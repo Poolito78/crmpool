@@ -43,14 +43,15 @@ export interface Fournisseur {
 export interface Produit {
   id: string;
   reference: string;
-  nom: string;
-  description?: string;
+  nom: string; // kept for backward compat, mapped to description
+  description: string; // was "nom", main product description
+  descriptionDetaillee?: string; // was "description", detailed description
   prixAchat: number;
   coefficient: number;
-  prixHT: number; // prix de vente public = prixAchat * coefficient
+  prixHT: number;
   coeffRevendeur: number;
-  remiseRevendeur: number; // en %
-  prixRevendeur: number; // prixAchat * coeffRevendeur
+  remiseRevendeur: number;
+  prixRevendeur: number;
   tva: number;
   unite: string;
   stock: number;
