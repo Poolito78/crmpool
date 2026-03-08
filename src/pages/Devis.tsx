@@ -319,7 +319,7 @@ export default function Devis() {
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
                           {tauxMarque !== null ? (
                             <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
-                              Taux de marque: {tauxMarque.toFixed(1)}%
+                              Marge: {tauxMarque.toFixed(1)}%
                             </span>
                           ) : <span />}
                           <span>Total TTC: {formatMontant(t.totalTTC)}</span>
