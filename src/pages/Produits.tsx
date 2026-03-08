@@ -174,10 +174,10 @@ export default function Produits() {
                 <span className="text-right">{formatMontant(p.prixAchat)}</span>
                 <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
                 <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
-                <span className="text-muted-foreground">Marge brute:</span>
-                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({tauxMarge.toFixed(0)}%)</span>
-                <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)})</span></span>
+                 <span className="text-muted-foreground">Marge brute:</span>
+                 <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({tauxMarge.toFixed(0)}% brut)</span>
+                 <span className="text-muted-foreground">P. Revendeur:</span>
+                 <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% brut)</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
