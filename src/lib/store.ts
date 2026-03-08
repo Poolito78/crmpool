@@ -119,7 +119,7 @@ function dbToClient(r: any): Client {
   };
 }
 
-function clientToDb(c: Client, userId: string) {
+function clientToDb(c: Client, userId: string): Record<string, unknown> {
   return {
     id: c.id,
     user_id: userId,
