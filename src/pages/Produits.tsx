@@ -339,7 +339,7 @@ export default function Produits() {
           categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
-      }).filter(p => p.nom || p.reference);
+      }).filter(p => p.description || p.reference);
 
       const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
       const unique = mapped.filter(p => {
