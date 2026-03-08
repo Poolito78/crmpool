@@ -567,8 +567,36 @@ export default function Devis() {
                         <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                       <div><Label className="text-xs">Qté</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
+                    {modeCalcul === 'surface' && (
+                      <div className="grid grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
+                        <div>
+                          <Label className="text-xs">Surface (m²)</Label>
+                          <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                            const surface = parseFloat(e.target.value) || 0;
+                            const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                            const quantite = p && p.consommation && p.conditionnement ? calcQuantiteSurface(p, surface) : l.quantite;
+                            setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                          }} className="h-8 text-sm" />
+                        </div>
+                        {(() => {
+                          const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                          return (
+                            <>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Conso.</Label>
+                                <Input value={p?.consommation ? `${p.consommation} kg/m²` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Condit.</Label>
+                                <Input value={p?.conditionnement ? `${p.conditionnement} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-4' : 'grid-cols-4'}`}>
+                       <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
                        <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
                        <div>
