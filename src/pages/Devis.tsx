@@ -152,9 +152,10 @@ export default function Devis() {
     setLignes(prev => prev.filter(l => l.id !== id));
   }
 
-  function calcQuantiteSurface(produit: typeof produits[0], surface: number): number {
-    if (!produit.consommation || produit.consommation <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
-    const kgNeeded = surface * produit.consommation;
+  function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
+    const conso = consoOverride || produit.consommation;
+    if (!conso || conso <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    const kgNeeded = surface * conso;
     return Math.ceil(kgNeeded / produit.conditionnement);
   }
 

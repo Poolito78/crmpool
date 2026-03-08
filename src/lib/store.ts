@@ -77,7 +77,8 @@ export interface LigneDevis {
   prixUnitaireHT: number;
   tva: number;
   remise: number;
-  surfaceM2?: number; // surface en m² pour mode surface
+  surfaceM2?: number;
+  consommation?: number; // override kg/m² par ligne
 }
 
 export interface Devis {
