@@ -318,11 +318,10 @@ export default function Produits() {
     } else {
       const mapped: Produit[] = importPreview.map((row: any) => {
         const prixAchat = getMappedNum(row, 'prixAchat');
-        const coefficient = getMappedNum(row, 'coefficient', 2);
-        const prixHT = getMappedNum(row, 'prixHT') || calcPrixVente(prixAchat, coefficient);
+        const coefficient = getMappedNum(row, 'coefficient', 1.6);
         const remiseRevendeur = getMappedNum(row, 'remiseRevendeur', 30);
-        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
-        const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeurFromCoeff(prixAchat, coefficient);
+        const prixHT = getMappedNum(row, 'prixHT') || calcPrixPublicFromRevendeur(prixRevendeur, remiseRevendeur);
         const reference = getMappedValue(row, 'reference');
         const description = getMappedValue(row, 'description');
         return {
@@ -331,9 +330,9 @@ export default function Produits() {
           description,
           descriptionDetaillee: getMappedValue(row, 'descriptionDetaillee'),
           prixAchat,
-          coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
+          coefficient: prixAchat > 0 && prixRevendeur > 0 ? prixRevendeur / prixAchat : coefficient,
           prixHT,
-          coeffRevendeur,
+          coeffRevendeur: prixAchat > 0 && prixRevendeur > 0 ? prixRevendeur / prixAchat : coefficient,
           remiseRevendeur,
           prixRevendeur,
           tva: getMappedNum(row, 'tva', 20),
