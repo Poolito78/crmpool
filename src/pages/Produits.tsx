@@ -188,13 +188,25 @@ export default function Produits() {
     { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
   ];
 
-  // Detect which import fields have matching columns in the file
-  const detectedImportFields = useMemo(() => {
+  // Auto-detect mapping from Excel columns to product fields
+  function autoDetectMapping(excelCols: string[]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    for (const field of importFields) {
+      for (const alias of field.aliases) {
+        const match = excelCols.find(col => col.trim().toLowerCase() === alias.toLowerCase());
+        if (match && !Object.values(mapping).includes(match)) {
+          mapping[field.key] = match;
+          break;
+        }
+      }
+    }
+    return mapping;
+  }
+
+  // Get available Excel columns from the preview
+  const excelColumns = useMemo(() => {
     if (!importPreview || importPreview.length === 0) return [];
-    const rowKeys = Object.keys(importPreview[0]);
-    return importFields.filter(f =>
-      f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase()))
-    );
+    return Object.keys(importPreview[0]);
   }, [importPreview]);
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -211,12 +223,10 @@ export default function Produits() {
         if (json.length === 0) { toast.error('Fichier vide'); return; }
         setImportPreview(json);
         setImportMode('add');
-        // Select all detected fields by default
-        const rowKeys = Object.keys(json[0] as object);
-        const detected = importFields
-          .filter(f => f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase())))
-          .map(f => f.key);
-        setImportSelectedCols(new Set(detected));
+        const cols = Object.keys(json[0] as object);
+        const detected = autoDetectMapping(cols);
+        setImportMapping(detected);
+        setImportSelectedCols(new Set(Object.keys(detected)));
         setImportDialogOpen(true);
       } catch { toast.error('Erreur de lecture du fichier'); }
     };
@@ -224,16 +234,15 @@ export default function Produits() {
     e.target.value = '';
   }
 
-  function findColValue(row: any, keys: string[]): string {
-    const rowKeys = Object.keys(row);
-    for (const k of keys) {
-      const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-      if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
-    }
-    return '';
+  function getMappedValue(row: any, fieldKey: string): string {
+    const colName = importMapping[fieldKey];
+    if (!colName) return '';
+    const val = row[colName];
+    if (val === undefined || val === null) return '';
+    return String(val).trim();
   }
-  function findNumValue(row: any, keys: string[], def = 0): number {
-    const val = findColValue(row, keys);
+  function getMappedNum(row: any, fieldKey: string, def = 0): number {
+    const val = getMappedValue(row, fieldKey);
     const n = parseFloat(val);
     return isNaN(n) ? def : n;
   }
