@@ -45,6 +45,9 @@ export default function Produits() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
