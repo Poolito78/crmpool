@@ -29,6 +29,10 @@ function calcTauxMarge(prixVente: number, prixAchat: number) {
   if (prixAchat === 0) return 0;
   return ((prixVente - prixAchat) / prixAchat) * 100;
 }
+function calcTauxMarque(prixVente: number, prixAchat: number) {
+  if (prixVente === 0) return 0;
+  return ((prixVente - prixAchat) / prixVente) * 100;
+}
 
 export default function Produits() {
   const { produits, updateProduits, fournisseurs } = useCRM();
@@ -125,17 +129,17 @@ export default function Produits() {
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
                     <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixHT)}</td>
-                     <td className="px-3 py-3 text-right">
-                       <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                         {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}% brut)</span>
-                       </span>
-                     </td>
-                     <td className="px-3 py-3 text-right text-muted-foreground">
-                       {formatMontant(p.prixRevendeur)}
-                       <span className="block text-xs text-muted-foreground">
-                         coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% brut)
-                       </span>
-                     </td>
+                    <td className="px-3 py-3 text-right">
+                      <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
+                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque)</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">
+                      {formatMontant(p.prixRevendeur)}
+                      <span className="block text-xs text-muted-foreground">
+                        coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque)
+                      </span>
+                    </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
@@ -174,10 +178,10 @@ export default function Produits() {
                 <span className="text-right">{formatMontant(p.prixAchat)}</span>
                 <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
                 <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
-                 <span className="text-muted-foreground">Marge brute:</span>
-                 <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({tauxMarge.toFixed(0)}% brut)</span>
-                 <span className="text-muted-foreground">P. Revendeur:</span>
-                 <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% brut)</span></span>
+                <span className="text-muted-foreground">Marge brute:</span>
+                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque)</span>
+                <span className="text-muted-foreground">P. Revendeur:</span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque)</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
@@ -222,8 +226,8 @@ export default function Produits() {
                   <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
                 </div>
                 <div>
-                  <Label className="text-xs">Taux marge</Label>
-                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                  <Label className="text-xs">Taux marque</Label>
+                  <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
                 <div>
                   <Label className="text-xs">TVA (%)</Label>
