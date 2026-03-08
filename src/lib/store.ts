@@ -48,8 +48,8 @@ export interface Fournisseur {
 export interface Produit {
   id: string;
   reference: string;
-  description: string; // anciennement "nom" - description du produit
-  descriptionDetaillee?: string; // anciennement "description" - description détaillée
+  description: string;
+  descriptionDetaillee?: string;
   prixAchat: number;
   coefficient: number;
   prixHT: number;
@@ -59,11 +59,43 @@ export interface Produit {
   tva: number;
   unite: string;
   poids?: number;
+  consommation?: number; // kg/m² - taux de consommation par m²
+  conditionnement?: number; // kg par unité de conditionnement
   stock: number;
   stockMin: number;
   fournisseurId?: string;
   categorie?: string;
   dateCreation: string;
+}
+
+export interface LigneDevis {
+  id: string;
+  produitId?: string;
+  description: string;
+  quantite: number;
+  unite: string;
+  prixUnitaireHT: number;
+  tva: number;
+  remise: number;
+  surfaceM2?: number; // surface en m² pour mode surface
+}
+
+export interface Devis {
+  id: string;
+  numero: string;
+  clientId: string;
+  adresseLivraisonId?: string;
+  dateCreation: string;
+  dateValidite: string;
+  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
+  lignes: LigneDevis[];
+  referenceAffaire?: string;
+  notes?: string;
+  conditions?: string;
+  fraisPortHT?: number;
+  fraisPortTVA?: number;
+  modeCalcul?: 'standard' | 'surface'; // mode de calcul du devis
+  surfaceGlobaleM2?: number; // surface globale applicable à toutes les lignes
 }
 
 export interface LigneDevis {
