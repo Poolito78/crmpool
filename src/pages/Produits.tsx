@@ -383,6 +383,9 @@ export default function Produits() {
               <Trash2 className="w-4 h-4 mr-2" /> Tout sélectionner
             </Button>
           )}
+          <Button variant={showFilters ? "secondary" : "outline"} size="sm" onClick={() => { setShowFilters(!showFilters); if (showFilters) setColumnFilters({}); }}>
+            <Filter className="w-4 h-4 mr-2" /> Filtres
+          </Button>
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
         </div>
@@ -405,6 +408,40 @@ export default function Produits() {
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
                 <th className="px-3 py-3"></th>
               </tr>
+              {showFilters && (
+                <tr className="border-b border-border bg-muted/30">
+                  <th className="px-3 py-1"></th>
+                  {[
+                    { key: 'reference', align: 'left' },
+                    { key: 'nom', align: 'left' },
+                    { key: 'categorie', align: 'left' },
+                    { key: 'prixAchat', align: 'right' },
+                    { key: 'coefficient', align: 'right' },
+                    { key: 'prixHT', align: 'right' },
+                    { key: 'marge', align: 'right', disabled: true },
+                    { key: 'prixRevendeur', align: 'right' },
+                    { key: 'stock', align: 'right' },
+                  ].map(col => (
+                    <th key={col.key} className="px-3 py-1">
+                      {!col.disabled ? (
+                        <Input
+                          placeholder="Filtrer..."
+                          value={columnFilters[col.key] || ''}
+                          onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
+                          className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
+                        />
+                      ) : null}
+                    </th>
+                  ))}
+                  <th className="px-3 py-1">
+                    {Object.values(columnFilters).some(v => v) && (
+                      <button onClick={() => setColumnFilters({})} className="p-1 rounded hover:bg-muted" title="Effacer les filtres">
+                        <X className="w-3.5 h-3.5 text-muted-foreground" />
+                      </button>
+                    )}
+                  </th>
+                </tr>
+              )}
             </thead>
             <tbody>
               {filtered.map(p => {
