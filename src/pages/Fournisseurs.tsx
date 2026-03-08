@@ -5,6 +5,7 @@ import { Plus, Search, Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
@@ -18,6 +19,8 @@ export default function Fournisseurs() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Fournisseur | null>(null);
   const [form, setForm] = useState(emptyFournisseur);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const filtered = fournisseurs.filter(f =>
     [f.nom, f.email, f.societe, f.telephone].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -42,9 +45,18 @@ export default function Fournisseurs() {
     setDialogOpen(false);
   }
 
-  function remove(id: string) {
-    updateFournisseurs(prev => prev.filter(f => f.id !== id));
-    toast.success('Fournisseur supprimé');
+  function confirmRemove(id: string) {
+    setDeleteTargetId(id);
+    setDeleteConfirmOpen(true);
+  }
+
+  function executeDelete() {
+    if (deleteTargetId) {
+      updateFournisseurs(prev => prev.filter(f => f.id !== deleteTargetId));
+      toast.success('Fournisseur supprimé');
+    }
+    setDeleteConfirmOpen(false);
+    setDeleteTargetId(null);
   }
 
   return (
@@ -80,7 +92,7 @@ export default function Fournisseurs() {
                 <td className="px-4 py-3">
                   <div className="flex gap-1 justify-end">
                     <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => remove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </td>
               </tr>
@@ -97,7 +109,7 @@ export default function Fournisseurs() {
               <div><p className="font-medium">{f.societe}</p><p className="text-sm text-muted-foreground">{f.nom}</p></div>
               <div className="flex gap-1">
                 <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => remove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
             <div className="mt-2 text-sm text-muted-foreground space-y-0.5">
@@ -106,6 +118,23 @@ export default function Fournisseurs() {
           </div>
         ))}
       </div>
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              Êtes-vous sûr de vouloir supprimer ce fournisseur ? Cette action ne peut pas être annulée.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Supprimer
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
