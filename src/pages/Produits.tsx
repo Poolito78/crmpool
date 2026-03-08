@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -50,10 +50,13 @@ export default function Produits() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [fromDevis, setFromDevis] = useState(false);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
+    const from = searchParams.get('from');
+    if (from === 'devis') setFromDevis(true);
     if (highlightId) {
       const prod = produits.find(p => p.id === highlightId);
       if (prod) {
@@ -230,6 +233,11 @@ export default function Produits() {
 
   return (
     <div className="space-y-4">
+      {fromDevis && (
+        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = '/devis'; }}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Retour aux devis
+        </Button>
+      )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
