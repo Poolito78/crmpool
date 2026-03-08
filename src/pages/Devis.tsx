@@ -169,7 +169,7 @@ export default function Devis() {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
       let quantite = 1;
-      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.conditionnement) {
+      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.poids) {
         quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
       }
       setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
