@@ -57,7 +57,10 @@ export default function Clients() {
   }, [produits]);
   const [search, setSearch] = useState('');
   const [filterVille, setFilterVille] = useState('');
+  const [filterDepartement, setFilterDepartement] = useState('');
+  const [filterSociete, setFilterSociete] = useState('');
   const [filterRevendeur, setFilterRevendeur] = useState<'' | 'oui' | 'non'>('');
+  const [filterHasAdresse, setFilterHasAdresse] = useState<'' | 'oui' | 'non'>('');
   const [showFilters, setShowFilters] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
@@ -77,18 +80,24 @@ export default function Clients() {
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
 
   const villes = useMemo(() => Array.from(new Set(clients.map(c => c.ville).filter(Boolean))).sort(), [clients]);
+  const departements = useMemo(() => Array.from(new Set(clients.map(c => c.codePostal?.substring(0, 2)).filter(Boolean))).sort(), [clients]);
+  const societes = useMemo(() => Array.from(new Set(clients.map(c => c.societe).filter(Boolean))).sort() as string[], [clients]);
 
-  const activeFilterCount = (filterVille ? 1 : 0) + (filterRevendeur ? 1 : 0);
+  const activeFilterCount = (filterVille ? 1 : 0) + (filterDepartement ? 1 : 0) + (filterSociete ? 1 : 0) + (filterRevendeur ? 1 : 0) + (filterHasAdresse ? 1 : 0);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
       if (search && ![c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
       if (filterVille && c.ville !== filterVille) return false;
+      if (filterDepartement && !c.codePostal?.startsWith(filterDepartement)) return false;
+      if (filterSociete && c.societe !== filterSociete) return false;
       if (filterRevendeur === 'oui' && !c.estRevendeur) return false;
       if (filterRevendeur === 'non' && c.estRevendeur) return false;
+      if (filterHasAdresse === 'oui' && (!c.adressesLivraison || c.adressesLivraison.length === 0)) return false;
+      if (filterHasAdresse === 'non' && c.adressesLivraison && c.adressesLivraison.length > 0) return false;
       return true;
     });
-  }, [clients, search, filterVille, filterRevendeur]);
+  }, [clients, search, filterVille, filterDepartement, filterSociete, filterRevendeur, filterHasAdresse]);
 
   function openNew() {
     setEditingClient(null);
@@ -283,30 +292,44 @@ export default function Clients() {
       {showFilters && (
         <div className="flex flex-wrap gap-3 items-center bg-muted/30 rounded-lg border border-border p-3">
           <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Département :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)}>
+              <option value="">Tous</option>
+              {departements.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Ville :</Label>
-            <select
-              className="text-sm rounded border border-input bg-background px-2 py-1.5"
-              value={filterVille}
-              onChange={e => setFilterVille(e.target.value)}
-            >
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterVille} onChange={e => setFilterVille(e.target.value)}>
               <option value="">Toutes</option>
               {villes.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Société :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterSociete} onChange={e => setFilterSociete(e.target.value)}>
+              <option value="">Toutes</option>
+              {societes.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Revendeur :</Label>
-            <select
-              className="text-sm rounded border border-input bg-background px-2 py-1.5"
-              value={filterRevendeur}
-              onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}
-            >
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}>
               <option value="">Tous</option>
               <option value="oui">Oui</option>
               <option value="non">Non</option>
             </select>
           </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Adresses :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')}>
+              <option value="">Tous</option>
+              <option value="oui">Avec adresses</option>
+              <option value="non">Sans adresses</option>
+            </select>
+          </div>
           {activeFilterCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterRevendeur(''); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterDepartement(''); setFilterSociete(''); setFilterRevendeur(''); setFilterHasAdresse(''); }}>
               Réinitialiser
             </Button>
           )}
