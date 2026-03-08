@@ -255,8 +255,8 @@ export default function Clients() {
         </div>
         <div className="flex gap-2 shrink-0">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
-          <Button variant="outline" onClick={() => { const { exportToExcel } = require('@/lib/exportExcel'); exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients'); }}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
+          <Button variant="outline" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
         </div>
       </div>

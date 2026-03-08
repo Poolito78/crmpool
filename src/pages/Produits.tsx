@@ -413,7 +413,8 @@ export default function Produits() {
           <Button variant={showFilters ? "secondary" : "outline"} size="sm" onClick={() => { setShowFilters(!showFilters); if (showFilters) setColumnFilters({}); }}>
             <Filter className="w-4 h-4 mr-2" /> Filtres
           </Button>
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
+          <Button variant="outline" onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, Poids: p.poids || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
         </div>
       </div>
