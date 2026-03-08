@@ -343,6 +343,39 @@ export default function Produits() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Import preview dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import ({importPreview?.length || 0} lignes)</DialogTitle></DialogHeader>
+          {importPreview && importPreview.length > 0 && (
+            <>
+              <p className="text-sm text-muted-foreground">Colonnes détectées : {Object.keys(importPreview[0]).join(', ')}</p>
+              <div className="overflow-x-auto border border-border rounded-lg max-h-60">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-muted/50 border-b border-border">
+                      {Object.keys(importPreview[0]).map(k => <th key={k} className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{k}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.slice(0, 10).map((row, i) => (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        {Object.values(row).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap">{String(v)}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importPreview.length > 10 && <p className="text-xs text-muted-foreground">... et {importPreview.length - 10} autres lignes</p>}
+            </>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
+            <Button onClick={importArticles}>Importer {importPreview?.length || 0} produit(s)</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
