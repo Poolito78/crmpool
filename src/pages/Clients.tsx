@@ -576,6 +576,22 @@ export default function Clients() {
           <DialogHeader><DialogTitle>Aperçu de l'import clients</DialogTitle></DialogHeader>
           {importPreview && (
             <>
+              {/* Mode selection */}
+              <div className="flex gap-2 mb-2">
+                <Button variant={importMode === 'add' ? 'default' : 'outline'} size="sm" onClick={() => setImportMode('add')}>
+                  Ajouter (nouveaux)
+                </Button>
+                <Button variant={importMode === 'update' ? 'default' : 'outline'} size="sm" onClick={() => setImportMode('update')}>
+                  Mettre à jour (existants)
+                </Button>
+              </div>
+
+              {importMode === 'update' && (
+                <p className="text-xs text-muted-foreground">
+                  Les clients seront mis à jour par correspondance sur le <strong>nom</strong>. Sélectionnez les colonnes à mettre à jour :
+                </p>
+              )}
+
               {/* Column mapping */}
               <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
                 <p className="text-xs font-semibold">Correspondance des colonnes :</p>
@@ -633,7 +649,9 @@ export default function Clients() {
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
-                <Button onClick={importClients}>Importer {importPreview.length} client(s)</Button>
+                <Button onClick={importClients}>
+                  {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview.length} client(s)`}
+                </Button>
               </div>
             </>
           )}
