@@ -165,7 +165,7 @@ export default function Devis() {
     }
   }
 
-  const total = calculerTotalDevis(lignes);
+  const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
 
   return (
     <div className="space-y-4">
