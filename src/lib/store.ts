@@ -201,3 +201,15 @@ export function formatMontant(n: number) {
 export function formatDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR');
 }
+
+export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number | null {
+  if (poidsKg <= 0) return 0;
+  if (poidsKg > 2000) {
+    // > 2000 kg : franco sauf granulat (retourne null = hors catégorie)
+    return hasGranulat ? null : 0;
+  }
+  if (poidsKg >= 701) return 230;
+  if (poidsKg >= 101) return 178;
+  if (poidsKg >= 26) return 85;
+  return 49;
+}
