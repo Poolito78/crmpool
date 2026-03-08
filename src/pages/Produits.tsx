@@ -79,15 +79,27 @@ export default function Produits() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ensure old products without new fields get defaults
-  const safeProduits = produits.map(p => ({
-    ...p,
-    prixAchat: p.prixAchat ?? 0,
-    coefficient: p.coefficient ?? (p.prixAchat ? p.prixHT / p.prixAchat : 1),
-    coeffRevendeur: p.coeffRevendeur ?? 1.6,
-    remiseRevendeur: p.remiseRevendeur ?? 30,
-    prixRevendeur: p.prixRevendeur ?? 0,
-  }));
+  // Ensure old products get correct coefficient (now drives revendeur price)
+  const safeProduits = produits.map(p => {
+    const prixAchat = p.prixAchat ?? 0;
+    const remise = p.remiseRevendeur ?? 30;
+    const prixRevendeur = p.prixRevendeur ?? 0;
+    // Recalculate coefficient as revendeur coefficient (prixRevendeur / prixAchat)
+    const coefficient = prixAchat > 0 && prixRevendeur > 0
+      ? prixRevendeur / prixAchat
+      : (p.coefficient ?? 1.6);
+    const recalcRevendeur = calcPrixRevendeurFromCoeff(prixAchat, coefficient);
+    const recalcPublic = calcPrixPublicFromRevendeur(recalcRevendeur, remise);
+    return {
+      ...p,
+      prixAchat,
+      coefficient,
+      coeffRevendeur: coefficient,
+      remiseRevendeur: remise,
+      prixRevendeur: recalcRevendeur,
+      prixHT: recalcPublic,
+    };
+  });
 
   const filtered = safeProduits.filter(p => {
     // Global search
