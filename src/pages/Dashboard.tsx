@@ -11,6 +11,28 @@ export default function Dashboard() {
   const caTotal = devisAcceptes.reduce((sum, d) => sum + calculerTotalDevis(d.lignes).totalTTC, 0);
   const devisEnCours = devis.filter(d => d.statut === 'envoyé');
 
+  // Calcul marge : totalHT lignes - coût d'achat
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+
+  const calcMarge = (filteredDevis: typeof devis) =>
+    filteredDevis.reduce((sum, d) => {
+      const margeDevis = d.lignes.reduce((acc, l) => {
+        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        const coutAchat = prod ? prod.prixAchat * l.quantite : 0;
+        const montantBrut = l.quantite * l.prixUnitaireHT;
+        const remise = montantBrut * (l.remise / 100);
+        return acc + (montantBrut - remise - coutAchat);
+      }, 0);
+      return sum + margeDevis;
+    }, 0);
+
+  const devisAnnuels = devisAcceptes.filter(d => new Date(d.dateCreation).getFullYear() === currentYear);
+  const devisMensuels = devisAnnuels.filter(d => new Date(d.dateCreation).getMonth() === currentMonth);
+  const margeAnnuelle = calcMarge(devisAnnuels);
+  const margeMensuelle = calcMarge(devisMensuels);
+
   const stats = [
     { label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
     { label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
