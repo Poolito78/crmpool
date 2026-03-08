@@ -32,6 +32,7 @@ export default function Devis() {
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
+  const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
