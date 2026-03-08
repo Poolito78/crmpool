@@ -64,8 +64,8 @@ export default function Devis() {
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
+    setDateCreation(d.dateCreation);
     setDateValidite(d.dateValidite);
-    setStatut(d.statut);
     setReferenceAffaire(d.referenceAffaire || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
