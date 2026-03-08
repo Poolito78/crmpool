@@ -129,12 +129,11 @@ export default function Devis() {
     if (p) {
       const client = clients.find(c => c.id === clientId);
       let prix = p.prixHT;
+      let remise = 0;
       if (client?.estRevendeur) {
-        const remiseCat = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
-        // Prix revendeur = prix public * (1 - remise/100)
-        prix = Math.round(p.prixHT * (1 - remiseCat / 100) * 100) / 100;
+        remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise } : l));
     }
   }
 
@@ -152,11 +151,11 @@ export default function Devis() {
       const p = produits.find(pr => pr.id === l.produitId);
       if (!p) return l;
       let prix = p.prixHT;
+      let remise = 0;
       if (client?.estRevendeur) {
-        const remiseCat = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
-        prix = Math.round(p.prixHT * (1 - remiseCat / 100) * 100) / 100;
+        remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      return { ...l, prixUnitaireHT: prix };
+      return { ...l, prixUnitaireHT: prix, remise };
     }));
   }, [clientId, dialogOpen, clients, produits]);
 
