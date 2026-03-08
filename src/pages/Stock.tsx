@@ -8,7 +8,7 @@ export default function Stock() {
   const sorted = [...produits].sort((a, b) => {
     const aLow = a.stock <= a.stockMin ? 0 : 1;
     const bLow = b.stock <= b.stockMin ? 0 : 1;
-    return aLow - bLow || a.nom.localeCompare(b.nom);
+    return aLow - bLow || a.description.localeCompare(b.description);
   });
 
   const totalStock = produits.reduce((s, p) => s + p.stock, 0);
