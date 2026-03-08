@@ -1,13 +1,14 @@
 import { type Devis, type Client, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer } from 'lucide-react';
+import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface Props {
   devis: Devis;
   client?: Client;
+  onEdit?: () => void;
 }
 
-export default function DevisPreview({ devis, client }: Props) {
+export default function DevisPreview({ devis, client, onEdit }: Props) {
   function handlePrint() {
     window.print();
   }
@@ -16,8 +17,13 @@ export default function DevisPreview({ devis, client }: Props) {
 
   return (
     <div className="bg-card">
-      {/* Print button */}
-      <div className="flex justify-end p-4 print:hidden">
+      {/* Print / Edit buttons */}
+      <div className="flex justify-end gap-2 p-4 print:hidden">
+        {onEdit && (
+          <Button variant="outline" size="sm" onClick={onEdit}>
+            <Pencil className="w-4 h-4 mr-2" /> Modifier
+          </Button>
+        )}
         <Button variant="outline" size="sm" onClick={handlePrint}>
           <Printer className="w-4 h-4 mr-2" /> Imprimer / PDF
         </Button>
