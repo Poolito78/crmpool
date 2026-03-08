@@ -131,7 +131,7 @@ export default function Produits() {
                     <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixHT)}</td>
                     <td className="px-3 py-3 text-right">
                       <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque)</span>
+                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
                       </span>
                     </td>
                     <td className="px-3 py-3 text-right text-muted-foreground">
