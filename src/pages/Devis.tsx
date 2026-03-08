@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -25,6 +25,7 @@ export default function Devis() {
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
@@ -38,7 +39,17 @@ export default function Devis() {
     return [d.numero, client?.nom, d.statut].some(v => v?.toLowerCase().includes(search.toLowerCase()));
   });
 
+  function populateForm(d: DevisType) {
+    setClientId(d.clientId);
+    setDateValidite(d.dateValidite);
+    setStatut(d.statut);
+    setNotes(d.notes || '');
+    setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
+    setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
+  }
+
   function openNew() {
+    setEditingId(null);
     setClientId('');
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
@@ -46,6 +57,27 @@ export default function Devis() {
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setDialogOpen(true);
+  }
+
+  function openEdit(d: DevisType) {
+    setEditingId(d.id);
+    populateForm(d);
+    setDialogOpen(true);
+  }
+
+  function duplicate(d: DevisType) {
+    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const newDevis: DevisType = {
+      ...d,
+      id: generateId(),
+      numero,
+      dateCreation: new Date().toISOString().split('T')[0],
+      dateValidite: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      statut: 'brouillon',
+      lignes: d.lignes.map(l => ({ ...l, id: generateId() })),
+    };
+    updateDevis(prev => [...prev, newDevis]);
+    toast.success('Devis dupliqué');
   }
 
   function addLigne() {
@@ -70,14 +102,23 @@ export default function Devis() {
   function save() {
     if (!clientId) { toast.error('Sélectionnez un client'); return; }
     if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne'); return; }
-    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
-    const newDevis: DevisType = {
-      id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
-      dateValidite, statut, lignes, notes, conditions
-    };
-    updateDevis(prev => [...prev, newDevis]);
-    toast.success('Devis créé');
+
+    if (editingId) {
+      updateDevis(prev => prev.map(d => d.id === editingId ? {
+        ...d, clientId, dateValidite, statut, lignes, notes, conditions
+      } : d));
+      toast.success('Devis modifié');
+    } else {
+      const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+      const newDevis: DevisType = {
+        id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
+        dateValidite, statut, lignes, notes, conditions
+      };
+      updateDevis(prev => [...prev, newDevis]);
+      toast.success('Devis créé');
+    }
     setDialogOpen(false);
+    setEditingId(null);
   }
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
@@ -144,8 +185,10 @@ export default function Devis() {
                       <option value="refusé">Refusé</option>
                       <option value="expiré">Expiré</option>
                     </select>
-                    <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted"><Eye className="w-4 h-4" /></button>
-                    <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => openEdit(d)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                    <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
+                    <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -155,10 +198,10 @@ export default function Devis() {
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
       </div>
 
-      {/* Create Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      {/* Create/Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Nouveau devis</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
@@ -177,6 +220,9 @@ export default function Devis() {
                 <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => setStatut(e.target.value as any)}>
                   <option value="brouillon">Brouillon</option>
                   <option value="envoyé">Envoyé</option>
+                  <option value="accepté">Accepté</option>
+                  <option value="refusé">Refusé</option>
+                  <option value="expiré">Expiré</option>
                 </select>
               </div>
             </div>
@@ -231,7 +277,7 @@ export default function Devis() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={save}><FileText className="w-4 h-4 mr-2" /> Créer le devis</Button>
+            <Button onClick={save}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
           </div>
         </DialogContent>
       </Dialog>
