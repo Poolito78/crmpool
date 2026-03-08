@@ -71,6 +71,7 @@ export default function Devis() {
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
+    setAdresseLivraisonId(d.adresseLivraisonId || '');
   }
 
   function openNew() {
