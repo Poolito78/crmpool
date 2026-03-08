@@ -553,9 +553,22 @@ export default function Clients() {
                       <Label className="text-xs">Téléphone</Label>
                       <Input value={adresseForm.telephone} onChange={e => setAdresseForm(p => ({ ...p, telephone: e.target.value }))} />
                     </div>
-                    <div className="col-span-2 flex items-center gap-2">
-                      <input type="checkbox" id="parDefaut" checked={adresseForm.parDefaut} onChange={e => setAdresseForm(p => ({ ...p, parDefaut: e.target.checked }))} className="rounded" />
-                      <label htmlFor="parDefaut" className="text-xs">Adresse par défaut</label>
+                    <div className="col-span-2 flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs">Type :</Label>
+                        <select
+                          className="text-xs rounded border border-input bg-background px-2 py-1"
+                          value={adresseForm.type}
+                          onChange={e => setAdresseForm(p => ({ ...p, type: e.target.value as 'livraison' | 'facturation' }))}
+                        >
+                          <option value="livraison">Livraison</option>
+                          <option value="facturation">Facturation</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="parDefaut" checked={adresseForm.parDefaut} onChange={e => setAdresseForm(p => ({ ...p, parDefaut: e.target.checked }))} className="rounded" />
+                        <label htmlFor="parDefaut" className="text-xs">Adresse par défaut</label>
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end">
