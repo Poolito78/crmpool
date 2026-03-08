@@ -65,6 +65,7 @@ export interface LigneDevis {
   produitId?: string;
   description: string;
   quantite: number;
+  unite: string;
   prixUnitaireHT: number;
   tva: number;
   remise: number;
@@ -109,16 +110,16 @@ const demoDevis: Devis[] = [
   {
     id: '1', numero: 'DEV-2024-001', clientId: '1', dateCreation: '2024-03-01', dateValidite: '2024-04-01', statut: 'accepté',
     lignes: [
-      { id: '1', produitId: '1', description: 'Câble électrique 2.5mm²', quantite: 50, prixUnitaireHT: 1.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '2', description: 'Interrupteur double', quantite: 10, prixUnitaireHT: 12.90, tva: 20, remise: 5 },
+      { id: '1', produitId: '1', description: 'Câble électrique 2.5mm²', quantite: 50, unite: 'm', prixUnitaireHT: 1.50, tva: 20, remise: 0 },
+      { id: '2', produitId: '2', description: 'Interrupteur double', quantite: 10, unite: 'pièce', prixUnitaireHT: 12.90, tva: 20, remise: 5 },
     ],
     notes: 'Installation électrique cuisine', conditions: 'Paiement à 30 jours'
   },
   {
     id: '2', numero: 'DEV-2024-002', clientId: '2', dateCreation: '2024-03-15', dateValidite: '2024-04-15', statut: 'envoyé',
     lignes: [
-      { id: '1', produitId: '3', description: 'Tube PVC 100mm', quantite: 20, prixUnitaireHT: 8.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '4', description: 'Robinet mitigeur', quantite: 2, prixUnitaireHT: 45.00, tva: 20, remise: 10 },
+      { id: '1', produitId: '3', description: 'Tube PVC 100mm', quantite: 20, unite: 'm', prixUnitaireHT: 8.50, tva: 20, remise: 0 },
+      { id: '2', produitId: '4', description: 'Robinet mitigeur', quantite: 2, unite: 'pièce', prixUnitaireHT: 45.00, tva: 20, remise: 10 },
     ],
     notes: 'Rénovation salle de bain'
   },

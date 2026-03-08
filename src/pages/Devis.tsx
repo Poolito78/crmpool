@@ -57,7 +57,7 @@ export default function Devis() {
     setStatut('brouillon');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
-    setLignes([{ id: generateId(), description: '', quantite: 1, prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setDialogOpen(true);
   }
 
@@ -83,7 +83,7 @@ export default function Devis() {
   }
 
   function addLigne() {
-    setLignes(prev => [...prev, { id: generateId(), description: '', quantite: 1, prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setLignes(prev => [...prev, { id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
   }
 
   function updateLigne(id: string, field: string, value: any) {
@@ -97,7 +97,7 @@ export default function Devis() {
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.nom, prixUnitaireHT: p.prixHT, tva: p.tva } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.nom, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
     }
   }
 
@@ -257,8 +257,9 @@ export default function Devis() {
                         <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-5 gap-2">
                       <div><Label className="text-xs">Qté</Label><Input type="number" value={l.quantite} onChange={e => updateLigne(l.id, 'quantite', parseFloat(e.target.value) || 0)} className="h-8 text-sm" /></div>
+                      <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                       <div><Label className="text-xs">Prix HT</Label><Input type="number" step="0.01" value={l.prixUnitaireHT} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" /></div>
                       <div><Label className="text-xs">TVA %</Label><Input type="number" value={l.tva} onChange={e => updateLigne(l.id, 'tva', parseFloat(e.target.value) || 0)} className="h-8 text-sm" /></div>
                       <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise} onChange={e => updateLigne(l.id, 'remise', parseFloat(e.target.value) || 0)} className="h-8 text-sm" /></div>
