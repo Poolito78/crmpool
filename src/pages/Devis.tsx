@@ -113,6 +113,8 @@ export default function Devis() {
     setFraisPortHT(0);
     setFraisPortTVA(20);
     setFraisPortAuto(true);
+    setModeCalcul('standard');
+    setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
     setDialogOpen(true);
   }
