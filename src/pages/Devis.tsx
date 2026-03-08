@@ -577,17 +577,23 @@ export default function Devis() {
                           <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                             const surface = parseFloat(e.target.value) || 0;
                             const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                            const quantite = p && p.consommation && p.conditionnement ? calcQuantiteSurface(p, surface) : l.quantite;
+                            const quantite = p && (l.consommation || p.consommation) && p.conditionnement ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
                             setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
                           }} className="h-8 text-sm" />
                         </div>
                         {(() => {
                           const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                          const consoValue = l.consommation || p?.consommation || 0;
                           return (
                             <>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Conso.</Label>
-                                <Input value={p?.consommation ? `${p.consommation} kg/m²` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                <Label className="text-xs">Conso. (kg/m²)</Label>
+                                <Input type="number" step="0.01" value={consoValue || ''} onChange={e => {
+                                  const conso = parseFloat(e.target.value) || 0;
+                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                  const quantite = p && p.conditionnement && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso || undefined, quantite } : li));
+                                }} className="h-8 text-sm" placeholder={p?.consommation ? String(p.consommation) : '—'} />
                               </div>
                               <div>
                                 <Label className="text-xs text-muted-foreground">Condit.</Label>
