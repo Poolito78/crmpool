@@ -9,8 +9,22 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyProduit = {
-  reference: '', nom: '', description: '', prixHT: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
+  reference: '', nom: '', description: '', prixAchat: 0, coefficient: 2, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
 };
+
+function calcPrixVente(prixAchat: number, coeff: number) {
+  return Math.round(prixAchat * coeff * 100) / 100;
+}
+function calcPrixRevendeur(prixAchat: number, coeffRevendeur: number) {
+  return Math.round(prixAchat * coeffRevendeur * 100) / 100;
+}
+function calcMargeBrute(prixVente: number, prixAchat: number) {
+  return prixVente - prixAchat;
+}
+function calcTauxMarge(prixVente: number, prixAchat: number) {
+  if (prixAchat === 0) return 0;
+  return ((prixVente - prixAchat) / prixAchat) * 100;
+}
 
 export default function Produits() {
   const { produits, updateProduits, fournisseurs } = useCRM();
@@ -26,8 +40,18 @@ export default function Produits() {
   function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
-    setForm({ reference: p.reference, nom: p.nom, description: p.description || '', prixHT: p.prixHT, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+    setForm({ reference: p.reference, nom: p.nom, description: p.description || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
     setDialogOpen(true);
+  }
+
+  function updateFormPrix(updates: Partial<typeof form>) {
+    setForm(prev => {
+      const next = { ...prev, ...updates };
+      // Recalculate derived prices
+      next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
+      next.prixRevendeur = calcPrixRevendeur(next.prixAchat, next.coeffRevendeur);
+      return next;
+    });
   }
 
   function save() {
@@ -58,63 +82,90 @@ export default function Produits() {
       </div>
 
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/50">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Réf.</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nom</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Catégorie</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Prix HT</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Stock</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Unité</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.map(p => (
-              <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-mono text-xs">{p.reference}</td>
-                <td className="px-4 py-3 font-medium">{p.nom}</td>
-                <td className="px-4 py-3 text-muted-foreground">{p.categorie || '—'}</td>
-                <td className="px-4 py-3 text-right">{formatMontant(p.prixHT)}</td>
-                <td className={`px-4 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
-                <td className="px-4 py-3 text-muted-foreground">{p.unite}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50">
+                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Réf.</th>
+                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nom</th>
+                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Achat</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Vente HT</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Marge</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Revend.</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
+                <th className="px-3 py-3"></th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {filtered.map(p => {
+                const marge = calcMargeBrute(p.prixHT, p.prixAchat);
+                const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+                return (
+                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-3 font-mono text-xs">{p.reference}</td>
+                    <td className="px-3 py-3 font-medium">{p.nom}</td>
+                    <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
+                    <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
+                    <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixHT)}</td>
+                    <td className="px-3 py-3 text-right">
+                      <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
+                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}%)</span>
+                      </span>
+                    </td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">{formatMontant(p.prixRevendeur)}</td>
+                    <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun produit</p>}
       </div>
 
+      {/* Mobile cards */}
       <div className="md:hidden space-y-3">
-        {filtered.map(p => (
-          <div key={p.id} className="bg-card rounded-xl border border-border p-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="font-medium">{p.nom}</p>
-                <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+        {filtered.map(p => {
+          const marge = calcMargeBrute(p.prixHT, p.prixAchat);
+          const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+          return (
+            <div key={p.id} className="bg-card rounded-xl border border-border p-4">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="font-medium">{p.nom}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+                </div>
+                <div className="flex gap-1">
+                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                  <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                </div>
               </div>
-              <div className="flex gap-1">
-                <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
+                <span className="text-muted-foreground">P. Achat:</span>
+                <span className="text-right">{formatMontant(p.prixAchat)}</span>
+                <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
+                <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
+                <span className="text-muted-foreground">Marge brute:</span>
+                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({tauxMarge.toFixed(0)}%)</span>
+                <span className="text-muted-foreground">P. Revendeur:</span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)}</span>
+              </div>
+              <div className="mt-2 flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">{p.categorie || '—'}</span>
+                <span className={p.stock <= p.stockMin ? 'text-warning font-medium' : 'text-muted-foreground'}>Stock: {p.stock}</span>
               </div>
             </div>
-            <div className="mt-2 flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{p.categorie || '—'}</span>
-              <span className="font-semibold">{formatMontant(p.prixHT)}</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">{p.unite}</span>
-              <span className={p.stock <= p.stockMin ? 'text-warning font-medium' : 'text-muted-foreground'}>Stock: {p.stock}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -127,11 +178,58 @@ export default function Produits() {
             </div>
             <div><Label>Nom *</Label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} /></div>
             <div><Label>Description</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
-            <div className="grid grid-cols-3 gap-4">
-              <div><Label>Prix HT (€)</Label><Input type="number" step="0.01" value={form.prixHT} onChange={e => setForm(p => ({ ...p, prixHT: parseFloat(e.target.value) || 0 }))} /></div>
-              <div><Label>TVA (%)</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 0 }))} /></div>
-              <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
+
+            {/* Pricing section */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold text-foreground">Tarification</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Prix Achat (€)</Label>
+                  <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Coefficient</Label>
+                  <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
+                </div>
+                <div>
+                  <Label className="text-xs">Prix Vente HT</Label>
+                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Marge brute</Label>
+                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
+                </div>
+                <div>
+                  <Label className="text-xs">Taux marge</Label>
+                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">TVA (%)</Label>
+                  <Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              </div>
+              <div className="border-t border-border pt-3">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise {form.remiseRevendeur}%)</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="text-xs">Coeff. Revendeur</Label>
+                    <Input type="number" step="0.01" value={form.coeffRevendeur} onChange={e => updateFormPrix({ coeffRevendeur: parseFloat(e.target.value) || 1 })} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Remise (%)</Label>
+                    <Input type="number" value={form.remiseRevendeur} onChange={e => setForm(p => ({ ...p, remiseRevendeur: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Prix Revendeur</Label>
+                    <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+                  </div>
+                </div>
+              </div>
             </div>
+
+            <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
               <div><Label>Stock min.</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
