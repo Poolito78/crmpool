@@ -131,7 +131,88 @@ export default function Produits() {
     confirmDelete(id);
   }
 
-  return (
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        if (json.length === 0) { toast.error('Fichier vide'); return; }
+        setImportPreview(json);
+        setImportDialogOpen(true);
+      } catch { toast.error('Erreur de lecture du fichier'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  }
+
+  function importArticles() {
+    if (!importPreview) return;
+
+    function findCol(row: any, keys: string[]): string {
+      const rowKeys = Object.keys(row);
+      for (const k of keys) {
+        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
+      }
+      return '';
+    }
+    function findNum(row: any, keys: string[], def = 0): number {
+      const val = findCol(row, keys);
+      const n = parseFloat(val);
+      return isNaN(n) ? def : n;
+    }
+
+    const mapped: Produit[] = importPreview.map((row: any) => {
+      const prixAchat = findNum(row, ['p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
+      const coefficient = findNum(row, ['coefficient', 'coeff'], 2);
+      const prixHT = findNum(row, ['prix ht', 'prixht', 'pv ht', 'prix_ht']) || calcPrixVente(prixAchat, coefficient);
+      const remiseRevendeur = findNum(row, ['remise revendeur', 'remiserevendeur', 'remise'], 30);
+      const prixRevendeur = findNum(row, ['prix revendeur', 'prixrevendeur']) || calcPrixRevendeur(prixHT, remiseRevendeur);
+      const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+      const reference = findCol(row, ['article', 'référence', 'reference', 'ref', 'code article']);
+      const nom = findCol(row, ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle']);
+      return {
+        id: generateId(),
+        reference,
+        nom,
+        description: findCol(row, ['description']),
+        prixAchat,
+        coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
+        prixHT,
+        coeffRevendeur,
+        remiseRevendeur,
+        prixRevendeur,
+        tva: findNum(row, ['tva'], 20),
+        unite: findCol(row, ['unité', 'unite']) || 'pièce',
+        stock: findNum(row, ['stock']),
+        stockMin: findNum(row, ['stock min', 'stockmin', 'stock minimum']),
+        fournisseurId: '',
+        categorie: findCol(row, ['catégorie', 'categorie', 'famille']),
+        dateCreation: new Date().toISOString().split('T')[0],
+      };
+    }).filter(p => p.nom || p.reference);
+
+    const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
+    const unique = mapped.filter(p => {
+      const ref = p.reference.trim().toLowerCase();
+      if (!ref) return true;
+      if (existingRefs.has(ref)) return false;
+      existingRefs.add(ref);
+      return true;
+    });
+    const skipped = mapped.length - unique.length;
+
+    updateProduits(prev => [...prev, ...unique]);
+    toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
