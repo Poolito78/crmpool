@@ -332,8 +332,8 @@ export default function Devis() {
             {/* Adresse de livraison */}
             {(() => {
               const selectedClient = clients.find(c => c.id === clientId);
-              const adressesLivraison = selectedClient?.adressesLivraison?.filter(a => a.type === 'livraison') || [];
-              if (!selectedClient || adressesLivraison.length === 0) return null;
+              const allAdresses = selectedClient?.adressesLivraison || [];
+              if (!selectedClient || allAdresses.length === 0) return null;
               return (
                 <div>
                   <Label>Adresse de livraison</Label>
@@ -342,10 +342,10 @@ export default function Devis() {
                     value={adresseLivraisonId}
                     onChange={e => setAdresseLivraisonId(e.target.value)}
                   >
-                    <option value="">— Identique à l'adresse de facturation —</option>
-                    {adressesLivraison.map(a => (
+                    <option value="">— Identique à l'adresse du client —</option>
+                    {allAdresses.map(a => (
                       <option key={a.id} value={a.id}>
-                        {a.libelle} — {a.adresse}, {a.codePostal} {a.ville} {a.parDefaut ? '(défaut)' : ''}
+                        {a.type === 'facturation' ? '[Fact.]' : '[Livr.]'} {a.libelle} — {a.adresse}, {a.codePostal} {a.ville} {a.parDefaut ? '(défaut)' : ''}
                       </option>
                     ))}
                   </select>
