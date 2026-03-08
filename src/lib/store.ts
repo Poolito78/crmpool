@@ -43,9 +43,8 @@ export interface Fournisseur {
 export interface Produit {
   id: string;
   reference: string;
-  nom: string; // kept for backward compat, mapped to description
-  description: string; // was "nom", main product description
-  descriptionDetaillee?: string; // was "description", detailed description
+  description: string; // anciennement "nom" - description du produit
+  descriptionDetaillee?: string; // anciennement "description" - description détaillée
   prixAchat: number;
   coefficient: number;
   prixHT: number;
