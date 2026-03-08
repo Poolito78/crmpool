@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react';
 
+export type TypeAdresse = 'livraison' | 'facturation';
+
 export interface AdresseLivraison {
   id: string;
   libelle: string;
@@ -9,6 +11,7 @@ export interface AdresseLivraison {
   contact?: string;
   telephone?: string;
   parDefaut: boolean;
+  type: TypeAdresse;
 }
 
 export interface Client {
