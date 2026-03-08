@@ -531,6 +531,21 @@ export default function Clients() {
               {showAdresseForm && (
                 <div className="bg-muted/20 rounded-lg border border-border p-3 space-y-3">
                   <p className="text-sm font-medium">{editingAdresse ? 'Modifier l\'adresse' : 'Nouvelle adresse'}</p>
+                  {adresseForm.type === 'livraison' && (
+                    <div className="flex items-center gap-2 mb-1">
+                      <input
+                        type="checkbox"
+                        id="copieFacturation"
+                        className="rounded"
+                        onChange={e => {
+                          if (e.target.checked) {
+                            setAdresseForm(p => ({ ...p, adresse: form.adresse, ville: form.ville, codePostal: form.codePostal }));
+                          }
+                        }}
+                      />
+                      <label htmlFor="copieFacturation" className="text-xs text-muted-foreground">Identique à l'adresse de facturation</label>
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 gap-2">
                     <div className="col-span-2">
                       <Label className="text-xs">Libellé *</Label>
