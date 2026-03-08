@@ -253,7 +253,18 @@ export default function Devis() {
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <Label>Client *</Label>
+                <div className="flex items-center justify-between">
+                  <Label>Client *</Label>
+                  {clientId && (
+                    <button
+                      type="button"
+                      onClick={() => { setDialogOpen(false); navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}`); }}
+                      className="text-xs text-primary hover:underline inline-flex items-center gap-1"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Voir fiche
+                    </button>
+                  )}
+                </div>
                 <ClientCombobox
                   clients={clients}
                   value={clientId}
