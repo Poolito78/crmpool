@@ -66,6 +66,8 @@ export default function Devis() {
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
+    setFraisPortHT(d.fraisPortHT || 0);
+    setFraisPortTVA(d.fraisPortTVA ?? 20);
   }
 
   function openNew() {
