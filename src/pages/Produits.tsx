@@ -247,6 +247,8 @@ export default function Produits() {
     { key: 'tva', label: 'TVA %', aliases: ['tva'], type: 'number', default: 20 },
     { key: 'unite', label: 'Unité', aliases: ['unité', 'unite'], type: 'text', default: 'pièce' },
     { key: 'poids', label: 'Poids (kg)', aliases: ['poids', 'poids kg', 'weight'], type: 'number' },
+    { key: 'consommation', label: 'Consommation (kg/m²)', aliases: ['consommation', 'conso', 'kg/m²', 'kg/m2', 'consommation kg/m²'], type: 'number' },
+    { key: 'conditionnement', label: 'Conditionnement (kg)', aliases: ['conditionnement', 'condit', 'condit.', 'cond', 'emballage', 'packaging'], type: 'number' },
     { key: 'stock', label: 'Stock', aliases: ['stock'], type: 'number' },
     { key: 'stockMin', label: 'Stock min', aliases: ['stock min', 'stockmin', 'stock minimum'], type: 'number' },
     { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
