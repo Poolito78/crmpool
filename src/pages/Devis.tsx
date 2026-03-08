@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,6 +24,7 @@ const statutColors: Record<string, string> = {
 
 export default function Devis() {
   const { devis, updateDevis, clients, produits } = useCRM();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -201,7 +202,18 @@ export default function Devis() {
                     <p className="font-heading font-semibold">{d.numero}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">{client?.nom || '—'} • {formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {client ? (
+                      <button
+                        onClick={() => navigate(`/clients?search=${encodeURIComponent(client.nom)}`)}
+                        className="text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <User className="w-3 h-3" />
+                        {client.nom}
+                      </button>
+                    ) : '—'}
+                    {' • '}{formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}
+                  </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                 </div>
                 <div className="flex items-center gap-3">
