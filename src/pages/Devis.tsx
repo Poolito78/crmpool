@@ -26,7 +26,7 @@ export default function Devis() {
   const { devis, updateDevis, clients, produits } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -133,26 +133,31 @@ export default function Devis() {
     }
   }
 
-  function save() {
-    if (!clientId) { toast.error('Sélectionnez un client'); return; }
-    if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne'); return; }
+  function save(silent = false): string | null {
+    if (!clientId) { if (!silent) toast.error('Sélectionnez un client'); return null; }
+    if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
 
+    let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       } : d));
-      toast.success('Devis modifié');
+      if (!silent) toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+      savedId = generateId();
       const newDevis: DevisType = {
-        id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
+        id: savedId, numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
         dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
-      toast.success('Devis créé');
+      if (!silent) toast.success('Devis créé');
     }
-    setDialogOpen(false);
-    setEditingId(null);
+    if (!silent) {
+      setDialogOpen(false);
+      setEditingId(null);
+    }
+    return savedId;
   }
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
@@ -259,10 +264,13 @@ export default function Devis() {
                     <button
                       type="button"
                       onClick={() => {
-                        // Save current devis first, then navigate with return param
-                        save();
-                        const devisId = editingId || devis[devis.length - 1]?.id;
-                        navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId || ''}`);
+                        const savedId = save(true);
+                        const devisId = savedId || editingId;
+                        if (devisId) {
+                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId}`);
+                        } else {
+                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}`);
+                        }
                       }}
                       className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                     >
@@ -425,7 +433,7 @@ export default function Devis() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={save}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
+            <Button onClick={() => save()}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
           </div>
         </DialogContent>
       </Dialog>
