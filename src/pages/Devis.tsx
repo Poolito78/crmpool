@@ -46,6 +46,7 @@ export default function Devis() {
     setClientId(d.clientId);
     setDateValidite(d.dateValidite);
     setStatut(d.statut);
+    setReferenceAffaire(d.referenceAffaire || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
