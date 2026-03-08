@@ -394,9 +394,12 @@ export default function Produits() {
   return (
     <div className="space-y-4">
       {fromDevis && (
-        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'; }}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
-        </Button>
+        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+          <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'); }}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
+          </Button>
+          <span className="text-sm text-muted-foreground">Vous consultez la fiche produit depuis l'édition d'un devis</span>
+        </div>
       )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
