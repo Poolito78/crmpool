@@ -110,8 +110,8 @@ const demoDevis: Devis[] = [
   {
     id: '1', numero: 'DEV-2024-001', clientId: '1', dateCreation: '2024-03-01', dateValidite: '2024-04-01', statut: 'accepté',
     lignes: [
-      { id: '1', produitId: '1', description: 'Câble électrique 2.5mm²', quantite: 50, prixUnitaireHT: 1.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '2', description: 'Interrupteur double', quantite: 10, prixUnitaireHT: 12.90, tva: 20, remise: 5 },
+      { id: '1', produitId: '1', description: 'Câble électrique 2.5mm²', quantite: 50, unite: 'm', prixUnitaireHT: 1.50, tva: 20, remise: 0 },
+      { id: '2', produitId: '2', description: 'Interrupteur double', quantite: 10, unite: 'pièce', prixUnitaireHT: 12.90, tva: 20, remise: 5 },
     ],
     notes: 'Installation électrique cuisine', conditions: 'Paiement à 30 jours'
   },
