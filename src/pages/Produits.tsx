@@ -29,6 +29,10 @@ function calcTauxMarge(prixVente: number, prixAchat: number) {
   if (prixAchat === 0) return 0;
   return ((prixVente - prixAchat) / prixAchat) * 100;
 }
+function calcTauxMarque(prixVente: number, prixAchat: number) {
+  if (prixVente === 0) return 0;
+  return ((prixVente - prixAchat) / prixVente) * 100;
+}
 
 export default function Produits() {
   const { produits, updateProduits, fournisseurs } = useCRM();
