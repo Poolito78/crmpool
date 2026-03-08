@@ -194,14 +194,15 @@ export default function Clients() {
       let updated = 0;
       updateClients(prev => prev.map(c => {
         const matchingRow = importPreview.find(row => {
-          const nom = getMappedValue(row, 'nom');
-          return nom.toLowerCase() === c.nom.trim().toLowerCase();
+          const val = getMappedValue(row, importMatchKey);
+          const clientVal = importMatchKey === 'nom' ? c.nom : (c.societe || '');
+          return val.toLowerCase() === clientVal.trim().toLowerCase();
         });
         if (!matchingRow) return c;
 
         const updates: Record<string, any> = {};
         for (const field of selectedFields) {
-          if (field.key === 'nom') continue;
+          if (field.key === importMatchKey) continue;
           const val = getMappedValue(matchingRow, field.key);
           if (val) updates[field.key] = val;
         }
