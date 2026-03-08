@@ -1,4 +1,4 @@
-import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, type AdresseLivraison, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -50,13 +50,45 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         {/* Info grid */}
         <div className="grid grid-cols-2 gap-8 mb-8">
           <div className="bg-muted/30 rounded-lg p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Client</p>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
             <p className="font-semibold">{client?.nom || '—'}</p>
             {client?.societe && <p className="text-muted-foreground">{client.societe}</p>}
             {client && <p className="text-muted-foreground">{client.adresse}</p>}
             {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
             {client?.email && <p className="text-muted-foreground">{client.email}</p>}
           </div>
+          <div className="bg-muted/30 rounded-lg p-4">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
+            {(() => {
+              const adresseLivraison = devis.adresseLivraisonId
+                ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
+                : null;
+              if (adresseLivraison) {
+                return (
+                  <>
+                    <p className="font-semibold">{adresseLivraison.libelle}</p>
+                    <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
+                    <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
+                    {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
+                    {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
+                  </>
+                );
+              }
+              return (
+                <>
+                  <p className="font-semibold">{client?.nom || '—'}</p>
+                  {client?.societe && <p className="text-muted-foreground">{client.societe}</p>}
+                  {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                  {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                  <p className="text-xs text-muted-foreground italic mt-1">Identique à l'adresse de facturation</p>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-8 mb-8">
+          <div></div>
           <div className="bg-muted/30 rounded-lg p-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Informations</p>
             <div className="space-y-1">

@@ -54,6 +54,7 @@ export default function Devis() {
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
+  const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
@@ -70,6 +71,7 @@ export default function Devis() {
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
+    setAdresseLivraisonId(d.adresseLivraisonId || '');
   }
 
   function openNew() {
@@ -83,6 +85,7 @@ export default function Devis() {
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
+    setAdresseLivraisonId('');
     setDialogOpen(true);
   }
 
@@ -140,14 +143,14 @@ export default function Devis() {
     let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
+        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
       } : d));
       if (!silent) toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
+        id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation: new Date().toISOString().split('T')[0],
         dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
@@ -326,6 +329,29 @@ export default function Devis() {
                 </select>
               </div>
             </div>
+            {/* Adresse de livraison */}
+            {(() => {
+              const selectedClient = clients.find(c => c.id === clientId);
+              const adressesLivraison = selectedClient?.adressesLivraison?.filter(a => a.type === 'livraison') || [];
+              if (!selectedClient || adressesLivraison.length === 0) return null;
+              return (
+                <div>
+                  <Label>Adresse de livraison</Label>
+                  <select
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    value={adresseLivraisonId}
+                    onChange={e => setAdresseLivraisonId(e.target.value)}
+                  >
+                    <option value="">— Identique à l'adresse de facturation —</option>
+                    {adressesLivraison.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.libelle} — {a.adresse}, {a.codePostal} {a.ville} {a.parDefaut ? '(défaut)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
             <div>
               <Label>Référence affaire</Label>
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
