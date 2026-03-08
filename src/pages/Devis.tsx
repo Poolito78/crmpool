@@ -27,6 +27,9 @@ export default function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [filterStatut, setFilterStatut] = useState<string>('tous');
+  const [filterClient, setFilterClient] = useState<string>('tous');
+  const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
