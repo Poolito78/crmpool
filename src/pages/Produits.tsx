@@ -118,7 +118,7 @@ export default function Produits() {
   function importArticles() {
     if (!importPreview) return;
     const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = parseFloat(row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
+      const prixAchat = parseFloat(row['Achat KG ou U'] || row['Achat Kg ou U'] || row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
       const coefficient = parseFloat(row['Coefficient'] || row['coefficient'] || row['Coeff'] || row['coeff'] || 2);
       const prixHT = parseFloat(row['Prix HT'] || row['prixHT'] || row['PV HT'] || row['prix_ht'] || 0) || calcPrixVente(prixAchat, coefficient);
       const remiseRevendeur = parseFloat(row['Remise Revendeur'] || row['remiseRevendeur'] || row['Remise'] || 30);
