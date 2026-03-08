@@ -134,30 +134,48 @@ export default function Produits() {
 
   function importArticles() {
     if (!importPreview) return;
+
+    // Helper: find value by checking multiple possible column names (case-insensitive)
+    function findCol(row: any, keys: string[]): string {
+      const rowKeys = Object.keys(row);
+      for (const k of keys) {
+        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
+      }
+      return '';
+    }
+    function findNum(row: any, keys: string[], def = 0): number {
+      const val = findCol(row, keys);
+      const n = parseFloat(val);
+      return isNaN(n) ? def : n;
+    }
+
     const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = parseFloat(row['p achat kg ou u'] || row['P achat kg ou u'] || row['P Achat Kg ou U'] || row['P ACHAT KG OU U'] || row['Achat KG ou U'] || row['Achat Kg ou U'] || row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
-      const coefficient = parseFloat(row['Coefficient'] || row['coefficient'] || row['Coeff'] || row['coeff'] || 2);
-      const prixHT = parseFloat(row['Prix HT'] || row['prixHT'] || row['PV HT'] || row['prix_ht'] || 0) || calcPrixVente(prixAchat, coefficient);
-      const remiseRevendeur = parseFloat(row['Remise Revendeur'] || row['remiseRevendeur'] || row['Remise'] || 30);
-      const prixRevendeur = parseFloat(row['Prix Revendeur'] || row['prixRevendeur'] || 0) || calcPrixRevendeur(prixHT, remiseRevendeur);
+      const prixAchat = findNum(row, ['p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
+      const coefficient = findNum(row, ['coefficient', 'coeff'], 2);
+      const prixHT = findNum(row, ['prix ht', 'prixht', 'pv ht', 'prix_ht']) || calcPrixVente(prixAchat, coefficient);
+      const remiseRevendeur = findNum(row, ['remise revendeur', 'remiserevendeur', 'remise'], 30);
+      const prixRevendeur = findNum(row, ['prix revendeur', 'prixrevendeur']) || calcPrixRevendeur(prixHT, remiseRevendeur);
       const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+      const reference = findCol(row, ['article', 'référence', 'reference', 'ref', 'code article']);
+      const nom = findCol(row, ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle']);
       return {
         id: generateId(),
-        reference: String(row['Article'] || row['article'] || row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
-        nom: String(row['Produit'] || row['produit'] || row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || ''),
-        description: String(row['Description'] || row['description'] || ''),
+        reference,
+        nom,
+        description: findCol(row, ['description']),
         prixAchat,
         coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
         prixHT,
         coeffRevendeur,
         remiseRevendeur,
         prixRevendeur,
-        tva: parseFloat(row['TVA'] || row['tva'] || 20),
-        unite: String(row['Unité'] || row['Unite'] || row['unite'] || 'pièce'),
-        stock: parseInt(row['Stock'] || row['stock'] || 0),
-        stockMin: parseInt(row['Stock Min'] || row['stockMin'] || row['Stock Minimum'] || 0),
+        tva: findNum(row, ['tva'], 20),
+        unite: findCol(row, ['unité', 'unite']) || 'pièce',
+        stock: findNum(row, ['stock']),
+        stockMin: findNum(row, ['stock min', 'stockmin', 'stock minimum']),
         fournisseurId: '',
-        categorie: String(row['Catégorie'] || row['Categorie'] || row['categorie'] || row['Famille'] || ''),
+        categorie: findCol(row, ['catégorie', 'categorie', 'famille']),
         dateCreation: new Date().toISOString().split('T')[0],
       };
     }).filter(p => p.nom || p.reference);
@@ -166,8 +184,9 @@ export default function Produits() {
     const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
     const unique = mapped.filter(p => {
       const ref = p.reference.trim().toLowerCase();
-      if (!ref || existingRefs.has(ref)) return false;
-      existingRefs.add(ref); // éviter aussi les doublons internes au fichier
+      if (!ref) return true; // pas de référence = on importe quand même
+      if (existingRefs.has(ref)) return false;
+      existingRefs.add(ref);
       return true;
     });
     const skipped = mapped.length - unique.length;
