@@ -469,7 +469,12 @@ export default function Produits() {
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
+              {fromDevis && editing && (
+                <Button variant="secondary" onClick={() => save(true)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
+                </Button>
+              )}
+              <Button onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
           </div>
         </DialogContent>
