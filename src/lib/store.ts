@@ -1,5 +1,16 @@
 import { useState, useCallback } from 'react';
 
+export interface AdresseLivraison {
+  id: string;
+  libelle: string;
+  adresse: string;
+  ville: string;
+  codePostal: string;
+  contact?: string;
+  telephone?: string;
+  parDefaut: boolean;
+}
+
 export interface Client {
   id: string;
   nom: string;
@@ -11,6 +22,7 @@ export interface Client {
   societe?: string;
   notes?: string;
   dateCreation: string;
+  adressesLivraison: AdresseLivraison[];
 }
 
 export interface Fournisseur {
