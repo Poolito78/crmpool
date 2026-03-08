@@ -81,6 +81,7 @@ export interface Devis {
   id: string;
   numero: string;
   clientId: string;
+  adresseLivraisonId?: string;
   dateCreation: string;
   dateValidite: string;
   statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
