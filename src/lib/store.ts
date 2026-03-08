@@ -43,7 +43,12 @@ export interface Produit {
   reference: string;
   nom: string;
   description?: string;
-  prixHT: number;
+  prixAchat: number;
+  coefficient: number;
+  prixHT: number; // prix de vente public = prixAchat * coefficient
+  coeffRevendeur: number;
+  remiseRevendeur: number; // en %
+  prixRevendeur: number; // prixAchat * coeffRevendeur
   tva: number;
   unite: string;
   stock: number;
