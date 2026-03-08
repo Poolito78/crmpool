@@ -694,7 +694,13 @@ export default function Devis() {
                   {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
                   <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
                   <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
-                  <div className="flex justify-between border-t border-border pt-2 mt-2 text-muted-foreground">
+                  {modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && (
+                    <div className="flex justify-between border-t border-border pt-2 mt-2 text-muted-foreground">
+                      <span>Surface</span>
+                      <span className="font-medium">{surfaceGlobaleM2} m²</span>
+                    </div>
+                  )}
+                  <div className={`flex justify-between ${modeCalcul !== 'surface' ? 'border-t border-border pt-2 mt-2' : ''} text-muted-foreground`}>
                     <span>Poids total</span>
                     <span className="font-medium">{poidsTotal.toFixed(2)} kg</span>
                   </div>
