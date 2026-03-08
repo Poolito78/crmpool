@@ -24,6 +24,7 @@ const statutColors: Record<string, string> = {
 
 export default function Devis() {
   const { devis, updateDevis, clients, produits } = useCRM();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
