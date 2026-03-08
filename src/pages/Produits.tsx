@@ -50,10 +50,13 @@ export default function Produits() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [fromDevis, setFromDevis] = useState(false);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
+    const from = searchParams.get('from');
+    if (from === 'devis') setFromDevis(true);
     if (highlightId) {
       const prod = produits.find(p => p.id === highlightId);
       if (prod) {
