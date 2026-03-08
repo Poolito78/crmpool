@@ -512,11 +512,36 @@ export default function Devis() {
 
             {/* Frais de port */}
             <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
-              <p className="text-sm font-semibold">Frais de port</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Frais de port</p>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+                  <input type="checkbox" checked={fraisPortAuto} onChange={e => setFraisPortAuto(e.target.checked)} className="rounded" />
+                  Auto (selon poids)
+                </label>
+              </div>
+              {fraisPortAuto && (() => {
+                const poidsTotal = lignes.reduce((acc, l) => {
+                  const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                  return acc + (prod?.poids || 0) * l.quantite;
+                }, 0);
+                const hasGranulat = lignes.some(l => {
+                  const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                  return prod?.categorie?.toLowerCase().includes('granulat');
+                });
+                const port = calculerFraisPort(poidsTotal, hasGranulat);
+                return (
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span></p>
+                    {port === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ &gt;2000 kg avec granulat : tarif hors catégorie</p>}
+                    {port === 0 && poidsTotal > 2000 && <p className="text-emerald-600 dark:text-emerald-400 font-medium">Franco de port (&gt;2000 kg)</p>}
+                    <p className="text-[10px]">0-25 kg: 49€ · 26-100 kg: 85€ · 101-700 kg: 178€ · 701-2000 kg: 230€ · &gt;2000 kg: franco</p>
+                  </div>
+                );
+              })()}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Montant HT</Label>
-                  <Input type="number" step="0.01" value={fraisPortHT || ''} onChange={e => setFraisPortHT(e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                  <Input type="number" step="0.01" value={fraisPortHT || ''} onChange={e => { setFraisPortAuto(false); setFraisPortHT(e.target.value === '' ? 0 : parseFloat(e.target.value)); }} className="h-8 text-sm" />
                 </div>
                 <div>
                   <Label className="text-xs">TVA %</Label>
