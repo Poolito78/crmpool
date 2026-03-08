@@ -1,4 +1,5 @@
-import { type Devis, type Client, type Produit, type AdresseLivraison, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { useState } from 'react';
+import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -10,6 +11,9 @@ interface Props {
 }
 
 export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
+  const [showConso, setShowConso] = useState(false);
+  const isSurfaceMode = devis.modeCalcul === 'surface';
+
   function handlePrint() {
     window.print();
   }
@@ -19,7 +23,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
   return (
     <div className="bg-card">
       {/* Print / Edit buttons */}
-      <div className="flex justify-end gap-2 p-4 print:hidden">
+      <div className="flex justify-end gap-2 p-4 print:hidden items-center">
+        {isSurfaceMode && (
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer mr-auto">
+            <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
+            Afficher consommation/m²
+          </label>
+        )}
         {onEdit && (
           <Button variant="outline" size="sm" onClick={onEdit}>
             <Pencil className="w-4 h-4 mr-2" /> Modifier
@@ -96,6 +106,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
               <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(devis.dateValidite)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Statut :</span><span className="font-medium capitalize">{devis.statut}</span></div>
               {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
+              {isSurfaceMode && devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
+                <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
+              )}
             </div>
           </div>
         </div>
@@ -112,6 +125,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           <thead>
              <tr className="border-b-2 border-primary">
                <th className="text-left py-2 font-semibold">Description</th>
+               {showConso && <th className="text-right py-2 font-semibold w-16">m²</th>}
+               {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
                <th className="text-right py-2 font-semibold w-16">Qté</th>
                <th className="text-center py-2 font-semibold w-16">Unité</th>
                <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
@@ -120,9 +135,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
              </tr>
            </thead>
           <tbody>
-            {devis.lignes.map((l, i) => {
+            {devis.lignes.map((l) => {
               const t = calculerTotalLigne(l);
               const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              const conso = l.consommation || prod?.consommation || 0;
               return (
                 <tr key={l.id} className="border-b border-border">
                    <td className="py-2">
@@ -131,6 +147,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                        <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
                      )}
                    </td>
+                   {showConso && <td className="py-2 text-right">{l.surfaceM2 || '—'}</td>}
+                   {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
                    <td className="py-2 text-right">{l.quantite}</td>
                    <td className="py-2 text-center">{l.unite || '—'}</td>
                    <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
