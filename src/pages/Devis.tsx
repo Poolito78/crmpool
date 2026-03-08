@@ -246,8 +246,10 @@ export default function Devis() {
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
-      if (!p || !p.consommation || !p.conditionnement) return l;
-      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2);
+      if (!p || !p.conditionnement) return l;
+      const conso = l.consommation || p.consommation;
+      if (!conso) return l;
+      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2, l.consommation);
       return { ...l, quantite, surfaceM2: l.surfaceM2 || surfaceGlobaleM2 };
     }));
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
