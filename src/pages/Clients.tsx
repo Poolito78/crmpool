@@ -362,7 +362,7 @@ export default function Clients() {
                   className="flex items-center gap-1 text-primary text-xs"
                 >
                   <MapPin className="w-3 h-3" />
-                  {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''} de livraison
+                  {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
                   {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </button>
                 {expandedClient === c.id && (
