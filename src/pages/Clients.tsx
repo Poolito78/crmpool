@@ -513,6 +513,7 @@ export default function Clients() {
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{a.libelle}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
                           {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
                         </div>
                         <p className="text-xs text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
