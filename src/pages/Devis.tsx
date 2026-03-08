@@ -475,6 +475,7 @@ export default function Devis() {
                               <span>{formatMontant(prixKg)}/kg</span>
                             )}
                           </div>
+                          {l.remise > 0 && <span>Prix HT remisé: {formatMontant(prixNetHT)}</span>}
                           <span>Total HT: {formatMontant(t.totalHT)}</span>
                         </div>
                       );
