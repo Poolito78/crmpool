@@ -154,9 +154,9 @@ export default function Devis() {
 
   function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
     const conso = consoOverride || produit.consommation;
-    if (!conso || conso <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    if (!conso || conso <= 0 || !produit.poids || produit.poids <= 0) return 1;
     const kgNeeded = surface * conso;
-    return Math.ceil(kgNeeded / produit.conditionnement);
+    return Math.ceil(kgNeeded / produit.poids);
   }
 
   function selectProduit(ligneId: string, produitId: string) {
