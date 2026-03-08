@@ -494,7 +494,7 @@ export default function Produits() {
                 <div className="flex items-start gap-2">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
                   <div>
-                    <p className="font-medium">{p.nom}</p>
+                    <p className="font-medium">{p.description}</p>
                     <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                   </div>
                 </div>
