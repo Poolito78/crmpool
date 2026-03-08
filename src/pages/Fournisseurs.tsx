@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Fournisseur } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
@@ -15,6 +15,33 @@ const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0
 };
 
+const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
+  { key: 'societe', label: 'Société', aliases: ['société', 'societe', 'entreprise', 'raison sociale'], type: 'text' },
+  { key: 'nom', label: 'Nom contact', aliases: ['nom', 'contact', 'nom contact'], type: 'text' },
+  { key: 'email', label: 'Email', aliases: ['email', 'e-mail', 'mail', 'courriel'], type: 'text' },
+  { key: 'telephone', label: 'Téléphone', aliases: ['téléphone', 'telephone', 'tel', 'tél'], type: 'text' },
+  { key: 'adresse', label: 'Adresse', aliases: ['adresse', 'rue'], type: 'text' },
+  { key: 'ville', label: 'Ville', aliases: ['ville', 'city'], type: 'text' },
+  { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp'], type: 'text' },
+  { key: 'francoPort', label: 'Franco de port', aliases: ['franco de port', 'francoport', 'franco', 'franco port'], type: 'number' },
+  { key: 'coutTransport', label: 'Coût transport', aliases: ['coût transport', 'couttransport', 'transport', 'frais transport'], type: 'number' },
+  { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques'], type: 'text' },
+];
+
+function autoDetectMapping(excelCols: string[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const field of importFields) {
+    for (const alias of field.aliases) {
+      const match = excelCols.find(col => col.trim().toLowerCase() === alias.toLowerCase());
+      if (match && !Object.values(mapping).includes(match)) {
+        mapping[field.key] = match;
+        break;
+      }
+    }
+  }
+  return mapping;
+}
+
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs } = useCRM();
   const [search, setSearch] = useState('');
@@ -26,10 +53,18 @@ export default function Fournisseurs() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'add' | 'update'>('add');
+  const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
 
   const filtered = fournisseurs.filter(f =>
     [f.nom, f.email, f.societe, f.telephone].some(v => v?.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const excelColumns = useMemo(() => {
+    if (!importPreview || importPreview.length === 0) return [];
+    return Object.keys(importPreview[0]);
+  }, [importPreview]);
 
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
   function openEdit(f: Fournisseur) {
@@ -64,6 +99,19 @@ export default function Fournisseurs() {
     setDeleteTargetId(null);
   }
 
+  function getMappedValue(row: any, fieldKey: string): string {
+    const colName = importMapping[fieldKey];
+    if (!colName) return '';
+    const val = row[colName];
+    if (val === undefined || val === null) return '';
+    return String(val).trim();
+  }
+  function getMappedNum(row: any, fieldKey: string, def = 0): number {
+    const val = getMappedValue(row, fieldKey);
+    const n = parseFloat(val);
+    return isNaN(n) ? def : n;
+  }
+
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -76,6 +124,11 @@ export default function Fournisseurs() {
         const json = XLSX.utils.sheet_to_json(sheet);
         if (json.length === 0) { toast.error('Fichier vide'); return; }
         setImportPreview(json);
+        setImportMode('add');
+        const cols = Object.keys(json[0] as object);
+        const detected = autoDetectMapping(cols);
+        setImportMapping(detected);
+        setImportSelectedCols(new Set(Object.keys(detected)));
         setImportDialogOpen(true);
       } catch { toast.error('Erreur de lecture du fichier'); }
     };
@@ -83,39 +136,67 @@ export default function Fournisseurs() {
     e.target.value = '';
   }
 
-  function importFournisseurs() {
+  function importFournisseursAction() {
     if (!importPreview) return;
-    function findCol(row: any, keys: string[]): string {
-      const rowKeys = Object.keys(row);
-      for (const k of keys) {
-        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
-      }
-      return '';
-    }
-    function findNum(row: any, keys: string[], def = 0): number {
-      const val = findCol(row, keys);
-      const n = parseFloat(val);
-      return isNaN(n) ? def : n;
-    }
-    const mapped: Fournisseur[] = importPreview.map((row: any) => ({
-      id: generateId(),
-      nom: findCol(row, ['nom', 'contact', 'nom contact']),
-      email: findCol(row, ['email', 'e-mail', 'mail', 'courriel']),
-      telephone: findCol(row, ['téléphone', 'telephone', 'tel', 'tél']),
-      adresse: findCol(row, ['adresse', 'rue']),
-      ville: findCol(row, ['ville', 'city']),
-      codePostal: findCol(row, ['code postal', 'codepostal', 'cp']),
-      societe: findCol(row, ['société', 'societe', 'entreprise', 'raison sociale']),
-      notes: findCol(row, ['notes', 'commentaire', 'remarques']),
-      francoPort: findNum(row, ['franco de port', 'francoport', 'franco', 'franco port']),
-      coutTransport: findNum(row, ['coût transport', 'couttransport', 'transport', 'frais transport']),
-      dateCreation: new Date().toISOString().split('T')[0],
-    })).filter(f => f.nom || f.societe);
+    const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
-    if (mapped.length === 0) { toast.error('Aucun fournisseur valide trouvé'); return; }
-    updateFournisseurs(prev => [...prev, ...mapped]);
-    toast.success(`${mapped.length} fournisseur(s) importé(s)`);
+    if (importMode === 'update') {
+      let updated = 0;
+      updateFournisseurs(prev => prev.map(f => {
+        const matchingRow = importPreview.find(row => {
+          const societe = getMappedValue(row, 'societe');
+          return societe.toLowerCase() === f.societe.trim().toLowerCase();
+        });
+        if (!matchingRow) return f;
+
+        const updates: Record<string, any> = {};
+        for (const field of selectedFields) {
+          if (field.key === 'societe') continue; // clé de correspondance
+          if (field.type === 'number') {
+            updates[field.key] = getMappedNum(matchingRow, field.key, field.default ?? 0);
+          } else {
+            const val = getMappedValue(matchingRow, field.key);
+            if (val || field.default) updates[field.key] = val || field.default || '';
+          }
+        }
+
+        if (Object.keys(updates).length > 0) {
+          updated++;
+          return { ...f, ...updates };
+        }
+        return f;
+      }));
+      toast.success(`${updated} fournisseur(s) mis à jour`);
+    } else {
+      const mapped: Fournisseur[] = importPreview.map((row: any) => ({
+        id: generateId(),
+        nom: getMappedValue(row, 'nom'),
+        email: getMappedValue(row, 'email'),
+        telephone: getMappedValue(row, 'telephone'),
+        adresse: getMappedValue(row, 'adresse'),
+        ville: getMappedValue(row, 'ville'),
+        codePostal: getMappedValue(row, 'codePostal'),
+        societe: getMappedValue(row, 'societe'),
+        notes: getMappedValue(row, 'notes'),
+        francoPort: getMappedNum(row, 'francoPort'),
+        coutTransport: getMappedNum(row, 'coutTransport'),
+        dateCreation: new Date().toISOString().split('T')[0],
+      })).filter(f => f.nom || f.societe);
+
+      const existingSocietes = new Set(fournisseurs.map(f => f.societe.trim().toLowerCase()));
+      const unique = mapped.filter(f => {
+        const s = f.societe.trim().toLowerCase();
+        if (!s) return true;
+        if (existingSocietes.has(s)) return false;
+        existingSocietes.add(s);
+        return true;
+      });
+      const skipped = mapped.length - unique.length;
+
+      updateFournisseurs(prev => [...prev, ...unique]);
+      toast.success(`${unique.length} fournisseur(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    }
+
     setImportDialogOpen(false);
     setImportPreview(null);
   }
@@ -243,33 +324,105 @@ export default function Fournisseurs() {
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Aperçu de l'import ({importPreview?.length || 0} fournisseurs)</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
           {importPreview && (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs border border-border">
-                <thead>
-                  <tr className="bg-muted/50">
-                    {Object.keys(importPreview[0] || {}).map(k => (
-                      <th key={k} className="px-2 py-1 text-left font-medium border-b border-border">{k}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {importPreview.slice(0, 10).map((row, i) => (
-                    <tr key={i} className="border-b border-border">
-                      {Object.values(row).map((v, j) => (
-                        <td key={j} className="px-2 py-1">{String(v ?? '')}</td>
-                      ))}
-                    </tr>
+            <>
+              {/* Mode selection */}
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant={importMode === 'add' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('add')}
+                >
+                  Ajouter (nouveaux)
+                </Button>
+                <Button
+                  variant={importMode === 'update' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('update')}
+                >
+                  Mettre à jour (existants)
+                </Button>
+              </div>
+
+              {importMode === 'update' && (
+                <p className="text-xs text-muted-foreground">
+                  Les fournisseurs seront mis à jour par correspondance sur la <strong>société</strong>. Sélectionnez les colonnes à mettre à jour :
+                </p>
+              )}
+
+              {/* Column mapping */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold">Correspondance des colonnes :</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {importFields.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input shrink-0"
+                        checked={importSelectedCols.has(f.key)}
+                        onChange={() => {
+                          setImportSelectedCols(prev => {
+                            const next = new Set(prev);
+                            next.has(f.key) ? next.delete(f.key) : next.add(f.key);
+                            return next;
+                          });
+                        }}
+                        disabled={importMode === 'update' && f.key === 'societe'}
+                      />
+                      <span className="text-xs w-28 shrink-0 truncate" title={f.label}>{f.label}</span>
+                      <select
+                        className="flex-1 text-xs rounded border border-input bg-background px-2 py-1"
+                        value={importMapping[f.key] || ''}
+                        onChange={e => {
+                          setImportMapping(prev => {
+                            const next = { ...prev };
+                            if (e.target.value) {
+                              next[f.key] = e.target.value;
+                              setImportSelectedCols(p => new Set([...p, f.key]));
+                            } else {
+                              delete next[f.key];
+                              setImportSelectedCols(p => { const n = new Set(p); n.delete(f.key); return n; });
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <option value="">— non mappé —</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
                   ))}
-                </tbody>
-              </table>
-              {importPreview.length > 10 && <p className="text-xs text-muted-foreground mt-2">... et {importPreview.length - 10} autres lignes</p>}
-            </div>
+                </div>
+              </div>
+
+              <p className="text-sm text-muted-foreground">{importPreview.length} ligne(s) détectée(s)</p>
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      {Object.keys(importPreview[0] || {}).map((k, i) => <th key={i} className="px-2 py-1 text-left">{k}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.slice(0, 10).map((row, i) => (
+                      <tr key={i} className="border-b">
+                        {Object.values(row).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap">{String(v)}</td>)}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {importPreview.length > 10 && <p className="text-xs text-muted-foreground">... et {importPreview.length - 10} autres lignes</p>}
+            </>
           )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
-            <Button onClick={importFournisseurs}>Importer {importPreview?.length || 0} fournisseur(s)</Button>
+            <Button onClick={importFournisseursAction}>
+              {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview?.length || 0} fournisseur(s)`}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
