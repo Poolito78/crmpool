@@ -57,6 +57,7 @@ export default function Devis() {
     setClientId('');
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
+    setReferenceAffaire('');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
