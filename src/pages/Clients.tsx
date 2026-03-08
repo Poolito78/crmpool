@@ -292,30 +292,44 @@ export default function Clients() {
       {showFilters && (
         <div className="flex flex-wrap gap-3 items-center bg-muted/30 rounded-lg border border-border p-3">
           <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Département :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)}>
+              <option value="">Tous</option>
+              {departements.map(d => <option key={d} value={d}>{d}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Ville :</Label>
-            <select
-              className="text-sm rounded border border-input bg-background px-2 py-1.5"
-              value={filterVille}
-              onChange={e => setFilterVille(e.target.value)}
-            >
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterVille} onChange={e => setFilterVille(e.target.value)}>
               <option value="">Toutes</option>
               {villes.map(v => <option key={v} value={v}>{v}</option>)}
             </select>
           </div>
           <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Société :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterSociete} onChange={e => setFilterSociete(e.target.value)}>
+              <option value="">Toutes</option>
+              {societes.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Revendeur :</Label>
-            <select
-              className="text-sm rounded border border-input bg-background px-2 py-1.5"
-              value={filterRevendeur}
-              onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}
-            >
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}>
               <option value="">Tous</option>
               <option value="oui">Oui</option>
               <option value="non">Non</option>
             </select>
           </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Adresses :</Label>
+            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')}>
+              <option value="">Tous</option>
+              <option value="oui">Avec adresses</option>
+              <option value="non">Sans adresses</option>
+            </select>
+          </div>
           {activeFilterCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterRevendeur(''); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterDepartement(''); setFilterSociete(''); setFilterRevendeur(''); setFilterHasAdresse(''); }}>
               Réinitialiser
             </Button>
           )}
