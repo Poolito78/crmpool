@@ -96,6 +96,8 @@ export default function Devis() {
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
     setAdresseLivraisonId(d.adresseLivraisonId || '');
+    setModeCalcul(d.modeCalcul || 'standard');
+    setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
   }
 
   function openNew() {
