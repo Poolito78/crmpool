@@ -146,7 +146,10 @@ export default function Clients() {
             {filtered.map(c => (
               <>
                 <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-3 font-medium">{c.nom}</td>
+                  <td className="px-4 py-3 font-medium">
+                    {c.nom}
+                    {c.estRevendeur && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">Revendeur</Badge>}
+                  </td>
                   <td className="px-4 py-3 text-muted-foreground">{c.societe || '—'}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.telephone}</td>
