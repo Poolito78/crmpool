@@ -587,9 +587,16 @@ export default function Clients() {
                 </Button>
               </div>
 
+              {/* Match key selector */}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-muted-foreground">Correspondance par :</span>
+                <Button variant={importMatchKey === 'nom' ? 'default' : 'outline'} size="sm" onClick={() => setImportMatchKey('nom')}>Nom</Button>
+                <Button variant={importMatchKey === 'societe' ? 'default' : 'outline'} size="sm" onClick={() => setImportMatchKey('societe')}>Société</Button>
+              </div>
+
               {importMode === 'update' && (
                 <p className="text-xs text-muted-foreground">
-                  Les clients seront mis à jour par correspondance sur le <strong>nom</strong>. Sélectionnez les colonnes à mettre à jour :
+                  Les clients seront mis à jour par correspondance sur <strong>{importMatchKey === 'nom' ? 'le nom' : 'la société'}</strong>. Sélectionnez les colonnes à mettre à jour :
                 </p>
               )}
 
