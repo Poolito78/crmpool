@@ -12,18 +12,21 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 2, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
 };
 
-function calcPrixVente(prixAchat: number, coeff: number) {
+// Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
+// Prix public déduit : prixHT = prixRevendeur / (1 - remise/100)
+function calcPrixRevendeurFromCoeff(prixAchat: number, coeff: number) {
   return Math.round(prixAchat * coeff * 100) / 100;
 }
-function calcPrixRevendeur(prixVenteHT: number, remise: number) {
-  return Math.round(prixVenteHT * (1 - remise / 100) * 100) / 100;
+function calcPrixPublicFromRevendeur(prixRevendeur: number, remise: number) {
+  if (remise >= 100) return prixRevendeur;
+  return Math.round(prixRevendeur / (1 - remise / 100) * 100) / 100;
 }
-function calcCoeffRevendeur(prixRevendeur: number, prixAchat: number) {
+function calcCoeffPublic(prixHT: number, prixAchat: number) {
   if (prixAchat === 0) return 0;
-  return prixRevendeur / prixAchat;
+  return prixHT / prixAchat;
 }
 function calcMargeBrute(prixVente: number, prixAchat: number) {
   return prixVente - prixAchat;
