@@ -126,8 +126,8 @@ export default function Produits() {
       const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
       return {
         id: generateId(),
-        reference: String(row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
-        nom: String(row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || row['Article'] || row['article'] || ''),
+        reference: String(row['Article'] || row['article'] || row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
+        nom: String(row['Produit'] || row['produit'] || row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || ''),
         description: String(row['Description'] || row['description'] || ''),
         prixAchat,
         coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
