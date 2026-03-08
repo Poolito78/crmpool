@@ -50,6 +50,8 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
+  const [fraisPortHT, setFraisPortHT] = useState(0);
+  const [fraisPortTVA, setFraisPortTVA] = useState(20);
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
@@ -64,6 +66,8 @@ export default function Devis() {
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
+    setFraisPortHT(d.fraisPortHT || 0);
+    setFraisPortTVA(d.fraisPortTVA ?? 20);
   }
 
   function openNew() {
@@ -75,6 +79,8 @@ export default function Devis() {
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setFraisPortHT(0);
+    setFraisPortTVA(20);
     setDialogOpen(true);
   }
 
@@ -124,14 +130,14 @@ export default function Devis() {
 
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions
+        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       } : d));
       toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       const newDevis: DevisType = {
         id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
-        dateValidite, statut, lignes, referenceAffaire, notes, conditions
+        dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
       toast.success('Devis créé');
@@ -159,7 +165,7 @@ export default function Devis() {
     }
   }
 
-  const total = calculerTotalDevis(lignes);
+  const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
 
   return (
     <div className="space-y-4">
@@ -175,7 +181,7 @@ export default function Devis() {
       <div className="space-y-3">
         {filtered.map(d => {
           const client = clients.find(c => c.id === d.clientId);
-          const t = calculerTotalDevis(d.lignes);
+          const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -325,9 +331,25 @@ export default function Devis() {
               </div>
             </div>
 
+            {/* Frais de port */}
+            <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
+              <p className="text-sm font-semibold">Frais de port</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Montant HT</Label>
+                  <Input type="number" step="0.01" value={fraisPortHT || ''} onChange={e => setFraisPortHT(e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                </div>
+                <div>
+                  <Label className="text-xs">TVA %</Label>
+                  <Input type="number" value={fraisPortTVA} onChange={e => setFraisPortTVA(parseFloat(e.target.value) || 20)} className="h-8 text-sm" />
+                </div>
+              </div>
+            </div>
+
             {/* Totals */}
             <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
-              <div className="flex justify-between"><span>Total HT</span><span className="font-semibold">{formatMontant(total.totalHT)}</span></div>
+              <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(calculerTotalDevis(lignes, 0, 0).totalHT)}</span></div>
+              {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
               <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
               <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
             </div>

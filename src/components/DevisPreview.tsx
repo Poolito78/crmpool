@@ -13,7 +13,7 @@ export default function DevisPreview({ devis, client, onEdit }: Props) {
     window.print();
   }
 
-  const totals = calculerTotalDevis(devis.lignes);
+  const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
 
   return (
     <div className="bg-card">
@@ -107,6 +107,9 @@ export default function DevisPreview({ devis, client, onEdit }: Props) {
         <div className="flex justify-end mb-8">
           <div className="w-64 space-y-1">
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
+            {(devis.fraisPortHT || 0) > 0 && (
+              <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>
+            )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total TVA</span><span>{formatMontant(totals.totalTVA)}</span></div>
             <div className="flex justify-between border-t-2 border-primary pt-2 mt-2">
               <span className="font-bold text-lg">Total TTC</span>

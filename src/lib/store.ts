@@ -82,6 +82,8 @@ export interface Devis {
   referenceAffaire?: string;
   notes?: string;
   conditions?: string;
+  fraisPortHT?: number;
+  fraisPortTVA?: number;
 }
 
 // Demo data
@@ -171,11 +173,18 @@ export function calculerTotalLigne(ligne: LigneDevis) {
   return { totalHT, totalTVA, totalTTC: totalHT + totalTVA };
 }
 
-export function calculerTotalDevis(lignes: LigneDevis[]) {
-  return lignes.reduce((acc, l) => {
+export function calculerTotalDevis(lignes: LigneDevis[], fraisPortHT = 0, fraisPortTVA = 20) {
+  const lignesTotal = lignes.reduce((acc, l) => {
     const { totalHT, totalTVA, totalTTC } = calculerTotalLigne(l);
     return { totalHT: acc.totalHT + totalHT, totalTVA: acc.totalTVA + totalTVA, totalTTC: acc.totalTTC + totalTTC };
   }, { totalHT: 0, totalTVA: 0, totalTTC: 0 });
+  const portTVA = fraisPortHT * (fraisPortTVA / 100);
+  return {
+    totalHT: lignesTotal.totalHT + fraisPortHT,
+    totalTVA: lignesTotal.totalTVA + portTVA,
+    totalTTC: lignesTotal.totalTTC + fraisPortHT + portTVA,
+    fraisPortTTC: fraisPortHT + portTVA,
+  };
 }
 
 export function formatMontant(n: number) {
