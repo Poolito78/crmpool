@@ -70,6 +70,7 @@ export default function Clients() {
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
+  const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -193,14 +194,15 @@ export default function Clients() {
       let updated = 0;
       updateClients(prev => prev.map(c => {
         const matchingRow = importPreview.find(row => {
-          const nom = getMappedValue(row, 'nom');
-          return nom.toLowerCase() === c.nom.trim().toLowerCase();
+          const val = getMappedValue(row, importMatchKey);
+          const clientVal = importMatchKey === 'nom' ? c.nom : (c.societe || '');
+          return val.toLowerCase() === clientVal.trim().toLowerCase();
         });
         if (!matchingRow) return c;
 
         const updates: Record<string, any> = {};
         for (const field of selectedFields) {
-          if (field.key === 'nom') continue;
+          if (field.key === importMatchKey) continue;
           const val = getMappedValue(matchingRow, field.key);
           if (val) updates[field.key] = val;
         }
@@ -226,12 +228,11 @@ export default function Clients() {
         dateCreation: new Date().toISOString().split('T')[0],
       })).filter(c => c.nom || c.societe);
 
-      const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+      const existingKeys = new Set(clients.map(c => (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase()));
       const unique = mapped.filter(c => {
-        const name = c.nom.trim().toLowerCase();
-        if (!name) return true;
-        if (existingNames.has(name)) return false;
-        existingNames.add(name);
+        const key = (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase();
+        if (!key || existingKeys.has(key)) return false;
+        existingKeys.add(key);
         return true;
       });
       const skipped = mapped.length - unique.length;
@@ -586,9 +587,16 @@ export default function Clients() {
                 </Button>
               </div>
 
+              {/* Match key selector */}
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-xs text-muted-foreground">Correspondance par :</span>
+                <Button variant={importMatchKey === 'nom' ? 'default' : 'outline'} size="sm" onClick={() => setImportMatchKey('nom')}>Nom</Button>
+                <Button variant={importMatchKey === 'societe' ? 'default' : 'outline'} size="sm" onClick={() => setImportMatchKey('societe')}>Société</Button>
+              </div>
+
               {importMode === 'update' && (
                 <p className="text-xs text-muted-foreground">
-                  Les clients seront mis à jour par correspondance sur le <strong>nom</strong>. Sélectionnez les colonnes à mettre à jour :
+                  Les clients seront mis à jour par correspondance sur <strong>{importMatchKey === 'nom' ? 'le nom' : 'la société'}</strong>. Sélectionnez les colonnes à mettre à jour :
                 </p>
               )}
 
