@@ -603,18 +603,14 @@ export default function Produits() {
                   <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute pub.</Label>
                   <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
                 </div>
                 <div>
-                  <Label className="text-xs">Taux marque</Label>
+                  <Label className="text-xs">Marge %</Label>
                   <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
-                </div>
-                <div>
-                  <Label className="text-xs">Taux marge</Label>
-                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
             </div>
