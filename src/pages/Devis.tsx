@@ -307,7 +307,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} onEdit={() => { setPreviewDevis(null); handleEdit(previewDevis); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} />
           </DialogContent>
         </Dialog>
       )}
