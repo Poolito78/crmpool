@@ -78,6 +78,7 @@ export default function Devis() {
   function openNew() {
     setEditingId(null);
     setClientId('');
+    setDateCreation(new Date().toISOString().split('T')[0]);
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
     setReferenceAffaire('');
