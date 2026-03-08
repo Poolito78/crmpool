@@ -41,6 +41,23 @@ export default function Produits() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleAll = () => {
+    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
+  };
+  function removeSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Supprimer ${selected.size} produit(s) ?`)) return;
+    updateProduits(prev => prev.filter(p => !selected.has(p.id)));
+    toast.success(`${selected.size} produit(s) supprimé(s)`);
+    setSelected(new Set());
+  }
 
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
@@ -160,9 +177,9 @@ export default function Produits() {
         </div>
         <div className="flex gap-2 shrink-0">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
-          {produits.length > 0 && (
-            <Button variant="destructive" size="sm" onClick={() => { if (confirm(`Supprimer les ${produits.length} produit(s) ?`)) { updateProduits(() => []); toast.success('Tous les produits supprimés'); } }}>
-              <Trash2 className="w-4 h-4 mr-2" /> Tout supprimer
+          {selected.size > 0 && (
+            <Button variant="destructive" size="sm" onClick={removeSelected}>
+              <Trash2 className="w-4 h-4 mr-2" /> Supprimer {selected.size} sélectionné(s)
             </Button>
           )}
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
@@ -175,6 +192,7 @@ export default function Produits() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
+                <th className="px-3 py-3 w-8"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} className="rounded border-input" /></th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Réf.</th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nom</th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
@@ -193,6 +211,7 @@ export default function Produits() {
                 const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     <td className="px-3 py-3 font-mono text-xs">{p.reference}</td>
                     <td className="px-3 py-3 font-medium">{p.nom}</td>
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
@@ -234,9 +253,12 @@ export default function Produits() {
           return (
             <div key={p.id} className="bg-card rounded-xl border border-border p-4">
               <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium">{p.nom}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+                <div className="flex items-start gap-2">
+                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
+                  <div>
+                    <p className="font-medium">{p.nom}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
