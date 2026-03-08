@@ -343,9 +343,9 @@ export function useStore() {
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('produits').insert(added.map(p => produitToDb(p, userId))).then();
+        if (added.length) supabase.from('produits').insert(added.map(p => produitToDb(p, userId)) as any).then();
         if (updated.length) {
-          updated.forEach(p => supabase.from('produits').update(produitToDb(p, userId)).eq('id', p.id).then());
+          updated.forEach(p => supabase.from('produits').update(produitToDb(p, userId) as any).eq('id', p.id).then());
         }
         if (removed.length) supabase.from('produits').delete().in('id', removed.map(p => p.id)).then();
       }
