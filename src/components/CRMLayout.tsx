@@ -1,10 +1,11 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis } from '@/lib/store';
 import { exportMultiSheet } from '@/lib/exportExcel';
+import { supabase } from '@/integrations/supabase/client';
 
 const navItems = [
   { label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
@@ -60,13 +61,20 @@ export default function CRMLayout() {
             );
           })}
         </nav>
-        <div className="px-3 pb-4">
+        <div className="px-3 pb-4 space-y-1">
           <button
             onClick={exportGlobal}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
           >
             <Download className="w-5 h-5 shrink-0" />
             Export global
+          </button>
+          <button
+            onClick={() => supabase.auth.signOut()}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+          >
+            <LogOut className="w-5 h-5 shrink-0" />
+            Déconnexion
           </button>
         </div>
       </aside>
