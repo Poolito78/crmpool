@@ -20,7 +20,14 @@ const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
 };
 
 export default function Clients() {
-  const { clients, updateClients } = useCRM();
+  const { clients, updateClients, produits } = useCRM();
+  
+  // Extract unique categories from products
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    produits.forEach(p => { if (p.categorie) cats.add(p.categorie); });
+    return Array.from(cats).sort();
+  }, [produits]);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
