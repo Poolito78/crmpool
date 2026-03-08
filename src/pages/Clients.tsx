@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}
@@ -18,6 +19,31 @@ const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
   libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false
 };
+
+const importFields: { key: string; label: string; aliases: string[]; type: 'text' }[] = [
+  { key: 'nom', label: 'Nom', aliases: ['nom', 'name', 'contact', 'nom contact', 'nom client'], type: 'text' },
+  { key: 'societe', label: 'Société', aliases: ['société', 'societe', 'entreprise', 'company', 'raison sociale'], type: 'text' },
+  { key: 'email', label: 'Email', aliases: ['email', 'e-mail', 'mail', 'courriel'], type: 'text' },
+  { key: 'telephone', label: 'Téléphone', aliases: ['téléphone', 'telephone', 'tel', 'tél', 'phone', 'portable', 'mobile'], type: 'text' },
+  { key: 'adresse', label: 'Adresse', aliases: ['adresse', 'address', 'rue'], type: 'text' },
+  { key: 'ville', label: 'Ville', aliases: ['ville', 'city'], type: 'text' },
+  { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp', 'zip', 'postal'], type: 'text' },
+  { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques', 'observation'], type: 'text' },
+];
+
+function autoDetectMapping(excelCols: string[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const field of importFields) {
+    for (const alias of field.aliases) {
+      const match = excelCols.find(col => col.trim().toLowerCase() === alias.toLowerCase());
+      if (match && !Object.values(mapping).includes(match)) {
+        mapping[field.key] = match;
+        break;
+      }
+    }
+  }
+  return mapping;
+}
 
 export default function Clients() {
   const { clients, updateClients, produits } = useCRM();
@@ -38,6 +64,11 @@ export default function Clients() {
   const [showAdresseForm, setShowAdresseForm] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -116,6 +147,76 @@ export default function Clients() {
     setShowAdresseForm(true);
   }
 
+  const excelColumns = useMemo(() => {
+    if (!importPreview || importPreview.length === 0) return [];
+    return Object.keys(importPreview[0]);
+  }, [importPreview]);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        if (json.length === 0) { toast.error('Fichier vide'); return; }
+        setImportPreview(json);
+        const cols = Object.keys(json[0] as object);
+        const detected = autoDetectMapping(cols);
+        setImportMapping(detected);
+        setImportSelectedCols(new Set(Object.keys(detected)));
+        setImportDialogOpen(true);
+      } catch { toast.error('Erreur de lecture du fichier'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  }
+
+  function getMappedValue(row: any, fieldKey: string): string {
+    const colName = importMapping[fieldKey];
+    if (!colName) return '';
+    const val = row[colName];
+    if (val === undefined || val === null) return '';
+    return String(val).trim();
+  }
+
+  function importClients() {
+    if (!importPreview) return;
+    const mapped: Client[] = importPreview.map((row: any) => ({
+      id: generateId(),
+      nom: getMappedValue(row, 'nom'),
+      societe: getMappedValue(row, 'societe'),
+      email: getMappedValue(row, 'email'),
+      telephone: getMappedValue(row, 'telephone'),
+      adresse: getMappedValue(row, 'adresse'),
+      ville: getMappedValue(row, 'ville'),
+      codePostal: getMappedValue(row, 'codePostal'),
+      notes: getMappedValue(row, 'notes'),
+      adressesLivraison: [],
+      dateCreation: new Date().toISOString().split('T')[0],
+    })).filter(c => c.nom || c.societe);
+
+    // Dédoublonnage par nom
+    const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+    const unique = mapped.filter(c => {
+      const name = c.nom.trim().toLowerCase();
+      if (!name) return true;
+      if (existingNames.has(name)) return false;
+      existingNames.add(name);
+      return true;
+    });
+    const skipped = mapped.length - unique.length;
+
+    updateClients(prev => [...prev, ...unique]);
+    toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -123,9 +224,11 @@ export default function Clients() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={openNew} className="shrink-0">
-          <Plus className="w-4 h-4 mr-2" /> Nouveau client
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
+        </div>
       </div>
 
       {/* Desktop table */}
@@ -437,6 +540,76 @@ export default function Clients() {
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import clients</DialogTitle></DialogHeader>
+          {importPreview && (
+            <>
+              {/* Column mapping */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold">Correspondance des colonnes :</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {importFields.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input shrink-0"
+                        checked={importSelectedCols.has(f.key)}
+                        onChange={e => {
+                          const next = new Set(importSelectedCols);
+                          e.target.checked ? next.add(f.key) : next.delete(f.key);
+                          setImportSelectedCols(next);
+                        }}
+                      />
+                      <Label className="text-xs w-24 shrink-0">{f.label}</Label>
+                      <select
+                        className="flex-1 text-xs rounded border border-input bg-background px-2 py-1"
+                        value={importMapping[f.key] || ''}
+                        onChange={e => setImportMapping(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      >
+                        <option value="">— Non mappé —</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="overflow-x-auto max-h-60">
+                <table className="w-full text-xs border">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      {importFields.filter(f => importSelectedCols.has(f.key) && importMapping[f.key]).map(f => (
+                        <th key={f.key} className="px-2 py-1 text-left border-b font-medium">{f.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.slice(0, 10).map((row, i) => (
+                      <tr key={i} className="border-b">
+                        {importFields.filter(f => importSelectedCols.has(f.key) && importMapping[f.key]).map(f => (
+                          <td key={f.key} className="px-2 py-1">{getMappedValue(row, f.key)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {importPreview.length > 10 && <p className="text-xs text-muted-foreground mt-1">... et {importPreview.length - 10} autres lignes</p>}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
+                <Button onClick={importClients}>Importer {importPreview.length} client(s)</Button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
