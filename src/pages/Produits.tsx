@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
@@ -50,6 +50,8 @@ export default function Produits() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'add' | 'update'>('add');
+  const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
 
@@ -168,6 +170,32 @@ export default function Produits() {
     confirmDelete(id);
   }
 
+  // Import field definitions
+  const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
+    { key: 'reference', label: 'Référence', aliases: ['article', 'référence', 'reference', 'ref', 'code article'], type: 'text' },
+    { key: 'nom', label: 'Nom', aliases: ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle'], type: 'text' },
+    { key: 'description', label: 'Description', aliases: ['description'], type: 'text' },
+    { key: 'prixAchat', label: 'Prix Achat', aliases: ['pa conditionné', 'pa conditionne', 'p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat'], type: 'number' },
+    { key: 'coefficient', label: 'Coefficient', aliases: ['coefficient', 'coeff'], type: 'number', default: 2 },
+    { key: 'prixHT', label: 'Prix HT', aliases: ['prix ht', 'prixht', 'pv ht', 'prix_ht'], type: 'number' },
+    { key: 'remiseRevendeur', label: 'Remise revendeur %', aliases: ['remise revendeur', 'remiserevendeur', 'remise'], type: 'number', default: 30 },
+    { key: 'prixRevendeur', label: 'Prix revendeur', aliases: ['prix revendeur', 'prixrevendeur'], type: 'number' },
+    { key: 'tva', label: 'TVA %', aliases: ['tva'], type: 'number', default: 20 },
+    { key: 'unite', label: 'Unité', aliases: ['unité', 'unite'], type: 'text', default: 'pièce' },
+    { key: 'stock', label: 'Stock', aliases: ['stock'], type: 'number' },
+    { key: 'stockMin', label: 'Stock min', aliases: ['stock min', 'stockmin', 'stock minimum'], type: 'number' },
+    { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
+  ];
+
+  // Detect which import fields have matching columns in the file
+  const detectedImportFields = useMemo(() => {
+    if (!importPreview || importPreview.length === 0) return [];
+    const rowKeys = Object.keys(importPreview[0]);
+    return importFields.filter(f =>
+      f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase()))
+    );
+  }, [importPreview]);
+
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -181,6 +209,13 @@ export default function Produits() {
         const json = XLSX.utils.sheet_to_json(sheet);
         if (json.length === 0) { toast.error('Fichier vide'); return; }
         setImportPreview(json);
+        setImportMode('add');
+        // Select all detected fields by default
+        const rowKeys = Object.keys(json[0] as object);
+        const detected = importFields
+          .filter(f => f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase())))
+          .map(f => f.key);
+        setImportSelectedCols(new Set(detected));
         setImportDialogOpen(true);
       } catch { toast.error('Erreur de lecture du fichier'); }
     };
@@ -188,65 +223,113 @@ export default function Produits() {
     e.target.value = '';
   }
 
+  function findColValue(row: any, keys: string[]): string {
+    const rowKeys = Object.keys(row);
+    for (const k of keys) {
+      const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+      if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
+    }
+    return '';
+  }
+  function findNumValue(row: any, keys: string[], def = 0): number {
+    const val = findColValue(row, keys);
+    const n = parseFloat(val);
+    return isNaN(n) ? def : n;
+  }
+
   function importArticles() {
     if (!importPreview) return;
+    const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
-    function findCol(row: any, keys: string[]): string {
-      const rowKeys = Object.keys(row);
-      for (const k of keys) {
-        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
-      }
-      return '';
+    if (importMode === 'update') {
+      // Update existing products by reference
+      let updated = 0;
+      updateProduits(prev => prev.map(p => {
+        const matchingRow = importPreview.find(row => {
+          const ref = findColValue(row, ['article', 'référence', 'reference', 'ref', 'code article']);
+          return ref.toLowerCase() === p.reference.trim().toLowerCase();
+        });
+        if (!matchingRow) return p;
+
+        const updates: Record<string, any> = {};
+        for (const field of selectedFields) {
+          if (field.key === 'reference') continue;
+          if (field.type === 'number') {
+            updates[field.key] = findNumValue(matchingRow, field.aliases, field.default ?? 0);
+          } else {
+            const val = findColValue(matchingRow, field.aliases);
+            if (val || field.default) updates[field.key] = val || field.default || '';
+          }
+        }
+
+        // Recalculate derived prices
+        const pa = updates.prixAchat ?? p.prixAchat;
+        const coeff = updates.coefficient ?? p.coefficient;
+        const pvht = updates.prixHT ?? calcPrixVente(pa, coeff);
+        const remise = updates.remiseRevendeur ?? p.remiseRevendeur;
+        const pvr = updates.prixRevendeur ?? calcPrixRevendeur(pvht, remise);
+
+        if (importSelectedCols.has('prixAchat') || importSelectedCols.has('coefficient')) {
+          updates.prixHT = importSelectedCols.has('prixHT') ? (updates.prixHT || pvht) : calcPrixVente(pa, coeff);
+        }
+        if (importSelectedCols.has('prixAchat') || importSelectedCols.has('remiseRevendeur') || importSelectedCols.has('prixHT')) {
+          updates.prixRevendeur = calcPrixRevendeur(updates.prixHT ?? pvht, remise);
+          updates.coeffRevendeur = calcCoeffRevendeur(updates.prixRevendeur, pa);
+        }
+
+        if (Object.keys(updates).length > 0) {
+          updated++;
+          return { ...p, ...updates };
+        }
+        return p;
+      }));
+      toast.success(`${updated} produit(s) mis à jour`);
+    } else {
+      // Add new products (existing behavior)
+      const mapped: Produit[] = importPreview.map((row: any) => {
+        const prixAchat = findNumValue(row, importFields.find(f => f.key === 'prixAchat')!.aliases);
+        const coefficient = findNumValue(row, importFields.find(f => f.key === 'coefficient')!.aliases, 2);
+        const prixHT = findNumValue(row, importFields.find(f => f.key === 'prixHT')!.aliases) || calcPrixVente(prixAchat, coefficient);
+        const remiseRevendeur = findNumValue(row, importFields.find(f => f.key === 'remiseRevendeur')!.aliases, 30);
+        const prixRevendeur = findNumValue(row, importFields.find(f => f.key === 'prixRevendeur')!.aliases) || calcPrixRevendeur(prixHT, remiseRevendeur);
+        const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+        const reference = findColValue(row, importFields.find(f => f.key === 'reference')!.aliases);
+        const nom = findColValue(row, importFields.find(f => f.key === 'nom')!.aliases);
+        return {
+          id: generateId(),
+          reference,
+          nom,
+          description: findColValue(row, ['description']),
+          prixAchat,
+          coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
+          prixHT,
+          coeffRevendeur,
+          remiseRevendeur,
+          prixRevendeur,
+          tva: findNumValue(row, ['tva'], 20),
+          unite: findColValue(row, ['unité', 'unite']) || 'pièce',
+          stock: findNumValue(row, ['stock']),
+          stockMin: findNumValue(row, ['stock min', 'stockmin', 'stock minimum']),
+          fournisseurId: '',
+          categorie: findColValue(row, ['catégorie', 'categorie', 'famille']),
+          dateCreation: new Date().toISOString().split('T')[0],
+        };
+      }).filter(p => p.nom || p.reference);
+
+      const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
+      const unique = mapped.filter(p => {
+        const ref = p.reference.trim().toLowerCase();
+        if (!ref) return true;
+        if (existingRefs.has(ref)) return false;
+        existingRefs.add(ref);
+        return true;
+      });
+      const skipped = mapped.length - unique.length;
+
+      updateProduits(prev => [...prev, ...unique]);
+      toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
     }
-    function findNum(row: any, keys: string[], def = 0): number {
-      const val = findCol(row, keys);
-      const n = parseFloat(val);
-      return isNaN(n) ? def : n;
-    }
 
-    const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = findNum(row, ['pa conditionné', 'pa conditionne', 'p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
-      const coefficient = findNum(row, ['coefficient', 'coeff'], 2);
-      const prixHT = findNum(row, ['prix ht', 'prixht', 'pv ht', 'prix_ht']) || calcPrixVente(prixAchat, coefficient);
-      const remiseRevendeur = findNum(row, ['remise revendeur', 'remiserevendeur', 'remise'], 30);
-      const prixRevendeur = findNum(row, ['prix revendeur', 'prixrevendeur']) || calcPrixRevendeur(prixHT, remiseRevendeur);
-      const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
-      const reference = findCol(row, ['article', 'référence', 'reference', 'ref', 'code article']);
-      const nom = findCol(row, ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle']);
-      return {
-        id: generateId(),
-        reference,
-        nom,
-        description: findCol(row, ['description']),
-        prixAchat,
-        coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
-        prixHT,
-        coeffRevendeur,
-        remiseRevendeur,
-        prixRevendeur,
-        tva: findNum(row, ['tva'], 20),
-        unite: findCol(row, ['unité', 'unite']) || 'pièce',
-        stock: findNum(row, ['stock']),
-        stockMin: findNum(row, ['stock min', 'stockmin', 'stock minimum']),
-        fournisseurId: '',
-        categorie: findCol(row, ['catégorie', 'categorie', 'famille']),
-        dateCreation: new Date().toISOString().split('T')[0],
-      };
-    }).filter(p => p.nom || p.reference);
-
-    const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
-    const unique = mapped.filter(p => {
-      const ref = p.reference.trim().toLowerCase();
-      if (!ref) return true;
-      if (existingRefs.has(ref)) return false;
-      existingRefs.add(ref);
-      return true;
-    });
-    const skipped = mapped.length - unique.length;
-
-    updateProduits(prev => [...prev, ...unique]);
-    toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
     setImportDialogOpen(false);
     setImportPreview(null);
   }
@@ -485,6 +568,59 @@ export default function Produits() {
           <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
           {importPreview && (
             <>
+              {/* Mode selection */}
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant={importMode === 'add' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('add')}
+                >
+                  Ajouter (nouveaux)
+                </Button>
+                <Button
+                  variant={importMode === 'update' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('update')}
+                >
+                  Mettre à jour (existants)
+                </Button>
+              </div>
+
+              {importMode === 'update' && (
+                <p className="text-xs text-muted-foreground">
+                  Les produits seront mis à jour par correspondance sur la <strong>référence</strong>. Sélectionnez les colonnes à mettre à jour :
+                </p>
+              )}
+
+              {/* Column selection */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30">
+                <p className="text-xs font-semibold mb-2">Colonnes détectées :</p>
+                <div className="flex flex-wrap gap-2">
+                  {detectedImportFields.map(f => (
+                    <label key={f.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input"
+                        checked={importSelectedCols.has(f.key)}
+                        onChange={() => {
+                          setImportSelectedCols(prev => {
+                            const next = new Set(prev);
+                            next.has(f.key) ? next.delete(f.key) : next.add(f.key);
+                            return next;
+                          });
+                        }}
+                        disabled={importMode === 'update' && f.key === 'reference'}
+                      />
+                      <span className={importMode === 'update' && f.key === 'reference' ? 'text-muted-foreground' : ''}>{f.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(detectedImportFields.map(f => f.key)))}>Tout sélectionner</button>
+                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(importMode === 'update' ? ['reference'] : []))}>Tout désélectionner</button>
+                </div>
+              </div>
+
               <p className="text-sm text-muted-foreground">{importPreview.length} ligne(s) détectée(s)</p>
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
@@ -507,7 +643,9 @@ export default function Produits() {
           )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
-            <Button onClick={importArticles}>Importer {importPreview?.length || 0} produit(s)</Button>
+            <Button onClick={importArticles}>
+              {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview?.length || 0} produit(s)`}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
