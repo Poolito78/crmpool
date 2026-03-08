@@ -152,9 +152,10 @@ export default function Devis() {
     setLignes(prev => prev.filter(l => l.id !== id));
   }
 
-  function calcQuantiteSurface(produit: typeof produits[0], surface: number): number {
-    if (!produit.consommation || produit.consommation <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
-    const kgNeeded = surface * produit.consommation;
+  function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
+    const conso = consoOverride || produit.consommation;
+    if (!conso || conso <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    const kgNeeded = surface * conso;
     return Math.ceil(kgNeeded / produit.conditionnement);
   }
 
@@ -171,7 +172,7 @@ export default function Devis() {
       if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.conditionnement) {
         quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
       }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
     }
   }
 
@@ -245,8 +246,10 @@ export default function Devis() {
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
-      if (!p || !p.consommation || !p.conditionnement) return l;
-      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2);
+      if (!p || !p.conditionnement) return l;
+      const conso = l.consommation || p.consommation;
+      if (!conso) return l;
+      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2, l.consommation);
       return { ...l, quantite, surfaceM2: l.surfaceM2 || surfaceGlobaleM2 };
     }));
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
@@ -574,17 +577,23 @@ export default function Devis() {
                           <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                             const surface = parseFloat(e.target.value) || 0;
                             const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                            const quantite = p && p.consommation && p.conditionnement ? calcQuantiteSurface(p, surface) : l.quantite;
+                            const quantite = p && (l.consommation || p.consommation) && p.conditionnement ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
                             setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
                           }} className="h-8 text-sm" />
                         </div>
                         {(() => {
                           const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                          const consoValue = l.consommation || p?.consommation || 0;
                           return (
                             <>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Conso.</Label>
-                                <Input value={p?.consommation ? `${p.consommation} kg/m²` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                <Label className="text-xs">Conso. (kg/m²)</Label>
+                                <Input type="number" step="0.01" value={consoValue || ''} onChange={e => {
+                                  const conso = parseFloat(e.target.value) || 0;
+                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                  const quantite = p && p.conditionnement && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso || undefined, quantite } : li));
+                                }} className="h-8 text-sm" placeholder={p?.consommation ? String(p.consommation) : '—'} />
                               </div>
                               <div>
                                 <Label className="text-xs text-muted-foreground">Condit.</Label>
