@@ -246,7 +246,7 @@ export default function Devis() {
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
-      if (!p || !p.conditionnement) return l;
+      if (!p || !p.poids) return l;
       const conso = l.consommation || p.consommation;
       if (!conso) return l;
       const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2, l.consommation);
