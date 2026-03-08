@@ -239,7 +239,7 @@ export default function Devis() {
                         className="text-primary hover:underline inline-flex items-center gap-1"
                       >
                         <User className="w-3 h-3" />
-                        {client.nom}
+                        {client.nom}{client.societe ? ` — ${client.societe}` : ''}
                       </button>
                     ) : '—'}
                     {' • '}{formatDate(d.dateCreation)}
