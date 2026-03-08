@@ -15,8 +15,12 @@ const emptyProduit = {
 function calcPrixVente(prixAchat: number, coeff: number) {
   return Math.round(prixAchat * coeff * 100) / 100;
 }
-function calcPrixRevendeur(prixAchat: number, coeffRevendeur: number) {
-  return Math.round(prixAchat * coeffRevendeur * 100) / 100;
+function calcPrixRevendeur(prixVenteHT: number, remise: number) {
+  return Math.round(prixVenteHT * (1 - remise / 100) * 100) / 100;
+}
+function calcCoeffRevendeur(prixRevendeur: number, prixAchat: number) {
+  if (prixAchat === 0) return 0;
+  return prixRevendeur / prixAchat;
 }
 function calcMargeBrute(prixVente: number, prixAchat: number) {
   return prixVente - prixAchat;
