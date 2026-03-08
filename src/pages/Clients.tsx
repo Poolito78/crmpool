@@ -49,6 +49,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 
 export default function Clients() {
   const { clients, updateClients, produits } = useCRM();
+  const [searchParams] = useSearchParams();
   
   // Extract unique categories from products
   const categories = useMemo(() => {
@@ -56,7 +57,7 @@ export default function Clients() {
     produits.forEach(p => { if (p.categorie) cats.add(p.categorie); });
     return Array.from(cats).sort();
   }, [produits]);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterVille, setFilterVille] = useState('');
   const [filterDepartement, setFilterDepartement] = useState('');
   const [filterSociete, setFilterSociete] = useState('');
