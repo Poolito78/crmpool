@@ -23,6 +23,8 @@ export interface Client {
   notes?: string;
   dateCreation: string;
   adressesLivraison: AdresseLivraison[];
+  estRevendeur?: boolean;
+  remisesParCategorie?: Record<string, number>; // catégorie -> remise %
 }
 
 export interface Fournisseur {
