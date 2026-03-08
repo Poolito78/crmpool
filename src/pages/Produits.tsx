@@ -160,7 +160,7 @@ export default function Produits() {
   }
 
   function save(andReturnToDevis = false) {
-    if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
+    if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     if (editing) {
       updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
       // Répercuter les modifications dans les lignes de devis liées
@@ -168,7 +168,7 @@ export default function Produits() {
         ...d,
         lignes: d.lignes.map(l => l.produitId === editing.id ? {
           ...l,
-          description: form.nom,
+          description: form.description,
           prixUnitaireHT: form.prixHT,
           tva: form.tva,
           unite: form.unite,
