@@ -13,7 +13,7 @@ export default function DevisPreview({ devis, client, onEdit }: Props) {
     window.print();
   }
 
-  const totals = calculerTotalDevis(devis.lignes);
+  const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
 
   return (
     <div className="bg-card">
