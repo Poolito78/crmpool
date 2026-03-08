@@ -437,14 +437,12 @@ export default function Produits() {
                     { key: 'stock', align: 'right' },
                   ].map(col => (
                     <th key={col.key} className="px-3 py-1">
-                      {!col.disabled ? (
-                        <Input
-                          placeholder="Filtrer..."
-                          value={columnFilters[col.key] || ''}
-                          onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
-                          className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
-                        />
-                      ) : null}
+                      <Input
+                        placeholder="Filtrer..."
+                        value={columnFilters[col.key] || ''}
+                        onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
+                        className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
+                      />
                     </th>
                   ))}
                   <th className="px-3 py-1">
