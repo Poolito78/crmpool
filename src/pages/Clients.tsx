@@ -390,6 +390,21 @@ export default function Clients() {
                     )}
                   </td>
                   <td className="px-4 py-3">
+                    {(() => {
+                      const clientDevis = devis.filter(d => d.clientId === c.id);
+                      if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                      return (
+                        <button
+                          onClick={() => navigate(`/devis?search=${encodeURIComponent(c.nom)}`)}
+                          className="flex items-center gap-1 text-primary hover:underline text-xs"
+                        >
+                          <FileText className="w-3 h-3" />
+                          {clientDevis.length} devis
+                        </button>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                       <button onClick={() => confirmRemove(c.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
