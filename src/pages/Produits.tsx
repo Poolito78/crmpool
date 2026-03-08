@@ -33,7 +33,17 @@ export default function Produits() {
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
 
-  const filtered = produits.filter(p =>
+  // Ensure old products without new fields get defaults
+  const safeProduits = produits.map(p => ({
+    ...p,
+    prixAchat: p.prixAchat ?? 0,
+    coefficient: p.coefficient ?? (p.prixAchat ? p.prixHT / p.prixAchat : 1),
+    coeffRevendeur: p.coeffRevendeur ?? 1.6,
+    remiseRevendeur: p.remiseRevendeur ?? 30,
+    prixRevendeur: p.prixRevendeur ?? 0,
+  }));
+
+  const filtered = safeProduits.filter(p =>
     [p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))
   );
 
