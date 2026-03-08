@@ -63,7 +63,8 @@ export default function Produits() {
       const next = { ...prev, ...updates };
       // Recalculate derived prices
       next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
-      next.prixRevendeur = calcPrixRevendeur(next.prixAchat, next.coeffRevendeur);
+      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
+      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
       return next;
     });
   }
