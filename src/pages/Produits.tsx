@@ -38,7 +38,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs } = useCRM();
+  const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
