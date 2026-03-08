@@ -226,12 +226,12 @@ export default function Produits() {
                   <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
                 </div>
                 <div>
-                  <Label className="text-xs">Taux marque</Label>
-                  <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                   <Label className="text-xs">Taux marque</Label>
+                   <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
                 <div>
-                  <Label className="text-xs">TVA (%)</Label>
-                  <Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 0 }))} />
+                   <Label className="text-xs">Taux marge</Label>
+                   <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
               <div className="border-t border-border pt-3">
