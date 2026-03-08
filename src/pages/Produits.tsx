@@ -155,9 +155,10 @@ export default function Produits() {
   function updateFormPrix(updates: Partial<typeof form>) {
     setForm(prev => {
       const next = { ...prev, ...updates };
-      next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
-      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
-      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
+      // Coefficient pilote le prix revendeur
+      next.prixRevendeur = calcPrixRevendeurFromCoeff(next.prixAchat, next.coefficient);
+      next.prixHT = calcPrixPublicFromRevendeur(next.prixRevendeur, next.remiseRevendeur);
+      next.coeffRevendeur = next.coefficient; // identique maintenant
       return next;
     });
   }
