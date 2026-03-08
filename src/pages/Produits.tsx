@@ -118,7 +118,7 @@ export default function Produits() {
   function importArticles() {
     if (!importPreview) return;
     const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = parseFloat(row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
+      const prixAchat = parseFloat(row['Achat KG ou U'] || row['Achat Kg ou U'] || row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
       const coefficient = parseFloat(row['Coefficient'] || row['coefficient'] || row['Coeff'] || row['coeff'] || 2);
       const prixHT = parseFloat(row['Prix HT'] || row['prixHT'] || row['PV HT'] || row['prix_ht'] || 0) || calcPrixVente(prixAchat, coefficient);
       const remiseRevendeur = parseFloat(row['Remise Revendeur'] || row['remiseRevendeur'] || row['Remise'] || 30);
@@ -126,8 +126,8 @@ export default function Produits() {
       const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
       return {
         id: generateId(),
-        reference: String(row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
-        nom: String(row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || row['Article'] || row['article'] || ''),
+        reference: String(row['Article'] || row['article'] || row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
+        nom: String(row['Produit'] || row['produit'] || row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || ''),
         description: String(row['Description'] || row['description'] || ''),
         prixAchat,
         coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
