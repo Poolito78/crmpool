@@ -80,26 +80,35 @@ export default function Produits() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure old products get correct coefficient (now drives revendeur price)
-  const safeProduits = produits.map(p => {
-    const prixAchat = p.prixAchat ?? 0;
-    const remise = p.remiseRevendeur ?? 30;
-    const prixRevendeur = p.prixRevendeur ?? 0;
-    // Recalculate coefficient as revendeur coefficient (prixRevendeur / prixAchat)
-    const coefficient = prixAchat > 0 && prixRevendeur > 0
-      ? prixRevendeur / prixAchat
-      : (p.coefficient ?? 1.6);
-    const recalcRevendeur = calcPrixRevendeurFromCoeff(prixAchat, coefficient);
-    const recalcPublic = calcPrixPublicFromRevendeur(recalcRevendeur, remise);
-    return {
-      ...p,
-      prixAchat,
-      coefficient,
-      coeffRevendeur: coefficient,
-      remiseRevendeur: remise,
-      prixRevendeur: recalcRevendeur,
-      prixHT: recalcPublic,
-    };
-  });
+  // Force remise revendeur to 30% for all products
+  const safeProduits = useMemo(() => {
+    let needsUpdate = false;
+    const safe = produits.map(p => {
+      const prixAchat = p.prixAchat ?? 0;
+      const remise = 30; // Force 30%
+      const prixRevendeur = p.prixRevendeur ?? 0;
+      const coefficient = prixAchat > 0 && prixRevendeur > 0
+        ? prixRevendeur / prixAchat
+        : (p.coefficient ?? 1.6);
+      const recalcRevendeur = calcPrixRevendeurFromCoeff(prixAchat, coefficient);
+      const recalcPublic = calcPrixPublicFromRevendeur(recalcRevendeur, remise);
+      if (p.remiseRevendeur !== 30 || p.prixHT !== recalcPublic) needsUpdate = true;
+      return {
+        ...p,
+        prixAchat,
+        coefficient,
+        coeffRevendeur: coefficient,
+        remiseRevendeur: remise,
+        prixRevendeur: recalcRevendeur,
+        prixHT: recalcPublic,
+      };
+    });
+    // Persist the fix
+    if (needsUpdate) {
+      setTimeout(() => updateProduits(() => safe), 0);
+    }
+    return safe;
+  }, [produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filtered = safeProduits.filter(p => {
     // Global search
