@@ -44,13 +44,28 @@ export default function Produits() {
   const [form, setForm] = useState(emptyProduit);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null); // null = supprimer plusieurs, else = supprimer un seul
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+
+  // Ensure old products without new fields get defaults
+  const safeProduits = produits.map(p => ({
+    ...p,
+    prixAchat: p.prixAchat ?? 0,
+    coefficient: p.coefficient ?? (p.prixAchat ? p.prixHT / p.prixAchat : 1),
+    coeffRevendeur: p.coeffRevendeur ?? 1.6,
+    remiseRevendeur: p.remiseRevendeur ?? 30,
+    prixRevendeur: p.prixRevendeur ?? 0,
+  }));
+
+  const filtered = safeProduits.filter(p =>
+    [p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))
+  );
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
+  
   const toggleAll = () => {
     setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
   };
@@ -80,93 +95,37 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importPreview, setImportPreview] = useState<any[] | null>(null);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
-
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const json = XLSX.utils.sheet_to_json(sheet);
-        if (json.length === 0) { toast.error('Fichier vide'); return; }
-        setImportPreview(json);
-        setImportDialogOpen(true);
-      } catch { toast.error('Erreur de lecture du fichier'); }
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = '';
+  function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
+  function openEdit(p: Produit) {
+    setEditing(p);
+    setForm({ reference: p.reference, nom: p.nom, description: p.description || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+    setDialogOpen(true);
   }
 
-  function importArticles() {
-    if (!importPreview) return;
-
-    // Helper: find value by checking multiple possible column names (case-insensitive)
-    function findCol(row: any, keys: string[]): string {
-      const rowKeys = Object.keys(row);
-      for (const k of keys) {
-        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
-      }
-      return '';
-    }
-    function findNum(row: any, keys: string[], def = 0): number {
-      const val = findCol(row, keys);
-      const n = parseFloat(val);
-      return isNaN(n) ? def : n;
-    }
-
-    const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = findNum(row, ['p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
-      const coefficient = findNum(row, ['coefficient', 'coeff'], 2);
-      const prixHT = findNum(row, ['prix ht', 'prixht', 'pv ht', 'prix_ht']) || calcPrixVente(prixAchat, coefficient);
-      const remiseRevendeur = findNum(row, ['remise revendeur', 'remiserevendeur', 'remise'], 30);
-      const prixRevendeur = findNum(row, ['prix revendeur', 'prixrevendeur']) || calcPrixRevendeur(prixHT, remiseRevendeur);
-      const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
-      const reference = findCol(row, ['article', 'référence', 'reference', 'ref', 'code article']);
-      const nom = findCol(row, ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle']);
-      return {
-        id: generateId(),
-        reference,
-        nom,
-        description: findCol(row, ['description']),
-        prixAchat,
-        coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
-        prixHT,
-        coeffRevendeur,
-        remiseRevendeur,
-        prixRevendeur,
-        tva: findNum(row, ['tva'], 20),
-        unite: findCol(row, ['unité', 'unite']) || 'pièce',
-        stock: findNum(row, ['stock']),
-        stockMin: findNum(row, ['stock min', 'stockmin', 'stock minimum']),
-        fournisseurId: '',
-        categorie: findCol(row, ['catégorie', 'categorie', 'famille']),
-        dateCreation: new Date().toISOString().split('T')[0],
-      };
-    }).filter(p => p.nom || p.reference);
-
-    // Filtrer les doublons par référence (code article)
-    const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
-    const unique = mapped.filter(p => {
-      const ref = p.reference.trim().toLowerCase();
-      if (!ref) return true; // pas de référence = on importe quand même
-      if (existingRefs.has(ref)) return false;
-      existingRefs.add(ref);
-      return true;
+  function updateFormPrix(updates: Partial<typeof form>) {
+    setForm(prev => {
+      const next = { ...prev, ...updates };
+      next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
+      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
+      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
+      return next;
     });
-    const skipped = mapped.length - unique.length;
+  }
 
-    updateProduits(prev => [...prev, ...unique]);
-    toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
-    setImportDialogOpen(false);
-    setImportPreview(null);
+  function save() {
+    if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
+    if (editing) {
+      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      toast.success('Produit modifié');
+    } else {
+      updateProduits(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
+      toast.success('Produit ajouté');
+    }
+    setDialogOpen(false);
+  }
+
+  function remove(id: string) {
+    confirmDelete(id);
   }
 
   return (
