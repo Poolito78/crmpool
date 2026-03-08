@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/lib/exportExcel';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}
