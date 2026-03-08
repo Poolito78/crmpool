@@ -66,9 +66,13 @@ export default function Produits() {
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
+    const returnDevis = searchParams.get('returnDevis');
     const from = searchParams.get('from');
     const devisId = searchParams.get('devisId');
-    if (from === 'devis') {
+    if (returnDevis) {
+      setFromDevis(true);
+      setReturnDevisId(returnDevis);
+    } else if (from === 'devis') {
       setFromDevis(true);
       if (devisId) setReturnDevisId(devisId);
     }
