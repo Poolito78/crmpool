@@ -362,10 +362,10 @@ export default function Devis() {
                               className="h-8 w-8 shrink-0"
                               title="Voir la fiche produit"
                               onClick={() => {
-                                const currentDevisId = editingId;
-                                setDialogOpen(false);
-                                setEditingId(null);
-                                window.location.href = `/produits?highlight=${l.produitId}&from=devis&devisId=${currentDevisId}`;
+                                const savedId = save(true);
+                                const devisId = savedId || editingId;
+                                const prod = produits.find(p => p.id === l.produitId);
+                                navigate(`/produits?search=${encodeURIComponent(prod?.reference || '')}&returnDevis=${devisId || ''}`);
                               }}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />

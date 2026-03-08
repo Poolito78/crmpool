@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download } from 'lucide-react';
@@ -44,7 +44,8 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 export default function Produits() {
   const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [showFilters, setShowFilters] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -65,9 +66,13 @@ export default function Produits() {
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
+    const returnDevis = searchParams.get('returnDevis');
     const from = searchParams.get('from');
     const devisId = searchParams.get('devisId');
-    if (from === 'devis') {
+    if (returnDevis) {
+      setFromDevis(true);
+      setReturnDevisId(returnDevis);
+    } else if (from === 'devis') {
       setFromDevis(true);
       if (devisId) setReturnDevisId(devisId);
     }
@@ -208,7 +213,7 @@ export default function Produits() {
     setDialogOpen(false);
     if (andReturnToDevis && fromDevis) {
       setFromDevis(false);
-      window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis';
+      navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
     }
   }
 
@@ -389,9 +394,12 @@ export default function Produits() {
   return (
     <div className="space-y-4">
       {fromDevis && (
-        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'; }}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
-        </Button>
+        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+          <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'); }}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
+          </Button>
+          <span className="text-sm text-muted-foreground">Vous consultez la fiche produit depuis l'édition d'un devis</span>
+        </div>
       )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
