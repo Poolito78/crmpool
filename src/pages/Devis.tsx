@@ -259,6 +259,33 @@ export default function Devis() {
                   value={clientId}
                   onSelect={setClientId}
                 />
+                {(() => {
+                  const selectedClient = clients.find(c => c.id === clientId);
+                  if (!selectedClient) return null;
+                  return (
+                    <div className="mt-2 bg-muted/30 rounded-lg border border-border p-3 text-xs space-y-1">
+                      {selectedClient.societe && <p className="font-medium text-sm">{selectedClient.societe}</p>}
+                      <p className="text-muted-foreground">{selectedClient.adresse}</p>
+                      <p className="text-muted-foreground">{selectedClient.codePostal} {selectedClient.ville}</p>
+                      {selectedClient.email && <p className="text-muted-foreground">{selectedClient.email}</p>}
+                      {selectedClient.telephone && <p className="text-muted-foreground">{selectedClient.telephone}</p>}
+                      {selectedClient.adressesLivraison?.length > 0 && (
+                        <div className="border-t border-border pt-2 mt-2 space-y-1">
+                          <p className="font-medium text-muted-foreground">Adresses :</p>
+                          {selectedClient.adressesLivraison.map(a => (
+                            <div key={a.id} className="flex items-center gap-1.5">
+                              <span className={`text-[10px] px-1.5 py-0 rounded-full border ${a.type === 'facturation' ? 'border-primary/30 text-primary' : 'border-border text-muted-foreground'}`}>
+                                {a.type === 'facturation' ? 'Fact.' : 'Livr.'}
+                              </span>
+                              <span>{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}</span>
+                              {a.parDefaut && <span className="text-[10px] text-primary font-medium">(défaut)</span>}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
               <div>
                 <Label>Date de validité</Label>
