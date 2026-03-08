@@ -51,7 +51,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [] });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {} });
     setDialogOpen(true);
   }
 
