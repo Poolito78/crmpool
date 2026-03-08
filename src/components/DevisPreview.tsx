@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 interface Props {
   devis: Devis;
   client?: Client;
+  produits?: Produit[];
   onEdit?: () => void;
 }
 
