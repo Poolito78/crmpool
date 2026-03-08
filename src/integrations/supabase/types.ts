@@ -14,7 +14,259 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      clients: {
+        Row: {
+          adresse: string
+          adresses_livraison: Json | null
+          code_postal: string
+          created_at: string
+          date_creation: string
+          email: string
+          est_revendeur: boolean | null
+          id: string
+          nom: string
+          notes: string | null
+          remises_par_categorie: Json | null
+          societe: string | null
+          telephone: string
+          user_id: string
+          ville: string
+        }
+        Insert: {
+          adresse?: string
+          adresses_livraison?: Json | null
+          code_postal?: string
+          created_at?: string
+          date_creation?: string
+          email?: string
+          est_revendeur?: boolean | null
+          id?: string
+          nom: string
+          notes?: string | null
+          remises_par_categorie?: Json | null
+          societe?: string | null
+          telephone?: string
+          user_id: string
+          ville?: string
+        }
+        Update: {
+          adresse?: string
+          adresses_livraison?: Json | null
+          code_postal?: string
+          created_at?: string
+          date_creation?: string
+          email?: string
+          est_revendeur?: boolean | null
+          id?: string
+          nom?: string
+          notes?: string | null
+          remises_par_categorie?: Json | null
+          societe?: string | null
+          telephone?: string
+          user_id?: string
+          ville?: string
+        }
+        Relationships: []
+      }
+      devis: {
+        Row: {
+          adresse_livraison_id: string | null
+          client_id: string | null
+          conditions: string | null
+          created_at: string
+          date_creation: string
+          date_validite: string | null
+          frais_port_ht: number | null
+          frais_port_tva: number | null
+          id: string
+          lignes: Json
+          mode_calcul: string | null
+          notes: string | null
+          numero: string
+          reference_affaire: string | null
+          statut: string
+          surface_globale_m2: number | null
+          user_id: string
+        }
+        Insert: {
+          adresse_livraison_id?: string | null
+          client_id?: string | null
+          conditions?: string | null
+          created_at?: string
+          date_creation?: string
+          date_validite?: string | null
+          frais_port_ht?: number | null
+          frais_port_tva?: number | null
+          id?: string
+          lignes?: Json
+          mode_calcul?: string | null
+          notes?: string | null
+          numero?: string
+          reference_affaire?: string | null
+          statut?: string
+          surface_globale_m2?: number | null
+          user_id: string
+        }
+        Update: {
+          adresse_livraison_id?: string | null
+          client_id?: string | null
+          conditions?: string | null
+          created_at?: string
+          date_creation?: string
+          date_validite?: string | null
+          frais_port_ht?: number | null
+          frais_port_tva?: number | null
+          id?: string
+          lignes?: Json
+          mode_calcul?: string | null
+          notes?: string | null
+          numero?: string
+          reference_affaire?: string | null
+          statut?: string
+          surface_globale_m2?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devis_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fournisseurs: {
+        Row: {
+          adresse: string
+          code_postal: string
+          cout_transport: number
+          created_at: string
+          date_creation: string
+          email: string
+          franco_port: number
+          id: string
+          nom: string
+          notes: string | null
+          societe: string
+          telephone: string
+          user_id: string
+          ville: string
+        }
+        Insert: {
+          adresse?: string
+          code_postal?: string
+          cout_transport?: number
+          created_at?: string
+          date_creation?: string
+          email?: string
+          franco_port?: number
+          id?: string
+          nom: string
+          notes?: string | null
+          societe?: string
+          telephone?: string
+          user_id: string
+          ville?: string
+        }
+        Update: {
+          adresse?: string
+          code_postal?: string
+          cout_transport?: number
+          created_at?: string
+          date_creation?: string
+          email?: string
+          franco_port?: number
+          id?: string
+          nom?: string
+          notes?: string | null
+          societe?: string
+          telephone?: string
+          user_id?: string
+          ville?: string
+        }
+        Relationships: []
+      }
+      produits: {
+        Row: {
+          categorie: string | null
+          coeff_revendeur: number
+          coefficient: number
+          consommation: number | null
+          created_at: string
+          date_creation: string
+          description: string
+          description_detaillee: string | null
+          fournisseur_id: string | null
+          id: string
+          poids: number | null
+          prix_achat: number
+          prix_ht: number
+          prix_revendeur: number
+          reference: string
+          remise_revendeur: number
+          stock: number
+          stock_min: number
+          tva: number
+          unite: string
+          user_id: string
+        }
+        Insert: {
+          categorie?: string | null
+          coeff_revendeur?: number
+          coefficient?: number
+          consommation?: number | null
+          created_at?: string
+          date_creation?: string
+          description?: string
+          description_detaillee?: string | null
+          fournisseur_id?: string | null
+          id?: string
+          poids?: number | null
+          prix_achat?: number
+          prix_ht?: number
+          prix_revendeur?: number
+          reference?: string
+          remise_revendeur?: number
+          stock?: number
+          stock_min?: number
+          tva?: number
+          unite?: string
+          user_id: string
+        }
+        Update: {
+          categorie?: string | null
+          coeff_revendeur?: number
+          coefficient?: number
+          consommation?: number | null
+          created_at?: string
+          date_creation?: string
+          description?: string
+          description_detaillee?: string | null
+          fournisseur_id?: string | null
+          id?: string
+          poids?: number | null
+          prix_achat?: number
+          prix_ht?: number
+          prix_revendeur?: number
+          reference?: string
+          remise_revendeur?: number
+          stock?: number
+          stock_min?: number
+          tva?: number
+          unite?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produits_fournisseur_id_fkey"
+            columns: ["fournisseur_id"]
+            isOneToOne: false
+            referencedRelation: "fournisseurs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
