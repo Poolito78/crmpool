@@ -154,9 +154,9 @@ export default function Devis() {
 
   function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
     const conso = consoOverride || produit.consommation;
-    if (!conso || conso <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    if (!conso || conso <= 0 || !produit.poids || produit.poids <= 0) return 1;
     const kgNeeded = surface * conso;
-    return Math.ceil(kgNeeded / produit.conditionnement);
+    return Math.ceil(kgNeeded / produit.poids);
   }
 
   function selectProduit(ligneId: string, produitId: string) {
@@ -169,7 +169,7 @@ export default function Devis() {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
       let quantite = 1;
-      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.conditionnement) {
+      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.poids) {
         quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
       }
       setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
@@ -246,7 +246,7 @@ export default function Devis() {
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
-      if (!p || !p.conditionnement) return l;
+      if (!p || !p.poids) return l;
       const conso = l.consommation || p.consommation;
       if (!conso) return l;
       const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2, l.consommation);
@@ -577,7 +577,7 @@ export default function Devis() {
                           <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                             const surface = parseFloat(e.target.value) || 0;
                             const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                            const quantite = p && (l.consommation || p.consommation) && p.conditionnement ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
+                            const quantite = p && (l.consommation || p.consommation) && p.poids ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
                             setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
                           }} className="h-8 text-sm" />
                         </div>
@@ -591,13 +591,13 @@ export default function Devis() {
                                 <Input type="number" step="0.01" value={consoValue || ''} onChange={e => {
                                   const conso = parseFloat(e.target.value) || 0;
                                   const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = p && p.conditionnement && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                  const quantite = p && p.poids && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso || undefined, quantite } : li));
                                 }} className="h-8 text-sm" placeholder={p?.consommation ? String(p.consommation) : '—'} />
                               </div>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Condit.</Label>
-                                <Input value={p?.conditionnement ? `${p.conditionnement} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
+                                <Input value={p?.poids ? `${p.poids} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
                               </div>
                             </>
                           );
