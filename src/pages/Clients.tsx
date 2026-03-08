@@ -1,15 +1,20 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, type Client } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, X } from 'lucide-react';
+import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: ''
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: []
+};
+
+const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
+  libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false
 };
 
 export default function Clients() {
@@ -18,6 +23,10 @@ export default function Clients() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState(emptyClient);
+  const [expandedClient, setExpandedClient] = useState<string | null>(null);
+  const [adresseForm, setAdresseForm] = useState(emptyAdresse);
+  const [editingAdresse, setEditingAdresse] = useState<string | null>(null);
+  const [showAdresseForm, setShowAdresseForm] = useState(false);
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -31,7 +40,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '' });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [] });
     setDialogOpen(true);
   }
 
@@ -52,6 +61,41 @@ export default function Clients() {
     toast.success('Client supprimé');
   }
 
+  function addOrUpdateAdresse() {
+    if (!adresseForm.libelle.trim() || !adresseForm.adresse.trim()) {
+      toast.error('Libellé et adresse requis');
+      return;
+    }
+    let newAdresses = [...form.adressesLivraison];
+    if (adresseForm.parDefaut) {
+      newAdresses = newAdresses.map(a => ({ ...a, parDefaut: false }));
+    }
+    if (editingAdresse) {
+      newAdresses = newAdresses.map(a => a.id === editingAdresse ? { ...adresseForm, id: editingAdresse } : a);
+    } else {
+      if (newAdresses.length === 0) adresseForm.parDefaut = true;
+      newAdresses.push({ ...adresseForm, id: generateId() });
+    }
+    setForm(prev => ({ ...prev, adressesLivraison: newAdresses }));
+    setAdresseForm(emptyAdresse);
+    setEditingAdresse(null);
+    setShowAdresseForm(false);
+  }
+
+  function removeAdresse(id: string) {
+    const newAdresses = form.adressesLivraison.filter(a => a.id !== id);
+    if (newAdresses.length > 0 && !newAdresses.some(a => a.parDefaut)) {
+      newAdresses[0].parDefaut = true;
+    }
+    setForm(prev => ({ ...prev, adressesLivraison: newAdresses }));
+  }
+
+  function editAdresse(a: AdresseLivraison) {
+    setAdresseForm({ libelle: a.libelle, adresse: a.adresse, ville: a.ville, codePostal: a.codePostal, contact: a.contact || '', telephone: a.telephone || '', parDefaut: a.parDefaut });
+    setEditingAdresse(a.id);
+    setShowAdresseForm(true);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -64,7 +108,7 @@ export default function Clients() {
         </Button>
       </div>
 
-      {/* Cards on mobile, table on desktop */}
+      {/* Desktop table */}
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -74,24 +118,61 @@ export default function Clients() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Livraison</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
             {filtered.map(c => (
-              <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-medium">{c.nom}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.societe || '—'}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.telephone}</td>
-                <td className="px-4 py-3 text-muted-foreground">{c.ville}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => remove(c.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </td>
-              </tr>
+              <>
+                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-medium">{c.nom}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.societe || '—'}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.telephone}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{c.ville}</td>
+                  <td className="px-4 py-3">
+                    {(c.adressesLivraison?.length || 0) > 0 ? (
+                      <button
+                        onClick={() => setExpandedClient(expandedClient === c.id ? null : c.id)}
+                        className="flex items-center gap-1 text-primary hover:underline text-xs"
+                      >
+                        <MapPin className="w-3 h-3" />
+                        {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
+                        {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                      </button>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => remove(c.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+                {expandedClient === c.id && c.adressesLivraison?.length > 0 && (
+                  <tr key={`${c.id}-addr`}>
+                    <td colSpan={7} className="px-4 py-2 bg-muted/20">
+                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        {c.adressesLivraison.map(a => (
+                          <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{a.libelle}</span>
+                              {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
+                            </div>
+                            <p className="text-muted-foreground">{a.adresse}</p>
+                            <p className="text-muted-foreground">{a.codePostal} {a.ville}</p>
+                            {a.contact && <p className="text-muted-foreground">Contact: {a.contact}</p>}
+                            {a.telephone && <p className="text-muted-foreground">Tél: {a.telephone}</p>}
+                          </div>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </>
             ))}
           </tbody>
         </table>
@@ -117,13 +198,38 @@ export default function Clients() {
               <p>{c.telephone}</p>
               <p>{c.ville}</p>
             </div>
+            {(c.adressesLivraison?.length || 0) > 0 && (
+              <div className="mt-3">
+                <button
+                  onClick={() => setExpandedClient(expandedClient === c.id ? null : c.id)}
+                  className="flex items-center gap-1 text-primary text-xs"
+                >
+                  <MapPin className="w-3 h-3" />
+                  {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''} de livraison
+                  {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+                {expandedClient === c.id && (
+                  <div className="mt-2 space-y-2">
+                    {c.adressesLivraison.map(a => (
+                      <div key={a.id} className="bg-muted/30 rounded-lg p-3 text-xs space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{a.libelle}</span>
+                          {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
+                        </div>
+                        <p className="text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         ))}
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun client trouvé</p>}
       </div>
 
       {/* Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
@@ -134,7 +240,7 @@ export default function Clients() {
               { key: 'societe', label: 'Société', type: 'text' },
               { key: 'email', label: 'Email', type: 'email' },
               { key: 'telephone', label: 'Téléphone', type: 'tel' },
-              { key: 'adresse', label: 'Adresse', type: 'text' },
+              { key: 'adresse', label: 'Adresse (facturation)', type: 'text' },
               { key: 'ville', label: 'Ville', type: 'text' },
               { key: 'codePostal', label: 'Code postal', type: 'text' },
             ].map(f => (
@@ -155,6 +261,79 @@ export default function Clients() {
                 value={form.notes}
                 onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
               />
+            </div>
+
+            {/* Adresses de livraison */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-base font-semibold flex items-center gap-2">
+                  <MapPin className="w-4 h-4" /> Adresses de livraison
+                </Label>
+                <Button type="button" variant="outline" size="sm" onClick={() => { setAdresseForm(emptyAdresse); setEditingAdresse(null); setShowAdresseForm(true); }}>
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter
+                </Button>
+              </div>
+
+              {form.adressesLivraison.length > 0 && (
+                <div className="space-y-2 mb-3">
+                  {form.adressesLivraison.map(a => (
+                    <div key={a.id} className="flex items-start justify-between bg-muted/30 rounded-lg p-3 text-sm">
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{a.libelle}</span>
+                          {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
+                        {a.contact && <p className="text-xs text-muted-foreground">Contact: {a.contact} {a.telephone ? `· ${a.telephone}` : ''}</p>}
+                      </div>
+                      <div className="flex gap-1 shrink-0">
+                        <button type="button" onClick={() => editAdresse(a)} className="p-1 rounded hover:bg-muted"><Edit2 className="w-3 h-3" /></button>
+                        <button type="button" onClick={() => removeAdresse(a.id)} className="p-1 rounded hover:bg-destructive/10 text-destructive"><Trash2 className="w-3 h-3" /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {showAdresseForm && (
+                <div className="bg-muted/20 rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-sm font-medium">{editingAdresse ? 'Modifier l\'adresse' : 'Nouvelle adresse'}</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="col-span-2">
+                      <Label className="text-xs">Libellé *</Label>
+                      <Input placeholder="Ex: Entrepôt, Chantier A..." value={adresseForm.libelle} onChange={e => setAdresseForm(p => ({ ...p, libelle: e.target.value }))} />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Adresse *</Label>
+                      <Input value={adresseForm.adresse} onChange={e => setAdresseForm(p => ({ ...p, adresse: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Ville</Label>
+                      <Input value={adresseForm.ville} onChange={e => setAdresseForm(p => ({ ...p, ville: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Code postal</Label>
+                      <Input value={adresseForm.codePostal} onChange={e => setAdresseForm(p => ({ ...p, codePostal: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Contact</Label>
+                      <Input value={adresseForm.contact} onChange={e => setAdresseForm(p => ({ ...p, contact: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Téléphone</Label>
+                      <Input value={adresseForm.telephone} onChange={e => setAdresseForm(p => ({ ...p, telephone: e.target.value }))} />
+                    </div>
+                    <div className="col-span-2 flex items-center gap-2">
+                      <input type="checkbox" id="parDefaut" checked={adresseForm.parDefaut} onChange={e => setAdresseForm(p => ({ ...p, parDefaut: e.target.checked }))} className="rounded" />
+                      <label htmlFor="parDefaut" className="text-xs">Adresse par défaut</label>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 justify-end">
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setShowAdresseForm(false); setEditingAdresse(null); }}>Annuler</Button>
+                    <Button type="button" size="sm" onClick={addOrUpdateAdresse}>{editingAdresse ? 'Modifier' : 'Ajouter'}</Button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex justify-end gap-2">

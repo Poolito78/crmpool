@@ -1,5 +1,16 @@
 import { useState, useCallback } from 'react';
 
+export interface AdresseLivraison {
+  id: string;
+  libelle: string;
+  adresse: string;
+  ville: string;
+  codePostal: string;
+  contact?: string;
+  telephone?: string;
+  parDefaut: boolean;
+}
+
 export interface Client {
   id: string;
   nom: string;
@@ -11,6 +22,7 @@ export interface Client {
   societe?: string;
   notes?: string;
   dateCreation: string;
+  adressesLivraison: AdresseLivraison[];
 }
 
 export interface Fournisseur {
@@ -65,9 +77,12 @@ export interface Devis {
 
 // Demo data
 const demoClients: Client[] = [
-  { id: '1', nom: 'Martin Dupont', email: 'martin@entreprise.fr', telephone: '06 12 34 56 78', adresse: '12 Rue de la Paix', ville: 'Paris', codePostal: '75002', societe: 'Dupont SARL', dateCreation: '2024-01-15' },
-  { id: '2', nom: 'Sophie Laurent', email: 'sophie@laurent.com', telephone: '06 98 76 54 32', adresse: '45 Avenue des Champs', ville: 'Lyon', codePostal: '69003', societe: 'Laurent & Co', dateCreation: '2024-02-20' },
-  { id: '3', nom: 'Pierre Bernard', email: 'p.bernard@mail.fr', telephone: '07 11 22 33 44', adresse: '8 Boulevard Haussmann', ville: 'Marseille', codePostal: '13001', dateCreation: '2024-03-10' },
+  { id: '1', nom: 'Martin Dupont', email: 'martin@entreprise.fr', telephone: '06 12 34 56 78', adresse: '12 Rue de la Paix', ville: 'Paris', codePostal: '75002', societe: 'Dupont SARL', dateCreation: '2024-01-15', adressesLivraison: [
+    { id: 'al1', libelle: 'Entrepôt Paris', adresse: '50 Rue du Faubourg', ville: 'Paris', codePostal: '75010', parDefaut: true },
+    { id: 'al2', libelle: 'Agence Lyon', adresse: '10 Rue de la République', ville: 'Lyon', codePostal: '69002', contact: 'Paul Martin', telephone: '06 55 44 33 22', parDefaut: false },
+  ]},
+  { id: '2', nom: 'Sophie Laurent', email: 'sophie@laurent.com', telephone: '06 98 76 54 32', adresse: '45 Avenue des Champs', ville: 'Lyon', codePostal: '69003', societe: 'Laurent & Co', dateCreation: '2024-02-20', adressesLivraison: [] },
+  { id: '3', nom: 'Pierre Bernard', email: 'p.bernard@mail.fr', telephone: '07 11 22 33 44', adresse: '8 Boulevard Haussmann', ville: 'Marseille', codePostal: '13001', dateCreation: '2024-03-10', adressesLivraison: [] },
 ];
 
 const demoFournisseurs: Fournisseur[] = [
