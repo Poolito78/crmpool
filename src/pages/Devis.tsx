@@ -475,6 +475,9 @@ export default function Devis() {
                                 Marge: {tauxMarque.toFixed(1)}%
                               </span>
                             ) : null}
+                            {coeff !== null && (
+                              <span>Coeff: {coeff.toFixed(2)}</span>
+                            )}
                             {prixKg !== null && (
                               <span>{formatMontant(prixKg)}/kg</span>
                             )}
