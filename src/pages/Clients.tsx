@@ -231,11 +231,8 @@ export default function Clients() {
       const existingKeys = new Set(clients.map(c => (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase()));
       const unique = mapped.filter(c => {
         const key = (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase();
-        return key && !existingKeys.has(key);
-        const name = c.nom.trim().toLowerCase();
-        if (!name) return true;
-        if (existingNames.has(name)) return false;
-        existingNames.add(name);
+        if (!key || existingKeys.has(key)) return false;
+        existingKeys.add(key);
         return true;
       });
       const skipped = mapped.length - unique.length;
