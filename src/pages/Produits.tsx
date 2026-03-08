@@ -252,11 +252,10 @@ export default function Produits() {
     const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
     if (importMode === 'update') {
-      // Update existing products by reference
       let updated = 0;
       updateProduits(prev => prev.map(p => {
         const matchingRow = importPreview.find(row => {
-          const ref = findColValue(row, ['article', 'référence', 'reference', 'ref', 'code article']);
+          const ref = getMappedValue(row, 'reference');
           return ref.toLowerCase() === p.reference.trim().toLowerCase();
         });
         if (!matchingRow) return p;
@@ -265,19 +264,17 @@ export default function Produits() {
         for (const field of selectedFields) {
           if (field.key === 'reference') continue;
           if (field.type === 'number') {
-            updates[field.key] = findNumValue(matchingRow, field.aliases, field.default ?? 0);
+            updates[field.key] = getMappedNum(matchingRow, field.key, field.default ?? 0);
           } else {
-            const val = findColValue(matchingRow, field.aliases);
+            const val = getMappedValue(matchingRow, field.key);
             if (val || field.default) updates[field.key] = val || field.default || '';
           }
         }
 
-        // Recalculate derived prices
         const pa = updates.prixAchat ?? p.prixAchat;
         const coeff = updates.coefficient ?? p.coefficient;
         const pvht = updates.prixHT ?? calcPrixVente(pa, coeff);
         const remise = updates.remiseRevendeur ?? p.remiseRevendeur;
-        const pvr = updates.prixRevendeur ?? calcPrixRevendeur(pvht, remise);
 
         if (importSelectedCols.has('prixAchat') || importSelectedCols.has('coefficient')) {
           updates.prixHT = importSelectedCols.has('prixHT') ? (updates.prixHT || pvht) : calcPrixVente(pa, coeff);
@@ -295,33 +292,32 @@ export default function Produits() {
       }));
       toast.success(`${updated} produit(s) mis à jour`);
     } else {
-      // Add new products (existing behavior)
       const mapped: Produit[] = importPreview.map((row: any) => {
-        const prixAchat = findNumValue(row, importFields.find(f => f.key === 'prixAchat')!.aliases);
-        const coefficient = findNumValue(row, importFields.find(f => f.key === 'coefficient')!.aliases, 2);
-        const prixHT = findNumValue(row, importFields.find(f => f.key === 'prixHT')!.aliases) || calcPrixVente(prixAchat, coefficient);
-        const remiseRevendeur = findNumValue(row, importFields.find(f => f.key === 'remiseRevendeur')!.aliases, 30);
-        const prixRevendeur = findNumValue(row, importFields.find(f => f.key === 'prixRevendeur')!.aliases) || calcPrixRevendeur(prixHT, remiseRevendeur);
+        const prixAchat = getMappedNum(row, 'prixAchat');
+        const coefficient = getMappedNum(row, 'coefficient', 2);
+        const prixHT = getMappedNum(row, 'prixHT') || calcPrixVente(prixAchat, coefficient);
+        const remiseRevendeur = getMappedNum(row, 'remiseRevendeur', 30);
+        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
         const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
-        const reference = findColValue(row, importFields.find(f => f.key === 'reference')!.aliases);
-        const nom = findColValue(row, importFields.find(f => f.key === 'nom')!.aliases);
+        const reference = getMappedValue(row, 'reference');
+        const nom = getMappedValue(row, 'nom');
         return {
           id: generateId(),
           reference,
           nom,
-          description: findColValue(row, ['description']),
+          description: getMappedValue(row, 'description'),
           prixAchat,
           coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
           prixHT,
           coeffRevendeur,
           remiseRevendeur,
           prixRevendeur,
-          tva: findNumValue(row, ['tva'], 20),
-          unite: findColValue(row, ['unité', 'unite']) || 'pièce',
-          stock: findNumValue(row, ['stock']),
-          stockMin: findNumValue(row, ['stock min', 'stockmin', 'stock minimum']),
+          tva: getMappedNum(row, 'tva', 20),
+          unite: getMappedValue(row, 'unite') || 'pièce',
+          stock: getMappedNum(row, 'stock'),
+          stockMin: getMappedNum(row, 'stockMin'),
           fournisseurId: '',
-          categorie: findColValue(row, ['catégorie', 'categorie', 'famille']),
+          categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
       }).filter(p => p.nom || p.reference);
