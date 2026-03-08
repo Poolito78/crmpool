@@ -127,6 +127,19 @@ export default function Clients() {
     setDialogOpen(false);
   }
 
+  // Auto-save client en temps réel
+  const autoSaveClientRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!editingClient || !dialogOpen) return;
+    clearTimeout(autoSaveClientRef.current);
+    autoSaveClientRef.current = setTimeout(() => {
+      if (form.nom.trim()) {
+        updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...form } : c));
+      }
+    }, 500);
+    return () => clearTimeout(autoSaveClientRef.current);
+  }, [form, editingClient, dialogOpen]);
+
   function confirmRemove(id: string) {
     setDeleteTargetId(id);
     setDeleteConfirmOpen(true);
