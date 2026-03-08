@@ -32,6 +32,7 @@ export default function Devis() {
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
+  const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
@@ -45,6 +46,7 @@ export default function Devis() {
     setClientId(d.clientId);
     setDateValidite(d.dateValidite);
     setStatut(d.statut);
+    setReferenceAffaire(d.referenceAffaire || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
@@ -55,6 +57,7 @@ export default function Devis() {
     setClientId('');
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
+    setReferenceAffaire('');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
@@ -107,14 +110,14 @@ export default function Devis() {
 
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, notes, conditions
+        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions
       } : d));
       toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       const newDevis: DevisType = {
         id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
-        dateValidite, statut, lignes, notes, conditions
+        dateValidite, statut, lignes, referenceAffaire, notes, conditions
       };
       updateDevis(prev => [...prev, newDevis]);
       toast.success('Devis créé');
@@ -167,7 +170,7 @@ export default function Devis() {
                     <p className="font-heading font-semibold">{d.numero}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">{client?.nom || '—'} • {formatDate(d.dateCreation)}</p>
+                  <p className="text-sm text-muted-foreground">{client?.nom || '—'} • {formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}</p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                 </div>
                 <div className="flex items-center gap-3">
@@ -228,6 +231,10 @@ export default function Devis() {
                   <option value="expiré">Expiré</option>
                 </select>
               </div>
+            </div>
+            <div>
+              <Label>Référence affaire</Label>
+              <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
             </div>
 
             {/* Lines */}
