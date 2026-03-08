@@ -83,7 +83,7 @@ export default function Devis() {
   }
 
   function addLigne() {
-    setLignes(prev => [...prev, { id: generateId(), description: '', quantite: 1, prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setLignes(prev => [...prev, { id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
   }
 
   function updateLigne(id: string, field: string, value: any) {
