@@ -591,13 +591,13 @@ export default function Devis() {
                                 <Input type="number" step="0.01" value={consoValue || ''} onChange={e => {
                                   const conso = parseFloat(e.target.value) || 0;
                                   const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = p && p.conditionnement && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                  const quantite = p && p.poids && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso || undefined, quantite } : li));
                                 }} className="h-8 text-sm" placeholder={p?.consommation ? String(p.consommation) : '—'} />
                               </div>
                               <div>
-                                <Label className="text-xs text-muted-foreground">Condit.</Label>
-                                <Input value={p?.conditionnement ? `${p.conditionnement} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
+                                <Input value={p?.poids ? `${p.poids} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
                               </div>
                             </>
                           );
