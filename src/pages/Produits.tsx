@@ -91,6 +91,66 @@ export default function Produits() {
     toast.success('Produit supprimé');
   }
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        if (json.length === 0) { toast.error('Fichier vide'); return; }
+        setImportPreview(json);
+        setImportDialogOpen(true);
+      } catch { toast.error('Erreur de lecture du fichier'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  }
+
+  function importArticles() {
+    if (!importPreview) return;
+    const mapped: Produit[] = importPreview.map((row: any) => {
+      const prixAchat = parseFloat(row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
+      const coefficient = parseFloat(row['Coefficient'] || row['coefficient'] || row['Coeff'] || row['coeff'] || 2);
+      const prixHT = parseFloat(row['Prix HT'] || row['prixHT'] || row['PV HT'] || row['prix_ht'] || 0) || calcPrixVente(prixAchat, coefficient);
+      const remiseRevendeur = parseFloat(row['Remise Revendeur'] || row['remiseRevendeur'] || row['Remise'] || 30);
+      const prixRevendeur = parseFloat(row['Prix Revendeur'] || row['prixRevendeur'] || 0) || calcPrixRevendeur(prixHT, remiseRevendeur);
+      const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+      return {
+        id: generateId(),
+        reference: String(row['Référence'] || row['Reference'] || row['Ref'] || row['ref'] || row['REF'] || ''),
+        nom: String(row['Nom'] || row['nom'] || row['Désignation'] || row['designation'] || row['Article'] || row['article'] || ''),
+        description: String(row['Description'] || row['description'] || ''),
+        prixAchat,
+        coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
+        prixHT,
+        coeffRevendeur,
+        remiseRevendeur,
+        prixRevendeur,
+        tva: parseFloat(row['TVA'] || row['tva'] || 20),
+        unite: String(row['Unité'] || row['Unite'] || row['unite'] || 'pièce'),
+        stock: parseInt(row['Stock'] || row['stock'] || 0),
+        stockMin: parseInt(row['Stock Min'] || row['stockMin'] || row['Stock Minimum'] || 0),
+        fournisseurId: '',
+        categorie: String(row['Catégorie'] || row['Categorie'] || row['categorie'] || row['Famille'] || ''),
+        dateCreation: new Date().toISOString().split('T')[0],
+      };
+    }).filter(p => p.nom || p.reference);
+
+    updateProduits(prev => [...prev, ...mapped]);
+    toast.success(`${mapped.length} produit(s) importé(s)`);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -98,7 +158,11 @@ export default function Produits() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
+        <div className="flex gap-2 shrink-0">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
+        </div>
       </div>
 
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
