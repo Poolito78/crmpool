@@ -23,6 +23,8 @@ export default function Devis() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
