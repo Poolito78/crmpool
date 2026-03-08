@@ -108,7 +108,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
         className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
       >
         <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-          {selected ? `${selected.reference} - ${selected.description}` : '— Libre —'}
+          {selected ? selected.reference : '— Libre —'}
         </span>
         <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
