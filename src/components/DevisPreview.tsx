@@ -90,9 +90,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           <tbody>
             {devis.lignes.map((l, i) => {
               const t = calculerTotalLigne(l);
+              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
               return (
                 <tr key={l.id} className="border-b border-border">
-                   <td className="py-2">{l.description}</td>
+                   <td className="py-2">
+                     {l.description}
+                     {prod?.descriptionDetaillee && (
+                       <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
+                     )}
+                   </td>
                    <td className="py-2 text-right">{l.quantite}</td>
                    <td className="py-2 text-center">{l.unite || '—'}</td>
                    <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
