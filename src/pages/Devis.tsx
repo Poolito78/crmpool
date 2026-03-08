@@ -85,9 +85,18 @@ export default function Devis() {
     toast.success('Statut mis à jour');
   }
 
-  function remove(id: string) {
-    updateDevis(prev => prev.filter(d => d.id !== id));
-    toast.success('Devis supprimé');
+  function confirmRemove(id: string) {
+    setDeleteTargetId(id);
+    setDeleteConfirmOpen(true);
+  }
+
+  function executeDelete() {
+    if (deleteTargetId) {
+      updateDevis(prev => prev.filter(d => d.id !== deleteTargetId));
+      toast.success('Devis supprimé');
+      setDeleteTargetId(null);
+      setDeleteConfirmOpen(false);
+    }
   }
 
   const total = calculerTotalDevis(lignes);
