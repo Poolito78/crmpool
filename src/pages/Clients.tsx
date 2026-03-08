@@ -267,12 +267,51 @@ export default function Clients() {
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="relative">
+            <Filter className="w-4 h-4 mr-2" /> Filtres
+            {activeFilterCount > 0 && (
+              <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-[10px]">{activeFilterCount}</Badge>
+            )}
+          </Button>
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
         </div>
       </div>
+
+      {showFilters && (
+        <div className="flex flex-wrap gap-3 items-center bg-muted/30 rounded-lg border border-border p-3">
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Ville :</Label>
+            <select
+              className="text-sm rounded border border-input bg-background px-2 py-1.5"
+              value={filterVille}
+              onChange={e => setFilterVille(e.target.value)}
+            >
+              <option value="">Toutes</option>
+              {villes.map(v => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Revendeur :</Label>
+            <select
+              className="text-sm rounded border border-input bg-background px-2 py-1.5"
+              value={filterRevendeur}
+              onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}
+            >
+              <option value="">Tous</option>
+              <option value="oui">Oui</option>
+              <option value="non">Non</option>
+            </select>
+          </div>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterRevendeur(''); }}>
+              Réinitialiser
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
