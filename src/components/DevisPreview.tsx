@@ -147,7 +147,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                        <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
                      )}
                    </td>
-                   {showConso && <td className="py-2 text-right">{l.surfaceM2 || '—'}</td>}
+                   {showConso && <td className="py-2 text-right">{l.surfaceM2 || devis.surfaceGlobaleM2 || '—'}</td>}
                    {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
                    <td className="py-2 text-right">{l.quantite}</td>
                    <td className="py-2 text-center">{l.unite || '—'}</td>
