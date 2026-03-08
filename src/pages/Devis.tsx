@@ -317,6 +317,10 @@ export default function Devis() {
                 })()}
               </div>
               <div>
+                <Label>Date de création</Label>
+                <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} />
+              </div>
+              <div>
                 <Label>Date de validité</Label>
                 <Input type="date" value={dateValidite} onChange={e => setDateValidite(e.target.value)} />
               </div>
