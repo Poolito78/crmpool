@@ -256,8 +256,9 @@ export default function Produits() {
                 <div className="flex items-start gap-2">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
                   <div>
-                  <p className="font-medium">{p.nom}</p>
-                  <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+                    <p className="font-medium">{p.nom}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
+                  </div>
                 </div>
                 <div className="flex gap-1">
                   <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
