@@ -398,7 +398,7 @@ export default function Produits() {
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-3 py-3 w-8"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} className="rounded border-input" /></th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Réf.</th>
-                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nom</th>
+                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Description</th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Achat</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
