@@ -187,33 +187,59 @@ export default function Clients() {
 
   function importClients() {
     if (!importPreview) return;
-    const mapped: Client[] = importPreview.map((row: any) => ({
-      id: generateId(),
-      nom: getMappedValue(row, 'nom'),
-      societe: getMappedValue(row, 'societe'),
-      email: getMappedValue(row, 'email'),
-      telephone: getMappedValue(row, 'telephone'),
-      adresse: getMappedValue(row, 'adresse'),
-      ville: getMappedValue(row, 'ville'),
-      codePostal: getMappedValue(row, 'codePostal'),
-      notes: getMappedValue(row, 'notes'),
-      adressesLivraison: [],
-      dateCreation: new Date().toISOString().split('T')[0],
-    })).filter(c => c.nom || c.societe);
+    const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
-    // Dédoublonnage par nom
-    const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
-    const unique = mapped.filter(c => {
-      const name = c.nom.trim().toLowerCase();
-      if (!name) return true;
-      if (existingNames.has(name)) return false;
-      existingNames.add(name);
-      return true;
-    });
-    const skipped = mapped.length - unique.length;
+    if (importMode === 'update') {
+      let updated = 0;
+      updateClients(prev => prev.map(c => {
+        const matchingRow = importPreview.find(row => {
+          const nom = getMappedValue(row, 'nom');
+          return nom.toLowerCase() === c.nom.trim().toLowerCase();
+        });
+        if (!matchingRow) return c;
 
-    updateClients(prev => [...prev, ...unique]);
-    toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+        const updates: Record<string, any> = {};
+        for (const field of selectedFields) {
+          if (field.key === 'nom') continue;
+          const val = getMappedValue(matchingRow, field.key);
+          if (val) updates[field.key] = val;
+        }
+        if (Object.keys(updates).length > 0) {
+          updated++;
+          return { ...c, ...updates };
+        }
+        return c;
+      }));
+      toast.success(`${updated} client(s) mis à jour`);
+    } else {
+      const mapped: Client[] = importPreview.map((row: any) => ({
+        id: generateId(),
+        nom: getMappedValue(row, 'nom'),
+        societe: getMappedValue(row, 'societe'),
+        email: getMappedValue(row, 'email'),
+        telephone: getMappedValue(row, 'telephone'),
+        adresse: getMappedValue(row, 'adresse'),
+        ville: getMappedValue(row, 'ville'),
+        codePostal: getMappedValue(row, 'codePostal'),
+        notes: getMappedValue(row, 'notes'),
+        adressesLivraison: [],
+        dateCreation: new Date().toISOString().split('T')[0],
+      })).filter(c => c.nom || c.societe);
+
+      const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+      const unique = mapped.filter(c => {
+        const name = c.nom.trim().toLowerCase();
+        if (!name) return true;
+        if (existingNames.has(name)) return false;
+        existingNames.add(name);
+        return true;
+      });
+      const skipped = mapped.length - unique.length;
+
+      updateClients(prev => [...prev, ...unique]);
+      toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    }
+
     setImportDialogOpen(false);
     setImportPreview(null);
   }
