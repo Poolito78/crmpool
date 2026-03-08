@@ -125,17 +125,17 @@ export default function Produits() {
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
                     <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixHT)}</td>
-                    <td className="px-3 py-3 text-right">
-                      <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}%)</span>
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">
-                      {formatMontant(p.prixRevendeur)}
-                      <span className="block text-xs text-muted-foreground">
-                        coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · marge {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))}
-                      </span>
-                    </td>
+                     <td className="px-3 py-3 text-right">
+                       <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
+                         {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}% brut)</span>
+                       </span>
+                     </td>
+                     <td className="px-3 py-3 text-right text-muted-foreground">
+                       {formatMontant(p.prixRevendeur)}
+                       <span className="block text-xs text-muted-foreground">
+                         coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% brut)
+                       </span>
+                     </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
