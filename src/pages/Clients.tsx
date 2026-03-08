@@ -147,6 +147,76 @@ export default function Clients() {
     setShowAdresseForm(true);
   }
 
+  const excelColumns = useMemo(() => {
+    if (!importPreview || importPreview.length === 0) return [];
+    return Object.keys(importPreview[0]);
+  }, [importPreview]);
+
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        if (json.length === 0) { toast.error('Fichier vide'); return; }
+        setImportPreview(json);
+        const cols = Object.keys(json[0] as object);
+        const detected = autoDetectMapping(cols);
+        setImportMapping(detected);
+        setImportSelectedCols(new Set(Object.keys(detected)));
+        setImportDialogOpen(true);
+      } catch { toast.error('Erreur de lecture du fichier'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  }
+
+  function getMappedValue(row: any, fieldKey: string): string {
+    const colName = importMapping[fieldKey];
+    if (!colName) return '';
+    const val = row[colName];
+    if (val === undefined || val === null) return '';
+    return String(val).trim();
+  }
+
+  function importClients() {
+    if (!importPreview) return;
+    const mapped: Client[] = importPreview.map((row: any) => ({
+      id: generateId(),
+      nom: getMappedValue(row, 'nom'),
+      societe: getMappedValue(row, 'societe'),
+      email: getMappedValue(row, 'email'),
+      telephone: getMappedValue(row, 'telephone'),
+      adresse: getMappedValue(row, 'adresse'),
+      ville: getMappedValue(row, 'ville'),
+      codePostal: getMappedValue(row, 'codePostal'),
+      notes: getMappedValue(row, 'notes'),
+      adressesLivraison: [],
+      dateCreation: new Date().toISOString().split('T')[0],
+    })).filter(c => c.nom || c.societe);
+
+    // Dédoublonnage par nom
+    const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+    const unique = mapped.filter(c => {
+      const name = c.nom.trim().toLowerCase();
+      if (!name) return true;
+      if (existingNames.has(name)) return false;
+      existingNames.add(name);
+      return true;
+    });
+    const skipped = mapped.length - unique.length;
+
+    updateClients(prev => [...prev, ...unique]);
+    toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -154,9 +224,11 @@ export default function Clients() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={openNew} className="shrink-0">
-          <Plus className="w-4 h-4 mr-2" /> Nouveau client
-        </Button>
+        <div className="flex gap-2 shrink-0">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
+        </div>
       </div>
 
       {/* Desktop table */}
