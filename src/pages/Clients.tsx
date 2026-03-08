@@ -542,6 +542,76 @@ export default function Clients() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Import Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import clients</DialogTitle></DialogHeader>
+          {importPreview && (
+            <>
+              {/* Column mapping */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold">Correspondance des colonnes :</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {importFields.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input shrink-0"
+                        checked={importSelectedCols.has(f.key)}
+                        onChange={e => {
+                          const next = new Set(importSelectedCols);
+                          e.target.checked ? next.add(f.key) : next.delete(f.key);
+                          setImportSelectedCols(next);
+                        }}
+                      />
+                      <Label className="text-xs w-24 shrink-0">{f.label}</Label>
+                      <select
+                        className="flex-1 text-xs rounded border border-input bg-background px-2 py-1"
+                        value={importMapping[f.key] || ''}
+                        onChange={e => setImportMapping(prev => ({ ...prev, [f.key]: e.target.value }))}
+                      >
+                        <option value="">— Non mappé —</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Preview */}
+              <div className="overflow-x-auto max-h-60">
+                <table className="w-full text-xs border">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      {importFields.filter(f => importSelectedCols.has(f.key) && importMapping[f.key]).map(f => (
+                        <th key={f.key} className="px-2 py-1 text-left border-b font-medium">{f.label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importPreview.slice(0, 10).map((row, i) => (
+                      <tr key={i} className="border-b">
+                        {importFields.filter(f => importSelectedCols.has(f.key) && importMapping[f.key]).map(f => (
+                          <td key={f.key} className="px-2 py-1">{getMappedValue(row, f.key)}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {importPreview.length > 10 && <p className="text-xs text-muted-foreground mt-1">... et {importPreview.length - 10} autres lignes</p>}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
+                <Button onClick={importClients}>Importer {importPreview.length} client(s)</Button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
