@@ -50,6 +50,8 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Clients() {
   const { clients, updateClients, produits } = useCRM();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const returnDevisId = searchParams.get('returnDevis');
   
   // Extract unique categories from products
   const categories = useMemo(() => {
