@@ -459,7 +459,12 @@ export default function Produits() {
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixRevendeur)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">
+                      {formatMontant(p.prixRevendeur)}
+                      <span className="block text-xs text-muted-foreground">
+                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)
+                      </span>
+                    </td>
                     <td className="px-3 py-3 text-right text-muted-foreground">
                       {formatMontant(p.prixHT)}
                        <span className="block text-xs text-muted-foreground">
