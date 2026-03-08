@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft } from 'lucide-react';
+import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison } from '@/lib/store';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -48,7 +48,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 }
 
 export default function Clients() {
-  const { clients, updateClients, produits } = useCRM();
+  const { clients, updateClients, produits, devis } = useCRM();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const returnDevisId = searchParams.get('returnDevis');
@@ -359,6 +359,7 @@ export default function Clients() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Devis</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -389,6 +390,21 @@ export default function Clients() {
                     )}
                   </td>
                   <td className="px-4 py-3">
+                    {(() => {
+                      const clientDevis = devis.filter(d => d.clientId === c.id);
+                      if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                      return (
+                        <button
+                          onClick={() => navigate(`/devis?search=${encodeURIComponent(c.nom)}`)}
+                          className="flex items-center gap-1 text-primary hover:underline text-xs"
+                        >
+                          <FileText className="w-3 h-3" />
+                          {clientDevis.length} devis
+                        </button>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                       <button onClick={() => confirmRemove(c.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
@@ -397,7 +413,7 @@ export default function Clients() {
                 </tr>
                 {expandedClient === c.id && c.adressesLivraison?.length > 0 && (
                   <tr key={`${c.id}-addr`}>
-                    <td colSpan={7} className="px-4 py-2 bg-muted/20">
+                    <td colSpan={8} className="px-4 py-2 bg-muted/20">
                       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {c.adressesLivraison.map(a => (
                           <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
