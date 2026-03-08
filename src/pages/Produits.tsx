@@ -233,6 +233,11 @@ export default function Produits() {
 
   return (
     <div className="space-y-4">
+      {fromDevis && (
+        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = '/devis'; }}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Retour aux devis
+        </Button>
+      )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
