@@ -232,12 +232,24 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if (clientId && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
+          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen]);
+  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+
+  // Recalcul auto des quantités en mode surface
+  useEffect(() => {
+    if (modeCalcul !== 'surface' || !dialogOpen || surfaceGlobaleM2 <= 0) return;
+    setLignes(prev => prev.map(l => {
+      if (!l.produitId) return l;
+      const p = produits.find(pr => pr.id === l.produitId);
+      if (!p || !p.consommation || !p.conditionnement) return l;
+      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2);
+      return { ...l, quantite, surfaceM2: l.surfaceM2 || surfaceGlobaleM2 };
+    }));
+  }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
 
   // Auto-calcul frais de port basé sur le poids
   useEffect(() => {
