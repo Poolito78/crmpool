@@ -52,6 +52,7 @@ export default function Produits() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
 
@@ -187,13 +188,25 @@ export default function Produits() {
     { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
   ];
 
-  // Detect which import fields have matching columns in the file
-  const detectedImportFields = useMemo(() => {
+  // Auto-detect mapping from Excel columns to product fields
+  function autoDetectMapping(excelCols: string[]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    for (const field of importFields) {
+      for (const alias of field.aliases) {
+        const match = excelCols.find(col => col.trim().toLowerCase() === alias.toLowerCase());
+        if (match && !Object.values(mapping).includes(match)) {
+          mapping[field.key] = match;
+          break;
+        }
+      }
+    }
+    return mapping;
+  }
+
+  // Get available Excel columns from the preview
+  const excelColumns = useMemo(() => {
     if (!importPreview || importPreview.length === 0) return [];
-    const rowKeys = Object.keys(importPreview[0]);
-    return importFields.filter(f =>
-      f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase()))
-    );
+    return Object.keys(importPreview[0]);
   }, [importPreview]);
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -210,12 +223,10 @@ export default function Produits() {
         if (json.length === 0) { toast.error('Fichier vide'); return; }
         setImportPreview(json);
         setImportMode('add');
-        // Select all detected fields by default
-        const rowKeys = Object.keys(json[0] as object);
-        const detected = importFields
-          .filter(f => f.aliases.some(alias => rowKeys.some(rk => rk.trim().toLowerCase() === alias.toLowerCase())))
-          .map(f => f.key);
-        setImportSelectedCols(new Set(detected));
+        const cols = Object.keys(json[0] as object);
+        const detected = autoDetectMapping(cols);
+        setImportMapping(detected);
+        setImportSelectedCols(new Set(Object.keys(detected)));
         setImportDialogOpen(true);
       } catch { toast.error('Erreur de lecture du fichier'); }
     };
@@ -223,16 +234,15 @@ export default function Produits() {
     e.target.value = '';
   }
 
-  function findColValue(row: any, keys: string[]): string {
-    const rowKeys = Object.keys(row);
-    for (const k of keys) {
-      const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
-      if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
-    }
-    return '';
+  function getMappedValue(row: any, fieldKey: string): string {
+    const colName = importMapping[fieldKey];
+    if (!colName) return '';
+    const val = row[colName];
+    if (val === undefined || val === null) return '';
+    return String(val).trim();
   }
-  function findNumValue(row: any, keys: string[], def = 0): number {
-    const val = findColValue(row, keys);
+  function getMappedNum(row: any, fieldKey: string, def = 0): number {
+    const val = getMappedValue(row, fieldKey);
     const n = parseFloat(val);
     return isNaN(n) ? def : n;
   }
@@ -242,11 +252,10 @@ export default function Produits() {
     const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
     if (importMode === 'update') {
-      // Update existing products by reference
       let updated = 0;
       updateProduits(prev => prev.map(p => {
         const matchingRow = importPreview.find(row => {
-          const ref = findColValue(row, ['article', 'référence', 'reference', 'ref', 'code article']);
+          const ref = getMappedValue(row, 'reference');
           return ref.toLowerCase() === p.reference.trim().toLowerCase();
         });
         if (!matchingRow) return p;
@@ -255,19 +264,17 @@ export default function Produits() {
         for (const field of selectedFields) {
           if (field.key === 'reference') continue;
           if (field.type === 'number') {
-            updates[field.key] = findNumValue(matchingRow, field.aliases, field.default ?? 0);
+            updates[field.key] = getMappedNum(matchingRow, field.key, field.default ?? 0);
           } else {
-            const val = findColValue(matchingRow, field.aliases);
+            const val = getMappedValue(matchingRow, field.key);
             if (val || field.default) updates[field.key] = val || field.default || '';
           }
         }
 
-        // Recalculate derived prices
         const pa = updates.prixAchat ?? p.prixAchat;
         const coeff = updates.coefficient ?? p.coefficient;
         const pvht = updates.prixHT ?? calcPrixVente(pa, coeff);
         const remise = updates.remiseRevendeur ?? p.remiseRevendeur;
-        const pvr = updates.prixRevendeur ?? calcPrixRevendeur(pvht, remise);
 
         if (importSelectedCols.has('prixAchat') || importSelectedCols.has('coefficient')) {
           updates.prixHT = importSelectedCols.has('prixHT') ? (updates.prixHT || pvht) : calcPrixVente(pa, coeff);
@@ -285,33 +292,32 @@ export default function Produits() {
       }));
       toast.success(`${updated} produit(s) mis à jour`);
     } else {
-      // Add new products (existing behavior)
       const mapped: Produit[] = importPreview.map((row: any) => {
-        const prixAchat = findNumValue(row, importFields.find(f => f.key === 'prixAchat')!.aliases);
-        const coefficient = findNumValue(row, importFields.find(f => f.key === 'coefficient')!.aliases, 2);
-        const prixHT = findNumValue(row, importFields.find(f => f.key === 'prixHT')!.aliases) || calcPrixVente(prixAchat, coefficient);
-        const remiseRevendeur = findNumValue(row, importFields.find(f => f.key === 'remiseRevendeur')!.aliases, 30);
-        const prixRevendeur = findNumValue(row, importFields.find(f => f.key === 'prixRevendeur')!.aliases) || calcPrixRevendeur(prixHT, remiseRevendeur);
+        const prixAchat = getMappedNum(row, 'prixAchat');
+        const coefficient = getMappedNum(row, 'coefficient', 2);
+        const prixHT = getMappedNum(row, 'prixHT') || calcPrixVente(prixAchat, coefficient);
+        const remiseRevendeur = getMappedNum(row, 'remiseRevendeur', 30);
+        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
         const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
-        const reference = findColValue(row, importFields.find(f => f.key === 'reference')!.aliases);
-        const nom = findColValue(row, importFields.find(f => f.key === 'nom')!.aliases);
+        const reference = getMappedValue(row, 'reference');
+        const nom = getMappedValue(row, 'nom');
         return {
           id: generateId(),
           reference,
           nom,
-          description: findColValue(row, ['description']),
+          description: getMappedValue(row, 'description'),
           prixAchat,
           coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
           prixHT,
           coeffRevendeur,
           remiseRevendeur,
           prixRevendeur,
-          tva: findNumValue(row, ['tva'], 20),
-          unite: findColValue(row, ['unité', 'unite']) || 'pièce',
-          stock: findNumValue(row, ['stock']),
-          stockMin: findNumValue(row, ['stock min', 'stockmin', 'stock minimum']),
+          tva: getMappedNum(row, 'tva', 20),
+          unite: getMappedValue(row, 'unite') || 'pièce',
+          stock: getMappedNum(row, 'stock'),
+          stockMin: getMappedNum(row, 'stockMin'),
           fournisseurId: '',
-          categorie: findColValue(row, ['catégorie', 'categorie', 'famille']),
+          categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
       }).filter(p => p.nom || p.reference);
@@ -592,15 +598,15 @@ export default function Produits() {
                 </p>
               )}
 
-              {/* Column selection */}
-              <div className="border border-border rounded-lg p-3 bg-muted/30">
-                <p className="text-xs font-semibold mb-2">Colonnes détectées :</p>
-                <div className="flex flex-wrap gap-2">
-                  {detectedImportFields.map(f => (
-                    <label key={f.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+              {/* Column mapping */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold">Correspondance des colonnes :</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {importFields.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
                       <input
                         type="checkbox"
-                        className="rounded border-input"
+                        className="rounded border-input shrink-0"
                         checked={importSelectedCols.has(f.key)}
                         onChange={() => {
                           setImportSelectedCols(prev => {
@@ -611,13 +617,32 @@ export default function Produits() {
                         }}
                         disabled={importMode === 'update' && f.key === 'reference'}
                       />
-                      <span className={importMode === 'update' && f.key === 'reference' ? 'text-muted-foreground' : ''}>{f.label}</span>
-                    </label>
+                      <span className="text-xs w-28 shrink-0 truncate" title={f.label}>{f.label}</span>
+                      <select
+                        className="flex-1 text-xs rounded border border-input bg-background px-2 py-1"
+                        value={importMapping[f.key] || ''}
+                        onChange={e => {
+                          setImportMapping(prev => {
+                            const next = { ...prev };
+                            if (e.target.value) {
+                              next[f.key] = e.target.value;
+                              // Auto-check when a column is selected
+                              setImportSelectedCols(p => new Set([...p, f.key]));
+                            } else {
+                              delete next[f.key];
+                              setImportSelectedCols(p => { const n = new Set(p); n.delete(f.key); return n; });
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <option value="">— non mappé —</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
                   ))}
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(detectedImportFields.map(f => f.key)))}>Tout sélectionner</button>
-                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(importMode === 'update' ? ['reference'] : []))}>Tout désélectionner</button>
                 </div>
               </div>
 
