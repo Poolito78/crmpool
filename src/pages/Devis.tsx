@@ -63,8 +63,25 @@ export default function Devis() {
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
-    return [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    if (!matchSearch) return false;
+    if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
+    if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
+    if (filterPeriode !== 'tous') {
+      const now = new Date();
+      const dateD = new Date(d.dateCreation);
+      if (filterPeriode === 'mois' && (dateD.getMonth() !== now.getMonth() || dateD.getFullYear() !== now.getFullYear())) return false;
+      if (filterPeriode === 'trimestre') {
+        const qNow = Math.floor(now.getMonth() / 3);
+        const qD = Math.floor(dateD.getMonth() / 3);
+        if (qD !== qNow || dateD.getFullYear() !== now.getFullYear()) return false;
+      }
+      if (filterPeriode === 'annee' && dateD.getFullYear() !== now.getFullYear()) return false;
+    }
+    return true;
   });
+
+  const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
