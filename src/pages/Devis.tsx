@@ -244,10 +244,11 @@ export default function Devis() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <Label className="text-xs">Produit</Label>
-                        <select className="w-full rounded border border-input bg-background px-2 py-1.5 text-sm" value={l.produitId || ''} onChange={e => selectProduit(l.id, e.target.value)}>
-                          <option value="">— Libre —</option>
-                          {produits.map(p => <option key={p.id} value={p.id}>{p.reference} - {p.nom}</option>)}
-                        </select>
+                        <ProduitCombobox
+                          produits={produits}
+                          value={l.produitId || ''}
+                          onSelect={(produitId) => produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined)}
+                        />
                       </div>
                       <div>
                         <Label className="text-xs">Description</Label>
