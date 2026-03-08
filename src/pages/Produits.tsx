@@ -557,9 +557,9 @@ export default function Produits() {
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
 
-            {/* Pricing section */}
+            {/* Tarif Revendeur - coefficient pilote */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarification</p>
+              <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *</Label>
@@ -570,42 +570,56 @@ export default function Produits() {
                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Prix Vente HT</Label>
-                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Prix Revendeur HT</Label>
+                  <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Marge brute</Label>
-                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Marge brute revend.</Label>
+                  <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted" />
                 </div>
                 <div>
-                   <Label className="text-xs">Taux marque</Label>
-                   <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                  <Label className="text-xs">Taux marque</Label>
+                  <Input value={`${calcTauxMarque(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
                 <div>
-                   <Label className="text-xs">Taux marge</Label>
-                   <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                  <Label className="text-xs">Taux marge</Label>
+                  <Input value={`${calcTauxMarge(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
             </div>
 
-            {/* Reseller pricing */}
+            {/* Prix public déduit de la remise */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarif Revendeur</p>
-              <div className="grid grid-cols-2 gap-3">
+              <p className="text-sm font-semibold text-foreground">Tarif Public (déduit via remise)</p>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Remise revendeur %</Label>
                   <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Coeff revendeur</Label>
-                  <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Coeff. public</Label>
+                  <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">Prix Vente HT (public)</Label>
+                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
-              <div>
-                <Label className="text-xs">Prix Revendeur HT</Label>
-                <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Marge brute pub.</Label>
+                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
+                </div>
+                <div>
+                  <Label className="text-xs">Taux marque</Label>
+                  <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">Taux marge</Label>
+                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                </div>
               </div>
             </div>
 
