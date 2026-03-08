@@ -568,6 +568,59 @@ export default function Produits() {
           <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
           {importPreview && (
             <>
+              {/* Mode selection */}
+              <div className="flex gap-2 mb-2">
+                <Button
+                  variant={importMode === 'add' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('add')}
+                >
+                  Ajouter (nouveaux)
+                </Button>
+                <Button
+                  variant={importMode === 'update' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setImportMode('update')}
+                >
+                  Mettre à jour (existants)
+                </Button>
+              </div>
+
+              {importMode === 'update' && (
+                <p className="text-xs text-muted-foreground">
+                  Les produits seront mis à jour par correspondance sur la <strong>référence</strong>. Sélectionnez les colonnes à mettre à jour :
+                </p>
+              )}
+
+              {/* Column selection */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30">
+                <p className="text-xs font-semibold mb-2">Colonnes détectées :</p>
+                <div className="flex flex-wrap gap-2">
+                  {detectedImportFields.map(f => (
+                    <label key={f.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                      <input
+                        type="checkbox"
+                        className="rounded border-input"
+                        checked={importSelectedCols.has(f.key)}
+                        onChange={() => {
+                          setImportSelectedCols(prev => {
+                            const next = new Set(prev);
+                            next.has(f.key) ? next.delete(f.key) : next.add(f.key);
+                            return next;
+                          });
+                        }}
+                        disabled={importMode === 'update' && f.key === 'reference'}
+                      />
+                      <span className={importMode === 'update' && f.key === 'reference' ? 'text-muted-foreground' : ''}>{f.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <div className="flex gap-2 mt-2">
+                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(detectedImportFields.map(f => f.key)))}>Tout sélectionner</button>
+                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(importMode === 'update' ? ['reference'] : []))}>Tout désélectionner</button>
+                </div>
+              </div>
+
               <p className="text-sm text-muted-foreground">{importPreview.length} ligne(s) détectée(s)</p>
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
@@ -590,7 +643,9 @@ export default function Produits() {
           )}
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
-            <Button onClick={importArticles}>Importer {importPreview?.length || 0} produit(s)</Button>
+            <Button onClick={importArticles}>
+              {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview?.length || 0} produit(s)`}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
