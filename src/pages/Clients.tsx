@@ -145,7 +145,7 @@ export default function Clients() {
   }
 
   function editAdresse(a: AdresseLivraison) {
-    setAdresseForm({ libelle: a.libelle, adresse: a.adresse, ville: a.ville, codePostal: a.codePostal, contact: a.contact || '', telephone: a.telephone || '', parDefaut: a.parDefaut });
+    setAdresseForm({ libelle: a.libelle, adresse: a.adresse, ville: a.ville, codePostal: a.codePostal, contact: a.contact || '', telephone: a.telephone || '', parDefaut: a.parDefaut, type: a.type || 'livraison' });
     setEditingAdresse(a.id);
     setShowAdresseForm(true);
   }
