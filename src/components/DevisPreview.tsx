@@ -9,7 +9,7 @@ interface Props {
   onEdit?: () => void;
 }
 
-export default function DevisPreview({ devis, client, onEdit }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
   function handlePrint() {
     window.print();
   }
