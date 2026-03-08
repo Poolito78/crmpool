@@ -138,6 +138,28 @@ export default function Devis() {
     }
   }
 
+  // Recalculer les prix quand le client change (revendeur / remises par catégorie)
+  const prevClientIdRef = useRef(clientId);
+  useEffect(() => {
+    if (!dialogOpen || clientId === prevClientIdRef.current) {
+      prevClientIdRef.current = clientId;
+      return;
+    }
+    prevClientIdRef.current = clientId;
+    const client = clients.find(c => c.id === clientId);
+    setLignes(prev => prev.map(l => {
+      if (!l.produitId) return l;
+      const p = produits.find(pr => pr.id === l.produitId);
+      if (!p) return l;
+      let prix = p.prixHT;
+      if (client?.estRevendeur) {
+        const remiseCat = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
+        prix = Math.round(p.prixHT * (1 - remiseCat / 100) * 100) / 100;
+      }
+      return { ...l, prixUnitaireHT: prix };
+    }));
+  }, [clientId, dialogOpen, clients, produits]);
+
   function save(silent = false): string | null {
     if (!clientId) { if (!silent) toast.error('Sélectionnez un client'); return null; }
     if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
