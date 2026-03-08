@@ -43,6 +43,8 @@ export default function Produits() {
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null); // null = supprimer plusieurs, else = supprimer un seul
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -52,61 +54,30 @@ export default function Produits() {
   const toggleAll = () => {
     setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
   };
+  
+  function confirmDelete(id?: string) {
+    setDeleteTarget(id || null);
+    setDeleteConfirmOpen(true);
+  }
+  
   function removeSelected() {
     if (selected.size === 0) return;
-    if (!confirm(`Supprimer ${selected.size} produit(s) ?`)) return;
-    updateProduits(prev => prev.filter(p => !selected.has(p.id)));
-    toast.success(`${selected.size} produit(s) supprimé(s)`);
-    setSelected(new Set());
+    confirmDelete();
   }
 
-  // Ensure old products without new fields get defaults
-  const safeProduits = produits.map(p => ({
-    ...p,
-    prixAchat: p.prixAchat ?? 0,
-    coefficient: p.coefficient ?? (p.prixAchat ? p.prixHT / p.prixAchat : 1),
-    coeffRevendeur: p.coeffRevendeur ?? 1.6,
-    remiseRevendeur: p.remiseRevendeur ?? 30,
-    prixRevendeur: p.prixRevendeur ?? 0,
-  }));
-
-  const filtered = safeProduits.filter(p =>
-    [p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-  );
-
-  function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
-  function openEdit(p: Produit) {
-    setEditing(p);
-    setForm({ reference: p.reference, nom: p.nom, description: p.description || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
-    setDialogOpen(true);
-  }
-
-  function updateFormPrix(updates: Partial<typeof form>) {
-    setForm(prev => {
-      const next = { ...prev, ...updates };
-      // Recalculate derived prices
-      next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
-      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
-      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
-      return next;
-    });
-  }
-
-  function save() {
-    if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
-    if (editing) {
-      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
-      toast.success('Produit modifié');
+  function executeDelete() {
+    if (deleteTarget) {
+      // Supprimer un seul produit
+      updateProduits(prev => prev.filter(p => p.id !== deleteTarget));
+      toast.success('Produit supprimé');
     } else {
-      updateProduits(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
-      toast.success('Produit ajouté');
+      // Supprimer les sélectionnés
+      updateProduits(prev => prev.filter(p => !selected.has(p.id)));
+      toast.success(`${selected.size} produit(s) supprimé(s)`);
+      setSelected(new Set());
     }
-    setDialogOpen(false);
-  }
-
-  function remove(id: string) {
-    updateProduits(prev => prev.filter(p => p.id !== id));
-    toast.success('Produit supprimé');
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
   }
 
   const fileInputRef = useRef<HTMLInputElement>(null);
