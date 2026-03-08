@@ -484,9 +484,9 @@ export default function Produits() {
                     </td>
                     <td className="px-3 py-3 text-right text-muted-foreground">
                       {formatMontant(p.prixHT)}
-                       <span className="block text-xs text-muted-foreground">
-                         coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)}
-                       </span>
+                      <span className="block text-xs text-muted-foreground">
+                        {formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)
+                      </span>
                     </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
