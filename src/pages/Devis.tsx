@@ -120,7 +120,14 @@ export default function Devis() {
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
+      const client = clients.find(c => c.id === clientId);
+      let prix = p.prixHT;
+      if (client?.estRevendeur) {
+        const remiseCat = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
+        // Prix revendeur = prix public * (1 - remise/100)
+        prix = Math.round(p.prixHT * (1 - remiseCat / 100) * 100) / 100;
+      }
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite } : l));
     }
   }
 
