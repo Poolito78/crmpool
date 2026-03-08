@@ -27,6 +27,9 @@ export default function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  const [filterStatut, setFilterStatut] = useState<string>('tous');
+  const [filterClient, setFilterClient] = useState<string>('tous');
+  const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -60,8 +63,25 @@ export default function Devis() {
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
-    return [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    if (!matchSearch) return false;
+    if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
+    if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
+    if (filterPeriode !== 'tous') {
+      const now = new Date();
+      const dateD = new Date(d.dateCreation);
+      if (filterPeriode === 'mois' && (dateD.getMonth() !== now.getMonth() || dateD.getFullYear() !== now.getFullYear())) return false;
+      if (filterPeriode === 'trimestre') {
+        const qNow = Math.floor(now.getMonth() / 3);
+        const qD = Math.floor(dateD.getMonth() / 3);
+        if (qD !== qNow || dateD.getFullYear() !== now.getFullYear()) return false;
+      }
+      if (filterPeriode === 'annee' && dateD.getFullYear() !== now.getFullYear()) return false;
+    }
+    return true;
   });
+
+  const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
@@ -243,14 +263,41 @@ export default function Devis() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+            <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
+          </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
+        <div className="flex flex-wrap gap-2">
+          <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Tous les statuts</option>
+            <option value="brouillon">Brouillon</option>
+            <option value="envoyé">Envoyé</option>
+            <option value="accepté">Accepté</option>
+            <option value="refusé">Refusé</option>
+            <option value="expiré">Expiré</option>
+          </select>
+          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Tous les clients</option>
+            {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
+          </select>
+          <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Toutes les périodes</option>
+            <option value="mois">Ce mois</option>
+            <option value="trimestre">Ce trimestre</option>
+            <option value="annee">Cette année</option>
+          </select>
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+              Réinitialiser les filtres
+            </Button>
+          )}
         </div>
       </div>
 
