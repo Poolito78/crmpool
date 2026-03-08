@@ -421,9 +421,9 @@ export default function Produits() {
                     { key: 'categorie', align: 'left' },
                     { key: 'prixAchat', align: 'right' },
                     { key: 'coefficient', align: 'right' },
+                    { key: 'prixRevendeur', align: 'right' },
                     { key: 'prixHT', align: 'right' },
                     { key: 'marge', align: 'right', disabled: true },
-                    { key: 'prixRevendeur', align: 'right' },
                     { key: 'stock', align: 'right' },
                   ].map(col => (
                     <th key={col.key} className="px-3 py-1">
