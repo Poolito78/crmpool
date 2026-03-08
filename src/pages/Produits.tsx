@@ -253,7 +253,9 @@ export default function Produits() {
           return (
             <div key={p.id} className="bg-card rounded-xl border border-border p-4">
               <div className="flex justify-between items-start">
-                <div>
+                <div className="flex items-start gap-2">
+                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
+                  <div>
                   <p className="font-medium">{p.nom}</p>
                   <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                 </div>
