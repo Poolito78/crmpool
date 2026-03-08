@@ -251,14 +251,14 @@ export default function Produits() {
         });
         if (!matchingRow) return p;
 
-        const updates: Partial<Produit> = {};
+        const updates: Record<string, any> = {};
         for (const field of selectedFields) {
-          if (field.key === 'reference') continue; // don't update the key field
+          if (field.key === 'reference') continue;
           if (field.type === 'number') {
-            updates[field.key as keyof Produit] = findNumValue(matchingRow, field.aliases, field.default ?? 0) as any;
+            updates[field.key] = findNumValue(matchingRow, field.aliases, field.default ?? 0);
           } else {
             const val = findColValue(matchingRow, field.aliases);
-            if (val || field.default) updates[field.key as keyof Produit] = (val || field.default || '') as any;
+            if (val || field.default) updates[field.key] = val || field.default || '';
           }
         }
 
