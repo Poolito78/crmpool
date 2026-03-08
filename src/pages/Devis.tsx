@@ -258,7 +258,12 @@ export default function Devis() {
                   {clientId && (
                     <button
                       type="button"
-                      onClick={() => { setDialogOpen(false); navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}`); }}
+                      onClick={() => {
+                        // Save current devis first, then navigate with return param
+                        save();
+                        const devisId = editingId || devis[devis.length - 1]?.id;
+                        navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId || ''}`);
+                      }}
                       className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                     >
                       <ExternalLink className="w-3 h-3" /> Voir fiche
