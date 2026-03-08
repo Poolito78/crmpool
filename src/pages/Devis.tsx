@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import ClientCombobox from '@/components/ClientCombobox';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -207,10 +208,11 @@ export default function Devis() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <Label>Client *</Label>
-                <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={clientId} onChange={e => setClientId(e.target.value)}>
-                  <option value="">— Sélectionner —</option>
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.nom}{c.societe ? ` (${c.societe})` : ''}</option>)}
-                </select>
+                <ClientCombobox
+                  clients={clients}
+                  value={clientId}
+                  onSelect={setClientId}
+                />
               </div>
               <div>
                 <Label>Date de validité</Label>
