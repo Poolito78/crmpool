@@ -53,6 +53,7 @@ export interface Produit {
   prixRevendeur: number;
   tva: number;
   unite: string;
+  poids?: number;
   stock: number;
   stockMin: number;
   fournisseurId?: string;
