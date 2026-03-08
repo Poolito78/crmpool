@@ -69,6 +69,7 @@ export default function Clients() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
+  const [importMode, setImportMode] = useState<'add' | 'update'>('add');
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -186,33 +187,59 @@ export default function Clients() {
 
   function importClients() {
     if (!importPreview) return;
-    const mapped: Client[] = importPreview.map((row: any) => ({
-      id: generateId(),
-      nom: getMappedValue(row, 'nom'),
-      societe: getMappedValue(row, 'societe'),
-      email: getMappedValue(row, 'email'),
-      telephone: getMappedValue(row, 'telephone'),
-      adresse: getMappedValue(row, 'adresse'),
-      ville: getMappedValue(row, 'ville'),
-      codePostal: getMappedValue(row, 'codePostal'),
-      notes: getMappedValue(row, 'notes'),
-      adressesLivraison: [],
-      dateCreation: new Date().toISOString().split('T')[0],
-    })).filter(c => c.nom || c.societe);
+    const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
 
-    // Dédoublonnage par nom
-    const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
-    const unique = mapped.filter(c => {
-      const name = c.nom.trim().toLowerCase();
-      if (!name) return true;
-      if (existingNames.has(name)) return false;
-      existingNames.add(name);
-      return true;
-    });
-    const skipped = mapped.length - unique.length;
+    if (importMode === 'update') {
+      let updated = 0;
+      updateClients(prev => prev.map(c => {
+        const matchingRow = importPreview.find(row => {
+          const nom = getMappedValue(row, 'nom');
+          return nom.toLowerCase() === c.nom.trim().toLowerCase();
+        });
+        if (!matchingRow) return c;
 
-    updateClients(prev => [...prev, ...unique]);
-    toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+        const updates: Record<string, any> = {};
+        for (const field of selectedFields) {
+          if (field.key === 'nom') continue;
+          const val = getMappedValue(matchingRow, field.key);
+          if (val) updates[field.key] = val;
+        }
+        if (Object.keys(updates).length > 0) {
+          updated++;
+          return { ...c, ...updates };
+        }
+        return c;
+      }));
+      toast.success(`${updated} client(s) mis à jour`);
+    } else {
+      const mapped: Client[] = importPreview.map((row: any) => ({
+        id: generateId(),
+        nom: getMappedValue(row, 'nom'),
+        societe: getMappedValue(row, 'societe'),
+        email: getMappedValue(row, 'email'),
+        telephone: getMappedValue(row, 'telephone'),
+        adresse: getMappedValue(row, 'adresse'),
+        ville: getMappedValue(row, 'ville'),
+        codePostal: getMappedValue(row, 'codePostal'),
+        notes: getMappedValue(row, 'notes'),
+        adressesLivraison: [],
+        dateCreation: new Date().toISOString().split('T')[0],
+      })).filter(c => c.nom || c.societe);
+
+      const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+      const unique = mapped.filter(c => {
+        const name = c.nom.trim().toLowerCase();
+        if (!name) return true;
+        if (existingNames.has(name)) return false;
+        existingNames.add(name);
+        return true;
+      });
+      const skipped = mapped.length - unique.length;
+
+      updateClients(prev => [...prev, ...unique]);
+      toast.success(`${unique.length} client(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    }
+
     setImportDialogOpen(false);
     setImportPreview(null);
   }
@@ -549,6 +576,22 @@ export default function Clients() {
           <DialogHeader><DialogTitle>Aperçu de l'import clients</DialogTitle></DialogHeader>
           {importPreview && (
             <>
+              {/* Mode selection */}
+              <div className="flex gap-2 mb-2">
+                <Button variant={importMode === 'add' ? 'default' : 'outline'} size="sm" onClick={() => setImportMode('add')}>
+                  Ajouter (nouveaux)
+                </Button>
+                <Button variant={importMode === 'update' ? 'default' : 'outline'} size="sm" onClick={() => setImportMode('update')}>
+                  Mettre à jour (existants)
+                </Button>
+              </div>
+
+              {importMode === 'update' && (
+                <p className="text-xs text-muted-foreground">
+                  Les clients seront mis à jour par correspondance sur le <strong>nom</strong>. Sélectionnez les colonnes à mettre à jour :
+                </p>
+              )}
+
               {/* Column mapping */}
               <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
                 <p className="text-xs font-semibold">Correspondance des colonnes :</p>
@@ -606,7 +649,9 @@ export default function Clients() {
 
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
-                <Button onClick={importClients}>Importer {importPreview.length} client(s)</Button>
+                <Button onClick={importClients}>
+                  {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview.length} client(s)`}
+                </Button>
               </div>
             </>
           )}
