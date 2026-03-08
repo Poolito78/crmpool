@@ -50,6 +50,8 @@ export default function Produits() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMode, setImportMode] = useState<'add' | 'update'>('add');
+  const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
 
