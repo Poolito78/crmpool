@@ -15,8 +15,12 @@ const emptyProduit = {
 function calcPrixVente(prixAchat: number, coeff: number) {
   return Math.round(prixAchat * coeff * 100) / 100;
 }
-function calcPrixRevendeur(prixAchat: number, coeffRevendeur: number) {
-  return Math.round(prixAchat * coeffRevendeur * 100) / 100;
+function calcPrixRevendeur(prixVenteHT: number, remise: number) {
+  return Math.round(prixVenteHT * (1 - remise / 100) * 100) / 100;
+}
+function calcCoeffRevendeur(prixRevendeur: number, prixAchat: number) {
+  if (prixAchat === 0) return 0;
+  return prixRevendeur / prixAchat;
 }
 function calcMargeBrute(prixVente: number, prixAchat: number) {
   return prixVente - prixAchat;
@@ -59,7 +63,8 @@ export default function Produits() {
       const next = { ...prev, ...updates };
       // Recalculate derived prices
       next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
-      next.prixRevendeur = calcPrixRevendeur(next.prixAchat, next.coeffRevendeur);
+      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
+      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
       return next;
     });
   }
@@ -125,7 +130,12 @@ export default function Produits() {
                         {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}%)</span>
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">{formatMontant(p.prixRevendeur)}</td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">
+                      {formatMontant(p.prixRevendeur)}
+                      <span className="block text-xs text-muted-foreground">
+                        coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · marge {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))}
+                      </span>
+                    </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
@@ -167,7 +177,7 @@ export default function Produits() {
                 <span className="text-muted-foreground">Marge brute:</span>
                 <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({tauxMarge.toFixed(0)}%)</span>
                 <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)}</span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)})</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
@@ -221,19 +231,25 @@ export default function Produits() {
                 </div>
               </div>
               <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise {form.remiseRevendeur}%)</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs">Coeff. Revendeur</Label>
-                    <Input type="number" step="0.01" value={form.coeffRevendeur} onChange={e => updateFormPrix({ coeffRevendeur: parseFloat(e.target.value) || 1 })} />
-                  </div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise sur prix vente public)</p>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Remise (%)</Label>
-                    <Input type="number" value={form.remiseRevendeur} onChange={e => setForm(p => ({ ...p, remiseRevendeur: parseFloat(e.target.value) || 0 }))} />
+                    <Input type="number" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Prix Revendeur</Label>
+                    <Label className="text-xs">Prix Revendeur HT</Label>
                     <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <Label className="text-xs">Coeff. Revendeur</Label>
+                    <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Marge brute Revendeur</Label>
+                    <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
                   </div>
                 </div>
               </div>
