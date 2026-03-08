@@ -59,6 +59,8 @@ export default function Devis() {
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
+  const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
+  const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
 
   const filtered = devis.filter(d => {
@@ -94,6 +96,8 @@ export default function Devis() {
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
     setAdresseLivraisonId(d.adresseLivraisonId || '');
+    setModeCalcul(d.modeCalcul || 'standard');
+    setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
   }
 
   function openNew() {
@@ -109,6 +113,8 @@ export default function Devis() {
     setFraisPortHT(0);
     setFraisPortTVA(20);
     setFraisPortAuto(true);
+    setModeCalcul('standard');
+    setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
     setDialogOpen(true);
   }
@@ -146,6 +152,12 @@ export default function Devis() {
     setLignes(prev => prev.filter(l => l.id !== id));
   }
 
+  function calcQuantiteSurface(produit: typeof produits[0], surface: number): number {
+    if (!produit.consommation || produit.consommation <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    const kgNeeded = surface * produit.consommation;
+    return Math.ceil(kgNeeded / produit.conditionnement);
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
@@ -155,7 +167,11 @@ export default function Devis() {
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise } : l));
+      let quantite = 1;
+      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.conditionnement) {
+        quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
+      }
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined } : l));
     }
   }
 
@@ -188,7 +204,7 @@ export default function Devis() {
     let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
+        ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       } : d));
       if (!silent) toast.success('Devis modifié');
     } else {
@@ -196,7 +212,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
-        dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
+        dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) toast.success('Devis créé');
@@ -216,12 +232,24 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if (clientId && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
+          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen]);
+  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+
+  // Recalcul auto des quantités en mode surface
+  useEffect(() => {
+    if (modeCalcul !== 'surface' || !dialogOpen || surfaceGlobaleM2 <= 0) return;
+    setLignes(prev => prev.map(l => {
+      if (!l.produitId) return l;
+      const p = produits.find(pr => pr.id === l.produitId);
+      if (!p || !p.consommation || !p.conditionnement) return l;
+      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2);
+      return { ...l, quantite, surfaceM2: l.surfaceM2 || surfaceGlobaleM2 };
+    }));
+  }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
 
   // Auto-calcul frais de port basé sur le poids
   useEffect(() => {
@@ -470,6 +498,28 @@ export default function Devis() {
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
             </div>
 
+            {/* Mode de calcul */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Mode de calcul</p>
+                <div className="flex gap-2">
+                  <Button variant={modeCalcul === 'standard' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('standard')}>Standard</Button>
+                  <Button variant={modeCalcul === 'surface' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('surface')}>Surface (m²)</Button>
+                </div>
+              </div>
+              {modeCalcul === 'surface' && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Les quantités sont calculées automatiquement : Surface × Consommation (kg/m²) ÷ Conditionnement (kg) = Nb unités</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Surface globale (m²)</Label>
+                      <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Ex: 50" className="h-8 text-sm" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Lines */}
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -517,8 +567,36 @@ export default function Devis() {
                         <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
-                       <div><Label className="text-xs">Qté</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
+                    {modeCalcul === 'surface' && (
+                      <div className="grid grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
+                        <div>
+                          <Label className="text-xs">Surface (m²)</Label>
+                          <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                            const surface = parseFloat(e.target.value) || 0;
+                            const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                            const quantite = p && p.consommation && p.conditionnement ? calcQuantiteSurface(p, surface) : l.quantite;
+                            setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                          }} className="h-8 text-sm" />
+                        </div>
+                        {(() => {
+                          const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                          return (
+                            <>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Conso.</Label>
+                                <Input value={p?.consommation ? `${p.consommation} kg/m²` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Condit.</Label>
+                                <Input value={p?.conditionnement ? `${p.conditionnement} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-4' : 'grid-cols-4'}`}>
+                       <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
                        <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
                        <div>
@@ -616,7 +694,13 @@ export default function Devis() {
                   {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
                   <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
                   <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
-                  <div className="flex justify-between border-t border-border pt-2 mt-2 text-muted-foreground">
+                  {modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && (
+                    <div className="flex justify-between border-t border-border pt-2 mt-2 text-muted-foreground">
+                      <span>Surface</span>
+                      <span className="font-medium">{surfaceGlobaleM2} m²</span>
+                    </div>
+                  )}
+                  <div className={`flex justify-between ${modeCalcul !== 'surface' ? 'border-t border-border pt-2 mt-2' : ''} text-muted-foreground`}>
                     <span>Poids total</span>
                     <span className="font-medium">{poidsTotal.toFixed(2)} kg</span>
                   </div>
