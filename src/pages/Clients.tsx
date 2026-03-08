@@ -371,6 +371,7 @@ export default function Clients() {
                       <div key={a.id} className="bg-muted/30 rounded-lg p-3 text-xs space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{a.libelle}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
                           {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
                         </div>
                         <p className="text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
