@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
