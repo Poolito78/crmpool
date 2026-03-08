@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
