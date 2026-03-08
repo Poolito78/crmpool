@@ -18,6 +18,17 @@ const navItems = [
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const location = useLocation();
+  const { clients, produits, fournisseurs, devis } = useCRM();
+
+  function exportGlobal() {
+    const sheets = [
+      { name: 'Clients', data: clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code Postal': c.codePostal, Revendeur: c.estRevendeur ? 'Oui' : 'Non', Notes: c.notes || '' })) },
+      { name: 'Produits', data: produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, Poids: p.poids || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })) },
+      { name: 'Fournisseurs', data: fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code Postal': f.codePostal, 'Franco Port': f.francoPort, 'Coût Transport': f.coutTransport, Notes: f.notes || '' })) },
+      { name: 'Devis', data: devis.map(d => { const client = clients.find(c => c.id === d.clientId); const t = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': t.totalHT, 'Total TVA': t.totalTVA, 'Total TTC': t.totalTTC, Notes: d.notes || '' }; }) },
+    ];
+    exportMultiSheet(sheets, `MonCRM_Export_${new Date().toISOString().split('T')[0]}`);
+  }
 
   return (
     <div className="min-h-screen flex bg-background">
