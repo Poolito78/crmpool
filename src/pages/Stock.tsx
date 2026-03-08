@@ -8,7 +8,7 @@ export default function Stock() {
   const sorted = [...produits].sort((a, b) => {
     const aLow = a.stock <= a.stockMin ? 0 : 1;
     const bLow = b.stock <= b.stockMin ? 0 : 1;
-    return aLow - bLow || a.nom.localeCompare(b.nom);
+    return aLow - bLow || a.description.localeCompare(b.description);
   });
 
   const totalStock = produits.reduce((s, p) => s + p.stock, 0);
@@ -83,7 +83,7 @@ export default function Stock() {
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {produitsAlerte.length} produit{produitsAlerte.length > 1 ? 's' : ''} en alerte :
-                    <span className="ml-1">{produitsAlerte.map(p => `${p.nom} (${Math.max(0, p.stockMin - p.stock + 1)} ${p.unite})`).join(', ')}</span>
+                    <span className="ml-1">{produitsAlerte.map(p => `${p.description} (${Math.max(0, p.stockMin - p.stock + 1)} ${p.unite})`).join(', ')}</span>
                   </div>
                 </div>
               );
@@ -120,7 +120,7 @@ export default function Stock() {
                         : <CheckCircle className="w-4 h-4 text-success" />}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{p.nom}</p>
+                      <p className="font-medium">{p.description}</p>
                       <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{p.categorie || '—'}</td>

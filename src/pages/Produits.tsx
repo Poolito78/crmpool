@@ -12,7 +12,7 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 const emptyProduit = {
-  reference: '', nom: '', description: '', prixAchat: 0, coefficient: 2, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 2, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
 };
 
 function calcPrixVente(prixAchat: number, coeff: number) {
@@ -88,14 +88,14 @@ export default function Produits() {
 
   const filtered = safeProduits.filter(p => {
     // Global search
-    if (search && ![p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
+    if (search && ![p.description, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
     // Column filters
     for (const [key, val] of Object.entries(columnFilters)) {
       if (!val) continue;
       const v = val.toLowerCase();
       switch (key) {
         case 'reference': if (!p.reference?.toLowerCase().includes(v)) return false; break;
-        case 'nom': if (!p.nom?.toLowerCase().includes(v)) return false; break;
+        case 'description': if (!p.description?.toLowerCase().includes(v)) return false; break;
         case 'categorie': if (!p.categorie?.toLowerCase().includes(v)) return false; break;
         case 'prixAchat': if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
         case 'coefficient': if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
@@ -145,7 +145,7 @@ export default function Produits() {
   function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
-    setForm({ reference: p.reference, nom: p.nom, description: p.description || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
     setDialogOpen(true);
   }
 
@@ -160,7 +160,7 @@ export default function Produits() {
   }
 
   function save(andReturnToDevis = false) {
-    if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
+    if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     if (editing) {
       updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
       // Répercuter les modifications dans les lignes de devis liées
@@ -168,7 +168,7 @@ export default function Produits() {
         ...d,
         lignes: d.lignes.map(l => l.produitId === editing.id ? {
           ...l,
-          description: form.nom,
+          description: form.description,
           prixUnitaireHT: form.prixHT,
           tva: form.tva,
           unite: form.unite,
@@ -193,8 +193,8 @@ export default function Produits() {
   // Import field definitions
   const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
     { key: 'reference', label: 'Référence', aliases: ['article', 'référence', 'reference', 'ref', 'code article'], type: 'text' },
-    { key: 'nom', label: 'Nom', aliases: ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle'], type: 'text' },
-    { key: 'description', label: 'Description', aliases: ['description'], type: 'text' },
+    { key: 'description', label: 'Description', aliases: ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle', 'description'], type: 'text' },
+    { key: 'descriptionDetaillee', label: 'Description détaillée', aliases: ['description détaillée', 'description detaillee', 'détail', 'detail'], type: 'text' },
     { key: 'prixAchat', label: 'Prix Achat', aliases: ['pa conditionné', 'pa conditionne', 'p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat'], type: 'number' },
     { key: 'coefficient', label: 'Coefficient', aliases: ['coefficient', 'coeff'], type: 'number', default: 2 },
     { key: 'prixHT', label: 'Prix HT', aliases: ['prix ht', 'prixht', 'pv ht', 'prix_ht'], type: 'number' },
@@ -319,12 +319,12 @@ export default function Produits() {
         const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
         const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
         const reference = getMappedValue(row, 'reference');
-        const nom = getMappedValue(row, 'nom');
+        const description = getMappedValue(row, 'description');
         return {
           id: generateId(),
           reference,
-          nom,
-          description: getMappedValue(row, 'description'),
+          description,
+          descriptionDetaillee: getMappedValue(row, 'descriptionDetaillee'),
           prixAchat,
           coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
           prixHT,
@@ -339,7 +339,7 @@ export default function Produits() {
           categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
-      }).filter(p => p.nom || p.reference);
+      }).filter(p => p.description || p.reference);
 
       const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
       const unique = mapped.filter(p => {
@@ -398,7 +398,7 @@ export default function Produits() {
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-3 py-3 w-8"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} className="rounded border-input" /></th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Réf.</th>
-                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Nom</th>
+                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Description</th>
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Achat</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
@@ -413,7 +413,7 @@ export default function Produits() {
                   <th className="px-3 py-1"></th>
                   {[
                     { key: 'reference', align: 'left' },
-                    { key: 'nom', align: 'left' },
+                    { key: 'description', align: 'left' },
                     { key: 'categorie', align: 'left' },
                     { key: 'prixAchat', align: 'right' },
                     { key: 'coefficient', align: 'right' },
@@ -451,7 +451,7 @@ export default function Produits() {
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     <td className="px-3 py-3 font-mono text-xs">{p.reference}</td>
-                    <td className="px-3 py-3 font-medium">{p.nom}</td>
+                    <td className="px-3 py-3 font-medium">{p.description}</td>
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
@@ -494,7 +494,7 @@ export default function Produits() {
                 <div className="flex items-start gap-2">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
                   <div>
-                    <p className="font-medium">{p.nom}</p>
+                    <p className="font-medium">{p.description}</p>
                     <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                   </div>
                 </div>
@@ -550,8 +550,8 @@ export default function Produits() {
               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
               <div><Label>Catégorie</Label><Input value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} /></div>
             </div>
-            <div><Label>Nom *</Label><Input value={form.nom} onChange={e => setForm(p => ({ ...p, nom: e.target.value }))} /></div>
-            <div><Label>Description</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
+            <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
+            <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
 
             {/* Pricing section */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">

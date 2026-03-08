@@ -120,7 +120,7 @@ export default function Devis() {
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.nom, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
     }
   }
 
@@ -368,7 +368,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} />
           </DialogContent>
         </Dialog>
       )}
