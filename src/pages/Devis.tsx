@@ -451,11 +451,15 @@ export default function Devis() {
                         <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                       </div>
                     </div>
-                    <div className="grid grid-cols-4 gap-2">
+                    <div className="grid grid-cols-5 gap-2">
                        <div><Label className="text-xs">Qté</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Prix HT</Label><Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
+                       <div>
+                         <Label className="text-xs">Prix remisé</Label>
+                         <Input value={formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))} readOnly className="h-8 text-sm bg-muted/50" />
+                       </div>
                     </div>
                     {(() => {
                       const t = calculerTotalLigne(l);
@@ -475,7 +479,6 @@ export default function Devis() {
                               <span>{formatMontant(prixKg)}/kg</span>
                             )}
                           </div>
-                          {l.remise > 0 && <span>Prix HT remisé: {formatMontant(prixNetHT)}</span>}
                           <span>Total HT: {formatMontant(t.totalHT)}</span>
                         </div>
                       );
