@@ -54,6 +54,7 @@ export default function Devis() {
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
+  const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
