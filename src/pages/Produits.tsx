@@ -660,6 +660,8 @@ export default function Produits() {
               <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
               <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
               <div><Label>Poids (kg)</Label><Input type="number" step="0.01" value={form.poids || ''} onChange={e => setForm(p => ({ ...p, poids: parseFloat(e.target.value) || 0 }))} /></div>
+              <div><Label>Consommation (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
+              <div><Label>Conditionnement (kg)</Label><Input type="number" step="0.01" value={form.conditionnement || ''} onChange={e => setForm(p => ({ ...p, conditionnement: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 25" /></div>
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
             </div>
             <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
