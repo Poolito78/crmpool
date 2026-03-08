@@ -182,6 +182,11 @@ export default function Produits() {
               <Trash2 className="w-4 h-4 mr-2" /> Supprimer {selected.size} sélectionné(s)
             </Button>
           )}
+          {produits.length > 0 && selected.size === 0 && (
+            <Button variant="destructive" size="sm" onClick={() => { toggleAll(); }}>
+              <Trash2 className="w-4 h-4 mr-2" /> Tout sélectionner
+            </Button>
+          )}
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
         </div>
