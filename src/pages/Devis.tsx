@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
