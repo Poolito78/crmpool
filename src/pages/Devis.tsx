@@ -263,14 +263,41 @@ export default function Devis() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+            <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
+          </div>
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
+        <div className="flex flex-wrap gap-2">
+          <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Tous les statuts</option>
+            <option value="brouillon">Brouillon</option>
+            <option value="envoyé">Envoyé</option>
+            <option value="accepté">Accepté</option>
+            <option value="refusé">Refusé</option>
+            <option value="expiré">Expiré</option>
+          </select>
+          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Tous les clients</option>
+            {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
+          </select>
+          <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Toutes les périodes</option>
+            <option value="mois">Ce mois</option>
+            <option value="trimestre">Ce trimestre</option>
+            <option value="annee">Cette année</option>
+          </select>
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+              Réinitialiser les filtres
+            </Button>
+          )}
         </div>
       </div>
 
