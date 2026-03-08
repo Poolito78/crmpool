@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink } from 'lucide-react';
@@ -22,12 +23,25 @@ const statutColors: Record<string, string> = {
 
 export default function Devis() {
   const { devis, updateDevis, clients, produits } = useCRM();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  // Auto-open devis editor when returning from product page
+  useEffect(() => {
+    const editDevisId = searchParams.get('editDevis');
+    if (editDevisId) {
+      const d = devis.find(dv => dv.id === editDevisId);
+      if (d) {
+        openEdit(d);
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
@@ -268,9 +282,10 @@ export default function Devis() {
                               className="h-8 w-8 shrink-0"
                               title="Voir la fiche produit"
                               onClick={() => {
+                                const currentDevisId = editingId;
                                 setDialogOpen(false);
                                 setEditingId(null);
-                                window.location.href = `/produits?highlight=${l.produitId}&from=devis`;
+                                window.location.href = `/produits?highlight=${l.produitId}&from=devis&devisId=${currentDevisId}`;
                               }}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />

@@ -51,12 +51,17 @@ export default function Produits() {
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [fromDevis, setFromDevis] = useState(false);
+  const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
     const from = searchParams.get('from');
-    if (from === 'devis') setFromDevis(true);
+    const devisId = searchParams.get('devisId');
+    if (from === 'devis') {
+      setFromDevis(true);
+      if (devisId) setReturnDevisId(devisId);
+    }
     if (highlightId) {
       const prod = produits.find(p => p.id === highlightId);
       if (prod) {
@@ -234,8 +239,8 @@ export default function Produits() {
   return (
     <div className="space-y-4">
       {fromDevis && (
-        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = '/devis'; }}>
-          <ArrowLeft className="w-4 h-4 mr-2" /> Retour aux devis
+        <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'; }}>
+          <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
         </Button>
       )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
