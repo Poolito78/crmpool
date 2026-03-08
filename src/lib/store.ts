@@ -118,8 +118,8 @@ const demoDevis: Devis[] = [
   {
     id: '2', numero: 'DEV-2024-002', clientId: '2', dateCreation: '2024-03-15', dateValidite: '2024-04-15', statut: 'envoyé',
     lignes: [
-      { id: '1', produitId: '3', description: 'Tube PVC 100mm', quantite: 20, prixUnitaireHT: 8.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '4', description: 'Robinet mitigeur', quantite: 2, prixUnitaireHT: 45.00, tva: 20, remise: 10 },
+      { id: '1', produitId: '3', description: 'Tube PVC 100mm', quantite: 20, unite: 'm', prixUnitaireHT: 8.50, tva: 20, remise: 0 },
+      { id: '2', produitId: '4', description: 'Robinet mitigeur', quantite: 2, unite: 'pièce', prixUnitaireHT: 45.00, tva: 20, remise: 10 },
     ],
     notes: 'Rénovation salle de bain'
   },
