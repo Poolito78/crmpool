@@ -41,6 +41,23 @@ export default function Produits() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const toggleAll = () => {
+    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
+  };
+  function removeSelected() {
+    if (selected.size === 0) return;
+    if (!confirm(`Supprimer ${selected.size} produit(s) ?`)) return;
+    updateProduits(prev => prev.filter(p => !selected.has(p.id)));
+    toast.success(`${selected.size} produit(s) supprimé(s)`);
+    setSelected(new Set());
+  }
 
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
