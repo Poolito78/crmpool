@@ -35,6 +35,8 @@ export interface Fournisseur {
   codePostal: string;
   societe: string;
   notes?: string;
+  francoPort: number; // montant minimum de commande pour franco de port
+  coutTransport: number; // coût de transport si franco non atteint
   dateCreation: string;
 }
 
