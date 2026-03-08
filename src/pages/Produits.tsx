@@ -12,18 +12,21 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 2, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
 };
 
-function calcPrixVente(prixAchat: number, coeff: number) {
+// Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
+// Prix public déduit : prixHT = prixRevendeur / (1 - remise/100)
+function calcPrixRevendeurFromCoeff(prixAchat: number, coeff: number) {
   return Math.round(prixAchat * coeff * 100) / 100;
 }
-function calcPrixRevendeur(prixVenteHT: number, remise: number) {
-  return Math.round(prixVenteHT * (1 - remise / 100) * 100) / 100;
+function calcPrixPublicFromRevendeur(prixRevendeur: number, remise: number) {
+  if (remise >= 100) return prixRevendeur;
+  return Math.round(prixRevendeur / (1 - remise / 100) * 100) / 100;
 }
-function calcCoeffRevendeur(prixRevendeur: number, prixAchat: number) {
+function calcCoeffPublic(prixHT: number, prixAchat: number) {
   if (prixAchat === 0) return 0;
-  return prixRevendeur / prixAchat;
+  return prixHT / prixAchat;
 }
 function calcMargeBrute(prixVente: number, prixAchat: number) {
   return prixVente - prixAchat;
@@ -152,9 +155,10 @@ export default function Produits() {
   function updateFormPrix(updates: Partial<typeof form>) {
     setForm(prev => {
       const next = { ...prev, ...updates };
-      next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
-      next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
-      next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
+      // Coefficient pilote le prix revendeur
+      next.prixRevendeur = calcPrixRevendeurFromCoeff(next.prixAchat, next.coefficient);
+      next.prixHT = calcPrixPublicFromRevendeur(next.prixRevendeur, next.remiseRevendeur);
+      next.coeffRevendeur = next.coefficient; // identique maintenant
       return next;
     });
   }
@@ -292,15 +296,16 @@ export default function Produits() {
 
         const pa = updates.prixAchat ?? p.prixAchat;
         const coeff = updates.coefficient ?? p.coefficient;
-        const pvht = updates.prixHT ?? calcPrixVente(pa, coeff);
         const remise = updates.remiseRevendeur ?? p.remiseRevendeur;
 
         if (importSelectedCols.has('prixAchat') || importSelectedCols.has('coefficient')) {
-          updates.prixHT = importSelectedCols.has('prixHT') ? (updates.prixHT || pvht) : calcPrixVente(pa, coeff);
+          updates.prixRevendeur = calcPrixRevendeurFromCoeff(pa, coeff);
+          updates.prixHT = calcPrixPublicFromRevendeur(updates.prixRevendeur, remise);
+          updates.coeffRevendeur = coeff;
         }
-        if (importSelectedCols.has('prixAchat') || importSelectedCols.has('remiseRevendeur') || importSelectedCols.has('prixHT')) {
-          updates.prixRevendeur = calcPrixRevendeur(updates.prixHT ?? pvht, remise);
-          updates.coeffRevendeur = calcCoeffRevendeur(updates.prixRevendeur, pa);
+        if (importSelectedCols.has('remiseRevendeur')) {
+          const pr = updates.prixRevendeur ?? calcPrixRevendeurFromCoeff(pa, coeff);
+          updates.prixHT = calcPrixPublicFromRevendeur(pr, remise);
         }
 
         if (Object.keys(updates).length > 0) {
@@ -313,11 +318,10 @@ export default function Produits() {
     } else {
       const mapped: Produit[] = importPreview.map((row: any) => {
         const prixAchat = getMappedNum(row, 'prixAchat');
-        const coefficient = getMappedNum(row, 'coefficient', 2);
-        const prixHT = getMappedNum(row, 'prixHT') || calcPrixVente(prixAchat, coefficient);
+        const coefficient = getMappedNum(row, 'coefficient', 1.6);
         const remiseRevendeur = getMappedNum(row, 'remiseRevendeur', 30);
-        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
-        const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
+        const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeurFromCoeff(prixAchat, coefficient);
+        const prixHT = getMappedNum(row, 'prixHT') || calcPrixPublicFromRevendeur(prixRevendeur, remiseRevendeur);
         const reference = getMappedValue(row, 'reference');
         const description = getMappedValue(row, 'description');
         return {
@@ -326,9 +330,9 @@ export default function Produits() {
           description,
           descriptionDetaillee: getMappedValue(row, 'descriptionDetaillee'),
           prixAchat,
-          coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
+          coefficient: prixAchat > 0 && prixRevendeur > 0 ? prixRevendeur / prixAchat : coefficient,
           prixHT,
-          coeffRevendeur,
+          coeffRevendeur: prixAchat > 0 && prixRevendeur > 0 ? prixRevendeur / prixAchat : coefficient,
           remiseRevendeur,
           prixRevendeur,
           tva: getMappedNum(row, 'tva', 20),
@@ -402,9 +406,9 @@ export default function Produits() {
                 <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Achat</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Vente HT</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Marge</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Revend.</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Public HT</th>
+                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Marge</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
                 <th className="px-3 py-3"></th>
               </tr>
@@ -417,9 +421,9 @@ export default function Produits() {
                     { key: 'categorie', align: 'left' },
                     { key: 'prixAchat', align: 'right' },
                     { key: 'coefficient', align: 'right' },
+                    { key: 'prixRevendeur', align: 'right' },
                     { key: 'prixHT', align: 'right' },
                     { key: 'marge', align: 'right', disabled: true },
-                    { key: 'prixRevendeur', align: 'right' },
                     { key: 'stock', align: 'right' },
                   ].map(col => (
                     <th key={col.key} className="px-3 py-1">
@@ -455,17 +459,17 @@ export default function Produits() {
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
-                    <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixHT)}</td>
+                    <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixRevendeur)}</td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">
+                      {formatMontant(p.prixHT)}
+                       <span className="block text-xs text-muted-foreground">
+                         coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)}
+                       </span>
+                    </td>
                     <td className="px-3 py-3 text-right">
                       <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(marge)} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
+                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span>
                       </span>
-                    </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">
-                      {formatMontant(p.prixRevendeur)}
-                       <span className="block text-xs text-muted-foreground">
-                         coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)
-                       </span>
                     </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
@@ -511,7 +515,7 @@ export default function Produits() {
                 <span className="text-muted-foreground">Marge brute:</span>
                 <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
                 <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
@@ -553,9 +557,9 @@ export default function Produits() {
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
 
-            {/* Pricing section */}
+            {/* Tarif Revendeur - coefficient pilote */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarification</p>
+              <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *</Label>
@@ -566,42 +570,56 @@ export default function Produits() {
                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Prix Vente HT</Label>
-                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Prix Revendeur HT</Label>
+                  <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Marge brute</Label>
-                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Marge brute revend.</Label>
+                  <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted" />
                 </div>
                 <div>
-                   <Label className="text-xs">Taux marque</Label>
-                   <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                  <Label className="text-xs">Taux marque</Label>
+                  <Input value={`${calcTauxMarque(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
                 <div>
-                   <Label className="text-xs">Taux marge</Label>
-                   <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                  <Label className="text-xs">Taux marge</Label>
+                  <Input value={`${calcTauxMarge(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
             </div>
 
-            {/* Reseller pricing */}
+            {/* Prix public déduit de la remise */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarif Revendeur</p>
-              <div className="grid grid-cols-2 gap-3">
+              <p className="text-sm font-semibold text-foreground">Tarif Public (déduit via remise)</p>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Remise revendeur %</Label>
                   <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
-                  <Label className="text-xs">Coeff revendeur</Label>
-                  <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted font-semibold" />
+                  <Label className="text-xs">Coeff. public</Label>
+                  <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">Prix Vente HT (public)</Label>
+                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
-              <div>
-                <Label className="text-xs">Prix Revendeur HT</Label>
-                <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="text-xs">Marge brute pub.</Label>
+                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
+                </div>
+                <div>
+                  <Label className="text-xs">Taux marque</Label>
+                  <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                </div>
+                <div>
+                  <Label className="text-xs">Taux marge</Label>
+                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                </div>
               </div>
             </div>
 
