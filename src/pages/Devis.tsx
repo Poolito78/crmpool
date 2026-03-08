@@ -500,12 +500,37 @@ export default function Devis() {
             </div>
 
             {/* Totals */}
-            <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
-              <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(calculerTotalDevis(lignes, 0, 0).totalHT)}</span></div>
-              {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
-              <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
-              <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
-            </div>
+            {(() => {
+              const poidsTotal = lignes.reduce((acc, l) => {
+                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                return acc + (prod?.poids || 0) * l.quantite;
+              }, 0);
+              const totalAchat = lignes.reduce((acc, l) => {
+                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                return acc + (prod?.prixAchat || 0) * l.quantite;
+              }, 0);
+              const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
+              const margeTotal = totalHTLignes - totalAchat;
+              const tauxMarque = totalHTLignes > 0 ? (margeTotal / totalHTLignes) * 100 : 0;
+              return (
+                <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
+                  <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(totalHTLignes)}</span></div>
+                  {fraisPortHT > 0 && <div className="flex justify-between"><span>Frais de port HT</span><span>{formatMontant(fraisPortHT)}</span></div>}
+                  <div className="flex justify-between"><span>Total TVA</span><span>{formatMontant(total.totalTVA)}</span></div>
+                  <div className="flex justify-between border-t border-border pt-1 mt-1"><span className="font-semibold">Total TTC</span><span className="font-heading font-bold text-lg">{formatMontant(total.totalTTC)}</span></div>
+                  <div className="flex justify-between border-t border-border pt-2 mt-2 text-muted-foreground">
+                    <span>Poids total</span>
+                    <span className="font-medium">{poidsTotal.toFixed(2)} kg</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Marge totale</span>
+                    <span className={`font-medium ${margeTotal < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%)
+                    </span>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
