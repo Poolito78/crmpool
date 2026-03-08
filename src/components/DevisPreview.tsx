@@ -76,16 +76,15 @@ export default function DevisPreview({ devis, client, onEdit }: Props) {
         {/* Table */}
         <table className="w-full mb-6">
           <thead>
-            <tr className="border-b-2 border-primary">
-              <th className="text-left py-2 font-semibold">Description</th>
-              <th className="text-right py-2 font-semibold w-16">Qté</th>
-              <th className="text-center py-2 font-semibold w-16">Unité</th>
-              <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
-              <th className="text-right py-2 font-semibold w-16">TVA</th>
-              <th className="text-right py-2 font-semibold w-16">Rem.</th>
-              <th className="text-right py-2 font-semibold w-28">Total HT</th>
-            </tr>
-          </thead>
+             <tr className="border-b-2 border-primary">
+               <th className="text-left py-2 font-semibold">Description</th>
+               <th className="text-right py-2 font-semibold w-16">Qté</th>
+               <th className="text-center py-2 font-semibold w-16">Unité</th>
+               <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
+               <th className="text-right py-2 font-semibold w-16">Rem.</th>
+               <th className="text-right py-2 font-semibold w-28">Total HT</th>
+             </tr>
+           </thead>
           <tbody>
             {devis.lignes.map((l, i) => {
               const t = calculerTotalLigne(l);
