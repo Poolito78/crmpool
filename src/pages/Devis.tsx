@@ -46,6 +46,7 @@ export default function Devis() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
+  const [dateCreation, setDateCreation] = useState(new Date().toISOString().split('T')[0]);
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
   const [referenceAffaire, setReferenceAffaire] = useState('');
@@ -63,8 +64,8 @@ export default function Devis() {
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
+    setDateCreation(d.dateCreation);
     setDateValidite(d.dateValidite);
-    setStatut(d.statut);
     setReferenceAffaire(d.referenceAffaire || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
@@ -77,6 +78,7 @@ export default function Devis() {
   function openNew() {
     setEditingId(null);
     setClientId('');
+    setDateCreation(new Date().toISOString().split('T')[0]);
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
     setReferenceAffaire('');
@@ -143,14 +145,14 @@ export default function Devis() {
     let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
+        ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
       } : d));
       if (!silent) toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation: new Date().toISOString().split('T')[0],
+        id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
         dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
@@ -313,6 +315,10 @@ export default function Devis() {
                     </div>
                   );
                 })()}
+              </div>
+              <div>
+                <Label>Date de création</Label>
+                <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} />
               </div>
               <div>
                 <Label>Date de validité</Label>
