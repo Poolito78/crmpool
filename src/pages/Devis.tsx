@@ -232,6 +232,10 @@ export default function Devis() {
                 </select>
               </div>
             </div>
+            <div>
+              <Label>Référence affaire</Label>
+              <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
+            </div>
 
             {/* Lines */}
             <div>

@@ -79,6 +79,7 @@ export interface Devis {
   dateValidite: string;
   statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
   lignes: LigneDevis[];
+  referenceAffaire?: string;
   notes?: string;
   conditions?: string;
 }
