@@ -137,16 +137,31 @@ export default function Produits() {
     });
   }
 
-  function save() {
+  function save(andReturnToDevis = false) {
     if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
     if (editing) {
       updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      // Répercuter les modifications dans les lignes de devis liées
+      updateDevis(prev => prev.map(d => ({
+        ...d,
+        lignes: d.lignes.map(l => l.produitId === editing.id ? {
+          ...l,
+          description: form.nom,
+          prixUnitaireHT: form.prixHT,
+          tva: form.tva,
+          unite: form.unite,
+        } : l),
+      })));
       toast.success('Produit modifié');
     } else {
       updateProduits(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
+    if (andReturnToDevis && fromDevis) {
+      setFromDevis(false);
+      window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis';
+    }
   }
 
   function remove(id: string) {
