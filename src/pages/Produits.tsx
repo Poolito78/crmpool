@@ -513,7 +513,7 @@ export default function Produits() {
                 <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
                 <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
                 <span className="text-muted-foreground">Marge brute:</span>
-                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
+                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
                 <span className="text-muted-foreground">P. Revendeur:</span>
                 <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
               </div>
