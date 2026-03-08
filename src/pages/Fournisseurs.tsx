@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Fournisseur } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/lib/exportExcel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -128,7 +129,8 @@ export default function Fournisseurs() {
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
+          <Button variant="outline" onClick={() => exportToExcel(fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code postal': f.codePostal, 'Franco port': f.francoPort, 'Coût transport': f.coutTransport, Notes: f.notes || '' })), 'fournisseurs', 'Fournisseurs')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
           <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
         </div>
       </div>
