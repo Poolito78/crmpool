@@ -57,7 +57,7 @@ export default function Devis() {
     setStatut('brouillon');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
-    setLignes([{ id: generateId(), description: '', quantite: 1, prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setDialogOpen(true);
   }
 
