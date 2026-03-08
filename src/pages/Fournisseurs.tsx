@@ -63,14 +63,74 @@ export default function Fournisseurs() {
     setDeleteTargetId(null);
   }
 
+  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet);
+        if (json.length === 0) { toast.error('Fichier vide'); return; }
+        setImportPreview(json);
+        setImportDialogOpen(true);
+      } catch { toast.error('Erreur de lecture du fichier'); }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  }
+
+  function importFournisseurs() {
+    if (!importPreview) return;
+    function findCol(row: any, keys: string[]): string {
+      const rowKeys = Object.keys(row);
+      for (const k of keys) {
+        const found = rowKeys.find(rk => rk.trim().toLowerCase() === k.toLowerCase());
+        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== '') return String(row[found]).trim();
+      }
+      return '';
+    }
+    function findNum(row: any, keys: string[], def = 0): number {
+      const val = findCol(row, keys);
+      const n = parseFloat(val);
+      return isNaN(n) ? def : n;
+    }
+    const mapped: Fournisseur[] = importPreview.map((row: any) => ({
+      id: generateId(),
+      nom: findCol(row, ['nom', 'contact', 'nom contact']),
+      email: findCol(row, ['email', 'e-mail', 'mail', 'courriel']),
+      telephone: findCol(row, ['téléphone', 'telephone', 'tel', 'tél']),
+      adresse: findCol(row, ['adresse', 'rue']),
+      ville: findCol(row, ['ville', 'city']),
+      codePostal: findCol(row, ['code postal', 'codepostal', 'cp']),
+      societe: findCol(row, ['société', 'societe', 'entreprise', 'raison sociale']),
+      notes: findCol(row, ['notes', 'commentaire', 'remarques']),
+      francoPort: findNum(row, ['franco de port', 'francoport', 'franco', 'franco port']),
+      coutTransport: findNum(row, ['coût transport', 'couttransport', 'transport', 'frais transport']),
+      dateCreation: new Date().toISOString().split('T')[0],
+    })).filter(f => f.nom || f.societe);
+
+    if (mapped.length === 0) { toast.error('Aucun fournisseur valide trouvé'); return; }
+    updateFournisseurs(prev => [...prev, ...mapped]);
+    toast.success(`${mapped.length} fournisseur(s) importé(s)`);
+    setImportDialogOpen(false);
+    setImportPreview(null);
+  }
+
   return (
     <div className="space-y-4">
+      <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
+          <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
+        </div>
       </div>
 
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
