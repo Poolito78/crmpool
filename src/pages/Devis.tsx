@@ -85,6 +85,7 @@ export default function Devis() {
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
+    setAdresseLivraisonId('');
     setDialogOpen(true);
   }
 
