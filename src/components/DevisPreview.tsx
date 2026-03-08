@@ -1,4 +1,4 @@
-import { type Devis, type Client, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
