@@ -481,11 +481,6 @@ export default function Produits() {
                          coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)}
                        </span>
                     </td>
-                    <td className="px-3 py-3 text-right">
-                      <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span>
-                      </span>
-                    </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
