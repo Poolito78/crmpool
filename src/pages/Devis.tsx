@@ -329,6 +329,29 @@ export default function Devis() {
                 </select>
               </div>
             </div>
+            {/* Adresse de livraison */}
+            {(() => {
+              const selectedClient = clients.find(c => c.id === clientId);
+              const adressesLivraison = selectedClient?.adressesLivraison?.filter(a => a.type === 'livraison') || [];
+              if (!selectedClient || adressesLivraison.length === 0) return null;
+              return (
+                <div>
+                  <Label>Adresse de livraison</Label>
+                  <select
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
+                    value={adresseLivraisonId}
+                    onChange={e => setAdresseLivraisonId(e.target.value)}
+                  >
+                    <option value="">— Identique à l'adresse de facturation —</option>
+                    {adressesLivraison.map(a => (
+                      <option key={a.id} value={a.id}>
+                        {a.libelle} — {a.adresse}, {a.codePostal} {a.ville} {a.parDefaut ? '(défaut)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
+            })()}
             <div>
               <Label>Référence affaire</Label>
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
