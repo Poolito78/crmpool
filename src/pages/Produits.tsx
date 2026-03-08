@@ -206,7 +206,7 @@ export default function Produits() {
     }
 
     const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = findNum(row, ['p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
+      const prixAchat = findNum(row, ['pa conditionné', 'pa conditionne', 'p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat']);
       const coefficient = findNum(row, ['coefficient', 'coeff'], 2);
       const prixHT = findNum(row, ['prix ht', 'prixht', 'pv ht', 'prix_ht']) || calcPrixVente(prixAchat, coefficient);
       const remiseRevendeur = findNum(row, ['remise revendeur', 'remiserevendeur', 'remise'], 30);
