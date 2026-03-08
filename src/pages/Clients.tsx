@@ -228,8 +228,10 @@ export default function Clients() {
         dateCreation: new Date().toISOString().split('T')[0],
       })).filter(c => c.nom || c.societe);
 
-      const existingNames = new Set(clients.map(c => c.nom.trim().toLowerCase()));
+      const existingKeys = new Set(clients.map(c => (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase()));
       const unique = mapped.filter(c => {
+        const key = (importMatchKey === 'nom' ? c.nom : (c.societe || '')).trim().toLowerCase();
+        return key && !existingKeys.has(key);
         const name = c.nom.trim().toLowerCase();
         if (!name) return true;
         if (existingNames.has(name)) return false;
