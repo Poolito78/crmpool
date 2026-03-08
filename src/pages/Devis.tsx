@@ -225,6 +225,11 @@ export default function Devis() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-heading font-semibold">{d.numero}</p>
+                    {d.referenceAffaire && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
+                        {d.referenceAffaire}
+                      </span>
+                    )}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
@@ -237,7 +242,7 @@ export default function Devis() {
                         {client.nom}
                       </button>
                     ) : '—'}
-                    {' • '}{formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}
+                    {' • '}{formatDate(d.dateCreation)}
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                 </div>
