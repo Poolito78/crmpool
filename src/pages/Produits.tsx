@@ -598,15 +598,15 @@ export default function Produits() {
                 </p>
               )}
 
-              {/* Column selection */}
-              <div className="border border-border rounded-lg p-3 bg-muted/30">
-                <p className="text-xs font-semibold mb-2">Colonnes détectées :</p>
-                <div className="flex flex-wrap gap-2">
-                  {detectedImportFields.map(f => (
-                    <label key={f.key} className="flex items-center gap-1.5 text-xs cursor-pointer">
+              {/* Column mapping */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold">Correspondance des colonnes :</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {importFields.map(f => (
+                    <div key={f.key} className="flex items-center gap-2">
                       <input
                         type="checkbox"
-                        className="rounded border-input"
+                        className="rounded border-input shrink-0"
                         checked={importSelectedCols.has(f.key)}
                         onChange={() => {
                           setImportSelectedCols(prev => {
@@ -617,13 +617,32 @@ export default function Produits() {
                         }}
                         disabled={importMode === 'update' && f.key === 'reference'}
                       />
-                      <span className={importMode === 'update' && f.key === 'reference' ? 'text-muted-foreground' : ''}>{f.label}</span>
-                    </label>
+                      <span className="text-xs w-28 shrink-0 truncate" title={f.label}>{f.label}</span>
+                      <select
+                        className="flex-1 text-xs rounded border border-input bg-background px-2 py-1"
+                        value={importMapping[f.key] || ''}
+                        onChange={e => {
+                          setImportMapping(prev => {
+                            const next = { ...prev };
+                            if (e.target.value) {
+                              next[f.key] = e.target.value;
+                              // Auto-check when a column is selected
+                              setImportSelectedCols(p => new Set([...p, f.key]));
+                            } else {
+                              delete next[f.key];
+                              setImportSelectedCols(p => { const n = new Set(p); n.delete(f.key); return n; });
+                            }
+                            return next;
+                          });
+                        }}
+                      >
+                        <option value="">— non mappé —</option>
+                        {excelColumns.map(col => (
+                          <option key={col} value={col}>{col}</option>
+                        ))}
+                      </select>
+                    </div>
                   ))}
-                </div>
-                <div className="flex gap-2 mt-2">
-                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(detectedImportFields.map(f => f.key)))}>Tout sélectionner</button>
-                  <button className="text-xs text-primary underline" onClick={() => setImportSelectedCols(new Set(importMode === 'update' ? ['reference'] : []))}>Tout désélectionner</button>
                 </div>
               </div>
 
