@@ -217,6 +217,19 @@ export default function Produits() {
     }
   }
 
+  // Auto-save produit en temps réel
+  const autoSaveProdRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!editing || !dialogOpen) return;
+    clearTimeout(autoSaveProdRef.current);
+    autoSaveProdRef.current = setTimeout(() => {
+      if (form.reference.trim() && form.description.trim()) {
+        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      }
+    }, 500);
+    return () => clearTimeout(autoSaveProdRef.current);
+  }, [form, editing, dialogOpen]);
+
   function remove(id: string) {
     confirmDelete(id);
   }
