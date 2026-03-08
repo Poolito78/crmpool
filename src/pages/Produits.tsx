@@ -38,7 +38,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs } = useCRM();
+  const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -137,16 +137,31 @@ export default function Produits() {
     });
   }
 
-  function save() {
+  function save(andReturnToDevis = false) {
     if (!form.nom.trim() || !form.reference.trim()) { toast.error('Référence et nom requis'); return; }
     if (editing) {
       updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      // Répercuter les modifications dans les lignes de devis liées
+      updateDevis(prev => prev.map(d => ({
+        ...d,
+        lignes: d.lignes.map(l => l.produitId === editing.id ? {
+          ...l,
+          description: form.nom,
+          prixUnitaireHT: form.prixHT,
+          tva: form.tva,
+          unite: form.unite,
+        } : l),
+      })));
       toast.success('Produit modifié');
     } else {
       updateProduits(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
+    if (andReturnToDevis && fromDevis) {
+      setFromDevis(false);
+      window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis';
+    }
   }
 
   function remove(id: string) {
@@ -454,7 +469,12 @@ export default function Produits() {
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
+              {fromDevis && editing && (
+                <Button variant="secondary" onClick={() => save(true)}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
+                </Button>
+              )}
+              <Button onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
           </div>
         </DialogContent>
