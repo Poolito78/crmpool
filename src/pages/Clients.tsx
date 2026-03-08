@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -50,6 +50,8 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Clients() {
   const { clients, updateClients, produits } = useCRM();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const returnDevisId = searchParams.get('returnDevis');
   
   // Extract unique categories from products
   const categories = useMemo(() => {
@@ -272,6 +274,14 @@ export default function Clients() {
 
   return (
     <div className="space-y-4">
+      {returnDevisId && (
+        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+          <Button variant="outline" size="sm" onClick={() => navigate(`/devis?editDevis=${returnDevisId}`)}>
+            <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
+          </Button>
+          <span className="text-sm text-muted-foreground">Vous consultez la fiche client depuis l'édition d'un devis</span>
+        </div>
+      )}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
