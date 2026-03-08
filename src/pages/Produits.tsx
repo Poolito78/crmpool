@@ -51,6 +51,18 @@ export default function Produits() {
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
 
+  // Auto-open product from query param (e.g. from devis)
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId) {
+      const prod = produits.find(p => p.id === highlightId);
+      if (prod) {
+        openEdit(prod);
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
     ...p,
