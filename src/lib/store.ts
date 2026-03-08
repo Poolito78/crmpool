@@ -93,8 +93,8 @@ const demoClients: Client[] = [
 ];
 
 const demoFournisseurs: Fournisseur[] = [
-  { id: '1', nom: 'Jean Fournier', email: 'contact@fournier-mat.fr', telephone: '01 23 45 67 89', adresse: '100 Zone Industrielle', ville: 'Lille', codePostal: '59000', societe: 'Fournier Matériaux', dateCreation: '2024-01-01' },
-  { id: '2', nom: 'Marie Leroy', email: 'marie@leroy-elec.fr', telephone: '01 98 76 54 32', adresse: '25 Rue du Commerce', ville: 'Nantes', codePostal: '44000', societe: 'Leroy Électrique', dateCreation: '2024-02-15' },
+  { id: '1', nom: 'Jean Fournier', email: 'contact@fournier-mat.fr', telephone: '01 23 45 67 89', adresse: '100 Zone Industrielle', ville: 'Lille', codePostal: '59000', societe: 'Fournier Matériaux', francoPort: 500, coutTransport: 35, dateCreation: '2024-01-01' },
+  { id: '2', nom: 'Marie Leroy', email: 'marie@leroy-elec.fr', telephone: '01 98 76 54 32', adresse: '25 Rue du Commerce', ville: 'Nantes', codePostal: '44000', societe: 'Leroy Électrique', francoPort: 300, coutTransport: 25, dateCreation: '2024-02-15' },
 ];
 
 const demoProduits: Produit[] = [
