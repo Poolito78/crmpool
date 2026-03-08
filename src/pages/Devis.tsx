@@ -270,7 +270,7 @@ export default function Devis() {
                               onClick={() => {
                                 setDialogOpen(false);
                                 setEditingId(null);
-                                window.location.href = `/produits?highlight=${l.produitId}`;
+                                window.location.href = `/produits?highlight=${l.produitId}&from=devis`;
                               }}
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
