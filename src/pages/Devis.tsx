@@ -498,6 +498,28 @@ export default function Devis() {
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
             </div>
 
+            {/* Mode de calcul */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold">Mode de calcul</p>
+                <div className="flex gap-2">
+                  <Button variant={modeCalcul === 'standard' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('standard')}>Standard</Button>
+                  <Button variant={modeCalcul === 'surface' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('surface')}>Surface (m²)</Button>
+                </div>
+              </div>
+              {modeCalcul === 'surface' && (
+                <div className="space-y-2">
+                  <p className="text-xs text-muted-foreground">Les quantités sont calculées automatiquement : Surface × Consommation (kg/m²) ÷ Conditionnement (kg) = Nb unités</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Surface globale (m²)</Label>
+                      <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Ex: 50" className="h-8 text-sm" />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Lines */}
             <div>
               <div className="flex items-center justify-between mb-2">
