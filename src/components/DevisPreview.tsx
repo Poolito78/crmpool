@@ -1,5 +1,5 @@
 import { type Devis, type Client, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer } from 'lucide-react';
+import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface Props {
