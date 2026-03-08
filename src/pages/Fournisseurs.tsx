@@ -238,6 +238,39 @@ export default function Fournisseurs() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import ({importPreview?.length || 0} fournisseurs)</DialogTitle></DialogHeader>
+          {importPreview && (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs border border-border">
+                <thead>
+                  <tr className="bg-muted/50">
+                    {Object.keys(importPreview[0] || {}).map(k => (
+                      <th key={k} className="px-2 py-1 text-left font-medium border-b border-border">{k}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {importPreview.slice(0, 10).map((row, i) => (
+                    <tr key={i} className="border-b border-border">
+                      {Object.values(row).map((v, j) => (
+                        <td key={j} className="px-2 py-1">{String(v ?? '')}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importPreview.length > 10 && <p className="text-xs text-muted-foreground mt-2">... et {importPreview.length - 10} autres lignes</p>}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
+            <Button onClick={importFournisseurs}>Importer {importPreview?.length || 0} fournisseur(s)</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
