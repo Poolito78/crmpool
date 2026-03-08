@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison } from '@/lib/store';
@@ -126,6 +126,19 @@ export default function Clients() {
     }
     setDialogOpen(false);
   }
+
+  // Auto-save client en temps réel
+  const autoSaveClientRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!editingClient || !dialogOpen) return;
+    clearTimeout(autoSaveClientRef.current);
+    autoSaveClientRef.current = setTimeout(() => {
+      if (form.nom.trim()) {
+        updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...form } : c));
+      }
+    }, 500);
+    return () => clearTimeout(autoSaveClientRef.current);
+  }, [form, editingClient, dialogOpen]);
 
   function confirmRemove(id: string) {
     setDeleteTargetId(id);

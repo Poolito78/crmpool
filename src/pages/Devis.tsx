@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
@@ -164,6 +164,21 @@ export default function Devis() {
     }
     return savedId;
   }
+
+  // Auto-save en temps réel pour les devis en édition
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!editingId || !dialogOpen) return;
+    clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      if (clientId && lignes.length > 0) {
+        updateDevis(prev => prev.map(d => d.id === editingId ? {
+          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined
+        } : d));
+      }
+    }, 500);
+    return () => clearTimeout(autoSaveRef.current);
+  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     updateDevis(prev => prev.map(d => d.id === id ? { ...d, statut: newStatut } : d));

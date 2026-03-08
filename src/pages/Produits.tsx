@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
@@ -216,6 +216,19 @@ export default function Produits() {
       navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
     }
   }
+
+  // Auto-save produit en temps réel
+  const autoSaveProdRef = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => {
+    if (!editing || !dialogOpen) return;
+    clearTimeout(autoSaveProdRef.current);
+    autoSaveProdRef.current = setTimeout(() => {
+      if (form.reference.trim() && form.description.trim()) {
+        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      }
+    }, 500);
+    return () => clearTimeout(autoSaveProdRef.current);
+  }, [form, editing, dialogOpen]);
 
   function remove(id: string) {
     confirmDelete(id);
