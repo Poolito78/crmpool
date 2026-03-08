@@ -1,8 +1,9 @@
 import { useState, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Fournisseur } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/lib/exportExcel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
