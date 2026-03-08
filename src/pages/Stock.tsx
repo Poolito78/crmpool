@@ -1,6 +1,8 @@
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant } from '@/lib/store';
-import { AlertTriangle, CheckCircle, Package, Truck } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Truck, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToExcel } from '@/lib/exportExcel';
 
 export default function Stock() {
   const { produits, fournisseurs } = useCRM();
