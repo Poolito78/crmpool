@@ -135,7 +135,7 @@ export default function Produits() {
   function importArticles() {
     if (!importPreview) return;
     const mapped: Produit[] = importPreview.map((row: any) => {
-      const prixAchat = parseFloat(row['Achat KG ou U'] || row['Achat Kg ou U'] || row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
+      const prixAchat = parseFloat(row['p achat kg ou u'] || row['P achat kg ou u'] || row['P Achat Kg ou U'] || row['P ACHAT KG OU U'] || row['Achat KG ou U'] || row['Achat Kg ou U'] || row['Prix Achat'] || row['prixAchat'] || row['PA'] || row['prix_achat'] || 0);
       const coefficient = parseFloat(row['Coefficient'] || row['coefficient'] || row['Coeff'] || row['coeff'] || 2);
       const prixHT = parseFloat(row['Prix HT'] || row['prixHT'] || row['PV HT'] || row['prix_ht'] || 0) || calcPrixVente(prixAchat, coefficient);
       const remiseRevendeur = parseFloat(row['Remise Revendeur'] || row['remiseRevendeur'] || row['Remise'] || 30);
@@ -162,8 +162,18 @@ export default function Produits() {
       };
     }).filter(p => p.nom || p.reference);
 
-    updateProduits(prev => [...prev, ...mapped]);
-    toast.success(`${mapped.length} produit(s) importé(s)`);
+    // Filtrer les doublons par référence (code article)
+    const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
+    const unique = mapped.filter(p => {
+      const ref = p.reference.trim().toLowerCase();
+      if (!ref || existingRefs.has(ref)) return false;
+      existingRefs.add(ref); // éviter aussi les doublons internes au fichier
+      return true;
+    });
+    const skipped = mapped.length - unique.length;
+
+    updateProduits(prev => [...prev, ...unique]);
+    toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
     setImportDialogOpen(false);
     setImportPreview(null);
   }
