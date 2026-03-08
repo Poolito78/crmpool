@@ -202,7 +202,18 @@ export default function Devis() {
                     <p className="font-heading font-semibold">{d.numero}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">{client?.nom || '—'} • {formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {client ? (
+                      <button
+                        onClick={() => navigate(`/clients?search=${encodeURIComponent(client.nom)}`)}
+                        className="text-primary hover:underline inline-flex items-center gap-1"
+                      >
+                        <User className="w-3 h-3" />
+                        {client.nom}
+                      </button>
+                    ) : '—'}
+                    {' • '}{formatDate(d.dateCreation)}{d.referenceAffaire ? ` • Réf: ${d.referenceAffaire}` : ''}
+                  </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                 </div>
                 <div className="flex items-center gap-3">
