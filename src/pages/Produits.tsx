@@ -162,8 +162,18 @@ export default function Produits() {
       };
     }).filter(p => p.nom || p.reference);
 
-    updateProduits(prev => [...prev, ...mapped]);
-    toast.success(`${mapped.length} produit(s) importé(s)`);
+    // Filtrer les doublons par référence (code article)
+    const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
+    const unique = mapped.filter(p => {
+      const ref = p.reference.trim().toLowerCase();
+      if (!ref || existingRefs.has(ref)) return false;
+      existingRefs.add(ref); // éviter aussi les doublons internes au fichier
+      return true;
+    });
+    const skipped = mapped.length - unique.length;
+
+    updateProduits(prev => [...prev, ...unique]);
+    toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
     setImportDialogOpen(false);
     setImportPreview(null);
   }
