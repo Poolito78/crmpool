@@ -133,26 +133,31 @@ export default function Devis() {
     }
   }
 
-  function save() {
-    if (!clientId) { toast.error('Sélectionnez un client'); return; }
-    if (lignes.length === 0) { toast.error('Ajoutez au moins une ligne'); return; }
+  function save(silent = false): string | null {
+    if (!clientId) { if (!silent) toast.error('Sélectionnez un client'); return null; }
+    if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
 
+    let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       } : d));
-      toast.success('Devis modifié');
+      if (!silent) toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+      savedId = generateId();
       const newDevis: DevisType = {
-        id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
+        id: savedId, numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
         dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
-      toast.success('Devis créé');
+      if (!silent) toast.success('Devis créé');
     }
-    setDialogOpen(false);
-    setEditingId(null);
+    if (!silent) {
+      setDialogOpen(false);
+      setEditingId(null);
+    }
+    return savedId;
   }
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
