@@ -152,6 +152,12 @@ export default function Devis() {
     setLignes(prev => prev.filter(l => l.id !== id));
   }
 
+  function calcQuantiteSurface(produit: typeof produits[0], surface: number): number {
+    if (!produit.consommation || produit.consommation <= 0 || !produit.conditionnement || produit.conditionnement <= 0) return 1;
+    const kgNeeded = surface * produit.consommation;
+    return Math.ceil(kgNeeded / produit.conditionnement);
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
@@ -161,7 +167,11 @@ export default function Devis() {
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise } : l));
+      let quantite = 1;
+      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.conditionnement) {
+        quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
+      }
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined } : l));
     }
   }
 
