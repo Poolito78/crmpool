@@ -296,15 +296,16 @@ export default function Produits() {
 
         const pa = updates.prixAchat ?? p.prixAchat;
         const coeff = updates.coefficient ?? p.coefficient;
-        const pvht = updates.prixHT ?? calcPrixVente(pa, coeff);
         const remise = updates.remiseRevendeur ?? p.remiseRevendeur;
 
         if (importSelectedCols.has('prixAchat') || importSelectedCols.has('coefficient')) {
-          updates.prixHT = importSelectedCols.has('prixHT') ? (updates.prixHT || pvht) : calcPrixVente(pa, coeff);
+          updates.prixRevendeur = calcPrixRevendeurFromCoeff(pa, coeff);
+          updates.prixHT = calcPrixPublicFromRevendeur(updates.prixRevendeur, remise);
+          updates.coeffRevendeur = coeff;
         }
-        if (importSelectedCols.has('prixAchat') || importSelectedCols.has('remiseRevendeur') || importSelectedCols.has('prixHT')) {
-          updates.prixRevendeur = calcPrixRevendeur(updates.prixHT ?? pvht, remise);
-          updates.coeffRevendeur = calcCoeffRevendeur(updates.prixRevendeur, pa);
+        if (importSelectedCols.has('remiseRevendeur')) {
+          const pr = updates.prixRevendeur ?? calcPrixRevendeurFromCoeff(pa, coeff);
+          updates.prixHT = calcPrixPublicFromRevendeur(pr, remise);
         }
 
         if (Object.keys(updates).length > 0) {
