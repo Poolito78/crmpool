@@ -110,7 +110,7 @@ export default function Devis() {
 
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, notes, conditions
+        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions
       } : d));
       toast.success('Devis modifié');
     } else {
