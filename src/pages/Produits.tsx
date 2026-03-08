@@ -213,6 +213,8 @@ export default function Produits() {
     setImportDialogOpen(false);
     setImportPreview(null);
   }
+
+  return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="relative w-full sm:w-72">
@@ -333,7 +335,6 @@ export default function Produits() {
         })}
       </div>
 
-
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -370,7 +371,7 @@ export default function Produits() {
               <p className="text-sm font-semibold text-foreground">Tarification</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Prix Achat (€)</Label>
+                  <Label className="text-xs">Prix Achat *</Label>
                   <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
@@ -385,7 +386,7 @@ export default function Produits() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute</Label>
-                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
+                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
                 </div>
                 <div>
                    <Label className="text-xs">Taux marque</Label>
@@ -396,68 +397,58 @@ export default function Produits() {
                    <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
-              <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise sur prix vente public)</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Remise (%)</Label>
-                    <Input type="number" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Prix Revendeur HT</Label>
-                    <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
-                  </div>
+            </div>
+
+            {/* Reseller pricing */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold text-foreground">Tarif Revendeur</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Remise revendeur %</Label>
+                  <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <Label className="text-xs">Coeff. Revendeur</Label>
-                    <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Marge brute Revendeur</Label>
-                    <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
-                  </div>
+                <div>
+                  <Label className="text-xs">Coeff revendeur</Label>
+                  <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted font-semibold" />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs">Prix Revendeur HT</Label>
+                <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
               </div>
             </div>
 
-            <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
+              <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
-              <div><Label>Stock min.</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
             </div>
-            <div>
-              <Label>Fournisseur</Label>
-              <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={form.fournisseurId} onChange={e => setForm(p => ({ ...p, fournisseurId: e.target.value }))}>
-                <option value="">— Aucun —</option>
-                {fournisseurs.map(f => <option key={f.id} value={f.id}>{f.societe}</option>)}
-              </select>
+            <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Import preview dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Aperçu de l'import ({importPreview?.length || 0} lignes)</DialogTitle></DialogHeader>
-          {importPreview && importPreview.length > 0 && (
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
+          {importPreview && (
             <>
-              <p className="text-sm text-muted-foreground">Colonnes détectées : {Object.keys(importPreview[0]).join(', ')}</p>
-              <div className="overflow-x-auto border border-border rounded-lg max-h-60">
+              <p className="text-sm text-muted-foreground">{importPreview.length} ligne(s) détectée(s)</p>
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-muted/50 border-b border-border">
-                      {Object.keys(importPreview[0]).map(k => <th key={k} className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{k}</th>)}
+                    <tr className="border-b bg-muted/50">
+                      {Object.keys(importPreview[0] || {}).map((k, i) => <th key={i} className="px-2 py-1 text-left">{k}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {importPreview.slice(0, 10).map((row, i) => (
-                      <tr key={i} className="border-b border-border last:border-0">
+                      <tr key={i} className="border-b">
                         {Object.values(row).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap">{String(v)}</td>)}
                       </tr>
                     ))}
