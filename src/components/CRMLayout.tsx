@@ -1,10 +1,11 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis } from '@/lib/store';
 import { exportMultiSheet } from '@/lib/exportExcel';
+import { supabase } from '@/integrations/supabase/client';
 
 const navItems = [
   { label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
