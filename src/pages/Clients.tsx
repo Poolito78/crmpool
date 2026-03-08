@@ -69,6 +69,7 @@ export default function Clients() {
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
+  const [importMode, setImportMode] = useState<'add' | 'update'>('add');
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
