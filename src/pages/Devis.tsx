@@ -50,6 +50,8 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
+  const [fraisPortHT, setFraisPortHT] = useState(0);
+  const [fraisPortTVA, setFraisPortTVA] = useState(20);
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
