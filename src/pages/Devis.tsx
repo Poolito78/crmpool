@@ -203,6 +203,23 @@ export default function Devis() {
     return () => clearTimeout(autoSaveRef.current);
   }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen]);
 
+  // Auto-calcul frais de port basé sur le poids
+  useEffect(() => {
+    if (!fraisPortAuto || !dialogOpen) return;
+    const poidsTotal = lignes.reduce((acc, l) => {
+      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      return acc + (prod?.poids || 0) * l.quantite;
+    }, 0);
+    const hasGranulat = lignes.some(l => {
+      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      return prod?.categorie?.toLowerCase().includes('granulat');
+    });
+    const port = calculerFraisPort(poidsTotal, hasGranulat);
+    if (port !== null) {
+      setFraisPortHT(port);
+    }
+  }, [lignes, fraisPortAuto, dialogOpen, produits]);
+
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     updateDevis(prev => prev.map(d => d.id === id ? { ...d, statut: newStatut } : d));
     toast.success('Statut mis à jour');
