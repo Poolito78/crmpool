@@ -145,7 +145,7 @@ export default function Devis() {
                       <option value="expiré">Expiré</option>
                     </select>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted"><Eye className="w-4 h-4" /></button>
-                    <button onClick={() => remove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
