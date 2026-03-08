@@ -46,6 +46,7 @@ export default function Devis() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
+  const [dateCreation, setDateCreation] = useState(new Date().toISOString().split('T')[0]);
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
   const [referenceAffaire, setReferenceAffaire] = useState('');
