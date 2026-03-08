@@ -59,7 +59,7 @@ export default function Devis() {
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
-    return [d.numero, client?.nom, d.statut].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    return [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
   });
 
   function populateForm(d: DevisType) {
