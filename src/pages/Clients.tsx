@@ -1,7 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}
@@ -18,6 +19,31 @@ const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
   libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false
 };
+
+const importFields: { key: string; label: string; aliases: string[]; type: 'text' }[] = [
+  { key: 'nom', label: 'Nom', aliases: ['nom', 'name', 'contact', 'nom contact', 'nom client'], type: 'text' },
+  { key: 'societe', label: 'Société', aliases: ['société', 'societe', 'entreprise', 'company', 'raison sociale'], type: 'text' },
+  { key: 'email', label: 'Email', aliases: ['email', 'e-mail', 'mail', 'courriel'], type: 'text' },
+  { key: 'telephone', label: 'Téléphone', aliases: ['téléphone', 'telephone', 'tel', 'tél', 'phone', 'portable', 'mobile'], type: 'text' },
+  { key: 'adresse', label: 'Adresse', aliases: ['adresse', 'address', 'rue'], type: 'text' },
+  { key: 'ville', label: 'Ville', aliases: ['ville', 'city'], type: 'text' },
+  { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp', 'zip', 'postal'], type: 'text' },
+  { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques', 'observation'], type: 'text' },
+];
+
+function autoDetectMapping(excelCols: string[]): Record<string, string> {
+  const mapping: Record<string, string> = {};
+  for (const field of importFields) {
+    for (const alias of field.aliases) {
+      const match = excelCols.find(col => col.trim().toLowerCase() === alias.toLowerCase());
+      if (match && !Object.values(mapping).includes(match)) {
+        mapping[field.key] = match;
+        break;
+      }
+    }
+  }
+  return mapping;
+}
 
 export default function Clients() {
   const { clients, updateClients, produits } = useCRM();
@@ -38,6 +64,11 @@ export default function Clients() {
   const [showAdresseForm, setShowAdresseForm] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
 
   const filtered = clients.filter(c =>
     [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
