@@ -231,19 +231,25 @@ export default function Produits() {
                 </div>
               </div>
               <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise {form.remiseRevendeur}%)</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <Label className="text-xs">Coeff. Revendeur</Label>
-                    <Input type="number" step="0.01" value={form.coeffRevendeur} onChange={e => updateFormPrix({ coeffRevendeur: parseFloat(e.target.value) || 1 })} />
-                  </div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise sur prix vente public)</p>
+                <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label className="text-xs">Remise (%)</Label>
-                    <Input type="number" value={form.remiseRevendeur} onChange={e => setForm(p => ({ ...p, remiseRevendeur: parseFloat(e.target.value) || 0 }))} />
+                    <Input type="number" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                   </div>
                   <div>
-                    <Label className="text-xs">Prix Revendeur</Label>
+                    <Label className="text-xs">Prix Revendeur HT</Label>
                     <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <div>
+                    <Label className="text-xs">Coeff. Revendeur</Label>
+                    <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted" />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Marge brute Revendeur</Label>
+                    <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
                   </div>
                 </div>
               </div>
