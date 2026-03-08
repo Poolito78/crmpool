@@ -515,7 +515,7 @@ export default function Produits() {
                 <span className="text-muted-foreground">Marge brute:</span>
                 <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
                 <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
