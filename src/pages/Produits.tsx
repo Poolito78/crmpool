@@ -160,6 +160,11 @@ export default function Produits() {
         </div>
         <div className="flex gap-2 shrink-0">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
+          {produits.length > 0 && (
+            <Button variant="destructive" size="sm" onClick={() => { if (confirm(`Supprimer les ${produits.length} produit(s) ?`)) { updateProduits(() => []); toast.success('Tous les produits supprimés'); } }}>
+              <Trash2 className="w-4 h-4 mr-2" /> Tout supprimer
+            </Button>
+          )}
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer Excel</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
         </div>
