@@ -413,7 +413,7 @@ export default function Produits() {
                   <th className="px-3 py-1"></th>
                   {[
                     { key: 'reference', align: 'left' },
-                    { key: 'nom', align: 'left' },
+                    { key: 'description', align: 'left' },
                     { key: 'categorie', align: 'left' },
                     { key: 'prixAchat', align: 'right' },
                     { key: 'coefficient', align: 'right' },
