@@ -9,6 +9,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import DevisPreview from '@/components/DevisPreview';
+import ProduitCombobox from '@/components/ProduitCombobox';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
