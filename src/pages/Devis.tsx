@@ -264,10 +264,13 @@ export default function Devis() {
                     <button
                       type="button"
                       onClick={() => {
-                        // Save current devis first, then navigate with return param
-                        save();
-                        const devisId = editingId || devis[devis.length - 1]?.id;
-                        navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId || ''}`);
+                        const savedId = save(true);
+                        const devisId = savedId || editingId;
+                        if (devisId) {
+                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId}`);
+                        } else {
+                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}`);
+                        }
                       }}
                       className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                     >
