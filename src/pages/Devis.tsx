@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -246,11 +246,30 @@ export default function Devis() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <Label className="text-xs">Produit</Label>
-                        <ProduitCombobox
-                          produits={produits}
-                          value={l.produitId || ''}
-                          onSelect={(produitId) => produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined)}
-                        />
+                        <div className="flex gap-1 items-end">
+                          <div className="flex-1">
+                            <ProduitCombobox
+                              produits={produits}
+                              value={l.produitId || ''}
+                              onSelect={(produitId) => produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined)}
+                            />
+                          </div>
+                          {l.produitId && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0"
+                              title="Voir la fiche produit"
+                              onClick={() => {
+                                setDialogOpen(false);
+                                setEditingId(null);
+                                window.location.href = `/produits?highlight=${l.produitId}`;
+                              }}
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </div>
                       <div>
                         <Label className="text-xs">Description</Label>

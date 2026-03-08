@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, type Produit } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
@@ -38,6 +39,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 
 export default function Produits() {
   const { produits, updateProduits, fournisseurs } = useCRM();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
@@ -48,6 +50,18 @@ export default function Produits() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importPreview, setImportPreview] = useState<any[] | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+
+  // Auto-open product from query param (e.g. from devis)
+  useEffect(() => {
+    const highlightId = searchParams.get('highlight');
+    if (highlightId) {
+      const prod = produits.find(p => p.id === highlightId);
+      if (prod) {
+        openEdit(prod);
+      }
+      setSearchParams({}, { replace: true });
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
