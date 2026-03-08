@@ -346,7 +346,7 @@ export default function Devis() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <Label className="text-xs">Produit</Label>
+                        <Label className="text-xs">Réf. produit</Label>
                         <div className="flex gap-1 items-end">
                           <div className="flex-1">
                             <ProduitCombobox
