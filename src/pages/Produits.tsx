@@ -41,6 +41,8 @@ export default function Produits() {
   const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState('');
+  const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
+  const [showFilters, setShowFilters] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
