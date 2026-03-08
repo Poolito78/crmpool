@@ -58,9 +58,8 @@ export interface Produit {
   prixRevendeur: number;
   tva: number;
   unite: string;
-  poids?: number;
+  poids?: number; // kg - sert aussi de conditionnement pour le calcul surface
   consommation?: number; // kg/m² - taux de consommation par m²
-  conditionnement?: number; // kg par unité de conditionnement
   stock: number;
   stockMin: number;
   fournisseurId?: string;
