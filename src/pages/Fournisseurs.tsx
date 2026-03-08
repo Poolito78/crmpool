@@ -22,6 +22,9 @@ export default function Fournisseurs() {
   const [form, setForm] = useState(emptyFournisseur);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   const filtered = fournisseurs.filter(f =>
     [f.nom, f.email, f.societe, f.telephone].some(v => v?.toLowerCase().includes(search.toLowerCase()))
