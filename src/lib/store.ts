@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -27,7 +28,7 @@ export interface Client {
   dateCreation: string;
   adressesLivraison: AdresseLivraison[];
   estRevendeur?: boolean;
-  remisesParCategorie?: Record<string, number>; // catégorie -> remise %
+  remisesParCategorie?: Record<string, number>;
 }
 
 export interface Fournisseur {
@@ -40,8 +41,8 @@ export interface Fournisseur {
   codePostal: string;
   societe: string;
   notes?: string;
-  francoPort: number; // montant minimum de commande pour franco de port
-  coutTransport: number; // coût de transport si franco non atteint
+  francoPort: number;
+  coutTransport: number;
   dateCreation: string;
 }
 
@@ -58,8 +59,8 @@ export interface Produit {
   prixRevendeur: number;
   tva: number;
   unite: string;
-  poids?: number; // kg - sert aussi de conditionnement pour le calcul surface
-  consommation?: number; // kg/m² - taux de consommation par m²
+  poids?: number;
+  consommation?: number;
   stock: number;
   stockMin: number;
   fournisseurId?: string;
@@ -77,7 +78,7 @@ export interface LigneDevis {
   tva: number;
   remise: number;
   surfaceM2?: number;
-  consommation?: number; // override kg/m² par ligne
+  consommation?: number;
 }
 
 export interface Devis {
@@ -94,114 +95,285 @@ export interface Devis {
   conditions?: string;
   fraisPortHT?: number;
   fraisPortTVA?: number;
-  modeCalcul?: 'standard' | 'surface'; // mode de calcul du devis
-  surfaceGlobaleM2?: number; // surface globale applicable à toutes les lignes
+  modeCalcul?: 'standard' | 'surface';
+  surfaceGlobaleM2?: number;
 }
 
-export interface LigneDevis {
-  id: string;
-  produitId?: string;
-  description: string;
-  quantite: number;
-  unite: string;
-  prixUnitaireHT: number;
-  tva: number;
-  remise: number;
+// ---- DB <-> App mapping ----
+
+function dbToClient(r: any): Client {
+  return {
+    id: r.id,
+    nom: r.nom,
+    email: r.email,
+    telephone: r.telephone,
+    adresse: r.adresse,
+    ville: r.ville,
+    codePostal: r.code_postal,
+    societe: r.societe || undefined,
+    notes: r.notes || undefined,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    adressesLivraison: (r.adresses_livraison as any[]) || [],
+    estRevendeur: r.est_revendeur || false,
+    remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
+  };
 }
 
-export interface Devis {
-  id: string;
-  numero: string;
-  clientId: string;
-  adresseLivraisonId?: string;
-  dateCreation: string;
-  dateValidite: string;
-  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
-  lignes: LigneDevis[];
-  referenceAffaire?: string;
-  notes?: string;
-  conditions?: string;
-  fraisPortHT?: number;
-  fraisPortTVA?: number;
+function clientToDb(c: Client, userId: string): Record<string, unknown> {
+  return {
+    id: c.id,
+    user_id: userId,
+    nom: c.nom,
+    email: c.email,
+    telephone: c.telephone,
+    adresse: c.adresse,
+    ville: c.ville,
+    code_postal: c.codePostal,
+    societe: c.societe || null,
+    notes: c.notes || null,
+    date_creation: c.dateCreation,
+    adresses_livraison: c.adressesLivraison,
+    est_revendeur: c.estRevendeur || false,
+    remises_par_categorie: c.remisesParCategorie || {},
+  };
 }
 
-// Demo data
-const demoClients: Client[] = [
-  { id: '1', nom: 'Martin Dupont', email: 'martin@entreprise.fr', telephone: '06 12 34 56 78', adresse: '12 Rue de la Paix', ville: 'Paris', codePostal: '75002', societe: 'Dupont SARL', dateCreation: '2024-01-15', adressesLivraison: [
-    { id: 'al1', libelle: 'Entrepôt Paris', adresse: '50 Rue du Faubourg', ville: 'Paris', codePostal: '75010', parDefaut: true, type: 'livraison' },
-    { id: 'al2', libelle: 'Agence Lyon', adresse: '10 Rue de la République', ville: 'Lyon', codePostal: '69002', contact: 'Paul Martin', telephone: '06 55 44 33 22', parDefaut: false, type: 'facturation' },
-  ]},
-  { id: '2', nom: 'Sophie Laurent', email: 'sophie@laurent.com', telephone: '06 98 76 54 32', adresse: '45 Avenue des Champs', ville: 'Lyon', codePostal: '69003', societe: 'Laurent & Co', dateCreation: '2024-02-20', adressesLivraison: [] },
-  { id: '3', nom: 'Pierre Bernard', email: 'p.bernard@mail.fr', telephone: '07 11 22 33 44', adresse: '8 Boulevard Haussmann', ville: 'Marseille', codePostal: '13001', dateCreation: '2024-03-10', adressesLivraison: [] },
-];
-
-const demoFournisseurs: Fournisseur[] = [
-  { id: '1', nom: 'Jean Fournier', email: 'contact@fournier-mat.fr', telephone: '01 23 45 67 89', adresse: '100 Zone Industrielle', ville: 'Lille', codePostal: '59000', societe: 'Fournier Matériaux', francoPort: 500, coutTransport: 35, dateCreation: '2024-01-01' },
-  { id: '2', nom: 'Marie Leroy', email: 'marie@leroy-elec.fr', telephone: '01 98 76 54 32', adresse: '25 Rue du Commerce', ville: 'Nantes', codePostal: '44000', societe: 'Leroy Électrique', francoPort: 300, coutTransport: 25, dateCreation: '2024-02-15' },
-];
-
-const demoProduits: Produit[] = [
-  { id: '1', reference: 'PRD-001', description: 'Câble électrique 2.5mm²', descriptionDetaillee: 'Câble cuivre souple H07VK', prixAchat: 0.60, coefficient: 2.5, prixHT: 1.50, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0.96, tva: 20, unite: 'm', stock: 500, stockMin: 100, fournisseurId: '2', categorie: 'Électricité', dateCreation: '2024-01-10' },
-  { id: '2', reference: 'PRD-002', description: 'Interrupteur double', descriptionDetaillee: 'Interrupteur va-et-vient', prixAchat: 5.00, coefficient: 2.58, prixHT: 12.90, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 8.00, tva: 20, unite: 'pièce', stock: 45, stockMin: 10, fournisseurId: '2', categorie: 'Électricité', dateCreation: '2024-01-10' },
-  { id: '3', reference: 'PRD-003', description: 'Tube PVC 100mm', prixAchat: 3.50, coefficient: 2.43, prixHT: 8.50, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 5.60, tva: 20, unite: 'm', stock: 80, stockMin: 20, fournisseurId: '1', categorie: 'Plomberie', dateCreation: '2024-02-01' },
-  { id: '4', reference: 'PRD-004', description: 'Robinet mitigeur', descriptionDetaillee: 'Mitigeur cuisine chromé', prixAchat: 18.00, coefficient: 2.5, prixHT: 45.00, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 28.80, tva: 20, unite: 'pièce', stock: 8, stockMin: 5, fournisseurId: '1', categorie: 'Plomberie', dateCreation: '2024-02-15' },
-  { id: '5', reference: 'PRD-005', description: 'Peinture blanche 10L', descriptionDetaillee: 'Peinture acrylique mate', prixAchat: 15.00, coefficient: 2.33, prixHT: 35.00, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 24.00, tva: 20, unite: 'pot', stock: 3, stockMin: 5, fournisseurId: '1', categorie: 'Peinture', dateCreation: '2024-03-01' },
-];
-
-const demoDevis: Devis[] = [
-  {
-    id: '1', numero: 'DEV-2024-001', clientId: '1', dateCreation: '2024-03-01', dateValidite: '2024-04-01', statut: 'accepté',
-    lignes: [
-      { id: '1', produitId: '1', description: 'Câble électrique 2.5mm²', quantite: 50, unite: 'm', prixUnitaireHT: 1.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '2', description: 'Interrupteur double', quantite: 10, unite: 'pièce', prixUnitaireHT: 12.90, tva: 20, remise: 5 },
-    ],
-    notes: 'Installation électrique cuisine', conditions: 'Paiement à 30 jours'
-  },
-  {
-    id: '2', numero: 'DEV-2024-002', clientId: '2', dateCreation: '2024-03-15', dateValidite: '2024-04-15', statut: 'envoyé',
-    lignes: [
-      { id: '1', produitId: '3', description: 'Tube PVC 100mm', quantite: 20, unite: 'm', prixUnitaireHT: 8.50, tva: 20, remise: 0 },
-      { id: '2', produitId: '4', description: 'Robinet mitigeur', quantite: 2, unite: 'pièce', prixUnitaireHT: 45.00, tva: 20, remise: 10 },
-    ],
-    notes: 'Rénovation salle de bain'
-  },
-];
-
-function loadFromStorage<T>(key: string, fallback: T): T {
-  try {
-    const stored = localStorage.getItem(key);
-    return stored ? JSON.parse(stored) : fallback;
-  } catch { return fallback; }
+function dbToFournisseur(r: any): Fournisseur {
+  return {
+    id: r.id,
+    nom: r.nom,
+    email: r.email,
+    telephone: r.telephone,
+    adresse: r.adresse,
+    ville: r.ville,
+    codePostal: r.code_postal,
+    societe: r.societe,
+    notes: r.notes || undefined,
+    francoPort: Number(r.franco_port) || 0,
+    coutTransport: Number(r.cout_transport) || 0,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+  };
 }
 
-function saveToStorage<T>(key: string, data: T) {
-  localStorage.setItem(key, JSON.stringify(data));
+function fournisseurToDb(f: Fournisseur, userId: string) {
+  return {
+    id: f.id,
+    user_id: userId,
+    nom: f.nom,
+    email: f.email,
+    telephone: f.telephone,
+    adresse: f.adresse,
+    ville: f.ville,
+    code_postal: f.codePostal,
+    societe: f.societe,
+    notes: f.notes || null,
+    franco_port: f.francoPort,
+    cout_transport: f.coutTransport,
+    date_creation: f.dateCreation,
+  };
+}
+
+function dbToProduit(r: any): Produit {
+  return {
+    id: r.id,
+    reference: r.reference,
+    description: r.description,
+    descriptionDetaillee: r.description_detaillee || undefined,
+    prixAchat: Number(r.prix_achat) || 0,
+    coefficient: Number(r.coefficient) || 1,
+    prixHT: Number(r.prix_ht) || 0,
+    coeffRevendeur: Number(r.coeff_revendeur) || 1,
+    remiseRevendeur: Number(r.remise_revendeur) || 0,
+    prixRevendeur: Number(r.prix_revendeur) || 0,
+    tva: Number(r.tva) || 20,
+    unite: r.unite,
+    poids: r.poids != null ? Number(r.poids) : undefined,
+    consommation: r.consommation != null ? Number(r.consommation) : undefined,
+    stock: Number(r.stock) || 0,
+    stockMin: Number(r.stock_min) || 0,
+    fournisseurId: r.fournisseur_id || undefined,
+    categorie: r.categorie || undefined,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+  };
+}
+
+function produitToDb(p: Produit, userId: string) {
+  return {
+    id: p.id,
+    user_id: userId,
+    reference: p.reference,
+    description: p.description,
+    description_detaillee: p.descriptionDetaillee || null,
+    prix_achat: p.prixAchat,
+    coefficient: p.coefficient,
+    prix_ht: p.prixHT,
+    coeff_revendeur: p.coeffRevendeur,
+    remise_revendeur: p.remiseRevendeur,
+    prix_revendeur: p.prixRevendeur,
+    tva: p.tva,
+    unite: p.unite,
+    poids: p.poids ?? null,
+    consommation: p.consommation ?? null,
+    stock: p.stock,
+    stock_min: p.stockMin,
+    fournisseur_id: p.fournisseurId || null,
+    categorie: p.categorie || null,
+    date_creation: p.dateCreation,
+  };
+}
+
+function dbToDevis(r: any): Devis {
+  return {
+    id: r.id,
+    numero: r.numero,
+    clientId: r.client_id || '',
+    adresseLivraisonId: r.adresse_livraison_id || undefined,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    dateValidite: r.date_validite?.split('T')[0] || '',
+    statut: r.statut as Devis['statut'],
+    lignes: (r.lignes as LigneDevis[]) || [],
+    referenceAffaire: r.reference_affaire || undefined,
+    notes: r.notes || undefined,
+    conditions: r.conditions || undefined,
+    fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
+    fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
+    modeCalcul: r.mode_calcul || 'standard',
+    surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
+  };
+}
+
+function devisToDb(d: Devis, userId: string) {
+  return {
+    id: d.id,
+    user_id: userId,
+    numero: d.numero,
+    client_id: d.clientId || null,
+    adresse_livraison_id: d.adresseLivraisonId || null,
+    date_creation: d.dateCreation,
+    date_validite: d.dateValidite || null,
+    statut: d.statut,
+    lignes: d.lignes as any,
+    reference_affaire: d.referenceAffaire || null,
+    notes: d.notes || null,
+    conditions: d.conditions || null,
+    frais_port_ht: d.fraisPortHT ?? 0,
+    frais_port_tva: d.fraisPortTVA ?? 20,
+    mode_calcul: d.modeCalcul || 'standard',
+    surface_globale_m2: d.surfaceGlobaleM2 ?? null,
+  };
+}
+
+// ---- Sync helpers ----
+
+function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
+  const prevIds = new Set(prev.map(i => i.id));
+  const nextIds = new Set(next.map(i => i.id));
+  const added = next.filter(i => !prevIds.has(i.id));
+  const removed = prev.filter(i => !nextIds.has(i.id));
+  const updated = next.filter(i => prevIds.has(i.id) && JSON.stringify(i) !== JSON.stringify(prev.find(p => p.id === i.id)));
+  return { added, removed, updated };
 }
 
 export function useStore() {
-  const [clients, setClients] = useState<Client[]>(() => loadFromStorage('crm_clients', demoClients));
-  const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>(() => loadFromStorage('crm_fournisseurs', demoFournisseurs));
-  const [produits, setProduits] = useState<Produit[]>(() => loadFromStorage('crm_produits', demoProduits));
-  const [devis, setDevis] = useState<Devis[]>(() => loadFromStorage('crm_devis', demoDevis));
+  const [clients, setClients] = useState<Client[]>([]);
+  const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
+  const [produits, setProduits] = useState<Produit[]>([]);
+  const [devis, setDevis] = useState<Devis[]>([]);
+  const [loading, setLoading] = useState(true);
+  const userIdRef = useRef<string | null>(null);
+
+  // Load data from Supabase on mount
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      userIdRef.current = session.user.id;
+
+      const [cRes, fRes, pRes, dRes] = await Promise.all([
+        supabase.from('clients').select('*'),
+        supabase.from('fournisseurs').select('*'),
+        supabase.from('produits').select('*'),
+        supabase.from('devis').select('*'),
+      ]);
+
+      if (cRes.data) setClients(cRes.data.map(dbToClient));
+      if (fRes.data) setFournisseurs(fRes.data.map(dbToFournisseur));
+      if (pRes.data) setProduits(pRes.data.map(dbToProduit));
+      if (dRes.data) setDevis(dRes.data.map(dbToDevis));
+      setLoading(false);
+    }
+    load();
+  }, []);
 
   const updateClients = useCallback((fn: (prev: Client[]) => Client[]) => {
-    setClients(prev => { const next = fn(prev); saveToStorage('crm_clients', next); return next; });
-  }, []);
-  const updateFournisseurs = useCallback((fn: (prev: Fournisseur[]) => Fournisseur[]) => {
-    setFournisseurs(prev => { const next = fn(prev); saveToStorage('crm_fournisseurs', next); return next; });
-  }, []);
-  const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
-    setProduits(prev => { const next = fn(prev); saveToStorage('crm_produits', next); return next; });
-  }, []);
-  const updateDevis = useCallback((fn: (prev: Devis[]) => Devis[]) => {
-    setDevis(prev => { const next = fn(prev); saveToStorage('crm_devis', next); return next; });
+    setClients(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId) as any).eq('id', c.id).then());
+        }
+        if (removed.length) supabase.from('clients').delete().in('id', removed.map(c => c.id)).then();
+      }
+      return next;
+    });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, updateClients, updateFournisseurs, updateProduits, updateDevis };
+  const updateFournisseurs = useCallback((fn: (prev: Fournisseur[]) => Fournisseur[]) => {
+    setFournisseurs(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('fournisseurs').insert(added.map(f => fournisseurToDb(f, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(f => supabase.from('fournisseurs').update(fournisseurToDb(f, userId) as any).eq('id', f.id).then());
+        }
+        if (removed.length) supabase.from('fournisseurs').delete().in('id', removed.map(f => f.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
+    setProduits(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('produits').insert(added.map(p => produitToDb(p, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(p => supabase.from('produits').update(produitToDb(p, userId) as any).eq('id', p.id).then());
+        }
+        if (removed.length) supabase.from('produits').delete().in('id', removed.map(p => p.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  const updateDevis = useCallback((fn: (prev: Devis[]) => Devis[]) => {
+    setDevis(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('devis').insert(added.map(d => devisToDb(d, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(d => supabase.from('devis').update(devisToDb(d, userId) as any).eq('id', d.id).then());
+        }
+        if (removed.length) supabase.from('devis').delete().in('id', removed.map(d => d.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, updateClients, updateFournisseurs, updateProduits, updateDevis, loading };
 }
 
 export function generateId() {
-  return Math.random().toString(36).substr(2, 9);
+  return crypto.randomUUID();
 }
 
 export function calculerTotalLigne(ligne: LigneDevis) {
@@ -237,7 +409,6 @@ export function formatDate(d: string) {
 export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number | null {
   if (poidsKg <= 0) return 0;
   if (poidsKg > 2000) {
-    // > 2000 kg : franco sauf granulat (retourne null = hors catégorie)
     return hasGranulat ? null : 0;
   }
   if (poidsKg >= 701) return 230;
