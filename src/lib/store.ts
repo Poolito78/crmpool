@@ -82,6 +82,8 @@ export interface Devis {
   referenceAffaire?: string;
   notes?: string;
   conditions?: string;
+  fraisPortHT?: number;
+  fraisPortTVA?: number;
 }
 
 // Demo data
