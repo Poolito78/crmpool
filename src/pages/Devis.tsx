@@ -117,7 +117,7 @@ export default function Devis() {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       const newDevis: DevisType = {
         id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
-        dateValidite, statut, lignes, notes, conditions
+        dateValidite, statut, lignes, referenceAffaire, notes, conditions
       };
       updateDevis(prev => [...prev, newDevis]);
       toast.success('Devis créé');
