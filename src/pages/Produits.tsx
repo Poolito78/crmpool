@@ -319,12 +319,12 @@ export default function Produits() {
         const prixRevendeur = getMappedNum(row, 'prixRevendeur') || calcPrixRevendeur(prixHT, remiseRevendeur);
         const coeffRevendeur = calcCoeffRevendeur(prixRevendeur, prixAchat);
         const reference = getMappedValue(row, 'reference');
-        const nom = getMappedValue(row, 'nom');
+        const description = getMappedValue(row, 'description');
         return {
           id: generateId(),
           reference,
-          nom,
-          description: getMappedValue(row, 'description'),
+          description,
+          descriptionDetaillee: getMappedValue(row, 'descriptionDetaillee'),
           prixAchat,
           coefficient: prixAchat > 0 && prixHT > 0 ? prixHT / prixAchat : coefficient,
           prixHT,
