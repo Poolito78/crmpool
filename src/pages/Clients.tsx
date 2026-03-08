@@ -18,7 +18,7 @@ const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
 };
 
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
-  libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false
+  libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false, type: 'livraison'
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' }[] = [
