@@ -311,9 +311,9 @@ export function useStore() {
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId))).then();
+        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId)) as any).then();
         if (updated.length) {
-          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId)).eq('id', c.id).then());
+          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId) as any).eq('id', c.id).then());
         }
         if (removed.length) supabase.from('clients').delete().in('id', removed.map(c => c.id)).then();
       }
