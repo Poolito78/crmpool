@@ -475,7 +475,7 @@ export default function Devis() {
                               <span>{formatMontant(prixKg)}/kg</span>
                             )}
                           </div>
-                          <span>Total TTC: {formatMontant(t.totalTTC)}</span>
+                          <span>Total HT: {formatMontant(t.totalHT)}</span>
                         </div>
                       );
                     })()}
