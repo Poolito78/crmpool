@@ -300,7 +300,64 @@ export default function Clients() {
               />
             </div>
 
-            {/* Adresses de livraison */}
+            {/* Catégorie Revendeur */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-3 mb-3">
+                <Checkbox
+                  id="estRevendeur"
+                  checked={form.estRevendeur || false}
+                  onCheckedChange={(checked) => {
+                    const isRevendeur = checked === true;
+                    setForm(prev => ({
+                      ...prev,
+                      estRevendeur: isRevendeur,
+                      remisesParCategorie: isRevendeur && Object.keys(prev.remisesParCategorie || {}).length === 0
+                        ? categories.reduce((acc, cat) => ({ ...acc, [cat]: 30 }), {} as Record<string, number>)
+                        : prev.remisesParCategorie || {},
+                    }));
+                  }}
+                />
+                <Label htmlFor="estRevendeur" className="text-base font-semibold cursor-pointer">
+                  Client revendeur
+                </Label>
+                {form.estRevendeur && (
+                  <Badge variant="secondary" className="text-xs">Remise auto 30%</Badge>
+                )}
+              </div>
+              {form.estRevendeur && (
+                <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Remise par catégorie de produit (%) — modifiable individuellement :</p>
+                  {categories.length > 0 ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {categories.map(cat => (
+                        <div key={cat} className="flex items-center gap-2">
+                          <Label className="text-xs min-w-[100px] truncate" title={cat}>{cat}</Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            max="100"
+                            className="h-7 text-xs w-20"
+                            value={form.remisesParCategorie?.[cat] ?? 30}
+                            onChange={e => setForm(prev => ({
+                              ...prev,
+                              remisesParCategorie: {
+                                ...prev.remisesParCategorie,
+                                [cat]: parseFloat(e.target.value) || 0,
+                              },
+                            }))}
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Aucune catégorie de produit définie. Ajoutez des catégories aux produits pour configurer les remises.</p>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="border-t border-border pt-4">
               <div className="flex items-center justify-between mb-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
