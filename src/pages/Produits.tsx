@@ -451,7 +451,7 @@ export default function Produits() {
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     <td className="px-3 py-3 font-mono text-xs">{p.reference}</td>
-                    <td className="px-3 py-3 font-medium">{p.nom}</td>
+                    <td className="px-3 py-3 font-medium">{p.description}</td>
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
                     <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
