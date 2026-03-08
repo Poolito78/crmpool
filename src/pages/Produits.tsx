@@ -5,6 +5,7 @@ import { Plus, Search, Edit2, Trash2, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -42,22 +43,11 @@ export default function Produits() {
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-
-  const toggleSelect = (id: string) => setSelected(prev => {
-    const next = new Set(prev);
-    next.has(id) ? next.delete(id) : next.add(id);
-    return next;
-  });
-  const toggleAll = () => {
-    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
-  };
-  function removeSelected() {
-    if (selected.size === 0) return;
-    if (!confirm(`Supprimer ${selected.size} produit(s) ?`)) return;
-    updateProduits(prev => prev.filter(p => !selected.has(p.id)));
-    toast.success(`${selected.size} produit(s) supprimé(s)`);
-    setSelected(new Set());
-  }
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importPreview, setImportPreview] = useState<any[] | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   // Ensure old products without new fields get defaults
   const safeProduits = produits.map(p => ({
@@ -73,6 +63,41 @@ export default function Produits() {
     [p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))
   );
 
+  const toggleSelect = (id: string) => setSelected(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  
+  const toggleAll = () => {
+    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
+  };
+  
+  function confirmDelete(id?: string) {
+    setDeleteTarget(id || null);
+    setDeleteConfirmOpen(true);
+  }
+  
+  function removeSelected() {
+    if (selected.size === 0) return;
+    confirmDelete();
+  }
+
+  function executeDelete() {
+    if (deleteTarget) {
+      // Supprimer un seul produit
+      updateProduits(prev => prev.filter(p => p.id !== deleteTarget));
+      toast.success('Produit supprimé');
+    } else {
+      // Supprimer les sélectionnés
+      updateProduits(prev => prev.filter(p => !selected.has(p.id)));
+      toast.success(`${selected.size} produit(s) supprimé(s)`);
+      setSelected(new Set());
+    }
+    setDeleteConfirmOpen(false);
+    setDeleteTarget(null);
+  }
+
   function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
@@ -83,7 +108,6 @@ export default function Produits() {
   function updateFormPrix(updates: Partial<typeof form>) {
     setForm(prev => {
       const next = { ...prev, ...updates };
-      // Recalculate derived prices
       next.prixHT = calcPrixVente(next.prixAchat, next.coefficient);
       next.prixRevendeur = calcPrixRevendeur(next.prixHT, next.remiseRevendeur);
       next.coeffRevendeur = calcCoeffRevendeur(next.prixRevendeur, next.prixAchat);
@@ -104,13 +128,8 @@ export default function Produits() {
   }
 
   function remove(id: string) {
-    updateProduits(prev => prev.filter(p => p.id !== id));
-    toast.success('Produit supprimé');
+    confirmDelete(id);
   }
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importPreview, setImportPreview] = useState<any[] | null>(null);
-  const [importDialogOpen, setImportDialogOpen] = useState(false);
 
   function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -135,7 +154,6 @@ export default function Produits() {
   function importArticles() {
     if (!importPreview) return;
 
-    // Helper: find value by checking multiple possible column names (case-insensitive)
     function findCol(row: any, keys: string[]): string {
       const rowKeys = Object.keys(row);
       for (const k of keys) {
@@ -180,11 +198,10 @@ export default function Produits() {
       };
     }).filter(p => p.nom || p.reference);
 
-    // Filtrer les doublons par référence (code article)
     const existingRefs = new Set(produits.map(p => p.reference.trim().toLowerCase()));
     const unique = mapped.filter(p => {
       const ref = p.reference.trim().toLowerCase();
-      if (!ref) return true; // pas de référence = on importe quand même
+      if (!ref) return true;
       if (existingRefs.has(ref)) return false;
       existingRefs.add(ref);
       return true;
@@ -318,6 +335,26 @@ export default function Produits() {
         })}
       </div>
 
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteTarget 
+                ? "Êtes-vous sûr de vouloir supprimer ce produit ? Cette action ne peut pas être annulée."
+                : `Êtes-vous sûr de vouloir supprimer ${selected.size} produit(s) ? Cette action ne peut pas être annulée.`
+              }
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="flex justify-end gap-2">
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Supprimer
+            </AlertDialogAction>
+          </div>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau produit'}</DialogTitle></DialogHeader>
@@ -334,7 +371,7 @@ export default function Produits() {
               <p className="text-sm font-semibold text-foreground">Tarification</p>
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Prix Achat (€)</Label>
+                  <Label className="text-xs">Prix Achat *</Label>
                   <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
                 </div>
                 <div>
@@ -349,7 +386,7 @@ export default function Produits() {
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute</Label>
-                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
+                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
                 </div>
                 <div>
                    <Label className="text-xs">Taux marque</Label>
@@ -360,68 +397,58 @@ export default function Produits() {
                    <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
-              <div className="border-t border-border pt-3">
-                <p className="text-xs font-medium text-muted-foreground mb-2">Prix Revendeur (remise sur prix vente public)</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Remise (%)</Label>
-                    <Input type="number" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Prix Revendeur HT</Label>
-                    <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
-                  </div>
+            </div>
+
+            {/* Reseller pricing */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold text-foreground">Tarif Revendeur</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Remise revendeur %</Label>
+                  <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                 </div>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  <div>
-                    <Label className="text-xs">Coeff. Revendeur</Label>
-                    <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted" />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Marge brute Revendeur</Label>
-                    <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted text-emerald-600 font-semibold" />
-                  </div>
+                <div>
+                  <Label className="text-xs">Coeff revendeur</Label>
+                  <Input value={form.coeffRevendeur.toFixed(2)} readOnly className="bg-muted font-semibold" />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs">Prix Revendeur HT</Label>
+                <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
               </div>
             </div>
 
-            <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
+              <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
+              <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
-              <div><Label>Stock min.</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
             </div>
-            <div>
-              <Label>Fournisseur</Label>
-              <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={form.fournisseurId} onChange={e => setForm(p => ({ ...p, fournisseurId: e.target.value }))}>
-                <option value="">— Aucun —</option>
-                {fournisseurs.map(f => <option key={f.id} value={f.id}>{f.societe}</option>)}
-              </select>
+            <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Import preview dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Aperçu de l'import ({importPreview?.length || 0} lignes)</DialogTitle></DialogHeader>
-          {importPreview && importPreview.length > 0 && (
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
+          {importPreview && (
             <>
-              <p className="text-sm text-muted-foreground">Colonnes détectées : {Object.keys(importPreview[0]).join(', ')}</p>
-              <div className="overflow-x-auto border border-border rounded-lg max-h-60">
+              <p className="text-sm text-muted-foreground">{importPreview.length} ligne(s) détectée(s)</p>
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="bg-muted/50 border-b border-border">
-                      {Object.keys(importPreview[0]).map(k => <th key={k} className="px-2 py-1.5 text-left font-medium text-muted-foreground whitespace-nowrap">{k}</th>)}
+                    <tr className="border-b bg-muted/50">
+                      {Object.keys(importPreview[0] || {}).map((k, i) => <th key={i} className="px-2 py-1 text-left">{k}</th>)}
                     </tr>
                   </thead>
                   <tbody>
                     {importPreview.slice(0, 10).map((row, i) => (
-                      <tr key={i} className="border-b border-border last:border-0">
+                      <tr key={i} className="border-b">
                         {Object.values(row).map((v, j) => <td key={j} className="px-2 py-1 whitespace-nowrap">{String(v)}</td>)}
                       </tr>
                     ))}
