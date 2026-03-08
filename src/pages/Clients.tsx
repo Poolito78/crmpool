@@ -56,6 +56,9 @@ export default function Clients() {
     return Array.from(cats).sort();
   }, [produits]);
   const [search, setSearch] = useState('');
+  const [filterVille, setFilterVille] = useState('');
+  const [filterRevendeur, setFilterRevendeur] = useState<'' | 'oui' | 'non'>('');
+  const [showFilters, setShowFilters] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState(emptyClient);
@@ -73,9 +76,19 @@ export default function Clients() {
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
 
-  const filtered = clients.filter(c =>
-    [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const villes = useMemo(() => Array.from(new Set(clients.map(c => c.ville).filter(Boolean))).sort(), [clients]);
+
+  const activeFilterCount = (filterVille ? 1 : 0) + (filterRevendeur ? 1 : 0);
+
+  const filtered = useMemo(() => {
+    return clients.filter(c => {
+      if (search && ![c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
+      if (filterVille && c.ville !== filterVille) return false;
+      if (filterRevendeur === 'oui' && !c.estRevendeur) return false;
+      if (filterRevendeur === 'non' && c.estRevendeur) return false;
+      return true;
+    });
+  }, [clients, search, filterVille, filterRevendeur]);
 
   function openNew() {
     setEditingClient(null);
