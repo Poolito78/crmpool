@@ -87,6 +87,7 @@ export default function DevisPreview({ devis, client }: Props) {
                 <tr key={l.id} className="border-b border-border">
                   <td className="py-2">{l.description}</td>
                   <td className="py-2 text-right">{l.quantite}</td>
+                  <td className="py-2 text-center">{l.unite || '—'}</td>
                   <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
                   <td className="py-2 text-right">{l.tva}%</td>
                   <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>

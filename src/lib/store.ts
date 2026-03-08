@@ -65,6 +65,7 @@ export interface LigneDevis {
   produitId?: string;
   description: string;
   quantite: number;
+  unite: string;
   prixUnitaireHT: number;
   tva: number;
   remise: number;
