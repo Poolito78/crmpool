@@ -359,6 +359,7 @@ export default function Clients() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Devis</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
