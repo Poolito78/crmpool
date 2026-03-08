@@ -130,7 +130,12 @@ export default function Produits() {
                         {formatMontant(marge)} <span className="text-xs text-muted-foreground">({tauxMarge.toFixed(0)}%)</span>
                       </span>
                     </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">{formatMontant(p.prixRevendeur)}</td>
+                    <td className="px-3 py-3 text-right text-muted-foreground">
+                      {formatMontant(p.prixRevendeur)}
+                      <span className="block text-xs text-muted-foreground">
+                        coeff {calcCoeffRevendeur(p.prixRevendeur, p.prixAchat).toFixed(2)} · marge {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))}
+                      </span>
+                    </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
