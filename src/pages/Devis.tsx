@@ -151,11 +151,11 @@ export default function Devis() {
       const p = produits.find(pr => pr.id === l.produitId);
       if (!p) return l;
       let prix = p.prixHT;
+      let remise = 0;
       if (client?.estRevendeur) {
-        const remiseCat = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
-        prix = Math.round(p.prixHT * (1 - remiseCat / 100) * 100) / 100;
+        remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      return { ...l, prixUnitaireHT: prix };
+      return { ...l, prixUnitaireHT: prix, remise };
     }));
   }, [clientId, dialogOpen, clients, produits]);
 
