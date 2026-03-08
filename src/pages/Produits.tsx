@@ -213,7 +213,7 @@ export default function Produits() {
     setDialogOpen(false);
     if (andReturnToDevis && fromDevis) {
       setFromDevis(false);
-      window.location.href = returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis';
+      navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis');
     }
   }
 
