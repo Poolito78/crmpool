@@ -420,7 +420,6 @@ export default function Produits() {
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Revend.</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Public HT</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Marge</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
                 <th className="px-3 py-3"></th>
               </tr>
