@@ -86,9 +86,26 @@ export default function Produits() {
     prixRevendeur: p.prixRevendeur ?? 0,
   }));
 
-  const filtered = safeProduits.filter(p =>
-    [p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const filtered = safeProduits.filter(p => {
+    // Global search
+    if (search && ![p.nom, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
+    // Column filters
+    for (const [key, val] of Object.entries(columnFilters)) {
+      if (!val) continue;
+      const v = val.toLowerCase();
+      switch (key) {
+        case 'reference': if (!p.reference?.toLowerCase().includes(v)) return false; break;
+        case 'nom': if (!p.nom?.toLowerCase().includes(v)) return false; break;
+        case 'categorie': if (!p.categorie?.toLowerCase().includes(v)) return false; break;
+        case 'prixAchat': if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
+        case 'coefficient': if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
+        case 'prixHT': if (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v)) return false; break;
+        case 'prixRevendeur': if (!formatMontant(p.prixRevendeur).toLowerCase().includes(v) && !String(p.prixRevendeur).includes(v)) return false; break;
+        case 'stock': if (!String(p.stock).includes(v)) return false; break;
+      }
+    }
+    return true;
+  });
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
