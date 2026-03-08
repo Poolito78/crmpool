@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { exportToExcel } from '@/lib/exportExcel';
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
