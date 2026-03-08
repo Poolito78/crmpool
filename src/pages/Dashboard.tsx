@@ -85,7 +85,7 @@ export default function Dashboard() {
             {produitsStockBas.slice(0, 5).map(p => (
               <div key={p.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
                 <div className="min-w-0">
-                  <p className="font-medium text-sm truncate">{p.nom}</p>
+                  <p className="font-medium text-sm truncate">{p.description}</p>
                   <p className="text-xs text-muted-foreground">{p.reference}</p>
                 </div>
                 <div className="flex items-center gap-2">

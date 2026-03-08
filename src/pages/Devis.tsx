@@ -120,7 +120,7 @@ export default function Devis() {
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (p) {
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.nom, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: p.prixHT, tva: p.tva, unite: p.unite } : l));
     }
   }
 

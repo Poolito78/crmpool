@@ -23,7 +23,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
     if (!query) return produits;
     const q = query.toLowerCase();
     return produits.filter(p =>
-      p.nom.toLowerCase().includes(q) ||
+      p.description.toLowerCase().includes(q) ||
       p.reference.toLowerCase().includes(q) ||
       p.categorie?.toLowerCase().includes(q)
     );
@@ -35,7 +35,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
   // Scroll highlighted item into view
   useEffect(() => {
     if (open && listRef.current) {
-      const item = listRef.current.children[highlightIndex + 1] as HTMLElement; // +1 for "Libre" option
+      const item = listRef.current.children[highlightIndex + 1] as HTMLElement;
       item?.scrollIntoView({ block: 'nearest' });
     }
   }, [highlightIndex, open]);
@@ -60,7 +60,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
       return;
     }
 
-    const totalItems = filtered.length + 1; // +1 for "Libre"
+    const totalItems = filtered.length + 1;
 
     switch (e.key) {
       case 'ArrowDown':
@@ -108,7 +108,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
         className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
       >
         <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-          {selected ? `${selected.reference} - ${selected.nom}` : '— Libre —'}
+          {selected ? `${selected.reference} - ${selected.description}` : '— Libre —'}
         </span>
         <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
@@ -157,7 +157,7 @@ export default function ProduitCombobox({ produits, value, onSelect }: ProduitCo
                 <Check className={cn('h-3.5 w-3.5 shrink-0', value === p.id ? 'opacity-100' : 'opacity-0')} />
                 <span className="truncate">
                   <span className="font-medium">{p.reference}</span>
-                  <span className="text-muted-foreground"> - {p.nom}</span>
+                  <span className="text-muted-foreground"> - {p.description}</span>
                   {p.categorie && <span className="text-xs text-muted-foreground/70 ml-1">({p.categorie})</span>}
                 </span>
               </button>

@@ -120,7 +120,7 @@ export default function Stock() {
                         : <CheckCircle className="w-4 h-4 text-success" />}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="font-medium">{p.nom}</p>
+                      <p className="font-medium">{p.description}</p>
                       <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{p.categorie || '—'}</td>
