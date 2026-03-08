@@ -5,6 +5,7 @@ import { Plus, Search, Eye, Trash2, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import DevisPreview from '@/components/DevisPreview';
@@ -22,6 +23,8 @@ export default function Devis() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
 
   const [clientId, setClientId] = useState('');
   const [dateValidite, setDateValidite] = useState('');
@@ -82,9 +85,18 @@ export default function Devis() {
     toast.success('Statut mis à jour');
   }
 
-  function remove(id: string) {
-    updateDevis(prev => prev.filter(d => d.id !== id));
-    toast.success('Devis supprimé');
+  function confirmRemove(id: string) {
+    setDeleteTargetId(id);
+    setDeleteConfirmOpen(true);
+  }
+
+  function executeDelete() {
+    if (deleteTargetId) {
+      updateDevis(prev => prev.filter(d => d.id !== deleteTargetId));
+      toast.success('Devis supprimé');
+      setDeleteTargetId(null);
+      setDeleteConfirmOpen(false);
+    }
   }
 
   const total = calculerTotalDevis(lignes);
@@ -133,7 +145,7 @@ export default function Devis() {
                       <option value="expiré">Expiré</option>
                     </select>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted"><Eye className="w-4 h-4" /></button>
-                    <button onClick={() => remove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
               </div>
@@ -232,6 +244,19 @@ export default function Devis() {
           </DialogContent>
         </Dialog>
       )}
+
+      <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+            <AlertDialogDescription>Êtes-vous sûr de vouloir supprimer ce devis ? Cette action est irréversible.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
