@@ -285,14 +285,13 @@ export default function Devis() {
                     {(() => {
                       const t = calculerTotalLigne(l);
                       const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                      const margeUnitaire = prod ? (l.prixUnitaireHT * (1 - l.remise / 100)) - prod.prixAchat : null;
-                      const margeTotale = margeUnitaire !== null ? margeUnitaire * l.quantite : null;
-                      const tauxMarque = prod && l.prixUnitaireHT > 0 ? (margeUnitaire! / (l.prixUnitaireHT * (1 - l.remise / 100))) * 100 : null;
+                      const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
+                      const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
                       return (
                         <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          {margeTotale !== null ? (
-                            <span className={margeTotale < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
-                              Marge: {formatMontant(margeTotale)} ({tauxMarque?.toFixed(1)}%)
+                          {tauxMarque !== null ? (
+                            <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
+                              Taux de marque: {tauxMarque.toFixed(1)}%
                             </span>
                           ) : <span />}
                           <span>Total TTC: {formatMontant(t.totalTTC)}</span>
