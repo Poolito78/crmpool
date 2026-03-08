@@ -130,14 +130,14 @@ export default function Devis() {
 
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions
+        ...d, clientId, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       } : d));
       toast.success('Devis modifié');
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       const newDevis: DevisType = {
         id: generateId(), numero, clientId, dateCreation: new Date().toISOString().split('T')[0],
-        dateValidite, statut, lignes, referenceAffaire, notes, conditions
+        dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA
       };
       updateDevis(prev => [...prev, newDevis]);
       toast.success('Devis créé');
