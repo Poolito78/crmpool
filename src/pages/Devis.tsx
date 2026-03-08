@@ -462,13 +462,19 @@ export default function Devis() {
                       const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                       const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
                       const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
+                      const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                       return (
-                        <div className="flex items-center justify-between text-xs text-muted-foreground">
-                          {tauxMarque !== null ? (
-                            <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
-                              Marge: {tauxMarque.toFixed(1)}%
-                            </span>
-                          ) : <span />}
+                        <div className="flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-x-3">
+                          <div className="flex items-center gap-3">
+                            {tauxMarque !== null ? (
+                              <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
+                                Marge: {tauxMarque.toFixed(1)}%
+                              </span>
+                            ) : null}
+                            {prixKg !== null && (
+                              <span>{formatMontant(prixKg)}/kg</span>
+                            )}
+                          </div>
                           <span>Total TTC: {formatMontant(t.totalTTC)}</span>
                         </div>
                       );
