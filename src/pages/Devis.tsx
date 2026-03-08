@@ -577,7 +577,7 @@ export default function Devis() {
                           <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                             const surface = parseFloat(e.target.value) || 0;
                             const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                            const quantite = p && (l.consommation || p.consommation) && p.conditionnement ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
+                            const quantite = p && (l.consommation || p.consommation) && p.poids ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
                             setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
                           }} className="h-8 text-sm" />
                         </div>
