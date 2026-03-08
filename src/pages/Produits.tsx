@@ -193,8 +193,8 @@ export default function Produits() {
   // Import field definitions
   const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
     { key: 'reference', label: 'Référence', aliases: ['article', 'référence', 'reference', 'ref', 'code article'], type: 'text' },
-    { key: 'nom', label: 'Nom', aliases: ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle'], type: 'text' },
-    { key: 'description', label: 'Description', aliases: ['description'], type: 'text' },
+    { key: 'description', label: 'Description', aliases: ['produit', 'nom', 'désignation', 'designation', 'libellé', 'libelle', 'description'], type: 'text' },
+    { key: 'descriptionDetaillee', label: 'Description détaillée', aliases: ['description détaillée', 'description detaillee', 'détail', 'detail'], type: 'text' },
     { key: 'prixAchat', label: 'Prix Achat', aliases: ['pa conditionné', 'pa conditionne', 'p achat kg ou u', 'achat kg ou u', 'prix achat', 'prixachat', 'pa', 'prix_achat'], type: 'number' },
     { key: 'coefficient', label: 'Coefficient', aliases: ['coefficient', 'coeff'], type: 'number', default: 2 },
     { key: 'prixHT', label: 'Prix HT', aliases: ['prix ht', 'prixht', 'pv ht', 'prix_ht'], type: 'number' },
