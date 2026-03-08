@@ -420,7 +420,6 @@ export default function Produits() {
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Revend.</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Public HT</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Marge</th>
                 <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
                 <th className="px-3 py-3"></th>
               </tr>
@@ -435,18 +434,15 @@ export default function Produits() {
                     { key: 'coefficient', align: 'right' },
                     { key: 'prixRevendeur', align: 'right' },
                     { key: 'prixHT', align: 'right' },
-                    { key: 'marge', align: 'right', disabled: true },
                     { key: 'stock', align: 'right' },
                   ].map(col => (
                     <th key={col.key} className="px-3 py-1">
-                      {!col.disabled ? (
-                        <Input
-                          placeholder="Filtrer..."
-                          value={columnFilters[col.key] || ''}
-                          onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
-                          className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
-                        />
-                      ) : null}
+                      <Input
+                        placeholder="Filtrer..."
+                        value={columnFilters[col.key] || ''}
+                        onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
+                        className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
+                      />
                     </th>
                   ))}
                   <th className="px-3 py-1">
@@ -482,11 +478,6 @@ export default function Produits() {
                        <span className="block text-xs text-muted-foreground">
                          coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)}
                        </span>
-                    </td>
-                    <td className="px-3 py-3 text-right">
-                      <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span>
-                      </span>
                     </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
                     <td className="px-3 py-3">
