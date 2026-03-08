@@ -18,7 +18,7 @@ const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
 };
 
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
-  libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false
+  libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false, type: 'livraison'
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' }[] = [
@@ -145,7 +145,7 @@ export default function Clients() {
   }
 
   function editAdresse(a: AdresseLivraison) {
-    setAdresseForm({ libelle: a.libelle, adresse: a.adresse, ville: a.ville, codePostal: a.codePostal, contact: a.contact || '', telephone: a.telephone || '', parDefaut: a.parDefaut });
+    setAdresseForm({ libelle: a.libelle, adresse: a.adresse, ville: a.ville, codePostal: a.codePostal, contact: a.contact || '', telephone: a.telephone || '', parDefaut: a.parDefaut, type: a.type || 'livraison' });
     setEditingAdresse(a.id);
     setShowAdresseForm(true);
   }
@@ -271,7 +271,7 @@ export default function Clients() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Livraison</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -316,6 +316,7 @@ export default function Clients() {
                           <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
                             <div className="flex items-center gap-2">
                               <span className="font-medium">{a.libelle}</span>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
                               {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
                             </div>
                             <p className="text-muted-foreground">{a.adresse}</p>
@@ -361,7 +362,7 @@ export default function Clients() {
                   className="flex items-center gap-1 text-primary text-xs"
                 >
                   <MapPin className="w-3 h-3" />
-                  {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''} de livraison
+                  {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
                   {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                 </button>
                 {expandedClient === c.id && (
@@ -370,6 +371,7 @@ export default function Clients() {
                       <div key={a.id} className="bg-muted/30 rounded-lg p-3 text-xs space-y-1">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{a.libelle}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
                           {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
                         </div>
                         <p className="text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
@@ -511,6 +513,7 @@ export default function Clients() {
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2">
                           <span className="font-medium">{a.libelle}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
                           {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
                         </div>
                         <p className="text-xs text-muted-foreground">{a.adresse}, {a.codePostal} {a.ville}</p>
@@ -553,9 +556,22 @@ export default function Clients() {
                       <Label className="text-xs">Téléphone</Label>
                       <Input value={adresseForm.telephone} onChange={e => setAdresseForm(p => ({ ...p, telephone: e.target.value }))} />
                     </div>
-                    <div className="col-span-2 flex items-center gap-2">
-                      <input type="checkbox" id="parDefaut" checked={adresseForm.parDefaut} onChange={e => setAdresseForm(p => ({ ...p, parDefaut: e.target.checked }))} className="rounded" />
-                      <label htmlFor="parDefaut" className="text-xs">Adresse par défaut</label>
+                    <div className="col-span-2 flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs">Type :</Label>
+                        <select
+                          className="text-xs rounded border border-input bg-background px-2 py-1"
+                          value={adresseForm.type}
+                          onChange={e => setAdresseForm(p => ({ ...p, type: e.target.value as 'livraison' | 'facturation' }))}
+                        >
+                          <option value="livraison">Livraison</option>
+                          <option value="facturation">Facturation</option>
+                        </select>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="parDefaut" checked={adresseForm.parDefaut} onChange={e => setAdresseForm(p => ({ ...p, parDefaut: e.target.checked }))} className="rounded" />
+                        <label htmlFor="parDefaut" className="text-xs">Adresse par défaut</label>
+                      </div>
                     </div>
                   </div>
                   <div className="flex gap-2 justify-end">
