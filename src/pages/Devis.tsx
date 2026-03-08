@@ -181,7 +181,7 @@ export default function Devis() {
       <div className="space-y-3">
         {filtered.map(d => {
           const client = clients.find(c => c.id === d.clientId);
-          const t = calculerTotalDevis(d.lignes);
+          const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
