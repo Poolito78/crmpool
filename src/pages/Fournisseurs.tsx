@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: ''
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0
 };
 
 export default function Fournisseurs() {
@@ -26,7 +26,7 @@ export default function Fournisseurs() {
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '' });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0 });
     setDialogOpen(true);
   }
 
@@ -125,6 +125,19 @@ export default function Fournisseurs() {
                 <Input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
               </div>
             ))}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold text-foreground">Conditions de livraison</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Franco de port (€)</Label>
+                  <Input type="number" step="0.01" value={form.francoPort} onChange={e => setForm(prev => ({ ...prev, francoPort: parseFloat(e.target.value) || 0 }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Coût transport (€)</Label>
+                  <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              </div>
+            </div>
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
