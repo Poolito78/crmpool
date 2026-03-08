@@ -468,7 +468,7 @@ export default function Produits() {
                     </td>
                     <td className="px-3 py-3 text-right">
                       <span className={marge > 0 ? 'text-emerald-600' : 'text-destructive'}>
-                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span>
+                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} <span className="text-xs text-muted-foreground">({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span>
                       </span>
                     </td>
                     <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
@@ -513,9 +513,9 @@ export default function Produits() {
                 <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
                 <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
                 <span className="text-muted-foreground">Marge brute:</span>
-                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
+                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
                 <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marque · {calcTauxMarge(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
+                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
               </div>
               <div className="mt-2 flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">{p.categorie || '—'}</span>
@@ -574,18 +574,14 @@ export default function Produits() {
                   <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute revend.</Label>
                   <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted" />
                 </div>
                 <div>
-                  <Label className="text-xs">Taux marque</Label>
+                  <Label className="text-xs">Marge %</Label>
                   <Input value={`${calcTauxMarque(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
-                </div>
-                <div>
-                  <Label className="text-xs">Taux marge</Label>
-                  <Input value={`${calcTauxMarge(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
             </div>
@@ -607,18 +603,14 @@ export default function Produits() {
                   <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                 </div>
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute pub.</Label>
                   <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
                 </div>
                 <div>
-                  <Label className="text-xs">Taux marque</Label>
+                  <Label className="text-xs">Marge %</Label>
                   <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
-                </div>
-                <div>
-                  <Label className="text-xs">Taux marge</Label>
-                  <Input value={`${calcTauxMarge(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
             </div>
