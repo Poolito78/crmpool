@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 interface Props {
   devis: Devis;
   client?: Client;
+  onEdit?: () => void;
 }
 
 export default function DevisPreview({ devis, client }: Props) {
