@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, type Produit } from '@/lib/store';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download } from 'lucide-react';
+import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -42,7 +43,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -494,6 +495,9 @@ export default function Produits() {
               {filtered.map(p => {
                 const marge = calcMargeBrute(p.prixHT, p.prixAchat);
                 const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+                const pfs = produitFournisseurs.filter(pf => pf.produitId === p.id);
+                const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
+                const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
@@ -514,7 +518,9 @@ export default function Produits() {
                         {formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)
                       </span>
                     </td>
-                    <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
+                    <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}
+                      {pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}
+                    </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
@@ -666,6 +672,10 @@ export default function Produits() {
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
             </div>
             <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+
+            {editing && (
+              <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
+            )}
 
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>

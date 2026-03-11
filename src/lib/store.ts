@@ -68,6 +68,17 @@ export interface Produit {
   dateCreation: string;
 }
 
+export interface ProduitFournisseur {
+  id: string;
+  produitId: string;
+  fournisseurId: string;
+  prixAchat: number;
+  referenceFournisseur: string;
+  delaiLivraison: number;
+  conditionnementMin: number;
+  estPrioritaire: boolean;
+}
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
@@ -263,6 +274,35 @@ function devisToDb(d: Devis, userId: string) {
   };
 }
 
+// ---- ProduitFournisseur mapping ----
+
+function dbToProduitFournisseur(r: any): ProduitFournisseur {
+  return {
+    id: r.id,
+    produitId: r.produit_id,
+    fournisseurId: r.fournisseur_id,
+    prixAchat: Number(r.prix_achat) || 0,
+    referenceFournisseur: r.reference_fournisseur || '',
+    delaiLivraison: Number(r.delai_livraison) || 0,
+    conditionnementMin: Number(r.conditionnement_min) || 1,
+    estPrioritaire: r.est_prioritaire || false,
+  };
+}
+
+function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
+  return {
+    id: pf.id,
+    user_id: userId,
+    produit_id: pf.produitId,
+    fournisseur_id: pf.fournisseurId,
+    prix_achat: pf.prixAchat,
+    reference_fournisseur: pf.referenceFournisseur,
+    delai_livraison: pf.delaiLivraison,
+    conditionnement_min: pf.conditionnementMin,
+    est_prioritaire: pf.estPrioritaire,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
@@ -279,27 +319,29 @@ export function useStore() {
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
   const [devis, setDevis] = useState<Devis[]>([]);
+  const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
-  // Load data from Supabase on mount
   useEffect(() => {
     async function load() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
         supabase.from('devis').select('*'),
+        supabase.from('produit_fournisseurs').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
       if (fRes.data) setFournisseurs(fRes.data.map(dbToFournisseur));
       if (pRes.data) setProduits(pRes.data.map(dbToProduit));
       if (dRes.data) setDevis(dRes.data.map(dbToDevis));
+      if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
       setLoading(false);
     }
     load();
@@ -369,7 +411,23 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, updateClients, updateFournisseurs, updateProduits, updateDevis, loading };
+  const updateProduitFournisseurs = useCallback((fn: (prev: ProduitFournisseur[]) => ProduitFournisseur[]) => {
+    setProduitFournisseurs(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('produit_fournisseurs').insert(added.map(pf => produitFournisseurToDb(pf, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(pf => supabase.from('produit_fournisseurs').update(produitFournisseurToDb(pf, userId) as any).eq('id', pf.id).then());
+        }
+        if (removed.length) supabase.from('produit_fournisseurs').delete().in('id', removed.map(pf => pf.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, produitFournisseurs, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, loading };
 }
 
 export function generateId() {
@@ -415,4 +473,41 @@ export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number
   if (poidsKg >= 101) return 178;
   if (poidsKg >= 26) return 85;
   return 49;
+}
+
+/**
+ * Calcule le fournisseur prioritaire pour un produit basé sur le coût global
+ * (prix d'achat + transport ramené à la quantité commandée)
+ */
+export function calculerFournisseurPrioritaire(
+  produitId: string,
+  qteCommande: number,
+  produitFournisseurs: ProduitFournisseur[],
+  fournisseurs: Fournisseur[]
+): ProduitFournisseur | null {
+  const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
+  if (pfs.length === 0) return null;
+  if (pfs.length === 1) return pfs[0];
+
+  let best: ProduitFournisseur | null = null;
+  let bestCost = Infinity;
+
+  for (const pf of pfs) {
+    const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
+    if (!fourn) continue;
+
+    const qte = Math.max(qteCommande, pf.conditionnementMin);
+    const totalAchat = pf.prixAchat * qte;
+    // Transport : gratuit si franco atteint, sinon coût transport
+    const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
+    const coutGlobal = totalAchat + transport;
+    const coutUnitaire = coutGlobal / qte;
+
+    if (coutUnitaire < bestCost) {
+      bestCost = coutUnitaire;
+      best = pf;
+    }
+  }
+
+  return best;
 }
