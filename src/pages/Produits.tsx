@@ -43,7 +43,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, devis, updateDevis } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
