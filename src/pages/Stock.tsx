@@ -8,35 +8,35 @@ export default function Stock() {
   const { produits, fournisseurs } = useCRM();
 
   const sorted = [...produits].sort((a, b) => {
-    const aLow = a.stock <= a.stockMin ? 0 : 1;
-    const bLow = b.stock <= b.stockMin ? 0 : 1;
+    const aLow = a.stock < a.stockMin ? 0 : 1;
+    const bLow = b.stock < b.stockMin ? 0 : 1;
     return aLow - bLow || a.description.localeCompare(b.description);
   });
 
   const totalStock = produits.reduce((s, p) => s + p.stock, 0);
   const totalValeur = produits.reduce((s, p) => s + p.stock * p.prixHT, 0);
-  const alertes = produits.filter(p => p.stock <= p.stockMin).length;
+  const alertes = produits.filter(p => p.stock < p.stockMin).length;
 
   // Calcul du minimum de réappro par fournisseur pour atteindre le franco
   function calcReapproFranco(fournisseurId: string) {
     const fourn = fournisseurs.find(f => f.id === fournisseurId);
     if (!fourn || !fourn.francoPort) return null;
     // Produits en alerte pour ce fournisseur
-    const produitsAlerte = produits.filter(p => p.fournisseurId === fournisseurId && p.stock <= p.stockMin);
+    const produitsAlerte = produits.filter(p => p.fournisseurId === fournisseurId && p.stock < p.stockMin);
     const totalReappro = produitsAlerte.reduce((s, p) => {
-      const qte = Math.max(0, p.stockMin - p.stock + 1);
+      const qte = Math.max(0, p.stockMin - p.stock);
       return s + qte * p.prixAchat;
     }, 0);
     return { fourn, totalReappro, manque: Math.max(0, fourn.francoPort - totalReappro), atteint: totalReappro >= fourn.francoPort };
   }
 
   // Grouper les alertes par fournisseur
-  const fournisseursAvecAlertes = [...new Set(produits.filter(p => p.stock <= p.stockMin && p.fournisseurId).map(p => p.fournisseurId!))];
+  const fournisseursAvecAlertes = [...new Set(produits.filter(p => p.stock < p.stockMin && p.fournisseurId).map(p => p.fournisseurId!))];
 
   return (
     <div className="space-y-6">
       <div className="flex justify-end mb-2">
-        <Button variant="outline" onClick={() => exportToExcel(sorted.map(p => ({ Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin, Alerte: p.stock <= p.stockMin ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'stock', 'Stock')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+        <Button variant="outline" onClick={() => exportToExcel(sorted.map(p => ({ Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin, Alerte: p.stock < p.stockMin ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'stock', 'Stock')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="stat-card text-center">
@@ -63,7 +63,7 @@ export default function Stock() {
             {fournisseursAvecAlertes.map(fId => {
               const info = calcReapproFranco(fId);
               if (!info) return null;
-              const produitsAlerte = produits.filter(p => p.fournisseurId === fId && p.stock <= p.stockMin);
+              const produitsAlerte = produits.filter(p => p.fournisseurId === fId && p.stock < p.stockMin);
               return (
                 <div key={fId} className="bg-card rounded-xl border border-border p-4 space-y-2">
                   <div className="flex items-center justify-between">
@@ -88,7 +88,7 @@ export default function Stock() {
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {produitsAlerte.length} produit{produitsAlerte.length > 1 ? 's' : ''} en alerte :
-                    <span className="ml-1">{produitsAlerte.map(p => `${p.description} (${Math.max(0, p.stockMin - p.stock + 1)} ${p.unite})`).join(', ')}</span>
+                    <span className="ml-1">{produitsAlerte.map(p => `${p.description} (${Math.max(0, p.stockMin - p.stock)} ${p.unite})`).join(', ')}</span>
                   </div>
                 </div>
               );
@@ -114,9 +114,9 @@ export default function Stock() {
             </thead>
             <tbody>
               {sorted.map(p => {
-                const low = p.stock <= p.stockMin;
+                const low = p.stock < p.stockMin;
                 const fourn = fournisseurs.find(f => f.id === p.fournisseurId);
-                const qteReappro = low ? Math.max(0, p.stockMin - p.stock + 1) : 0;
+                const qteReappro = low ? Math.max(0, p.stockMin - p.stock) : 0;
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
