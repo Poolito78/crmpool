@@ -114,7 +114,7 @@ export default function Stock() {
             </thead>
             <tbody>
               {sorted.map(p => {
-                const low = p.stock <= p.stockMin;
+                const low = p.stock < p.stockMin;
                 const fourn = fournisseurs.find(f => f.id === p.fournisseurId);
                 const qteReappro = low ? Math.max(0, p.stockMin - p.stock + 1) : 0;
                 return (
