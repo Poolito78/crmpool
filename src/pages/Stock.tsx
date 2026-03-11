@@ -36,7 +36,7 @@ export default function Stock() {
   return (
     <div className="space-y-6">
       <div className="flex justify-end mb-2">
-        <Button variant="outline" onClick={() => exportToExcel(sorted.map(p => ({ Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin, Alerte: p.stock <= p.stockMin ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'stock', 'Stock')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+        <Button variant="outline" onClick={() => exportToExcel(sorted.map(p => ({ Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin, Alerte: p.stock < p.stockMin ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'stock', 'Stock')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
       </div>
       <div className="grid grid-cols-3 gap-4">
         <div className="stat-card text-center">
