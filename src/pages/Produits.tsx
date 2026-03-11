@@ -518,7 +518,9 @@ export default function Produits() {
                         {formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)
                       </span>
                     </td>
-                    <td className={`px-3 py-3 text-right font-medium ${p.stock <= p.stockMin ? 'text-warning' : ''}`}>{p.stock}</td>
+                    <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}
+                      {pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}
+                    </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
