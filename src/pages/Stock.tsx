@@ -116,7 +116,7 @@ export default function Stock() {
               {sorted.map(p => {
                 const low = p.stock < p.stockMin;
                 const fourn = fournisseurs.find(f => f.id === p.fournisseurId);
-                const qteReappro = low ? Math.max(0, p.stockMin - p.stock + 1) : 0;
+                const qteReappro = low ? Math.max(0, p.stockMin - p.stock) : 0;
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
