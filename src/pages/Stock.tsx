@@ -22,9 +22,9 @@ export default function Stock() {
     const fourn = fournisseurs.find(f => f.id === fournisseurId);
     if (!fourn || !fourn.francoPort) return null;
     // Produits en alerte pour ce fournisseur
-    const produitsAlerte = produits.filter(p => p.fournisseurId === fournisseurId && p.stock <= p.stockMin);
+    const produitsAlerte = produits.filter(p => p.fournisseurId === fournisseurId && p.stock < p.stockMin);
     const totalReappro = produitsAlerte.reduce((s, p) => {
-      const qte = Math.max(0, p.stockMin - p.stock + 1);
+      const qte = Math.max(0, p.stockMin - p.stock);
       return s + qte * p.prixAchat;
     }, 0);
     return { fourn, totalReappro, manque: Math.max(0, fourn.francoPort - totalReappro), atteint: totalReappro >= fourn.francoPort };
