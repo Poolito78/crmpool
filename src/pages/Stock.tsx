@@ -9,7 +9,7 @@ export default function Stock() {
 
   const sorted = [...produits].sort((a, b) => {
     const aLow = a.stock < a.stockMin ? 0 : 1;
-    const bLow = b.stock <= b.stockMin ? 0 : 1;
+    const bLow = b.stock < b.stockMin ? 0 : 1;
     return aLow - bLow || a.description.localeCompare(b.description);
   });
 
