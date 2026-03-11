@@ -6,7 +6,7 @@ import { Link } from 'react-router-dom';
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis } = useCRM();
 
-  const produitsStockBas = produits.filter(p => p.stock <= p.stockMin);
+  const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
   const caTotal = devisAcceptes.reduce((sum, d) => sum + calculerTotalDevis(d.lignes).totalTTC, 0);
   const devisEnCours = devis.filter(d => d.statut === 'envoyé');
