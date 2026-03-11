@@ -187,6 +187,60 @@ export type Database = {
         }
         Relationships: []
       }
+      produit_fournisseurs: {
+        Row: {
+          conditionnement_min: number | null
+          created_at: string
+          delai_livraison: number | null
+          est_prioritaire: boolean | null
+          fournisseur_id: string
+          id: string
+          prix_achat: number
+          produit_id: string
+          reference_fournisseur: string | null
+          user_id: string
+        }
+        Insert: {
+          conditionnement_min?: number | null
+          created_at?: string
+          delai_livraison?: number | null
+          est_prioritaire?: boolean | null
+          fournisseur_id: string
+          id?: string
+          prix_achat?: number
+          produit_id: string
+          reference_fournisseur?: string | null
+          user_id: string
+        }
+        Update: {
+          conditionnement_min?: number | null
+          created_at?: string
+          delai_livraison?: number | null
+          est_prioritaire?: boolean | null
+          fournisseur_id?: string
+          id?: string
+          prix_achat?: number
+          produit_id?: string
+          reference_fournisseur?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produit_fournisseurs_fournisseur_id_fkey"
+            columns: ["fournisseur_id"]
+            isOneToOne: false
+            referencedRelation: "fournisseurs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produit_fournisseurs_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produits: {
         Row: {
           categorie: string | null
