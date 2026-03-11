@@ -63,7 +63,7 @@ export default function Stock() {
             {fournisseursAvecAlertes.map(fId => {
               const info = calcReapproFranco(fId);
               if (!info) return null;
-              const produitsAlerte = produits.filter(p => p.fournisseurId === fId && p.stock <= p.stockMin);
+              const produitsAlerte = produits.filter(p => p.fournisseurId === fId && p.stock < p.stockMin);
               return (
                 <div key={fId} className="bg-card rounded-xl border border-border p-4 space-y-2">
                   <div className="flex items-center justify-between">
