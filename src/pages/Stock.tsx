@@ -88,7 +88,7 @@ export default function Stock() {
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {produitsAlerte.length} produit{produitsAlerte.length > 1 ? 's' : ''} en alerte :
-                    <span className="ml-1">{produitsAlerte.map(p => `${p.description} (${Math.max(0, p.stockMin - p.stock + 1)} ${p.unite})`).join(', ')}</span>
+                    <span className="ml-1">{produitsAlerte.map(p => `${p.description} (${Math.max(0, p.stockMin - p.stock)} ${p.unite})`).join(', ')}</span>
                   </div>
                 </div>
               );
