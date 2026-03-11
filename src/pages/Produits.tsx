@@ -495,6 +495,9 @@ export default function Produits() {
               {filtered.map(p => {
                 const marge = calcMargeBrute(p.prixHT, p.prixAchat);
                 const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+                const pfs = produitFournisseurs.filter(pf => pf.produitId === p.id);
+                const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
+                const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
