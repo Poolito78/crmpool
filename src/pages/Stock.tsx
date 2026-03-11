@@ -31,7 +31,7 @@ export default function Stock() {
   }
 
   // Grouper les alertes par fournisseur
-  const fournisseursAvecAlertes = [...new Set(produits.filter(p => p.stock <= p.stockMin && p.fournisseurId).map(p => p.fournisseurId!))];
+  const fournisseursAvecAlertes = [...new Set(produits.filter(p => p.stock < p.stockMin && p.fournisseurId).map(p => p.fournisseurId!))];
 
   return (
     <div className="space-y-6">
