@@ -15,7 +15,7 @@ export default function Stock() {
 
   const totalStock = produits.reduce((s, p) => s + p.stock, 0);
   const totalValeur = produits.reduce((s, p) => s + p.stock * p.prixHT, 0);
-  const alertes = produits.filter(p => p.stock <= p.stockMin).length;
+  const alertes = produits.filter(p => p.stock < p.stockMin).length;
 
   // Calcul du minimum de réappro par fournisseur pour atteindre le franco
   function calcReapproFranco(fournisseurId: string) {
