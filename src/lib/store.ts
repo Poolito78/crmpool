@@ -274,6 +274,35 @@ function devisToDb(d: Devis, userId: string) {
   };
 }
 
+// ---- ProduitFournisseur mapping ----
+
+function dbToProduitFournisseur(r: any): ProduitFournisseur {
+  return {
+    id: r.id,
+    produitId: r.produit_id,
+    fournisseurId: r.fournisseur_id,
+    prixAchat: Number(r.prix_achat) || 0,
+    referenceFournisseur: r.reference_fournisseur || '',
+    delaiLivraison: Number(r.delai_livraison) || 0,
+    conditionnementMin: Number(r.conditionnement_min) || 1,
+    estPrioritaire: r.est_prioritaire || false,
+  };
+}
+
+function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
+  return {
+    id: pf.id,
+    user_id: userId,
+    produit_id: pf.produitId,
+    fournisseur_id: pf.fournisseurId,
+    prix_achat: pf.prixAchat,
+    reference_fournisseur: pf.referenceFournisseur,
+    delai_livraison: pf.delaiLivraison,
+    conditionnement_min: pf.conditionnementMin,
+    est_prioritaire: pf.estPrioritaire,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
