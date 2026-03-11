@@ -68,6 +68,17 @@ export interface Produit {
   dateCreation: string;
 }
 
+export interface ProduitFournisseur {
+  id: string;
+  produitId: string;
+  fournisseurId: string;
+  prixAchat: number;
+  referenceFournisseur: string;
+  delaiLivraison: number;
+  conditionnementMin: number;
+  estPrioritaire: boolean;
+}
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
