@@ -37,6 +37,9 @@ export default function Devis() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
+  const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
+  const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
