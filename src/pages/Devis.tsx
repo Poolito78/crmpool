@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,6 +13,8 @@ import { exportToExcel } from '@/lib/exportExcel';
 import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
+import DevisEmailDialog from '@/components/DevisEmailDialog';
+import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
