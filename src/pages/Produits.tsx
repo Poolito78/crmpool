@@ -392,7 +392,12 @@ export default function Produits() {
           unite: getMappedValue(row, 'unite') || 'pièce',
           stock: getMappedNum(row, 'stock'),
           stockMin: getMappedNum(row, 'stockMin'),
-          fournisseurId: '',
+          fournisseurId: (() => {
+            const fournNom = getMappedValue(row, 'fournisseur');
+            if (!fournNom) return '';
+            const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
+            return fourn ? fourn.id : '';
+          })(),
           categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
