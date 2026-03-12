@@ -277,8 +277,12 @@ export default function Devis() {
   }, [lignes, fraisPortAuto, dialogOpen, produits]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
-    updateDevis(prev => prev.map(d => d.id === id ? { ...d, statut: newStatut } : d));
+    const d = devis.find(dv => dv.id === id);
+    updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
     toast.success('Statut mis à jour');
+    if (newStatut === 'accepté' && d) {
+      setCommandeConfirmDevis({ ...d, statut: newStatut });
+    }
   }
 
   function confirmRemove(id: string) {
