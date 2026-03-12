@@ -391,6 +391,7 @@ export default function Devis() {
                       <option value="expiré">Expiré</option>
                     </select>
                     <button onClick={() => openEdit(d)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
                     <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
                     <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
