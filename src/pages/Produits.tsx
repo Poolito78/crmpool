@@ -331,6 +331,14 @@ export default function Produits() {
         const updates: Record<string, any> = {};
         for (const field of selectedFields) {
           if (field.key === 'reference') continue;
+          if (field.key === 'fournisseur') {
+            const fournNom = getMappedValue(matchingRow, 'fournisseur');
+            if (fournNom) {
+              const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
+              if (fourn) updates.fournisseurId = fourn.id;
+            }
+            continue;
+          }
           if (field.type === 'number') {
             updates[field.key] = getMappedNum(matchingRow, field.key, field.default ?? 0);
           } else {
