@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,6 +13,8 @@ import { exportToExcel } from '@/lib/exportExcel';
 import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
+import DevisEmailDialog from '@/components/DevisEmailDialog';
+import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -23,7 +25,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits } = useCRM();
+  const { devis, updateDevis, clients, produits, fournisseurs, produitFournisseurs } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -35,6 +37,9 @@ export default function Devis() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
+  const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
+  const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
@@ -272,8 +277,12 @@ export default function Devis() {
   }, [lignes, fraisPortAuto, dialogOpen, produits]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
-    updateDevis(prev => prev.map(d => d.id === id ? { ...d, statut: newStatut } : d));
+    const d = devis.find(dv => dv.id === id);
+    updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
     toast.success('Statut mis à jour');
+    if (newStatut === 'accepté' && d) {
+      setCommandeConfirmDevis({ ...d, statut: newStatut });
+    }
   }
 
   function confirmRemove(id: string) {
@@ -382,6 +391,7 @@ export default function Devis() {
                       <option value="expiré">Expiré</option>
                     </select>
                     <button onClick={() => openEdit(d)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Pencil className="w-4 h-4" /></button>
+                    <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
                     <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
                     <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
@@ -751,6 +761,54 @@ export default function Devis() {
           <AlertDialogFooter>
             <AlertDialogCancel>Annuler</AlertDialogCancel>
             <AlertDialogAction onClick={executeDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Supprimer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Email Dialog */}
+      <DevisEmailDialog
+        open={!!emailDevis}
+        onOpenChange={(open) => { if (!open) setEmailDevis(null); }}
+        devis={emailDevis}
+        client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
+        onSent={() => {
+          if (emailDevis) {
+            updateDevis(prev => prev.map(d => d.id === emailDevis.id ? { ...d, statut: 'envoyé' } : d));
+            toast.success('Devis marqué comme envoyé');
+          }
+        }}
+      />
+
+      {/* Commande Fournisseur Dialog */}
+      <CommandeFournisseurDialog
+        open={!!commandeDevis}
+        onOpenChange={(open) => { if (!open) setCommandeDevis(null); }}
+        devis={commandeDevis}
+        produits={produits}
+        fournisseurs={fournisseurs}
+        produitFournisseurs={produitFournisseurs}
+      />
+
+      {/* Confirmation commande fournisseur quand devis accepté */}
+      <AlertDialog open={!!commandeConfirmDevis} onOpenChange={(open) => { if (!open) setCommandeConfirmDevis(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Créer une commande fournisseur ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Le devis {commandeConfirmDevis?.numero} a été accepté. Souhaitez-vous générer automatiquement les bons de commande fournisseur correspondants ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Plus tard</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setCommandeDevis(commandeConfirmDevis);
+              setCommandeConfirmDevis(null);
+            }}>
+              Créer la commande
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
