@@ -764,6 +764,54 @@ export default function Devis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Email Dialog */}
+      <DevisEmailDialog
+        open={!!emailDevis}
+        onOpenChange={(open) => { if (!open) setEmailDevis(null); }}
+        devis={emailDevis}
+        client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
+        onSent={() => {
+          if (emailDevis) {
+            updateDevis(prev => prev.map(d => d.id === emailDevis.id ? { ...d, statut: 'envoyé' } : d));
+            toast.success('Devis marqué comme envoyé');
+          }
+        }}
+      />
+
+      {/* Commande Fournisseur Dialog */}
+      <CommandeFournisseurDialog
+        open={!!commandeDevis}
+        onOpenChange={(open) => { if (!open) setCommandeDevis(null); }}
+        devis={commandeDevis}
+        produits={produits}
+        fournisseurs={fournisseurs}
+        produitFournisseurs={produitFournisseurs}
+      />
+
+      {/* Confirmation commande fournisseur quand devis accepté */}
+      <AlertDialog open={!!commandeConfirmDevis} onOpenChange={(open) => { if (!open) setCommandeConfirmDevis(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5" />
+              Créer une commande fournisseur ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Le devis {commandeConfirmDevis?.numero} a été accepté. Souhaitez-vous générer automatiquement les bons de commande fournisseur correspondants ?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Plus tard</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              setCommandeDevis(commandeConfirmDevis);
+              setCommandeConfirmDevis(null);
+            }}>
+              Créer la commande
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
