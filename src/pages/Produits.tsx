@@ -253,6 +253,7 @@ export default function Produits() {
     { key: 'stock', label: 'Stock', aliases: ['stock'], type: 'number' },
     { key: 'stockMin', label: 'Stock min', aliases: ['stock min', 'stockmin', 'stock minimum'], type: 'number' },
     { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
+    { key: 'fournisseur', label: 'Fournisseur', aliases: ['fournisseur', 'supplier', 'société fournisseur', 'societe fournisseur'], type: 'text' },
   ];
 
   // Auto-detect mapping from Excel columns to product fields
