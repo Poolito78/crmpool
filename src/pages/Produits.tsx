@@ -253,6 +253,7 @@ export default function Produits() {
     { key: 'stock', label: 'Stock', aliases: ['stock'], type: 'number' },
     { key: 'stockMin', label: 'Stock min', aliases: ['stock min', 'stockmin', 'stock minimum'], type: 'number' },
     { key: 'categorie', label: 'Catégorie', aliases: ['catégorie', 'categorie', 'famille'], type: 'text' },
+    { key: 'fournisseur', label: 'Fournisseur', aliases: ['fournisseur', 'supplier', 'société fournisseur', 'societe fournisseur'], type: 'text' },
   ];
 
   // Auto-detect mapping from Excel columns to product fields
@@ -330,6 +331,14 @@ export default function Produits() {
         const updates: Record<string, any> = {};
         for (const field of selectedFields) {
           if (field.key === 'reference') continue;
+          if (field.key === 'fournisseur') {
+            const fournNom = getMappedValue(matchingRow, 'fournisseur');
+            if (fournNom) {
+              const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
+              if (fourn) updates.fournisseurId = fourn.id;
+            }
+            continue;
+          }
           if (field.type === 'number') {
             updates[field.key] = getMappedNum(matchingRow, field.key, field.default ?? 0);
           } else {
@@ -383,7 +392,12 @@ export default function Produits() {
           unite: getMappedValue(row, 'unite') || 'pièce',
           stock: getMappedNum(row, 'stock'),
           stockMin: getMappedNum(row, 'stockMin'),
-          fournisseurId: '',
+          fournisseurId: (() => {
+            const fournNom = getMappedValue(row, 'fournisseur');
+            if (!fournNom) return '';
+            const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
+            return fourn ? fourn.id : '';
+          })(),
           categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
