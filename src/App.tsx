@@ -11,6 +11,7 @@ import Clients from "@/pages/Clients";
 import Produits from "@/pages/Produits";
 import Fournisseurs from "@/pages/Fournisseurs";
 import Stock from "@/pages/Stock";
+import Commandes from "@/pages/Commandes";
 import Devis from "@/pages/Devis";
 import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
