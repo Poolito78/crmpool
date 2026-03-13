@@ -138,7 +138,7 @@ export default function CRMLayout() {
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-30 flex justify-around py-2">
-        {navItems.slice(0, 5).map(item => {
+        {navItems.slice(0, 6).map(item => {
           const active = location.pathname === item.path;
           return (
             <Link
