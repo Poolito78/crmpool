@@ -116,14 +116,24 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
               <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Produits sans fournisseur</p>
-                <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-0.5">
+                <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1">
                   {produitsSansFournisseur.map(({ produit, quantite }) => (
-                    <li key={produit.id}>• {produit.reference} — {produit.description} (Qté: {quantite})</li>
+                    <li key={produit.id} className="flex items-center gap-1 flex-wrap">
+                      <span>• {produit.reference} — {produit.description} (Qté: {quantite})</span>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        className="h-auto p-0 text-xs text-amber-800 dark:text-amber-300 underline"
+                        onClick={() => {
+                          onOpenChange(false);
+                          navigate(`/produits?highlight=${produit.id}&from=devis${devis ? `&devisId=${devis.id}` : ''}`);
+                        }}
+                      >
+                        <ExternalLink className="w-3 h-3 mr-0.5" /> Ajouter fournisseur
+                      </Button>
+                    </li>
                   ))}
                 </ul>
-                <p className="text-xs text-amber-600 dark:text-amber-500 mt-2">
-                  Assignez un fournisseur depuis la fiche produit.
-                </p>
               </div>
             </div>
           )}
