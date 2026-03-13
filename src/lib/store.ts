@@ -79,6 +79,20 @@ export interface ProduitFournisseur {
   estPrioritaire: boolean;
 }
 
+export interface CommandeFournisseur {
+  id: string;
+  devisId?: string;
+  fournisseurId: string;
+  numero: string;
+  dateCreation: string;
+  statut: 'en_attente' | 'passee' | 'recue';
+  lignes: { produitId: string; description: string; reference: string; quantite: number; prixAchat: number; total: number }[];
+  totalHT: number;
+  fraisTransport: number;
+  totalTTC: number;
+  notes?: string;
+}
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
@@ -303,6 +317,41 @@ function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
   };
 }
 
+// ---- CommandeFournisseur mapping ----
+
+function dbToCommandeFournisseur(r: any): CommandeFournisseur {
+  return {
+    id: r.id,
+    devisId: r.devis_id || undefined,
+    fournisseurId: r.fournisseur_id,
+    numero: r.numero,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    statut: r.statut as CommandeFournisseur['statut'],
+    lignes: (r.lignes as any[]) || [],
+    totalHT: Number(r.total_ht) || 0,
+    fraisTransport: Number(r.frais_transport) || 0,
+    totalTTC: Number(r.total_ttc) || 0,
+    notes: r.notes || undefined,
+  };
+}
+
+function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
+  return {
+    id: cf.id,
+    user_id: userId,
+    devis_id: cf.devisId || null,
+    fournisseur_id: cf.fournisseurId,
+    numero: cf.numero,
+    date_creation: cf.dateCreation,
+    statut: cf.statut,
+    lignes: cf.lignes as any,
+    total_ht: cf.totalHT,
+    frais_transport: cf.fraisTransport,
+    total_ttc: cf.totalTTC,
+    notes: cf.notes || null,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
@@ -320,6 +369,7 @@ export function useStore() {
   const [produits, setProduits] = useState<Produit[]>([]);
   const [devis, setDevis] = useState<Devis[]>([]);
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
+  const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
@@ -329,12 +379,13 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes, cfRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
         supabase.from('devis').select('*'),
         supabase.from('produit_fournisseurs').select('*'),
+        supabase.from('commandes_fournisseur').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
@@ -342,6 +393,7 @@ export function useStore() {
       if (pRes.data) setProduits(pRes.data.map(dbToProduit));
       if (dRes.data) setDevis(dRes.data.map(dbToDevis));
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
+      if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
       setLoading(false);
     }
     load();
@@ -427,7 +479,23 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, produitFournisseurs, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, loading };
+  const updateCommandesFournisseur = useCallback((fn: (prev: CommandeFournisseur[]) => CommandeFournisseur[]) => {
+    setCommandesFournisseur(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('commandes_fournisseur').insert(added.map(cf => commandeFournisseurToDb(cf, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(cf => supabase.from('commandes_fournisseur').update(commandeFournisseurToDb(cf, userId) as any).eq('id', cf.id).then());
+        }
+        if (removed.length) supabase.from('commandes_fournisseur').delete().in('id', removed.map(cf => cf.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, loading };
 }
 
 export function generateId() {

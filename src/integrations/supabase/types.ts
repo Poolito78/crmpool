@@ -68,6 +68,69 @@ export type Database = {
         }
         Relationships: []
       }
+      commandes_fournisseur: {
+        Row: {
+          created_at: string
+          date_creation: string
+          devis_id: string | null
+          fournisseur_id: string
+          frais_transport: number
+          id: string
+          lignes: Json
+          notes: string | null
+          numero: string
+          statut: string
+          total_ht: number
+          total_ttc: number
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_creation?: string
+          devis_id?: string | null
+          fournisseur_id: string
+          frais_transport?: number
+          id?: string
+          lignes?: Json
+          notes?: string | null
+          numero?: string
+          statut?: string
+          total_ht?: number
+          total_ttc?: number
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_creation?: string
+          devis_id?: string | null
+          fournisseur_id?: string
+          frais_transport?: number
+          id?: string
+          lignes?: Json
+          notes?: string | null
+          numero?: string
+          statut?: string
+          total_ht?: number
+          total_ttc?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commandes_fournisseur_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "devis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commandes_fournisseur_fournisseur_id_fkey"
+            columns: ["fournisseur_id"]
+            isOneToOne: false
+            referencedRelation: "fournisseurs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       devis: {
         Row: {
           adresse_livraison_id: string | null
