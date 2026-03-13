@@ -369,6 +369,7 @@ export function useStore() {
   const [produits, setProduits] = useState<Produit[]>([]);
   const [devis, setDevis] = useState<Devis[]>([]);
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
+  const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
@@ -378,12 +379,13 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes, cfRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
         supabase.from('devis').select('*'),
         supabase.from('produit_fournisseurs').select('*'),
+        supabase.from('commandes_fournisseur').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
@@ -391,6 +393,7 @@ export function useStore() {
       if (pRes.data) setProduits(pRes.data.map(dbToProduit));
       if (dRes.data) setDevis(dRes.data.map(dbToDevis));
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
+      if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
       setLoading(false);
     }
     load();
