@@ -79,6 +79,20 @@ export interface ProduitFournisseur {
   estPrioritaire: boolean;
 }
 
+export interface CommandeFournisseur {
+  id: string;
+  devisId?: string;
+  fournisseurId: string;
+  numero: string;
+  dateCreation: string;
+  statut: 'en_attente' | 'passee' | 'recue';
+  lignes: { produitId: string; description: string; reference: string; quantite: number; prixAchat: number; total: number }[];
+  totalHT: number;
+  fraisTransport: number;
+  totalTTC: number;
+  notes?: string;
+}
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
