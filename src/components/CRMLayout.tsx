@@ -14,6 +14,7 @@ const navItems = [
   { label: 'Fournisseurs', icon: Truck, path: '/fournisseurs' },
   { label: 'Stock', icon: BarChart3, path: '/stock' },
   { label: 'Devis', icon: FileText, path: '/devis' },
+  { label: 'Commandes', icon: ShoppingCart, path: '/commandes' },
 ];
 
 export default function CRMLayout() {

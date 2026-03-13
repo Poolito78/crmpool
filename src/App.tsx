@@ -48,6 +48,7 @@ function AppRoutes() {
           <Route path="/fournisseurs" element={<Fournisseurs />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/devis" element={<Devis />} />
+          <Route path="/commandes" element={<Commandes />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
