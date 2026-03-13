@@ -787,6 +787,9 @@ export default function Devis() {
         produits={produits}
         fournisseurs={fournisseurs}
         produitFournisseurs={produitFournisseurs}
+        onSaveCommandes={(commandes) => {
+          updateCommandesFournisseur(prev => [...prev, ...commandes]);
+        }}
       />
 
       {/* Confirmation commande fournisseur quand devis accepté */}
