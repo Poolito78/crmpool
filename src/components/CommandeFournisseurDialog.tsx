@@ -25,6 +25,7 @@ interface Props {
 }
 
 export default function CommandeFournisseurDialog({ open, onOpenChange, devis, produits, fournisseurs, produitFournisseurs, onSaveCommandes }: Props) {
+  const navigate = useNavigate();
   const [alertOpen, setAlertOpen] = useState(false);
 
   const { commandesParFournisseur, produitsSansFournisseur } = useMemo(() => {
