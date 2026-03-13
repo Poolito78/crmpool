@@ -317,6 +317,41 @@ function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
   };
 }
 
+// ---- CommandeFournisseur mapping ----
+
+function dbToCommandeFournisseur(r: any): CommandeFournisseur {
+  return {
+    id: r.id,
+    devisId: r.devis_id || undefined,
+    fournisseurId: r.fournisseur_id,
+    numero: r.numero,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    statut: r.statut as CommandeFournisseur['statut'],
+    lignes: (r.lignes as any[]) || [],
+    totalHT: Number(r.total_ht) || 0,
+    fraisTransport: Number(r.frais_transport) || 0,
+    totalTTC: Number(r.total_ttc) || 0,
+    notes: r.notes || undefined,
+  };
+}
+
+function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
+  return {
+    id: cf.id,
+    user_id: userId,
+    devis_id: cf.devisId || null,
+    fournisseur_id: cf.fournisseurId,
+    numero: cf.numero,
+    date_creation: cf.dateCreation,
+    statut: cf.statut,
+    lignes: cf.lignes as any,
+    total_ht: cf.totalHT,
+    frais_transport: cf.fraisTransport,
+    total_ttc: cf.totalTTC,
+    notes: cf.notes || null,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
