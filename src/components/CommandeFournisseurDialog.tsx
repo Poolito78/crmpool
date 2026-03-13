@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
-import { ShoppingCart, Printer, AlertTriangle, Save } from 'lucide-react';
+import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink } from 'lucide-react';
 import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId } from '@/lib/store';
 import { toast } from 'sonner';
 
