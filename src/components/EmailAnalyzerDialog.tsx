@@ -2,24 +2,29 @@ import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, type LigneDevis, type Devis as DevisType } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Mail, Loader2, Check, AlertTriangle, X, Sparkles } from 'lucide-react';
+import { Mail, Loader2, Check, AlertTriangle, X, Sparkles, Trash2, Plus } from 'lucide-react';
+import ClientCombobox from '@/components/ClientCombobox';
+import ProduitCombobox from '@/components/ProduitCombobox';
+
+interface AnalysisLigne {
+  produitId: string;
+  produitMatch: string;
+  quantite: number;
+  confidence: 'high' | 'medium' | 'low';
+}
 
 interface AnalysisResult {
   clientId: string;
   clientMatch: string;
   referenceAffaire?: string;
   notes?: string;
-  lignes: {
-    produitId: string;
-    produitMatch: string;
-    quantite: number;
-    confidence: 'high' | 'medium' | 'low';
-  }[];
+  lignes: AnalysisLigne[];
 }
 
 const confidenceColors: Record<string, string> = {
@@ -75,12 +80,50 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
     }
   }
 
+  function updateResultClient(clientId: string) {
+    if (!result) return;
+    setResult({ ...result, clientId });
+  }
+
+  function updateResultLigneProduit(index: number, produitId: string) {
+    if (!result) return;
+    const p = produits.find(pr => pr.id === produitId);
+    const newLignes = [...result.lignes];
+    newLignes[index] = {
+      ...newLignes[index],
+      produitId,
+      produitMatch: p?.description || newLignes[index].produitMatch,
+      confidence: 'high',
+    };
+    setResult({ ...result, lignes: newLignes });
+  }
+
+  function updateResultLigneQuantite(index: number, quantite: number) {
+    if (!result) return;
+    const newLignes = [...result.lignes];
+    newLignes[index] = { ...newLignes[index], quantite };
+    setResult({ ...result, lignes: newLignes });
+  }
+
+  function removeResultLigne(index: number) {
+    if (!result) return;
+    setResult({ ...result, lignes: result.lignes.filter((_, i) => i !== index) });
+  }
+
+  function addResultLigne() {
+    if (!result) return;
+    setResult({
+      ...result,
+      lignes: [...result.lignes, { produitId: '', produitMatch: '', quantite: 1, confidence: 'high' }],
+    });
+  }
+
   function createDevis() {
     if (!result) return;
 
     const client = clients.find(c => c.id === result.clientId);
     if (!result.clientId || !client) {
-      toast.error('Client non identifié, impossible de créer le devis');
+      toast.error('Sélectionnez un client');
       return;
     }
 
@@ -101,7 +144,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       });
 
     if (lignes.length === 0) {
-      toast.error('Aucun produit identifié');
+      toast.error('Ajoutez au moins un produit');
       return;
     }
 
@@ -168,50 +211,89 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Client identifié */}
-            <div className="rounded-lg border p-3 space-y-1">
-              <div className="text-sm font-medium text-muted-foreground">Client identifié</div>
-              {client ? (
-                <div className="flex items-center gap-2">
-                  <Check className="w-4 h-4 text-success" />
-                  <span className="font-medium">{client.nom}</span>
-                  {client.societe && <span className="text-muted-foreground">({client.societe})</span>}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-destructive">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span>Client non trouvé : « {result.clientMatch || 'aucun'} »</span>
+            {/* Client — editable */}
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="text-sm font-medium text-muted-foreground">Client</div>
+              {client && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                  <Check className="w-3 h-3 text-success" />
+                  <span>Détecté : {result.clientMatch}</span>
                 </div>
               )}
+              {!client && result.clientMatch && (
+                <div className="flex items-center gap-2 text-xs text-destructive mb-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>Non trouvé : « {result.clientMatch} » — sélectionnez manuellement</span>
+                </div>
+              )}
+              <ClientCombobox
+                clients={clients}
+                value={result.clientId}
+                onChange={updateResultClient}
+              />
             </div>
 
             {/* Référence affaire */}
             {result.referenceAffaire && (
               <div className="rounded-lg border p-3 space-y-1">
                 <div className="text-sm font-medium text-muted-foreground">Référence affaire</div>
-                <div>{result.referenceAffaire}</div>
+                <Input
+                  value={result.referenceAffaire}
+                  onChange={e => setResult({ ...result, referenceAffaire: e.target.value })}
+                  className="h-8"
+                />
               </div>
             )}
 
-            {/* Produits identifiés */}
+            {/* Produits — editable */}
             <div className="rounded-lg border p-3 space-y-2">
-              <div className="text-sm font-medium text-muted-foreground">Produits identifiés ({result.lignes.length})</div>
+              <div className="flex items-center justify-between">
+                <div className="text-sm font-medium text-muted-foreground">Produits ({result.lignes.length})</div>
+                <Button variant="ghost" size="sm" onClick={addResultLigne} className="h-7 text-xs">
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter
+                </Button>
+              </div>
               {result.lignes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Aucun produit identifié dans le message.</p>
+                <p className="text-sm text-muted-foreground">Aucun produit. Ajoutez-en manuellement.</p>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   {result.lignes.map((l, i) => {
                     const p = produits.find(pr => pr.id === l.produitId);
                     return (
-                      <div key={i} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 p-2 rounded bg-muted/50">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-sm truncate">{p?.description || l.produitMatch}</div>
-                          {p && <div className="text-xs text-muted-foreground">Réf: {p.reference} — {p.prixHT.toFixed(2)}€ HT/{p.unite}</div>}
-                          {!p && <div className="text-xs text-destructive">Produit non trouvé : « {l.produitMatch} »</div>}
+                      <div key={i} className="p-2 rounded bg-muted/50 space-y-2">
+                        <div className="flex items-start gap-2">
+                          <div className="flex-1 min-w-0">
+                            {l.produitMatch && l.confidence !== 'high' && (
+                              <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                                Détecté : « {l.produitMatch} »
+                                <Badge className={`${confidenceColors[l.confidence]} text-[10px] px-1 py-0`}>{confidenceLabels[l.confidence]}</Badge>
+                              </div>
+                            )}
+                            <ProduitCombobox
+                              produits={produits}
+                              value={l.produitId}
+                              onChange={(produitId) => updateResultLigneProduit(i, produitId)}
+                            />
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeResultLigne(i)}
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive shrink-0 mt-0.5"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">Qté: {l.quantite}</span>
-                          <Badge className={confidenceColors[l.confidence]}>{confidenceLabels[l.confidence]}</Badge>
+                          <span className="text-xs text-muted-foreground shrink-0">Qté :</span>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={l.quantite}
+                            onChange={e => updateResultLigneQuantite(i, Math.max(1, Number(e.target.value) || 1))}
+                            className="h-7 w-20 text-sm"
+                          />
+                          {p && <span className="text-xs text-muted-foreground">{p.unite} — {p.prixHT.toFixed(2)}€ HT</span>}
                         </div>
                       </div>
                     );
@@ -235,7 +317,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
               </Button>
               <Button
                 onClick={createDevis}
-                disabled={!client || result.lignes.filter(l => l.produitId).length === 0}
+                disabled={!result.clientId || result.lignes.filter(l => l.produitId).length === 0}
               >
                 <Check className="w-4 h-4 mr-1" /> Créer le devis
               </Button>
