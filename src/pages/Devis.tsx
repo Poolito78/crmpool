@@ -15,6 +15,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog from '@/components/DevisEmailDialog';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
+import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
