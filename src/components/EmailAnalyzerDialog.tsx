@@ -272,7 +272,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
                             <ProduitCombobox
                               produits={produits}
                               value={l.produitId}
-                              onChange={(produitId) => updateResultLigneProduit(i, produitId)}
+                              onSelect={(produitId) => updateResultLigneProduit(i, produitId)}
                             />
                           </div>
                           <Button
