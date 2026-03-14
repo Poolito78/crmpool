@@ -229,7 +229,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
               <ClientCombobox
                 clients={clients}
                 value={result.clientId}
-                onChange={updateResultClient}
+                onSelect={updateResultClient}
               />
             </div>
 
