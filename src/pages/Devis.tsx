@@ -818,6 +818,15 @@ export default function Devis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <EmailAnalyzerDialog
+        open={emailAnalyzerOpen}
+        onOpenChange={setEmailAnalyzerOpen}
+        onDevisCreated={(devisId) => {
+          const d = devis.find(dv => dv.id === devisId);
+          if (d) openEdit(d);
+        }}
+      />
     </div>
   );
 }
