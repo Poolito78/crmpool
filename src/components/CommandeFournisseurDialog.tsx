@@ -1,7 +1,6 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink } from 'lucide-react';
 import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId } from '@/lib/store';
@@ -26,35 +25,41 @@ interface Props {
 
 export default function CommandeFournisseurDialog({ open, onOpenChange, devis, produits, fournisseurs, produitFournisseurs, onSaveCommandes }: Props) {
   const navigate = useNavigate();
-  const [alertOpen, setAlertOpen] = useState(false);
 
   const { commandesParFournisseur, produitsSansFournisseur } = useMemo(() => {
     if (!devis) return { commandesParFournisseur: new Map<string, { fournisseur: Fournisseur; lignes: LigneCommande[] }>(), produitsSansFournisseur: [] as { produit: Produit; quantite: number }[] };
 
+    const devisLignes = Array.isArray(devis.lignes) ? devis.lignes : [];
     const sansFournisseur: { produit: Produit; quantite: number }[] = [];
     const parFournisseur = new Map<string, { fournisseur: Fournisseur; lignes: LigneCommande[] }>();
 
-    for (const ligne of devis.lignes) {
+    for (const ligne of devisLignes) {
       if (!ligne.produitId) continue;
       const produit = produits.find(p => p.id === ligne.produitId);
       if (!produit) continue;
 
-      const pf = calculerFournisseurPrioritaire(produit.id, ligne.quantite, produitFournisseurs, fournisseurs);
+      const quantite = Number.isFinite(Number(ligne.quantite)) && Number(ligne.quantite) > 0 ? Number(ligne.quantite) : 1;
+      const pf = calculerFournisseurPrioritaire(produit.id, quantite, produitFournisseurs, fournisseurs);
       if (!pf) {
-        sansFournisseur.push({ produit, quantite: ligne.quantite });
+        sansFournisseur.push({ produit, quantite });
         continue;
       }
 
       const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
       if (!fourn) {
-        sansFournisseur.push({ produit, quantite: ligne.quantite });
+        sansFournisseur.push({ produit, quantite });
         continue;
       }
 
       if (!parFournisseur.has(fourn.id)) {
         parFournisseur.set(fourn.id, { fournisseur: fourn, lignes: [] });
       }
-      parFournisseur.get(fourn.id)!.lignes.push({ produit, quantite: Math.max(ligne.quantite, pf.conditionnementMin), pf, fournisseur: fourn });
+      parFournisseur.get(fourn.id)!.lignes.push({
+        produit,
+        quantite: Math.max(quantite, Number(pf.conditionnementMin) || 1),
+        pf,
+        fournisseur: fourn,
+      });
     }
 
     return { commandesParFournisseur: parFournisseur, produitsSansFournisseur: sansFournisseur };
