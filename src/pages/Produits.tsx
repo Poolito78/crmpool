@@ -43,7 +43,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, produitFournisseurs, devis, updateDevis } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -318,6 +318,7 @@ export default function Produits() {
   function importArticles() {
     if (!importPreview) return;
     const selectedFields = importFields.filter(f => importSelectedCols.has(f.key));
+    const newProduitFournisseurs: import('@/lib/store').ProduitFournisseur[] = [];
 
     if (importMode === 'update') {
       let updated = 0;
@@ -329,13 +330,17 @@ export default function Produits() {
         if (!matchingRow) return p;
 
         const updates: Record<string, any> = {};
+        let fournisseurIdForLink: string | null = null;
         for (const field of selectedFields) {
           if (field.key === 'reference') continue;
           if (field.key === 'fournisseur') {
             const fournNom = getMappedValue(matchingRow, 'fournisseur');
             if (fournNom) {
               const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
-              if (fourn) updates.fournisseurId = fourn.id;
+              if (fourn) {
+                updates.fournisseurId = fourn.id;
+                fournisseurIdForLink = fourn.id;
+              }
             }
             continue;
           }
@@ -361,6 +366,23 @@ export default function Produits() {
           updates.prixHT = calcPrixPublicFromRevendeur(pr, remise);
         }
 
+        // Create/update produitFournisseur link
+        if (fournisseurIdForLink) {
+          const existingPf = produitFournisseurs.find(pf => pf.produitId === p.id && pf.fournisseurId === fournisseurIdForLink);
+          if (!existingPf) {
+            newProduitFournisseurs.push({
+              id: generateId(),
+              produitId: p.id,
+              fournisseurId: fournisseurIdForLink,
+              prixAchat: pa,
+              referenceFournisseur: '',
+              delaiLivraison: 0,
+              conditionnementMin: 1,
+              estPrioritaire: false,
+            });
+          }
+        }
+
         if (Object.keys(updates).length > 0) {
           updated++;
           return { ...p, ...updates };
@@ -377,8 +399,26 @@ export default function Produits() {
         const prixHT = getMappedNum(row, 'prixHT') || calcPrixPublicFromRevendeur(prixRevendeur, remiseRevendeur);
         const reference = getMappedValue(row, 'reference');
         const description = getMappedValue(row, 'description');
+        const fournNom = getMappedValue(row, 'fournisseur');
+        const fourn = fournNom ? fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase()) : null;
+        const produitId = generateId();
+
+        // Create produitFournisseur link for new products
+        if (fourn) {
+          newProduitFournisseurs.push({
+            id: generateId(),
+            produitId,
+            fournisseurId: fourn.id,
+            prixAchat,
+            referenceFournisseur: '',
+            delaiLivraison: 0,
+            conditionnementMin: 1,
+            estPrioritaire: false,
+          });
+        }
+
         return {
-          id: generateId(),
+          id: produitId,
           reference,
           description,
           descriptionDetaillee: getMappedValue(row, 'descriptionDetaillee'),
@@ -392,12 +432,7 @@ export default function Produits() {
           unite: getMappedValue(row, 'unite') || 'pièce',
           stock: getMappedNum(row, 'stock'),
           stockMin: getMappedNum(row, 'stockMin'),
-          fournisseurId: (() => {
-            const fournNom = getMappedValue(row, 'fournisseur');
-            if (!fournNom) return '';
-            const fourn = fournisseurs.find(f => f.societe.toLowerCase() === fournNom.toLowerCase() || f.nom.toLowerCase() === fournNom.toLowerCase());
-            return fourn ? fourn.id : '';
-          })(),
+          fournisseurId: fourn?.id || '',
           categorie: getMappedValue(row, 'categorie'),
           dateCreation: new Date().toISOString().split('T')[0],
         };
@@ -412,9 +447,19 @@ export default function Produits() {
         return true;
       });
       const skipped = mapped.length - unique.length;
+      // Filter out produitFournisseur links for skipped products
+      const uniqueIds = new Set(unique.map(p => p.id));
+      const filteredPfs = newProduitFournisseurs.filter(pf => uniqueIds.has(pf.produitId));
+      newProduitFournisseurs.length = 0;
+      newProduitFournisseurs.push(...filteredPfs);
 
       updateProduits(prev => [...prev, ...unique]);
       toast.success(`${unique.length} produit(s) importé(s)${skipped > 0 ? `, ${skipped} doublon(s) ignoré(s)` : ''}`);
+    }
+
+    // Add all new produitFournisseur links
+    if (newProduitFournisseurs.length > 0) {
+      updateProduitFournisseurs(prev => [...prev, ...newProduitFournisseurs]);
     }
 
     setImportDialogOpen(false);
