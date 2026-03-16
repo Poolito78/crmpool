@@ -95,6 +95,7 @@ export default function Commandes() {
           const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
           const dv = devis.find(d => d.id === cf.devisId);
           const config = statutConfig[cf.statut] || statutConfig.en_attente;
+          const lignes = Array.isArray(cf.lignes) ? cf.lignes : [];
 
           return (
             <div key={cf.id} className="bg-card rounded-xl border border-border p-4">
@@ -109,7 +110,7 @@ export default function Commandes() {
                     {dv && <span> • Devis {dv.numero}</span>}
                   </p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {cf.lignes.length} produit{cf.lignes.length > 1 ? 's' : ''} : {cf.lignes.map(l => `${l.description} (×${l.quantite})`).join(', ')}
+                    {lignes.length} produit{lignes.length > 1 ? 's' : ''} : {lignes.map(l => `${l.description} (×${l.quantite})`).join(', ')}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
