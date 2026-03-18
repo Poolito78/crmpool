@@ -123,6 +123,7 @@ export default function Devis() {
     setFraisPortTVA(20);
     setFraisPortAuto(true);
     setTransporteur('standard');
+    setCoeffUPS(1.4);
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
