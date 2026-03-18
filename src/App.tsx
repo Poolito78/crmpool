@@ -13,6 +13,7 @@ import Fournisseurs from "@/pages/Fournisseurs";
 import Stock from "@/pages/Stock";
 import Commandes from "@/pages/Commandes";
 import Devis from "@/pages/Devis";
+import CalculateurUPS from "@/pages/CalculateurUPS";
 import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
 
