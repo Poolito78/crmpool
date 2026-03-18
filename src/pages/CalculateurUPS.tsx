@@ -44,11 +44,31 @@ export default function CalculateurUPS() {
                 onChange={e => setNbColis(Math.max(1, parseInt(e.target.value) || 1))}
               />
             </div>
+            <div>
+              <Label>Coefficient</Label>
+              <Input
+                type="number"
+                step="0.1"
+                min="0.1"
+                value={coeff}
+                onChange={e => setCoeff(parseFloat(e.target.value) || 1)}
+              />
+            </div>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col justify-end">
-              <Label className="text-muted-foreground text-xs mb-1">Estimation UPS</Label>
-              <div className="h-10 flex items-center px-3 rounded-md bg-muted font-bold text-lg">
+              <Label className="text-muted-foreground text-xs mb-1">Tarif brut UPS</Label>
+              <div className="h-10 flex items-center px-3 rounded-md bg-muted text-sm">
                 {resultat.prix !== null ? formatMontant(resultat.prix) : (
-                  <span className="text-amber-600 text-sm font-medium">Sur devis (hors barème)</span>
+                  <span className="text-amber-600 text-sm font-medium">Hors barème</span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col justify-end">
+              <Label className="text-muted-foreground text-xs mb-1">Tarif final (× {coeff})</Label>
+              <div className="h-10 flex items-center px-3 rounded-md bg-muted font-bold text-lg">
+                {prixFinal !== null ? formatMontant(prixFinal) : (
+                  <span className="text-amber-600 text-sm font-medium">Sur devis</span>
                 )}
               </div>
             </div>
