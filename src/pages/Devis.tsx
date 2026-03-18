@@ -672,11 +672,40 @@ export default function Devis() {
                   Auto (selon poids)
                 </label>
               </div>
+              {fraisPortAuto && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTransporteur('standard')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === 'standard' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                  >
+                    Standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTransporteur('ups')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === 'ups' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                  >
+                    UPS
+                  </button>
+                </div>
+              )}
               {fraisPortAuto && (() => {
                 const poidsTotal = lignes.reduce((acc, l) => {
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                   return acc + (prod?.poids || 0) * l.quantite;
                 }, 0);
+
+                if (transporteur === 'ups') {
+                  const { prix, palier } = calculerFraisPortUPS(poidsTotal);
+                  return (
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier UPS : {palier}</p>
+                      {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème UPS : tarif sur devis</p>}
+                    </div>
+                  );
+                }
+
                 const hasGranulat = lignes.some(l => {
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                   return prod?.categorie?.toLowerCase().includes('granulat');
