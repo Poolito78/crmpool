@@ -15,6 +15,7 @@ const navItems = [
   { label: 'Devis', icon: FileText, path: '/devis' },
   { label: 'Fournisseurs', icon: Truck, path: '/fournisseurs' },
   { label: 'Commandes', icon: ShoppingCart, path: '/commandes' },
+  { label: 'Calcul UPS', icon: Calculator, path: '/calculateur-ups' },
 ];
 
 export default function CRMLayout() {
