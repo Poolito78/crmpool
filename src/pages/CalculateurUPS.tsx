@@ -8,8 +8,10 @@ import { Truck } from 'lucide-react';
 export default function CalculateurUPS() {
   const [poids, setPoids] = useState(0);
   const [nbColis, setNbColis] = useState(1);
+  const [coeff, setCoeff] = useState(1.4);
 
   const resultat = calculerFraisPortUPS(poids, nbColis);
+  const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeff * 100) / 100 : null;
 
   return (
     <div className="space-y-6 max-w-4xl">
