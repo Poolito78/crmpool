@@ -67,6 +67,7 @@ export default function Devis() {
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
   const [transporteur, setTransporteur] = useState<'standard' | 'ups'>('standard');
+  const [coeffUPS, setCoeffUPS] = useState(1.4);
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
@@ -122,6 +123,7 @@ export default function Devis() {
     setFraisPortTVA(20);
     setFraisPortAuto(true);
     setTransporteur('standard');
+    setCoeffUPS(1.4);
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
@@ -273,7 +275,7 @@ export default function Devis() {
 
     if (transporteur === 'ups') {
       const { prix } = calculerFraisPortUPS(poidsTotal);
-      if (prix !== null) setFraisPortHT(prix);
+      if (prix !== null) setFraisPortHT(Math.round(prix * coeffUPS * 100) / 100);
     } else {
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -282,7 +284,7 @@ export default function Devis() {
       const port = calculerFraisPort(poidsTotal, hasGranulat);
       if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffUPS]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
@@ -699,9 +701,14 @@ export default function Devis() {
                 if (transporteur === 'ups') {
                   const { prix, palier } = calculerFraisPortUPS(poidsTotal);
                   return (
-                    <div className="text-xs text-muted-foreground space-y-0.5">
+                    <div className="text-xs text-muted-foreground space-y-1">
                       <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier UPS : {palier}</p>
+                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffUPS} = <span className="font-medium">{formatMontant(prix * coeffUPS)}</span></p>}
                       {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème UPS : tarif sur devis</p>}
+                      <div className="flex items-center gap-2 pt-0.5">
+                        <Label className="text-xs whitespace-nowrap">Coeff. UPS</Label>
+                        <Input type="number" step="0.1" min="0.1" value={coeffUPS} onChange={e => setCoeffUPS(parseFloat(e.target.value) || 1)} className="h-7 text-xs w-20" />
+                      </div>
                     </div>
                   );
                 }
