@@ -66,6 +66,7 @@ export default function Devis() {
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
+  const [transporteur, setTransporteur] = useState<'standard' | 'ups'>('standard');
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
