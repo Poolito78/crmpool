@@ -275,7 +275,7 @@ export default function Devis() {
 
     if (transporteur === 'ups') {
       const { prix } = calculerFraisPortUPS(poidsTotal);
-      if (prix !== null) setFraisPortHT(prix);
+      if (prix !== null) setFraisPortHT(Math.round(prix * coeffUPS * 100) / 100);
     } else {
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
