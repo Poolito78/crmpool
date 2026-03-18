@@ -270,15 +270,19 @@ export default function Devis() {
       const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
       return acc + (prod?.poids || 0) * l.quantite;
     }, 0);
-    const hasGranulat = lignes.some(l => {
-      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-      return prod?.categorie?.toLowerCase().includes('granulat');
-    });
-    const port = calculerFraisPort(poidsTotal, hasGranulat);
-    if (port !== null) {
-      setFraisPortHT(port);
+
+    if (transporteur === 'ups') {
+      const { prix } = calculerFraisPortUPS(poidsTotal);
+      if (prix !== null) setFraisPortHT(prix);
+    } else {
+      const hasGranulat = lignes.some(l => {
+        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        return prod?.categorie?.toLowerCase().includes('granulat');
+      });
+      const port = calculerFraisPort(poidsTotal, hasGranulat);
+      if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
