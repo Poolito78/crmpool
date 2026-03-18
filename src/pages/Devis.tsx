@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortUPS, formatMontant, formatDate, type Devis as DevisType, type LigneDevis } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +66,7 @@ export default function Devis() {
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
+  const [transporteur, setTransporteur] = useState<'standard' | 'ups'>('standard');
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
@@ -120,6 +121,7 @@ export default function Devis() {
     setFraisPortHT(0);
     setFraisPortTVA(20);
     setFraisPortAuto(true);
+    setTransporteur('standard');
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
@@ -268,15 +270,19 @@ export default function Devis() {
       const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
       return acc + (prod?.poids || 0) * l.quantite;
     }, 0);
-    const hasGranulat = lignes.some(l => {
-      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-      return prod?.categorie?.toLowerCase().includes('granulat');
-    });
-    const port = calculerFraisPort(poidsTotal, hasGranulat);
-    if (port !== null) {
-      setFraisPortHT(port);
+
+    if (transporteur === 'ups') {
+      const { prix } = calculerFraisPortUPS(poidsTotal);
+      if (prix !== null) setFraisPortHT(prix);
+    } else {
+      const hasGranulat = lignes.some(l => {
+        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        return prod?.categorie?.toLowerCase().includes('granulat');
+      });
+      const port = calculerFraisPort(poidsTotal, hasGranulat);
+      if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
@@ -666,11 +672,40 @@ export default function Devis() {
                   Auto (selon poids)
                 </label>
               </div>
+              {fraisPortAuto && (
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTransporteur('standard')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === 'standard' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                  >
+                    Standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTransporteur('ups')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === 'ups' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                  >
+                    UPS
+                  </button>
+                </div>
+              )}
               {fraisPortAuto && (() => {
                 const poidsTotal = lignes.reduce((acc, l) => {
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                   return acc + (prod?.poids || 0) * l.quantite;
                 }, 0);
+
+                if (transporteur === 'ups') {
+                  const { prix, palier } = calculerFraisPortUPS(poidsTotal);
+                  return (
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier UPS : {palier}</p>
+                      {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème UPS : tarif sur devis</p>}
+                    </div>
+                  );
+                }
+
                 const hasGranulat = lignes.some(l => {
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                   return prod?.categorie?.toLowerCase().includes('granulat');

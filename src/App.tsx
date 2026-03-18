@@ -13,6 +13,7 @@ import Fournisseurs from "@/pages/Fournisseurs";
 import Stock from "@/pages/Stock";
 import Commandes from "@/pages/Commandes";
 import Devis from "@/pages/Devis";
+import CalculateurUPS from "@/pages/CalculateurUPS";
 import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -48,6 +49,7 @@ function AppRoutes() {
           <Route path="/fournisseurs" element={<Fournisseurs />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/devis" element={<Devis />} />
+          <Route path="/calculateur-ups" element={<CalculateurUPS />} />
           <Route path="/commandes" element={<Commandes />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />

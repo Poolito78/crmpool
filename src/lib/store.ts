@@ -543,6 +543,45 @@ export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number
   return 49;
 }
 
+// ---- Barème UPS par paliers de poids ----
+
+export const BAREME_UPS = [
+  { min: 0, max: 1, prix: 8.50 },
+  { min: 1, max: 2, prix: 9.50 },
+  { min: 2, max: 3, prix: 10.50 },
+  { min: 3, max: 5, prix: 12.00 },
+  { min: 5, max: 10, prix: 15.00 },
+  { min: 10, max: 15, prix: 19.00 },
+  { min: 15, max: 20, prix: 23.00 },
+  { min: 20, max: 25, prix: 28.00 },
+  { min: 25, max: 30, prix: 33.00 },
+  { min: 30, max: 40, prix: 42.00 },
+  { min: 40, max: 50, prix: 52.00 },
+  { min: 50, max: 70, prix: 68.00 },
+  { min: 70, max: 100, prix: 95.00 },
+  { min: 100, max: 150, prix: 135.00 },
+  { min: 150, max: 200, prix: 175.00 },
+  { min: 200, max: 300, prix: 250.00 },
+  { min: 300, max: 500, prix: 380.00 },
+  { min: 500, max: 1000, prix: 650.00 },
+  { min: 1000, max: Infinity, prix: null as number | null },
+];
+
+export function calculerFraisPortUPS(poidsKg: number, nbColis: number = 1): { prix: number | null; palier: string } {
+  if (poidsKg <= 0) return { prix: 0, palier: '0 kg' };
+  
+  // Si multi-colis, diviser le poids
+  const poidsBrut = nbColis > 1 ? poidsKg / nbColis : poidsKg;
+  
+  const palier = BAREME_UPS.find(b => poidsBrut > b.min && poidsBrut <= b.max);
+  if (!palier) return { prix: null, palier: `>${BAREME_UPS[BAREME_UPS.length - 2].max} kg` };
+  
+  if (palier.prix === null) return { prix: null, palier: `>${BAREME_UPS[BAREME_UPS.length - 2].max} kg` };
+  
+  const prixTotal = palier.prix * nbColis;
+  return { prix: prixTotal, palier: `${palier.min}-${palier.max === Infinity ? '∞' : palier.max} kg` };
+}
+
 /**
  * Calcule le fournisseur prioritaire pour un produit basé sur le coût global
  * (prix d'achat + transport ramené à la quantité commandée)
