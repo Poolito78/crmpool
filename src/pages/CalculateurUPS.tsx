@@ -110,6 +110,39 @@ export default function CalculateurUPS() {
               />
             </div>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div>
+              <Label>Département départ</Label>
+              <Input
+                type="text"
+                maxLength={3}
+                value={deptDepart}
+                onChange={e => setDeptDepart(e.target.value.replace(/[^0-9AB]/gi, '').toUpperCase())}
+                placeholder="76"
+              />
+            </div>
+            <div>
+              <Label>Département livraison</Label>
+              <Input
+                type="text"
+                maxLength={3}
+                value={deptLivraison}
+                onChange={e => setDeptLivraison(e.target.value.replace(/[^0-9AB]/gi, '').toUpperCase())}
+                placeholder="Ex: 13"
+              />
+            </div>
+            <div className="flex flex-col justify-end">
+              <Label className="text-muted-foreground text-xs mb-1">Distance estimée</Label>
+              <div className="h-10 flex items-center gap-1.5 px-3 rounded-md bg-muted text-sm">
+                <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                {distanceKm !== null ? (
+                  <span className="font-medium">{distanceKm} km</span>
+                ) : (
+                  <span className="text-muted-foreground">—</span>
+                )}
+              </div>
+            </div>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col justify-end">
               <Label className="text-muted-foreground text-xs mb-1">Tarif brut {config.label}</Label>
