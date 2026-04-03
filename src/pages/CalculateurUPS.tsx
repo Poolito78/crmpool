@@ -1,16 +1,20 @@
 import { useState } from 'react';
-import { BAREME_UPS, calculerFraisPortUPS, formatMontant } from '@/lib/store';
+import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, type TransporteurType } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Truck } from 'lucide-react';
 
+const transporteurs = Object.entries(BAREMES_TRANSPORT) as [Exclude<TransporteurType, 'standard'>, typeof BAREMES_TRANSPORT[keyof typeof BAREMES_TRANSPORT]][];
+
 export default function CalculateurUPS() {
   const [poids, setPoids] = useState(0);
   const [nbColis, setNbColis] = useState(1);
+  const [selectedTransporteur, setSelectedTransporteur] = useState<Exclude<TransporteurType, 'standard'>>('ups');
   const [coeff, setCoeff] = useState(1.4);
 
-  const resultat = calculerFraisPortUPS(poids, nbColis);
+  const config = BAREMES_TRANSPORT[selectedTransporteur];
+  const resultat = calculerFraisPortBareme(config.bareme, poids, nbColis);
   const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeff * 100) / 100 : null;
 
   return (
@@ -19,10 +23,22 @@ export default function CalculateurUPS() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Truck className="w-5 h-5 text-amber-600" />
-            Calculateur frais de port UPS
+            Calculateur frais de port
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-1.5">
+            {transporteurs.map(([key, { label }]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => { setSelectedTransporteur(key); setCoeff(BAREMES_TRANSPORT[key].coeffDefaut); }}
+                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${selectedTransporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label>Poids total (kg)</Label>
@@ -57,7 +73,7 @@ export default function CalculateurUPS() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col justify-end">
-              <Label className="text-muted-foreground text-xs mb-1">Tarif brut UPS</Label>
+              <Label className="text-muted-foreground text-xs mb-1">Tarif brut {config.label}</Label>
               <div className="h-10 flex items-center px-3 rounded-md bg-muted text-sm">
                 {resultat.prix !== null ? formatMontant(resultat.prix) : (
                   <span className="text-amber-600 text-sm font-medium">Hors barème</span>
@@ -88,7 +104,7 @@ export default function CalculateurUPS() {
       {/* Barème complet */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Barème UPS (tarifs par colis)</CardTitle>
+          <CardTitle className="text-base">Barème {config.label} (tarifs par colis)</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -100,7 +116,7 @@ export default function CalculateurUPS() {
                 </tr>
               </thead>
               <tbody>
-                {BAREME_UPS.map((b, i) => {
+                {config.bareme.map((b, i) => {
                   const isActive = poids > 0 && nbColis >= 1 && (() => {
                     const poidsColis = nbColis > 1 ? poids / nbColis : poids;
                     return poidsColis > b.min && poidsColis <= b.max;

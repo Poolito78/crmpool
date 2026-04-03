@@ -543,9 +543,17 @@ export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number
   return 49;
 }
 
-// ---- Barème UPS par paliers de poids ----
+// ---- Barèmes transport par paliers de poids ----
 
-export const BAREME_UPS = [
+export type TransporteurType = 'standard' | 'ups' | 'messagerie' | 'gls';
+
+export interface BaremePalier {
+  min: number;
+  max: number;
+  prix: number | null;
+}
+
+export const BAREME_UPS: BaremePalier[] = [
   { min: 0, max: 1, prix: 8.50 },
   { min: 1, max: 2, prix: 9.50 },
   { min: 2, max: 3, prix: 10.50 },
@@ -564,22 +572,75 @@ export const BAREME_UPS = [
   { min: 200, max: 300, prix: 250.00 },
   { min: 300, max: 500, prix: 380.00 },
   { min: 500, max: 1000, prix: 650.00 },
-  { min: 1000, max: Infinity, prix: null as number | null },
+  { min: 1000, max: Infinity, prix: null },
 ];
 
-export function calculerFraisPortUPS(poidsKg: number, nbColis: number = 1): { prix: number | null; palier: string } {
+export const BAREME_MESSAGERIE: BaremePalier[] = [
+  { min: 0, max: 1, prix: 7.00 },
+  { min: 1, max: 2, prix: 8.00 },
+  { min: 2, max: 3, prix: 9.00 },
+  { min: 3, max: 5, prix: 10.50 },
+  { min: 5, max: 10, prix: 13.00 },
+  { min: 10, max: 15, prix: 16.50 },
+  { min: 15, max: 20, prix: 20.00 },
+  { min: 20, max: 25, prix: 24.00 },
+  { min: 25, max: 30, prix: 28.50 },
+  { min: 30, max: 40, prix: 36.00 },
+  { min: 40, max: 50, prix: 45.00 },
+  { min: 50, max: 70, prix: 58.00 },
+  { min: 70, max: 100, prix: 82.00 },
+  { min: 100, max: 150, prix: 115.00 },
+  { min: 150, max: 200, prix: 150.00 },
+  { min: 200, max: 300, prix: 215.00 },
+  { min: 300, max: 500, prix: 330.00 },
+  { min: 500, max: 1000, prix: 560.00 },
+  { min: 1000, max: Infinity, prix: null },
+];
+
+export const BAREME_GLS: BaremePalier[] = [
+  { min: 0, max: 1, prix: 9.00 },
+  { min: 1, max: 2, prix: 10.00 },
+  { min: 2, max: 3, prix: 11.00 },
+  { min: 3, max: 5, prix: 13.00 },
+  { min: 5, max: 10, prix: 16.00 },
+  { min: 10, max: 15, prix: 20.00 },
+  { min: 15, max: 20, prix: 24.50 },
+  { min: 20, max: 25, prix: 29.50 },
+  { min: 25, max: 30, prix: 35.00 },
+  { min: 30, max: 40, prix: 44.00 },
+  { min: 40, max: 50, prix: 55.00 },
+  { min: 50, max: 70, prix: 72.00 },
+  { min: 70, max: 100, prix: 100.00 },
+  { min: 100, max: 150, prix: 142.00 },
+  { min: 150, max: 200, prix: 185.00 },
+  { min: 200, max: 300, prix: 265.00 },
+  { min: 300, max: 500, prix: 400.00 },
+  { min: 500, max: 1000, prix: 690.00 },
+  { min: 1000, max: Infinity, prix: null },
+];
+
+export const BAREMES_TRANSPORT: Record<Exclude<TransporteurType, 'standard'>, { label: string; bareme: BaremePalier[]; coeffDefaut: number }> = {
+  ups: { label: 'UPS', bareme: BAREME_UPS, coeffDefaut: 1.4 },
+  messagerie: { label: 'Messagerie', bareme: BAREME_MESSAGERIE, coeffDefaut: 1.4 },
+  gls: { label: 'Affrètement GLS', bareme: BAREME_GLS, coeffDefaut: 1.4 },
+};
+
+export function calculerFraisPortBareme(bareme: BaremePalier[], poidsKg: number, nbColis: number = 1): { prix: number | null; palier: string } {
   if (poidsKg <= 0) return { prix: 0, palier: '0 kg' };
   
-  // Si multi-colis, diviser le poids
   const poidsBrut = nbColis > 1 ? poidsKg / nbColis : poidsKg;
   
-  const palier = BAREME_UPS.find(b => poidsBrut > b.min && poidsBrut <= b.max);
-  if (!palier) return { prix: null, palier: `>${BAREME_UPS[BAREME_UPS.length - 2].max} kg` };
+  const palier = bareme.find(b => poidsBrut > b.min && poidsBrut <= b.max);
+  if (!palier) return { prix: null, palier: `>${bareme[bareme.length - 2].max} kg` };
   
-  if (palier.prix === null) return { prix: null, palier: `>${BAREME_UPS[BAREME_UPS.length - 2].max} kg` };
+  if (palier.prix === null) return { prix: null, palier: `>${bareme[bareme.length - 2].max} kg` };
   
   const prixTotal = palier.prix * nbColis;
   return { prix: prixTotal, palier: `${palier.min}-${palier.max === Infinity ? '∞' : palier.max} kg` };
+}
+
+export function calculerFraisPortUPS(poidsKg: number, nbColis: number = 1) {
+  return calculerFraisPortBareme(BAREME_UPS, poidsKg, nbColis);
 }
 
 /**
