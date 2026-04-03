@@ -675,7 +675,7 @@ export default function Devis() {
                 </label>
               </div>
               {fraisPortAuto && (
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   <button
                     type="button"
                     onClick={() => setTransporteur('standard')}
@@ -683,13 +683,16 @@ export default function Devis() {
                   >
                     Standard
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => setTransporteur('ups')}
-                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === 'ups' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
-                  >
-                    UPS
-                  </button>
+                  {Object.entries(BAREMES_TRANSPORT).map(([key, { label }]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => { setTransporteur(key as TransporteurType); setCoeffTransport(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffDefaut); }}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
                 </div>
               )}
               {fraisPortAuto && (() => {
