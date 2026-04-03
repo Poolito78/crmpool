@@ -701,16 +701,17 @@ export default function Devis() {
                   return acc + (prod?.poids || 0) * l.quantite;
                 }, 0);
 
-                if (transporteur === 'ups') {
-                  const { prix, palier } = calculerFraisPortUPS(poidsTotal);
+                if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
+                  const config = BAREMES_TRANSPORT[transporteur];
+                  const { prix, palier } = calculerFraisPortBareme(config.bareme, poidsTotal);
                   return (
                     <div className="text-xs text-muted-foreground space-y-1">
-                      <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier UPS : {palier}</p>
-                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffUPS} = <span className="font-medium">{formatMontant(prix * coeffUPS)}</span></p>}
-                      {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème UPS : tarif sur devis</p>}
+                      <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier {config.label} : {palier}</p>
+                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffTransport} = <span className="font-medium">{formatMontant(prix * coeffTransport)}</span></p>}
+                      {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème {config.label} : tarif sur devis</p>}
                       <div className="flex items-center gap-2 pt-0.5">
-                        <Label className="text-xs whitespace-nowrap">Coeff. UPS</Label>
-                        <Input type="number" step="0.1" min="0.1" value={coeffUPS} onChange={e => setCoeffUPS(parseFloat(e.target.value) || 1)} className="h-7 text-xs w-20" />
+                        <Label className="text-xs whitespace-nowrap">Coeff. {config.label}</Label>
+                        <Input type="number" step="0.1" min="0.1" value={coeffTransport} onChange={e => setCoeffTransport(parseFloat(e.target.value) || 1)} className="h-7 text-xs w-20" />
                       </div>
                     </div>
                   );
