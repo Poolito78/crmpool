@@ -273,9 +273,9 @@ export default function Devis() {
       return acc + (prod?.poids || 0) * l.quantite;
     }, 0);
 
-    if (transporteur === 'ups') {
-      const { prix } = calculerFraisPortUPS(poidsTotal);
-      if (prix !== null) setFraisPortHT(Math.round(prix * coeffUPS * 100) / 100);
+    if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
+      const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur].bareme, poidsTotal);
+      if (prix !== null) setFraisPortHT(Math.round(prix * coeffTransport * 100) / 100);
     } else {
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -284,7 +284,7 @@ export default function Devis() {
       const port = calculerFraisPort(poidsTotal, hasGranulat);
       if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffUPS]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
