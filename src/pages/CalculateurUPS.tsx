@@ -48,12 +48,15 @@ export default function CalculateurUPS() {
   const [nbColis, setNbColis] = useState(1);
   const [selectedTransporteur, setSelectedTransporteur] = useState<Exclude<TransporteurType, 'standard'>>('ups');
   const [coeff, setCoeff] = useState(1.4);
+  const [express, setExpress] = useState(false);
+  const [coeffExpress, setCoeffExpress] = useState(1.8);
   const [deptDepart, setDeptDepart] = useState('76');
   const [deptLivraison, setDeptLivraison] = useState('');
 
   const config = BAREMES_TRANSPORT[selectedTransporteur];
   const resultat = calculerFraisPortBareme(config.bareme, poids, nbColis);
-  const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeff * 100) / 100 : null;
+  const coeffTotal = express ? coeff * coeffExpress : coeff;
+  const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeffTotal * 100) / 100 : null;
   const distanceKm = useMemo(() => deptDepart && deptLivraison ? estimerDistanceKm(deptDepart, deptLivraison) : null, [deptDepart, deptLivraison]);
 
   return (
@@ -71,8 +74,7 @@ export default function CalculateurUPS() {
               <button
                 key={key}
                 type="button"
-                onClick={() => { setSelectedTransporteur(key); setCoeff(BAREMES_TRANSPORT[key].coeffDefaut); }}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${selectedTransporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                onClick={() => { setSelectedTransporteur(key); setCoeff(BAREMES_TRANSPORT[key].coeffDefaut); setCoeffExpress(BAREMES_TRANSPORT[key].coeffExpressDefaut); }}
               >
                 {label}
               </button>
@@ -109,6 +111,18 @@ export default function CalculateurUPS() {
                 onChange={e => setCoeff(parseFloat(e.target.value) || 1)}
               />
             </div>
+          </div>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={express} onChange={e => setExpress(e.target.checked)} className="rounded" />
+              <span className="text-sm font-medium">Express J+1</span>
+            </label>
+            {express && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs whitespace-nowrap">Coeff. Express</Label>
+                <Input type="number" step="0.1" min="1" value={coeffExpress} onChange={e => setCoeffExpress(parseFloat(e.target.value) || 1)} className="h-8 text-sm w-20" />
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -153,7 +167,9 @@ export default function CalculateurUPS() {
               </div>
             </div>
             <div className="flex flex-col justify-end">
-              <Label className="text-muted-foreground text-xs mb-1">Tarif final (× {coeff})</Label>
+              <Label className="text-muted-foreground text-xs mb-1">
+                Tarif final (× {coeff}{express ? ` × ${coeffExpress} express` : ''})
+              </Label>
               <div className="h-10 flex items-center px-3 rounded-md bg-muted font-bold text-lg">
                 {prixFinal !== null ? formatMontant(prixFinal) : (
                   <span className="text-amber-600 text-sm font-medium">Sur devis</span>

@@ -68,6 +68,8 @@ export default function Devis() {
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
   const [transporteur, setTransporteur] = useState<TransporteurType>('standard');
   const [coeffTransport, setCoeffTransport] = useState(1.4);
+  const [expressJ1, setExpressJ1] = useState(false);
+  const [coeffExpress, setCoeffExpress] = useState(1.8);
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
@@ -124,6 +126,8 @@ export default function Devis() {
     setFraisPortAuto(true);
     setTransporteur('standard');
     setCoeffTransport(1.4);
+    setExpressJ1(false);
+    setCoeffExpress(1.8);
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
@@ -275,7 +279,8 @@ export default function Devis() {
 
     if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
       const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur].bareme, poidsTotal);
-      if (prix !== null) setFraisPortHT(Math.round(prix * coeffTransport * 100) / 100);
+      const coeffTotal = expressJ1 ? coeffTransport * coeffExpress : coeffTransport;
+      if (prix !== null) setFraisPortHT(Math.round(prix * coeffTotal * 100) / 100);
     } else {
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -284,7 +289,7 @@ export default function Devis() {
       const port = calculerFraisPort(poidsTotal, hasGranulat);
       if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport, expressJ1, coeffExpress]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
@@ -687,12 +692,26 @@ export default function Devis() {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => { setTransporteur(key as TransporteurType); setCoeffTransport(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffDefaut); }}
+                      onClick={() => { setTransporteur(key as TransporteurType); setCoeffTransport(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffDefaut); setCoeffExpress(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffExpressDefaut); }}
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                     >
                       {label}
                     </button>
                   ))}
+                </div>
+              )}
+              {fraisPortAuto && transporteur !== 'standard' && (
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={expressJ1} onChange={e => setExpressJ1(e.target.checked)} className="rounded" />
+                    <span className="text-xs font-medium">Express J+1</span>
+                  </label>
+                  {expressJ1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-[10px] whitespace-nowrap">Coeff. Express</Label>
+                      <Input type="number" step="0.1" min="1" value={coeffExpress} onChange={e => setCoeffExpress(parseFloat(e.target.value) || 1)} className="h-6 text-xs w-16" />
+                    </div>
+                  )}
                 </div>
               )}
               {fraisPortAuto && (() => {
@@ -704,10 +723,11 @@ export default function Devis() {
                 if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
                   const config = BAREMES_TRANSPORT[transporteur];
                   const { prix, palier } = calculerFraisPortBareme(config.bareme, poidsTotal);
+                  const coeffTotal = expressJ1 ? coeffTransport * coeffExpress : coeffTransport;
                   return (
                     <div className="text-xs text-muted-foreground space-y-1">
                       <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier {config.label} : {palier}</p>
-                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffTransport} = <span className="font-medium">{formatMontant(prix * coeffTransport)}</span></p>}
+                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffTransport}{expressJ1 ? ` × ${coeffExpress} (express)` : ''} = <span className="font-medium">{formatMontant(prix * coeffTotal)}</span></p>}
                       {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème {config.label} : tarif sur devis</p>}
                       <div className="flex items-center gap-2 pt-0.5">
                         <Label className="text-xs whitespace-nowrap">Coeff. {config.label}</Label>
