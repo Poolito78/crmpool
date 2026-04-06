@@ -700,6 +700,20 @@ export default function Devis() {
                   ))}
                 </div>
               )}
+              {fraisPortAuto && transporteur !== 'standard' && (
+                <div className="flex items-center gap-3">
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" checked={expressJ1} onChange={e => setExpressJ1(e.target.checked)} className="rounded" />
+                    <span className="text-xs font-medium">Express J+1</span>
+                  </label>
+                  {expressJ1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Label className="text-[10px] whitespace-nowrap">Coeff. Express</Label>
+                      <Input type="number" step="0.1" min="1" value={coeffExpress} onChange={e => setCoeffExpress(parseFloat(e.target.value) || 1)} className="h-6 text-xs w-16" />
+                    </div>
+                  )}
+                </div>
+              )}
               {fraisPortAuto && (() => {
                 const poidsTotal = lignes.reduce((acc, l) => {
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -709,10 +723,11 @@ export default function Devis() {
                 if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
                   const config = BAREMES_TRANSPORT[transporteur];
                   const { prix, palier } = calculerFraisPortBareme(config.bareme, poidsTotal);
+                  const coeffTotal = expressJ1 ? coeffTransport * coeffExpress : coeffTransport;
                   return (
                     <div className="text-xs text-muted-foreground space-y-1">
                       <p>Poids total : <span className="font-medium">{poidsTotal.toFixed(2)} kg</span> · Palier {config.label} : {palier}</p>
-                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffTransport} = <span className="font-medium">{formatMontant(prix * coeffTransport)}</span></p>}
+                      {prix !== null && <p>Tarif brut : {formatMontant(prix)} × {coeffTransport}{expressJ1 ? ` × ${coeffExpress} (express)` : ''} = <span className="font-medium">{formatMontant(prix * coeffTotal)}</span></p>}
                       {prix === null && <p className="text-amber-600 dark:text-amber-400 font-medium">⚠ Hors barème {config.label} : tarif sur devis</p>}
                       <div className="flex items-center gap-2 pt-0.5">
                         <Label className="text-xs whitespace-nowrap">Coeff. {config.label}</Label>
