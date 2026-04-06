@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -26,7 +26,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur } = useCRM();
+  const { devis, updateDevis, clients, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -296,7 +296,33 @@ export default function Devis() {
     updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
     toast.success('Statut mis à jour');
     if (newStatut === 'accepté' && d) {
-      setCommandeConfirmDevis({ ...d, statut: newStatut });
+      const devisData = { ...d, statut: newStatut as DevisType['statut'] };
+
+      // Création automatique de la commande client si elle n'existe pas encore
+      const dejaExistante = commandesClient.some(c => c.devisId === id);
+      if (!dejaExistante) {
+        const total = calculerTotalDevis(devisData.lignes, devisData.fraisPortHT, devisData.fraisPortTVA);
+        const newNumero = `CMD-${new Date().getFullYear()}-${String(commandesClient.length + 1).padStart(4, '0')}`;
+        const newCmd: CommandeClient = {
+          id: generateId(),
+          clientId: devisData.clientId,
+          devisId: devisData.id,
+          numero: newNumero,
+          dateCreation: new Date().toISOString().split('T')[0],
+          statut: 'accuse_envoye',
+          lignes: devisData.lignes,
+          totalHT: total.totalHT,
+          totalTVA: total.totalTVA,
+          totalTTC: total.totalTTC,
+          fraisPortHT: devisData.fraisPortHT || 0,
+          referenceAffaire: devisData.referenceAffaire || undefined,
+          notes: devisData.notes || undefined,
+        };
+        updateCommandesClient(prev => [...prev, newCmd]);
+        toast.success(`✅ Commande client ${newNumero} créée automatiquement`);
+      }
+
+      setCommandeConfirmDevis(devisData);
     }
   }
 
@@ -870,7 +896,7 @@ export default function Devis() {
               Créer une commande fournisseur ?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              Le devis {commandeConfirmDevis?.numero} a été accepté. Souhaitez-vous générer automatiquement les bons de commande fournisseur correspondants ?
+              Le devis {commandeConfirmDevis?.numero} a été accepté et une <strong>commande client a été créée automatiquement</strong>. Souhaitez-vous également générer les bons de commande fournisseur correspondants ?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
