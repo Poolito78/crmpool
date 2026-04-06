@@ -692,7 +692,7 @@ export default function Devis() {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => { setTransporteur(key as TransporteurType); setCoeffTransport(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffDefaut); }}
+                      onClick={() => { setTransporteur(key as TransporteurType); setCoeffTransport(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffDefaut); setCoeffExpress(BAREMES_TRANSPORT[key as Exclude<TransporteurType, 'standard'>].coeffExpressDefaut); }}
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${transporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
                     >
                       {label}
