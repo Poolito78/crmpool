@@ -242,7 +242,7 @@ export default function CommandesClient() {
           <div className="space-y-4">
             <div>
               <Label>Client *</Label>
-              <ClientCombobox clients={clients} value={clientId} onChange={setClientId} />
+              <ClientCombobox clients={clients} value={clientId} onSelect={setClientId} />
             </div>
             <div>
               <Label>Devis associé</Label>
