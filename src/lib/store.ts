@@ -562,7 +562,23 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, loading };
+  const updateCommandesClient = useCallback((fn: (prev: CommandeClient[]) => CommandeClient[]) => {
+    setCommandesClient(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('commandes_client').insert(added.map(cc => commandeClientToDb(cc, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(cc => supabase.from('commandes_client').update(commandeClientToDb(cc, userId) as any).eq('id', cc.id).then());
+        }
+        if (removed.length) supabase.from('commandes_client').delete().in('id', removed.map(cc => cc.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, loading };
 }
 
 export function generateId() {
