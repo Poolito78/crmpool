@@ -12,6 +12,7 @@ import Produits from "@/pages/Produits";
 import Fournisseurs from "@/pages/Fournisseurs";
 import Stock from "@/pages/Stock";
 import Commandes from "@/pages/Commandes";
+import CommandesClient from "@/pages/CommandesClient";
 import Devis from "@/pages/Devis";
 import CalculateurUPS from "@/pages/CalculateurUPS";
 import Auth from "@/pages/Auth";
@@ -49,8 +50,9 @@ function AppRoutes() {
           <Route path="/fournisseurs" element={<Fournisseurs />} />
           <Route path="/stock" element={<Stock />} />
           <Route path="/devis" element={<Devis />} />
-          <Route path="/calculateur-ups" element={<CalculateurUPS />} />
           <Route path="/commandes" element={<Commandes />} />
+          <Route path="/commandes-client" element={<CommandesClient />} />
+          <Route path="/calculateur-ups" element={<CalculateurUPS />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
