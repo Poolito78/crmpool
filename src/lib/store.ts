@@ -377,6 +377,45 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
   };
 }
 
+// ---- CommandeClient mapping ----
+
+function dbToCommandeClient(r: any): CommandeClient {
+  return {
+    id: r.id,
+    devisId: r.devis_id || undefined,
+    clientId: r.client_id,
+    numero: r.numero,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    statut: r.statut as StatutCommandeClient,
+    lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
+    totalHT: Number(r.total_ht) || 0,
+    totalTVA: Number(r.total_tva) || 0,
+    totalTTC: Number(r.total_ttc) || 0,
+    fraisPortHT: Number(r.frais_port_ht) || 0,
+    referenceAffaire: r.reference_affaire || undefined,
+    notes: r.notes || undefined,
+  };
+}
+
+function commandeClientToDb(cc: CommandeClient, userId: string) {
+  return {
+    id: cc.id,
+    user_id: userId,
+    devis_id: cc.devisId || null,
+    client_id: cc.clientId,
+    numero: cc.numero,
+    date_creation: cc.dateCreation,
+    statut: cc.statut,
+    lignes: cc.lignes as any,
+    total_ht: cc.totalHT,
+    total_tva: cc.totalTVA,
+    total_ttc: cc.totalTTC,
+    frais_port_ht: cc.fraisPortHT,
+    reference_affaire: cc.referenceAffaire || null,
+    notes: cc.notes || null,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
