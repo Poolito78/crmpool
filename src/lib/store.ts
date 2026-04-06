@@ -619,10 +619,10 @@ export const BAREME_GLS: BaremePalier[] = [
   { min: 1000, max: Infinity, prix: null },
 ];
 
-export const BAREMES_TRANSPORT: Record<Exclude<TransporteurType, 'standard'>, { label: string; bareme: BaremePalier[]; coeffDefaut: number }> = {
-  ups: { label: 'UPS', bareme: BAREME_UPS, coeffDefaut: 1.4 },
-  messagerie: { label: 'Messagerie', bareme: BAREME_MESSAGERIE, coeffDefaut: 1.4 },
-  gls: { label: 'Affrètement GLS', bareme: BAREME_GLS, coeffDefaut: 1.4 },
+export const BAREMES_TRANSPORT: Record<Exclude<TransporteurType, 'standard'>, { label: string; bareme: BaremePalier[]; coeffDefaut: number; coeffExpressDefaut: number }> = {
+  ups: { label: 'UPS', bareme: BAREME_UPS, coeffDefaut: 1.4, coeffExpressDefaut: 1.8 },
+  messagerie: { label: 'Messagerie', bareme: BAREME_MESSAGERIE, coeffDefaut: 1.4, coeffExpressDefaut: 1.6 },
+  gls: { label: 'Affrètement GLS', bareme: BAREME_GLS, coeffDefaut: 1.4, coeffExpressDefaut: 1.7 },
 };
 
 export function calculerFraisPortBareme(bareme: BaremePalier[], poidsKg: number, nbColis: number = 1): { prix: number | null; palier: string } {

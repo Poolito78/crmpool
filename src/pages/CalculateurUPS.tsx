@@ -48,12 +48,15 @@ export default function CalculateurUPS() {
   const [nbColis, setNbColis] = useState(1);
   const [selectedTransporteur, setSelectedTransporteur] = useState<Exclude<TransporteurType, 'standard'>>('ups');
   const [coeff, setCoeff] = useState(1.4);
+  const [express, setExpress] = useState(false);
+  const [coeffExpress, setCoeffExpress] = useState(1.8);
   const [deptDepart, setDeptDepart] = useState('76');
   const [deptLivraison, setDeptLivraison] = useState('');
 
   const config = BAREMES_TRANSPORT[selectedTransporteur];
   const resultat = calculerFraisPortBareme(config.bareme, poids, nbColis);
-  const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeff * 100) / 100 : null;
+  const coeffTotal = express ? coeff * coeffExpress : coeff;
+  const prixFinal = resultat.prix !== null ? Math.round(resultat.prix * coeffTotal * 100) / 100 : null;
   const distanceKm = useMemo(() => deptDepart && deptLivraison ? estimerDistanceKm(deptDepart, deptLivraison) : null, [deptDepart, deptLivraison]);
 
   return (
