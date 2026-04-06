@@ -167,7 +167,9 @@ export default function CalculateurUPS() {
               </div>
             </div>
             <div className="flex flex-col justify-end">
-              <Label className="text-muted-foreground text-xs mb-1">Tarif final (× {coeff})</Label>
+              <Label className="text-muted-foreground text-xs mb-1">
+                Tarif final (× {coeff}{express ? ` × ${coeffExpress} express` : ''})
+              </Label>
               <div className="h-10 flex items-center px-3 rounded-md bg-muted font-bold text-lg">
                 {prixFinal !== null ? formatMontant(prixFinal) : (
                   <span className="text-amber-600 text-sm font-medium">Sur devis</span>
