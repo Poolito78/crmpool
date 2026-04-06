@@ -444,13 +444,14 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes, cfRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
         supabase.from('devis').select('*'),
         supabase.from('produit_fournisseurs').select('*'),
         supabase.from('commandes_fournisseur').select('*'),
+        supabase.from('commandes_client').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
@@ -459,6 +460,7 @@ export function useStore() {
       if (dRes.data) setDevis(dRes.data.map(dbToDevis));
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
       if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
+      if (ccRes.data) setCommandesClient(ccRes.data.map(dbToCommandeClient));
       setLoading(false);
     }
     load();
