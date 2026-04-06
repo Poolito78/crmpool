@@ -93,6 +93,31 @@ export interface CommandeFournisseur {
   notes?: string;
 }
 
+export type StatutCommandeClient = 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture';
+
+export interface CommandeClient {
+  id: string;
+  devisId?: string;
+  clientId: string;
+  numero: string;
+  dateCreation: string;
+  statut: StatutCommandeClient;
+  lignes: LigneDevis[];
+  totalHT: number;
+  totalTVA: number;
+  totalTTC: number;
+  fraisPortHT: number;
+  referenceAffaire?: string;
+  notes?: string;
+}
+
+export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
+  accuse_envoye: { label: 'AR envoyé', color: 'bg-info/10 text-info' },
+  commande_envoyee: { label: 'Envoyée', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  livre: { label: 'Livré', color: 'bg-success/10 text-success' },
+  facture: { label: 'Facturé', color: 'bg-primary/10 text-primary' },
+};
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
