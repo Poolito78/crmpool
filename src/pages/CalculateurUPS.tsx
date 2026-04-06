@@ -74,8 +74,7 @@ export default function CalculateurUPS() {
               <button
                 key={key}
                 type="button"
-                onClick={() => { setSelectedTransporteur(key); setCoeff(BAREMES_TRANSPORT[key].coeffDefaut); }}
-                className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${selectedTransporteur === key ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}
+                onClick={() => { setSelectedTransporteur(key); setCoeff(BAREMES_TRANSPORT[key].coeffDefaut); setCoeffExpress(BAREMES_TRANSPORT[key].coeffExpressDefaut); }}
               >
                 {label}
               </button>
