@@ -279,7 +279,8 @@ export default function Devis() {
 
     if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur]) {
       const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur].bareme, poidsTotal);
-      if (prix !== null) setFraisPortHT(Math.round(prix * coeffTransport * 100) / 100);
+      const coeffTotal = expressJ1 ? coeffTransport * coeffExpress : coeffTransport;
+      if (prix !== null) setFraisPortHT(Math.round(prix * coeffTotal * 100) / 100);
     } else {
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
