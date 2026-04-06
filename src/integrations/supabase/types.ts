@@ -68,6 +68,68 @@ export type Database = {
         }
         Relationships: []
       }
+      commandes_client: {
+        Row: {
+          client_id: string
+          created_at: string
+          date_creation: string
+          devis_id: string | null
+          frais_port_ht: number
+          id: string
+          lignes: Json
+          notes: string | null
+          numero: string
+          reference_affaire: string | null
+          statut: string
+          total_ht: number
+          total_ttc: number
+          total_tva: number
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          date_creation?: string
+          devis_id?: string | null
+          frais_port_ht?: number
+          id?: string
+          lignes?: Json
+          notes?: string | null
+          numero?: string
+          reference_affaire?: string | null
+          statut?: string
+          total_ht?: number
+          total_ttc?: number
+          total_tva?: number
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          date_creation?: string
+          devis_id?: string | null
+          frais_port_ht?: number
+          id?: string
+          lignes?: Json
+          notes?: string | null
+          numero?: string
+          reference_affaire?: string | null
+          statut?: string
+          total_ht?: number
+          total_ttc?: number
+          total_tva?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commandes_client_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "devis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commandes_fournisseur: {
         Row: {
           created_at: string
