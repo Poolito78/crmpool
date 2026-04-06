@@ -434,6 +434,7 @@ export function useStore() {
   const [devis, setDevis] = useState<Devis[]>([]);
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
   const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
+  const [commandesClient, setCommandesClient] = useState<CommandeClient[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
