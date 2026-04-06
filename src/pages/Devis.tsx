@@ -68,6 +68,8 @@ export default function Devis() {
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
   const [transporteur, setTransporteur] = useState<TransporteurType>('standard');
   const [coeffTransport, setCoeffTransport] = useState(1.4);
+  const [expressJ1, setExpressJ1] = useState(false);
+  const [coeffExpress, setCoeffExpress] = useState(1.8);
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
@@ -124,6 +126,8 @@ export default function Devis() {
     setFraisPortAuto(true);
     setTransporteur('standard');
     setCoeffTransport(1.4);
+    setExpressJ1(false);
+    setCoeffExpress(1.8);
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
