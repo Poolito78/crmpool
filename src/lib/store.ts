@@ -93,6 +93,31 @@ export interface CommandeFournisseur {
   notes?: string;
 }
 
+export type StatutCommandeClient = 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture';
+
+export interface CommandeClient {
+  id: string;
+  devisId?: string;
+  clientId: string;
+  numero: string;
+  dateCreation: string;
+  statut: StatutCommandeClient;
+  lignes: LigneDevis[];
+  totalHT: number;
+  totalTVA: number;
+  totalTTC: number;
+  fraisPortHT: number;
+  referenceAffaire?: string;
+  notes?: string;
+}
+
+export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
+  accuse_envoye: { label: 'AR envoyé', color: 'bg-info/10 text-info' },
+  commande_envoyee: { label: 'Envoyée', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  livre: { label: 'Livré', color: 'bg-success/10 text-success' },
+  facture: { label: 'Facturé', color: 'bg-primary/10 text-primary' },
+};
+
 export interface LigneDevis {
   id: string;
   produitId?: string;
@@ -352,6 +377,45 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
   };
 }
 
+// ---- CommandeClient mapping ----
+
+function dbToCommandeClient(r: any): CommandeClient {
+  return {
+    id: r.id,
+    devisId: r.devis_id || undefined,
+    clientId: r.client_id,
+    numero: r.numero,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    statut: r.statut as StatutCommandeClient,
+    lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
+    totalHT: Number(r.total_ht) || 0,
+    totalTVA: Number(r.total_tva) || 0,
+    totalTTC: Number(r.total_ttc) || 0,
+    fraisPortHT: Number(r.frais_port_ht) || 0,
+    referenceAffaire: r.reference_affaire || undefined,
+    notes: r.notes || undefined,
+  };
+}
+
+function commandeClientToDb(cc: CommandeClient, userId: string) {
+  return {
+    id: cc.id,
+    user_id: userId,
+    devis_id: cc.devisId || null,
+    client_id: cc.clientId,
+    numero: cc.numero,
+    date_creation: cc.dateCreation,
+    statut: cc.statut,
+    lignes: cc.lignes as any,
+    total_ht: cc.totalHT,
+    total_tva: cc.totalTVA,
+    total_ttc: cc.totalTTC,
+    frais_port_ht: cc.fraisPortHT,
+    reference_affaire: cc.referenceAffaire || null,
+    notes: cc.notes || null,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
@@ -370,6 +434,7 @@ export function useStore() {
   const [devis, setDevis] = useState<Devis[]>([]);
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
   const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
+  const [commandesClient, setCommandesClient] = useState<CommandeClient[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
@@ -379,13 +444,14 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes, cfRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
         supabase.from('devis').select('*'),
         supabase.from('produit_fournisseurs').select('*'),
         supabase.from('commandes_fournisseur').select('*'),
+        supabase.from('commandes_client').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
@@ -394,6 +460,7 @@ export function useStore() {
       if (dRes.data) setDevis(dRes.data.map(dbToDevis));
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
       if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
+      if (ccRes.data) setCommandesClient(ccRes.data.map(dbToCommandeClient));
       setLoading(false);
     }
     load();
@@ -495,7 +562,23 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, loading };
+  const updateCommandesClient = useCallback((fn: (prev: CommandeClient[]) => CommandeClient[]) => {
+    setCommandesClient(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('commandes_client').insert(added.map(cc => commandeClientToDb(cc, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(cc => supabase.from('commandes_client').update(commandeClientToDb(cc, userId) as any).eq('id', cc.id).then());
+        }
+        if (removed.length) supabase.from('commandes_client').delete().in('id', removed.map(cc => cc.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, loading };
 }
 
 export function generateId() {
