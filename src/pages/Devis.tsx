@@ -289,7 +289,7 @@ export default function Devis() {
       const port = calculerFraisPort(poidsTotal, hasGranulat);
       if (port !== null) setFraisPortHT(port);
     }
-  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport]);
+  }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport, expressJ1, coeffExpress]);
 
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
