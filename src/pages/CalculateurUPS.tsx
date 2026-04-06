@@ -112,6 +112,18 @@ export default function CalculateurUPS() {
               />
             </div>
           </div>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={express} onChange={e => setExpress(e.target.checked)} className="rounded" />
+              <span className="text-sm font-medium">Express J+1</span>
+            </label>
+            {express && (
+              <div className="flex items-center gap-2">
+                <Label className="text-xs whitespace-nowrap">Coeff. Express</Label>
+                <Input type="number" step="0.1" min="1" value={coeffExpress} onChange={e => setCoeffExpress(parseFloat(e.target.value) || 1)} className="h-8 text-sm w-20" />
+              </div>
+            )}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <Label>Département départ</Label>
