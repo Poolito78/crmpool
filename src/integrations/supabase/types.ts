@@ -73,6 +73,8 @@ export type Database = {
           client_id: string
           created_at: string
           date_creation: string
+          date_depart: string | null
+          date_livraison_prevue: string | null
           devis_id: string | null
           frais_port_ht: number
           id: string
@@ -90,6 +92,8 @@ export type Database = {
           client_id: string
           created_at?: string
           date_creation?: string
+          date_depart?: string | null
+          date_livraison_prevue?: string | null
           devis_id?: string | null
           frais_port_ht?: number
           id?: string
@@ -107,6 +111,8 @@ export type Database = {
           client_id?: string
           created_at?: string
           date_creation?: string
+          date_depart?: string | null
+          date_livraison_prevue?: string | null
           devis_id?: string | null
           frais_port_ht?: number
           id?: string
