@@ -93,7 +93,7 @@ export interface CommandeFournisseur {
   notes?: string;
 }
 
-export type StatutCommandeClient = 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture';
+export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture';
 
 export interface CommandeClient {
   id: string;
@@ -112,6 +112,7 @@ export interface CommandeClient {
 }
 
 export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
+  a_traiter: { label: 'À traiter', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   accuse_envoye: { label: 'AR envoyé', color: 'bg-info/10 text-info' },
   commande_envoyee: { label: 'Envoyée', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   livre: { label: 'Livré', color: 'bg-success/10 text-success' },

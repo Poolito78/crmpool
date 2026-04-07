@@ -309,7 +309,7 @@ export default function Devis() {
           devisId: devisData.id,
           numero: newNumero,
           dateCreation: new Date().toISOString().split('T')[0],
-          statut: 'accuse_envoye',
+          statut: 'a_traiter',
           lignes: devisData.lignes,
           totalHT: total.totalHT,
           totalTVA: total.totalTVA,
