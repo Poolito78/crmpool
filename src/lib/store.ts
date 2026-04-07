@@ -109,6 +109,8 @@ export interface CommandeClient {
   fraisPortHT: number;
   referenceAffaire?: string;
   notes?: string;
+  dateDepart?: string;
+  dateLivraisonPrevue?: string;
 }
 
 export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
@@ -395,6 +397,8 @@ function dbToCommandeClient(r: any): CommandeClient {
     fraisPortHT: Number(r.frais_port_ht) || 0,
     referenceAffaire: r.reference_affaire || undefined,
     notes: r.notes || undefined,
+    dateDepart: r.date_depart || undefined,
+    dateLivraisonPrevue: r.date_livraison_prevue || undefined,
   };
 }
 
@@ -414,6 +418,8 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
     frais_port_ht: cc.fraisPortHT,
     reference_affaire: cc.referenceAffaire || null,
     notes: cc.notes || null,
+    date_depart: cc.dateDepart || null,
+    date_livraison_prevue: cc.dateLivraisonPrevue || null,
   };
 }
 

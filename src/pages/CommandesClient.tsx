@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, Eye, FileText } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import ClientCombobox from '@/components/ClientCombobox';
+import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
 export default function CommandesClient() {
-  const { commandesClient, updateCommandesClient, clients, devis } = useCRM();
+  const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur } = useCRM();
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -22,12 +24,26 @@ export default function CommandesClient() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [previewCommande, setPreviewCommande] = useState<CommandeClient | null>(null);
 
+  // AR Dialog state
+  const [arDialogOpen, setArDialogOpen] = useState(false);
+  const [arCommande, setArCommande] = useState<CommandeClient | null>(null);
+  const [arDateDepart, setArDateDepart] = useState('');
+  const [arDateLivraison, setArDateLivraison] = useState('');
+
+  // Facturer Dialog state
+  const [factureDialogOpen, setFactureDialogOpen] = useState(false);
+  const [factureCommande, setFactureCommande] = useState<CommandeClient | null>(null);
+  const [factureLignesSelectees, setFactureLignesSelectees] = useState<string[]>([]);
+
+  // Commande fournisseur dialog
+  const [cmdFournisseurDevis, setCmdFournisseurDevis] = useState<any>(null);
+
   // Form state
   const [clientId, setClientId] = useState('');
   const [devisId, setDevisId] = useState('');
   const [numero, setNumero] = useState('');
   const [dateCreation, setDateCreation] = useState(new Date().toISOString().split('T')[0]);
-  const [statut, setStatut] = useState<StatutCommandeClient>('accuse_envoye');
+  const [statut, setStatut] = useState<StatutCommandeClient>('a_traiter');
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
   const [fraisPortHT, setFraisPortHT] = useState(0);
@@ -37,7 +53,7 @@ export default function CommandesClient() {
     setDevisId('');
     setNumero(`CMD-${String(commandesClient.length + 1).padStart(4, '0')}`);
     setDateCreation(new Date().toISOString().split('T')[0]);
-    setStatut('accuse_envoye');
+    setStatut('a_traiter');
     setReferenceAffaire('');
     setNotes('');
     setFraisPortHT(0);
@@ -59,18 +75,6 @@ export default function CommandesClient() {
     setReferenceAffaire(cmd.referenceAffaire || '');
     setNotes(cmd.notes || '');
     setFraisPortHT(cmd.fraisPortHT);
-    setDialogOpen(true);
-  }
-
-  function createFromDevis(devisItem: typeof devis[0]) {
-    const client = clients.find(c => c.id === devisItem.clientId);
-    const total = calculerTotalDevis(devisItem.lignes, devisItem.fraisPortHT, devisItem.fraisPortTVA);
-    resetForm();
-    setClientId(devisItem.clientId);
-    setDevisId(devisItem.id);
-    setNumero(`CMD-${String(commandesClient.length + 1).padStart(4, '0')}`);
-    setReferenceAffaire(devisItem.referenceAffaire || '');
-    setFraisPortHT(devisItem.fraisPortHT || 0);
     setDialogOpen(true);
   }
 
@@ -114,6 +118,70 @@ export default function CommandesClient() {
     setDeleteConfirmOpen(false);
   }
 
+  // ---- Action: Commande Fournisseur ----
+  function openCmdFournisseur(cmd: CommandeClient) {
+    if (!cmd.devisId) {
+      toast.error('Aucun devis associé à cette commande');
+      return;
+    }
+    const linkedDevis = devis.find(d => d.id === cmd.devisId);
+    if (!linkedDevis) {
+      toast.error('Devis introuvable');
+      return;
+    }
+    setCmdFournisseurDevis(linkedDevis);
+  }
+
+  // ---- Action: Envoi AR ----
+  function openArDialog(cmd: CommandeClient) {
+    setArCommande(cmd);
+    setArDateDepart(cmd.dateDepart || new Date().toISOString().split('T')[0]);
+    setArDateLivraison(cmd.dateLivraisonPrevue || '');
+    setArDialogOpen(true);
+  }
+
+  function saveAr() {
+    if (!arCommande) return;
+    if (!arDateDepart) { toast.error('Renseignez la date de départ'); return; }
+    if (!arDateLivraison) { toast.error('Renseignez la date de livraison prévue'); return; }
+    updateCommandesClient(prev => prev.map(c => c.id === arCommande.id ? {
+      ...c,
+      statut: 'accuse_envoye' as StatutCommandeClient,
+      dateDepart: arDateDepart,
+      dateLivraisonPrevue: arDateLivraison,
+    } : c));
+    toast.success(`AR envoyé — départ ${formatDate(arDateDepart)}, livraison prévue ${formatDate(arDateLivraison)}`);
+    setArDialogOpen(false);
+    setArCommande(null);
+  }
+
+  // ---- Action: Facturer ----
+  function openFactureDialog(cmd: CommandeClient) {
+    setFactureCommande(cmd);
+    setFactureLignesSelectees(cmd.lignes.map(l => l.id));
+    setFactureDialogOpen(true);
+  }
+
+  function toggleLigneFacture(ligneId: string) {
+    setFactureLignesSelectees(prev =>
+      prev.includes(ligneId) ? prev.filter(id => id !== ligneId) : [...prev, ligneId]
+    );
+  }
+
+  function saveFacture() {
+    if (!factureCommande) return;
+    if (factureLignesSelectees.length === 0) {
+      toast.error('Sélectionnez au moins un produit à facturer');
+      return;
+    }
+    updateCommandesClient(prev => prev.map(c => c.id === factureCommande.id ? {
+      ...c, statut: 'facture' as StatutCommandeClient,
+    } : c));
+    toast.success(`Commande ${factureCommande.numero} marquée comme facturée (${factureLignesSelectees.length} produit(s))`);
+    setFactureDialogOpen(false);
+    setFactureCommande(null);
+  }
+
   const filtered = commandesClient
     .filter(c => {
       if (filterStatut !== 'tous' && c.statut !== filterStatut) return false;
@@ -126,8 +194,6 @@ export default function CommandesClient() {
         c.referenceAffaire?.toLowerCase().includes(s);
     })
     .sort((a, b) => b.dateCreation.localeCompare(a.dateCreation));
-
-  const acceptedDevis = devis.filter(d => d.statut === 'accepté');
 
   return (
     <div className="space-y-4">
@@ -157,7 +223,7 @@ export default function CommandesClient() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
         {allStatuts.map(s => {
           const cmds = commandesClient.filter(c => c.statut === s);
           const total = cmds.reduce((acc, c) => acc + c.totalTTC, 0);
@@ -180,6 +246,7 @@ export default function CommandesClient() {
               <th className="text-left py-3 px-4 font-medium text-muted-foreground">Client</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">Réf. Affaire</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Date</th>
+              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Départ / Livraison</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total TTC</th>
               <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
@@ -198,6 +265,14 @@ export default function CommandesClient() {
                   </td>
                   <td className="py-3 px-4 hidden sm:table-cell text-muted-foreground">{cmd.referenceAffaire || '—'}</td>
                   <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">{formatDate(cmd.dateCreation)}</td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
+                    {cmd.dateDepart || cmd.dateLivraisonPrevue ? (
+                      <div className="text-xs space-y-0.5">
+                        {cmd.dateDepart && <div className="text-muted-foreground">Départ: <span className="font-medium text-foreground">{formatDate(cmd.dateDepart)}</span></div>}
+                        {cmd.dateLivraisonPrevue && <div className="text-muted-foreground">Livr.: <span className="font-medium text-foreground">{formatDate(cmd.dateLivraisonPrevue)}</span></div>}
+                      </div>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
                   <td className="py-3 px-4 text-right font-medium">{formatMontant(cmd.totalTTC)}</td>
                   <td className="py-3 px-4 text-center">
                     <select
@@ -211,7 +286,16 @@ export default function CommandesClient() {
                     </select>
                   </td>
                   <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1 flex-wrap">
+                      <button onClick={() => openCmdFournisseur(cmd)} className="p-1.5 rounded hover:bg-muted" title="Cmd Fournisseur">
+                        <ShoppingCart className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => openArDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Envoi AR + Dates">
+                        <Send className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => openFactureDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Facturer">
+                        <Receipt className="w-4 h-4 text-muted-foreground" />
+                      </button>
                       <button onClick={() => setPreviewCommande(cmd)} className="p-1.5 rounded hover:bg-muted" title="Aperçu">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                       </button>
@@ -227,7 +311,7 @@ export default function CommandesClient() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={7} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
+              <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
             )}
           </tbody>
         </table>
@@ -297,6 +381,119 @@ export default function CommandesClient() {
         </DialogContent>
       </Dialog>
 
+      {/* AR Dialog — Envoi accusé de réception avec dates */}
+      <Dialog open={arDialogOpen} onOpenChange={setArDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="w-5 h-5" />
+              Envoi AR — {arCommande?.numero}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Confirmez l'envoi de l'accusé de réception avec les dates de départ et livraison prévues.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Date de départ</Label>
+                <Input type="date" value={arDateDepart} onChange={e => setArDateDepart(e.target.value)} />
+              </div>
+              <div>
+                <Label className="flex items-center gap-1.5"><CalendarDays className="w-3.5 h-3.5" />Livraison prévue</Label>
+                <Input type="date" value={arDateLivraison} onChange={e => setArDateLivraison(e.target.value)} />
+              </div>
+            </div>
+            {arCommande && arCommande.lignes.length > 0 && (
+              <div className="border border-border rounded-md overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-muted/50 border-b border-border">
+                    <th className="text-left py-2 px-3">Description</th>
+                    <th className="text-right py-2 px-3">Qté</th>
+                    <th className="text-right py-2 px-3">Total HT</th>
+                  </tr></thead>
+                  <tbody>
+                    {arCommande.lignes.map((l, i) => {
+                      const t = calculerTotalLigne(l);
+                      return (
+                        <tr key={i} className="border-b border-border/50">
+                          <td className="py-1.5 px-3">{l.description}</td>
+                          <td className="py-1.5 px-3 text-right">{l.quantite}</td>
+                          <td className="py-1.5 px-3 text-right">{formatMontant(t.totalHT)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setArDialogOpen(false)} className="flex-1">Annuler</Button>
+              <Button onClick={saveAr} className="flex-1"><Send className="w-4 h-4 mr-1" />Envoyer AR</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Facturer Dialog */}
+      <Dialog open={factureDialogOpen} onOpenChange={setFactureDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5" />
+              Facturer — {factureCommande?.numero}
+            </DialogTitle>
+          </DialogHeader>
+          {factureCommande && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                Sélectionnez les produits livrés à facturer :
+              </p>
+              <div className="border border-border rounded-md overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead><tr className="bg-muted/50 border-b border-border">
+                    <th className="py-2 px-3 w-8"></th>
+                    <th className="text-left py-2 px-3">Description</th>
+                    <th className="text-right py-2 px-3">Qté</th>
+                    <th className="text-right py-2 px-3">Total HT</th>
+                  </tr></thead>
+                  <tbody>
+                    {factureCommande.lignes.map((l, i) => {
+                      const t = calculerTotalLigne(l);
+                      const checked = factureLignesSelectees.includes(l.id);
+                      return (
+                        <tr key={i} className={`border-b border-border/50 cursor-pointer hover:bg-muted/30 ${checked ? 'bg-primary/5' : ''}`} onClick={() => toggleLigneFacture(l.id)}>
+                          <td className="py-1.5 px-3">
+                            <Checkbox checked={checked} onCheckedChange={() => toggleLigneFacture(l.id)} />
+                          </td>
+                          <td className="py-1.5 px-3">{l.description}</td>
+                          <td className="py-1.5 px-3 text-right">{l.quantite}</td>
+                          <td className="py-1.5 px-3 text-right">{formatMontant(t.totalHT)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="border-t border-border pt-3 text-sm">
+                <div className="flex justify-between font-medium">
+                  <span>Total à facturer</span>
+                  <span>{formatMontant(
+                    factureCommande.lignes
+                      .filter(l => factureLignesSelectees.includes(l.id))
+                      .reduce((acc, l) => acc + calculerTotalLigne(l).totalHT, 0)
+                  )}</span>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setFactureDialogOpen(false)} className="flex-1">Annuler</Button>
+                <Button onClick={saveFacture} className="flex-1"><Receipt className="w-4 h-4 mr-1" />Facturer</Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       {/* Preview Dialog */}
       <Dialog open={!!previewCommande} onOpenChange={() => setPreviewCommande(null)}>
         <DialogContent className="max-w-lg">
@@ -317,6 +514,8 @@ export default function CommandesClient() {
                   <div><span className="text-muted-foreground">Date :</span> <span className="font-medium">{formatDate(previewCommande.dateCreation)}</span></div>
                   <div><span className="text-muted-foreground">Statut :</span> <span className={`text-xs font-medium px-2 py-0.5 rounded ${statutInfo.color}`}>{statutInfo.label}</span></div>
                   {previewCommande.referenceAffaire && <div className="col-span-2"><span className="text-muted-foreground">Réf. Affaire :</span> <span className="font-medium">{previewCommande.referenceAffaire}</span></div>}
+                  {previewCommande.dateDepart && <div><span className="text-muted-foreground">Départ :</span> <span className="font-medium">{formatDate(previewCommande.dateDepart)}</span></div>}
+                  {previewCommande.dateLivraisonPrevue && <div><span className="text-muted-foreground">Livraison prévue :</span> <span className="font-medium">{formatDate(previewCommande.dateLivraisonPrevue)}</span></div>}
                 </div>
                 {previewCommande.lignes.length > 0 && (
                   <div>
@@ -358,6 +557,19 @@ export default function CommandesClient() {
           })()}
         </DialogContent>
       </Dialog>
+
+      {/* Commande Fournisseur Dialog */}
+      <CommandeFournisseurDialog
+        open={!!cmdFournisseurDevis}
+        onOpenChange={(open) => { if (!open) setCmdFournisseurDevis(null); }}
+        devis={cmdFournisseurDevis}
+        produits={produits}
+        fournisseurs={fournisseurs}
+        produitFournisseurs={produitFournisseurs}
+        onSaveCommandes={(commandes) => {
+          updateCommandesFournisseur(prev => [...prev, ...commandes]);
+        }}
+      />
 
       {/* Delete confirmation */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
