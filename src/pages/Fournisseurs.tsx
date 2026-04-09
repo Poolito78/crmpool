@@ -322,7 +322,7 @@ export default function Fournisseurs() {
               <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Délai de règlement (jours)</Label>
+                  <Label className="text-xs">Délai de règlement (jours FDM)</Label>
                   <Input type="number" step="1" value={form.delaiReglement} onChange={e => setForm(prev => ({ ...prev, delaiReglement: parseInt(e.target.value) || 0 }))} />
                 </div>
                 <div>
