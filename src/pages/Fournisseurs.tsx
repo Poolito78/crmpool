@@ -336,7 +336,6 @@ export default function Fournisseurs() {
                     <option value="60j FDM">60j FDM</option>
                   </select>
                 </div>
-                </div>
                 <div>
                   <Label className="text-xs">Encours max (€)</Label>
                   <Input type="number" step="0.01" value={form.encoursMax} onChange={e => setForm(prev => ({ ...prev, encoursMax: parseFloat(e.target.value) || 0 }))} />
