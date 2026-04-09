@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: 45, encoursMax: 0
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', encoursMax: 0
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
