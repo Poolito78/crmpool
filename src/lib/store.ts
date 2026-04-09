@@ -43,6 +43,8 @@ export interface Fournisseur {
   notes?: string;
   francoPort: number;
   coutTransport: number;
+  delaiReglement: number;
+  encoursMax: number;
   dateCreation: string;
 }
 
