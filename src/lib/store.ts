@@ -43,6 +43,8 @@ export interface Fournisseur {
   notes?: string;
   francoPort: number;
   coutTransport: number;
+  delaiReglement: number;
+  encoursMax: number;
   dateCreation: string;
 }
 
@@ -204,6 +206,8 @@ function dbToFournisseur(r: any): Fournisseur {
     notes: r.notes || undefined,
     francoPort: Number(r.franco_port) || 0,
     coutTransport: Number(r.cout_transport) || 0,
+    delaiReglement: Number(r.delai_reglement) || 30,
+    encoursMax: Number(r.encours_max) || 0,
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
 }
@@ -222,6 +226,8 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     notes: f.notes || null,
     franco_port: f.francoPort,
     cout_transport: f.coutTransport,
+    delai_reglement: f.delaiReglement,
+    encours_max: f.encoursMax,
     date_creation: f.dateCreation,
   };
 }
