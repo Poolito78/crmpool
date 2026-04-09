@@ -25,6 +25,8 @@ const importFields: { key: string; label: string; aliases: string[]; type: 'text
   { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp'], type: 'text' },
   { key: 'francoPort', label: 'Franco de port', aliases: ['franco de port', 'francoport', 'franco', 'franco port'], type: 'number' },
   { key: 'coutTransport', label: 'Coût transport', aliases: ['coût transport', 'couttransport', 'transport', 'frais transport'], type: 'number' },
+  { key: 'delaiReglement', label: 'Délai règlement', aliases: ['délai règlement', 'delai reglement', 'délai de règlement', 'delai de reglement', 'paiement'], type: 'number', default: 30 },
+  { key: 'encoursMax', label: 'Encours max', aliases: ['encours', 'encours max', 'montant encours', 'encours maximum'], type: 'number' },
   { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques'], type: 'text' },
 ];
 
@@ -313,6 +315,19 @@ export default function Fournisseurs() {
                 <div>
                   <Label className="text-xs">Coût transport (€)</Label>
                   <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
+                </div>
+              </div>
+            </div>
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Délai de règlement (jours)</Label>
+                  <Input type="number" step="1" value={form.delaiReglement} onChange={e => setForm(prev => ({ ...prev, delaiReglement: parseInt(e.target.value) || 0 }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Encours max (€)</Label>
+                  <Input type="number" step="0.01" value={form.encoursMax} onChange={e => setForm(prev => ({ ...prev, encoursMax: parseFloat(e.target.value) || 0 }))} />
                 </div>
               </div>
             </div>
