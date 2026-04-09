@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: 45, encoursMax: 0
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', encoursMax: 0
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -71,7 +71,7 @@ export default function Fournisseurs() {
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement ?? 30, encoursMax: f.encoursMax ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM', encoursMax: f.encoursMax ?? 0 });
     setDialogOpen(true);
   }
 
@@ -182,7 +182,7 @@ export default function Fournisseurs() {
         notes: getMappedValue(row, 'notes'),
         francoPort: getMappedNum(row, 'francoPort'),
         coutTransport: getMappedNum(row, 'coutTransport'),
-        delaiReglement: getMappedNum(row, 'delaiReglement', 30),
+        delaiReglement: getMappedValue(row, 'delaiReglement') || '45j FDM',
         encoursMax: getMappedNum(row, 'encoursMax'),
         dateCreation: new Date().toISOString().split('T')[0],
       })).filter(f => f.nom || f.societe);
@@ -322,8 +322,19 @@ export default function Fournisseurs() {
               <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label className="text-xs">Délai de règlement (jours FDM)</Label>
-                  <Input type="number" step="1" value={form.delaiReglement} onChange={e => setForm(prev => ({ ...prev, delaiReglement: parseInt(e.target.value) || 0 }))} />
+                  <Label className="text-xs">Délai de règlement</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={form.delaiReglement}
+                    onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                  >
+                    <option value="30j net">30j net</option>
+                    <option value="30j FDM">30j FDM</option>
+                    <option value="45j net">45j net</option>
+                    <option value="45j FDM">45j FDM</option>
+                    <option value="60j net">60j net</option>
+                    <option value="60j FDM">60j FDM</option>
+                  </select>
                 </div>
                 <div>
                   <Label className="text-xs">Encours max (€)</Label>

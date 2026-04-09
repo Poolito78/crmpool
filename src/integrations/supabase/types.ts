@@ -274,7 +274,7 @@ export type Database = {
           cout_transport: number
           created_at: string
           date_creation: string
-          delai_reglement: number
+          delai_reglement: string
           email: string
           encours_max: number
           franco_port: number
@@ -292,7 +292,7 @@ export type Database = {
           cout_transport?: number
           created_at?: string
           date_creation?: string
-          delai_reglement?: number
+          delai_reglement?: string
           email?: string
           encours_max?: number
           franco_port?: number
@@ -310,7 +310,7 @@ export type Database = {
           cout_transport?: number
           created_at?: string
           date_creation?: string
-          delai_reglement?: number
+          delai_reglement?: string
           email?: string
           encours_max?: number
           franco_port?: number
