@@ -180,6 +180,8 @@ export default function Fournisseurs() {
         notes: getMappedValue(row, 'notes'),
         francoPort: getMappedNum(row, 'francoPort'),
         coutTransport: getMappedNum(row, 'coutTransport'),
+        delaiReglement: getMappedNum(row, 'delaiReglement', 30),
+        encoursMax: getMappedNum(row, 'encoursMax'),
         dateCreation: new Date().toISOString().split('T')[0],
       })).filter(f => f.nom || f.societe);
 
