@@ -206,7 +206,7 @@ function dbToFournisseur(r: any): Fournisseur {
     notes: r.notes || undefined,
     francoPort: Number(r.franco_port) || 0,
     coutTransport: Number(r.cout_transport) || 0,
-    delaiReglement: Number(r.delai_reglement) || 30,
+    delaiReglement: r.delai_reglement ? String(r.delai_reglement) : '45j FDM',
     encoursMax: Number(r.encours_max) || 0,
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
