@@ -320,27 +320,21 @@ export default function Fournisseurs() {
             </div>
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Délai de règlement</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={form.delaiReglement}
-                    onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
-                  >
-                    <option value="Comptant">Comptant</option>
-                    <option value="30j net">30j net</option>
-                    <option value="30j FDM">30j FDM</option>
-                    <option value="45j net">45j net</option>
-                    <option value="45j FDM">45j FDM</option>
-                    <option value="60j net">60j net</option>
-                    <option value="60j FDM">60j FDM</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs">Encours max (€)</Label>
-                  <Input type="number" step="0.01" value={form.encoursMax} onChange={e => setForm(prev => ({ ...prev, encoursMax: parseFloat(e.target.value) || 0 }))} />
-                </div>
+              <div>
+                <Label className="text-xs">Délai de règlement</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={form.delaiReglement}
+                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                >
+                  <option value="Comptant">Comptant</option>
+                  <option value="30j net">30j net</option>
+                  <option value="30j FDM">30j FDM</option>
+                  <option value="45j net">45j net</option>
+                  <option value="45j FDM">45j FDM</option>
+                  <option value="60j net">60j net</option>
+                  <option value="60j FDM">60j FDM</option>
+                </select>
               </div>
             </div>
           </div>
