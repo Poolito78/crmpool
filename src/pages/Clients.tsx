@@ -48,7 +48,22 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 }
 
 export default function Clients() {
-  const { clients, updateClients, produits, devis } = useCRM();
+  const { clients, updateClients, produits, devis, commandesClient } = useCRM();
+
+  // Calculate encours dû per client (commandes facturées non payées)
+  const encoursDuParClient = useMemo(() => {
+    const map: Record<string, { montant: number; echeances: { montant: number; date: string }[] }> = {};
+    commandesClient.forEach(cc => {
+      if (cc.statut === 'facture') {
+        if (!map[cc.clientId]) map[cc.clientId] = { montant: 0, echeances: [] };
+        map[cc.clientId].montant += cc.totalTTC;
+        if (cc.dateEcheance) {
+          map[cc.clientId].echeances.push({ montant: cc.totalTTC, date: cc.dateEcheance });
+        }
+      }
+    });
+    return map;
+  }, [commandesClient]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const returnDevisId = searchParams.get('returnDevis');
@@ -373,6 +388,7 @@ export default function Clients() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Devis</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -417,6 +433,24 @@ export default function Clients() {
                       );
                     })()}
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    {(() => {
+                      const encours = encoursDuParClient[c.id];
+                      const montantDu = encours?.montant || 0;
+                      const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
+                      const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
+                      if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
+                      return (
+                        <div>
+                          <span className="font-medium text-xs">{formatMontant(montantDu)}</span>
+                          {montantDepasse > 0 && (
+                            <div className="text-xs text-destructive font-medium">
+                              {formatMontant(montantDepasse)} échu
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
