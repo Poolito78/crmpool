@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, type Fournisseur } from '@/lib/store';
+import { generateId, formatMontant, type Fournisseur } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
@@ -25,8 +25,7 @@ const importFields: { key: string; label: string; aliases: string[]; type: 'text
   { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp'], type: 'text' },
   { key: 'francoPort', label: 'Franco de port', aliases: ['franco de port', 'francoport', 'franco', 'franco port'], type: 'number' },
   { key: 'coutTransport', label: 'Coût transport', aliases: ['coût transport', 'couttransport', 'transport', 'frais transport'], type: 'number' },
-  { key: 'delaiReglement', label: 'Délai règlement', aliases: ['délai règlement', 'delai reglement', 'délai de règlement', 'delai de reglement', 'paiement'], type: 'number', default: 30 },
-  { key: 'encoursMax', label: 'Encours max', aliases: ['encours', 'encours max', 'montant encours', 'encours maximum'], type: 'number' },
+  { key: 'delaiReglement', label: 'Délai règlement', aliases: ['délai règlement', 'delai reglement', 'délai de règlement', 'delai de reglement', 'paiement'], type: 'text' },
   { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques'], type: 'text' },
 ];
 
@@ -45,7 +44,22 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 }
 
 export default function Fournisseurs() {
-  const { fournisseurs, updateFournisseurs } = useCRM();
+  const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
+
+  // Calculate encours dû per fournisseur (commandes reçues non payées)
+  const encoursDuParFournisseur = useMemo(() => {
+    const map: Record<string, { montant: number; echeances: { montant: number; date: string }[] }> = {};
+    commandesFournisseur.forEach(cf => {
+      if (cf.statut === 'recue') {
+        if (!map[cf.fournisseurId]) map[cf.fournisseurId] = { montant: 0, echeances: [] };
+        map[cf.fournisseurId].montant += cf.totalTTC;
+        if (cf.dateEcheance) {
+          map[cf.fournisseurId].echeances.push({ montant: cf.totalTTC, date: cf.dateEcheance });
+        }
+      }
+    });
+    return map;
+  }, [commandesFournisseur]);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Fournisseur | null>(null);
@@ -229,25 +243,44 @@ export default function Fournisseurs() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => (
-              <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-medium">{f.societe}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(f => {
+              const encours = encoursDuParFournisseur[f.id];
+              const montantDu = encours?.montant || 0;
+              const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
+              const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
+              return (
+                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-medium">{f.societe}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
+                  <td className="px-4 py-3 text-right">
+                    {montantDu > 0 ? (
+                      <div>
+                        <span className="font-medium">{formatMontant(montantDu)}</span>
+                        {montantDepasse > 0 && (
+                          <div className="text-xs text-destructive font-medium">
+                            {formatMontant(montantDepasse)} échu
+                          </div>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun fournisseur</p>}
