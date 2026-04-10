@@ -209,7 +209,6 @@ function dbToFournisseur(r: any): Fournisseur {
     francoPort: Number(r.franco_port) || 0,
     coutTransport: Number(r.cout_transport) || 0,
     delaiReglement: r.delai_reglement ? String(r.delai_reglement) : '45j FDM',
-    encoursMax: Number(r.encours_max) || 0,
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
 }
@@ -229,7 +228,6 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     franco_port: f.francoPort,
     cout_transport: f.coutTransport,
     delai_reglement: f.delaiReglement,
-    encours_max: f.encoursMax,
     date_creation: f.dateCreation,
   };
 }
@@ -368,6 +366,7 @@ function dbToCommandeFournisseur(r: any): CommandeFournisseur {
     fraisTransport: Number(r.frais_transport) || 0,
     totalTTC: Number(r.total_ttc) || 0,
     notes: r.notes || undefined,
+    dateEcheance: r.date_echeance || undefined,
   };
 }
 
@@ -385,6 +384,7 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
     frais_transport: cf.fraisTransport,
     total_ttc: cf.totalTTC,
     notes: cf.notes || null,
+    date_echeance: cf.dateEcheance || null,
   };
 }
 
@@ -407,6 +407,7 @@ function dbToCommandeClient(r: any): CommandeClient {
     notes: r.notes || undefined,
     dateDepart: r.date_depart || undefined,
     dateLivraisonPrevue: r.date_livraison_prevue || undefined,
+    dateEcheance: r.date_echeance || undefined,
   };
 }
 
@@ -428,6 +429,7 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
     notes: cc.notes || null,
     date_depart: cc.dateDepart || null,
     date_livraison_prevue: cc.dateLivraisonPrevue || null,
+    date_echeance: cc.dateEcheance || null,
   };
 }
 
