@@ -44,7 +44,6 @@ export interface Fournisseur {
   francoPort: number;
   coutTransport: number;
   delaiReglement: string;
-  encoursMax: number;
   dateCreation: string;
 }
 
@@ -87,15 +86,16 @@ export interface CommandeFournisseur {
   fournisseurId: string;
   numero: string;
   dateCreation: string;
-  statut: 'en_attente' | 'passee' | 'recue';
+  statut: 'en_attente' | 'passee' | 'recue' | 'payee';
   lignes: { produitId: string; description: string; reference: string; quantite: number; prixAchat: number; total: number }[];
   totalHT: number;
   fraisTransport: number;
   totalTTC: number;
   notes?: string;
+  dateEcheance?: string;
 }
 
-export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture';
+export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture' | 'payee';
 
 export interface CommandeClient {
   id: string;
@@ -113,6 +113,7 @@ export interface CommandeClient {
   notes?: string;
   dateDepart?: string;
   dateLivraisonPrevue?: string;
+  dateEcheance?: string;
 }
 
 export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
@@ -121,6 +122,7 @@ export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: stri
   commande_envoyee: { label: 'Envoyée', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
   livre: { label: 'Livré', color: 'bg-success/10 text-success' },
   facture: { label: 'Facturé', color: 'bg-primary/10 text-primary' },
+  payee: { label: 'Payée', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
 };
 
 export interface LigneDevis {
