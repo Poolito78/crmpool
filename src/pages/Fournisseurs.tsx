@@ -328,6 +328,7 @@ export default function Fournisseurs() {
                     value={form.delaiReglement}
                     onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
                   >
+                    <option value="Comptant">Comptant</option>
                     <option value="30j net">30j net</option>
                     <option value="30j FDM">30j FDM</option>
                     <option value="45j net">45j net</option>
