@@ -461,7 +461,7 @@ export default function Clients() {
                 </tr>
                 {expandedClient === c.id && c.adressesLivraison?.length > 0 && (
                   <tr key={`${c.id}-addr`}>
-                    <td colSpan={8} className="px-4 py-2 bg-muted/20">
+                    <td colSpan={9} className="px-4 py-2 bg-muted/20">
                       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         {c.adressesLivraison.map(a => (
                           <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
