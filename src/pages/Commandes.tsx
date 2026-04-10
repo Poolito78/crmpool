@@ -11,6 +11,7 @@ const statutConfig: Record<string, { label: string; color: string; icon: typeof 
   en_attente: { label: 'En attente', color: 'bg-warning/10 text-warning', icon: Clock },
   passee: { label: 'Passée', color: 'bg-info/10 text-info', icon: ShoppingCart },
   recue: { label: 'Reçue', color: 'bg-success/10 text-success', icon: CheckCircle },
+  payee: { label: 'Payée', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', icon: CheckCircle },
 };
 
 export default function Commandes() {
@@ -86,6 +87,7 @@ export default function Commandes() {
           <option value="en_attente">En attente</option>
           <option value="passee">Passée</option>
           <option value="recue">Reçue</option>
+          <option value="payee">Payée</option>
         </select>
       </div>
 
@@ -129,6 +131,7 @@ export default function Commandes() {
                       <option value="en_attente">En attente</option>
                       <option value="passee">Passée</option>
                       <option value="recue">Reçue</option>
+                      <option value="payee">Payée</option>
                     </select>
                     <button onClick={() => setDeleteId(cf.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer">
                       <Trash2 className="w-4 h-4" />
