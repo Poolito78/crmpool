@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', encoursMax: 0
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -71,7 +71,7 @@ export default function Fournisseurs() {
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM', encoursMax: f.encoursMax ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
     setDialogOpen(true);
   }
 
