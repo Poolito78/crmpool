@@ -451,6 +451,7 @@ export default function Clients() {
                         </div>
                       );
                     })()}
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
