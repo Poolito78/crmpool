@@ -74,6 +74,7 @@ export type Database = {
           created_at: string
           date_creation: string
           date_depart: string | null
+          date_echeance: string | null
           date_livraison_prevue: string | null
           devis_id: string | null
           frais_port_ht: number
@@ -93,6 +94,7 @@ export type Database = {
           created_at?: string
           date_creation?: string
           date_depart?: string | null
+          date_echeance?: string | null
           date_livraison_prevue?: string | null
           devis_id?: string | null
           frais_port_ht?: number
@@ -112,6 +114,7 @@ export type Database = {
           created_at?: string
           date_creation?: string
           date_depart?: string | null
+          date_echeance?: string | null
           date_livraison_prevue?: string | null
           devis_id?: string | null
           frais_port_ht?: number
@@ -140,6 +143,7 @@ export type Database = {
         Row: {
           created_at: string
           date_creation: string
+          date_echeance: string | null
           devis_id: string | null
           fournisseur_id: string
           frais_transport: number
@@ -155,6 +159,7 @@ export type Database = {
         Insert: {
           created_at?: string
           date_creation?: string
+          date_echeance?: string | null
           devis_id?: string | null
           fournisseur_id: string
           frais_transport?: number
@@ -170,6 +175,7 @@ export type Database = {
         Update: {
           created_at?: string
           date_creation?: string
+          date_echeance?: string | null
           devis_id?: string | null
           fournisseur_id?: string
           frais_transport?: number
@@ -276,7 +282,6 @@ export type Database = {
           date_creation: string
           delai_reglement: string
           email: string
-          encours_max: number
           franco_port: number
           id: string
           nom: string
@@ -294,7 +299,6 @@ export type Database = {
           date_creation?: string
           delai_reglement?: string
           email?: string
-          encours_max?: number
           franco_port?: number
           id?: string
           nom: string
@@ -312,7 +316,6 @@ export type Database = {
           date_creation?: string
           delai_reglement?: string
           email?: string
-          encours_max?: number
           franco_port?: number
           id?: string
           nom?: string
