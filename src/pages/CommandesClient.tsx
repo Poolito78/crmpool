@@ -321,7 +321,7 @@ export default function CommandesClient() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
+              <tr><td colSpan={9} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
             )}
           </tbody>
         </table>
