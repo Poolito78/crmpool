@@ -223,7 +223,7 @@ export default function CommandesClient() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {allStatuts.map(s => {
           const cmds = commandesClient.filter(c => c.statut === s);
           const total = cmds.reduce((acc, c) => acc + c.totalTTC, 0);
@@ -247,6 +247,7 @@ export default function CommandesClient() {
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">Réf. Affaire</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Date</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Départ / Livraison</th>
+              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Échéance</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total TTC</th>
               <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
@@ -256,6 +257,7 @@ export default function CommandesClient() {
             {filtered.map(cmd => {
               const client = clients.find(c => c.id === cmd.clientId);
               const statutInfo = STATUTS_COMMANDE_CLIENT[cmd.statut];
+              const isOverdue = cmd.dateEcheance && new Date(cmd.dateEcheance) < new Date() && cmd.statut === 'facture';
               return (
                 <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                   <td className="py-3 px-4 font-mono text-xs">{cmd.numero}</td>
@@ -271,6 +273,14 @@ export default function CommandesClient() {
                         {cmd.dateDepart && <div className="text-muted-foreground">Départ: <span className="font-medium text-foreground">{formatDate(cmd.dateDepart)}</span></div>}
                         {cmd.dateLivraisonPrevue && <div className="text-muted-foreground">Livr.: <span className="font-medium text-foreground">{formatDate(cmd.dateLivraisonPrevue)}</span></div>}
                       </div>
+                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                  </td>
+                  <td className="py-3 px-4 hidden lg:table-cell">
+                    {cmd.dateEcheance ? (
+                      <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
+                        {formatDate(cmd.dateEcheance)}
+                        {isOverdue && <span className="block text-[10px]">Échu</span>}
+                      </span>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
                   <td className="py-3 px-4 text-right font-medium">{formatMontant(cmd.totalTTC)}</td>
@@ -311,7 +321,7 @@ export default function CommandesClient() {
               );
             })}
             {filtered.length === 0 && (
-              <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
+              <tr><td colSpan={9} className="py-12 text-center text-muted-foreground">Aucune commande client</td></tr>
             )}
           </tbody>
         </table>

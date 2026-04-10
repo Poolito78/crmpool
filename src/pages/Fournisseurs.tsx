@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, type Fournisseur } from '@/lib/store';
+import { generateId, formatMontant, type Fournisseur } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
@@ -12,7 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', encoursMax: 0
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -25,8 +25,7 @@ const importFields: { key: string; label: string; aliases: string[]; type: 'text
   { key: 'codePostal', label: 'Code postal', aliases: ['code postal', 'codepostal', 'cp'], type: 'text' },
   { key: 'francoPort', label: 'Franco de port', aliases: ['franco de port', 'francoport', 'franco', 'franco port'], type: 'number' },
   { key: 'coutTransport', label: 'Coût transport', aliases: ['coût transport', 'couttransport', 'transport', 'frais transport'], type: 'number' },
-  { key: 'delaiReglement', label: 'Délai règlement', aliases: ['délai règlement', 'delai reglement', 'délai de règlement', 'delai de reglement', 'paiement'], type: 'number', default: 30 },
-  { key: 'encoursMax', label: 'Encours max', aliases: ['encours', 'encours max', 'montant encours', 'encours maximum'], type: 'number' },
+  { key: 'delaiReglement', label: 'Délai règlement', aliases: ['délai règlement', 'delai reglement', 'délai de règlement', 'delai de reglement', 'paiement'], type: 'text' },
   { key: 'notes', label: 'Notes', aliases: ['notes', 'commentaire', 'remarques'], type: 'text' },
 ];
 
@@ -45,7 +44,22 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 }
 
 export default function Fournisseurs() {
-  const { fournisseurs, updateFournisseurs } = useCRM();
+  const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
+
+  // Calculate encours dû per fournisseur (commandes reçues non payées)
+  const encoursDuParFournisseur = useMemo(() => {
+    const map: Record<string, { montant: number; echeances: { montant: number; date: string }[] }> = {};
+    commandesFournisseur.forEach(cf => {
+      if (cf.statut === 'recue') {
+        if (!map[cf.fournisseurId]) map[cf.fournisseurId] = { montant: 0, echeances: [] };
+        map[cf.fournisseurId].montant += cf.totalTTC;
+        if (cf.dateEcheance) {
+          map[cf.fournisseurId].echeances.push({ montant: cf.totalTTC, date: cf.dateEcheance });
+        }
+      }
+    });
+    return map;
+  }, [commandesFournisseur]);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Fournisseur | null>(null);
@@ -71,7 +85,7 @@ export default function Fournisseurs() {
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM', encoursMax: f.encoursMax ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
     setDialogOpen(true);
   }
 
@@ -229,25 +243,44 @@ export default function Fournisseurs() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => (
-              <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                <td className="px-4 py-3 font-medium">{f.societe}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
-                <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-1 justify-end">
-                    <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                    <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filtered.map(f => {
+              const encours = encoursDuParFournisseur[f.id];
+              const montantDu = encours?.montant || 0;
+              const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
+              const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
+              return (
+                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-3 font-medium">{f.societe}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
+                  <td className="px-4 py-3 text-right">
+                    {montantDu > 0 ? (
+                      <div>
+                        <span className="font-medium">{formatMontant(montantDu)}</span>
+                        {montantDepasse > 0 && (
+                          <div className="text-xs text-destructive font-medium">
+                            {formatMontant(montantDepasse)} échu
+                          </div>
+                        )}
+                      </div>
+                    ) : <span className="text-muted-foreground">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                      <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun fournisseur</p>}
@@ -320,27 +353,21 @@ export default function Fournisseurs() {
             </div>
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Délai de règlement</Label>
-                  <select
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    value={form.delaiReglement}
-                    onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
-                  >
-                    <option value="Comptant">Comptant</option>
-                    <option value="30j net">30j net</option>
-                    <option value="30j FDM">30j FDM</option>
-                    <option value="45j net">45j net</option>
-                    <option value="45j FDM">45j FDM</option>
-                    <option value="60j net">60j net</option>
-                    <option value="60j FDM">60j FDM</option>
-                  </select>
-                </div>
-                <div>
-                  <Label className="text-xs">Encours max (€)</Label>
-                  <Input type="number" step="0.01" value={form.encoursMax} onChange={e => setForm(prev => ({ ...prev, encoursMax: parseFloat(e.target.value) || 0 }))} />
-                </div>
+              <div>
+                <Label className="text-xs">Délai de règlement</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  value={form.delaiReglement}
+                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                >
+                  <option value="Comptant">Comptant</option>
+                  <option value="30j net">30j net</option>
+                  <option value="30j FDM">30j FDM</option>
+                  <option value="45j net">45j net</option>
+                  <option value="45j FDM">45j FDM</option>
+                  <option value="60j net">60j net</option>
+                  <option value="60j FDM">60j FDM</option>
+                </select>
               </div>
             </div>
           </div>
