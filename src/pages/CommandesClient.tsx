@@ -223,7 +223,7 @@ export default function CommandesClient() {
       </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-6 gap-3">
         {allStatuts.map(s => {
           const cmds = commandesClient.filter(c => c.statut === s);
           const total = cmds.reduce((acc, c) => acc + c.totalTTC, 0);
