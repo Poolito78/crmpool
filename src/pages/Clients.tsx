@@ -395,7 +395,7 @@ export default function Clients() {
           <tbody>
             {filtered.map(c => (
               <>
-                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
                   <td className="px-4 py-3 font-medium">
                     {c.nom}
                     {c.estRevendeur && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">Revendeur</Badge>}
@@ -490,7 +490,7 @@ export default function Clients() {
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
         {filtered.map(c => (
-          <div key={c.id} className="bg-card rounded-xl border border-border p-4">
+          <div key={c.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={() => openEdit(c)}>
             <div className="flex justify-between items-start">
               <div>
                 <p className="font-medium">{c.nom}</p>
