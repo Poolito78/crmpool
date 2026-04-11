@@ -313,6 +313,9 @@ export default function CommandesClient() {
                       <button onClick={() => openFactureDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Facturer">
                         <Receipt className="w-4 h-4 text-muted-foreground" />
                       </button>
+                      <button onClick={() => openEmailFacture(cmd)} className="p-1.5 rounded hover:bg-muted" title="Envoyer par email">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                      </button>
                       <button onClick={() => setPreviewCommande(cmd)} className="p-1.5 rounded hover:bg-muted" title="Aperçu">
                         <Eye className="w-4 h-4 text-muted-foreground" />
                       </button>
