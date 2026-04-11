@@ -632,6 +632,23 @@ export function formatDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR');
 }
 
+export function calculerDateEcheance(dateCreation: string, delaiReglement: string): Date {
+  const base = new Date(dateCreation);
+  if (!delaiReglement || delaiReglement === 'Comptant') return base;
+  const match = delaiReglement.match(/^(\d+)j\s*(FDM|net)?$/i);
+  if (!match) return base;
+  const jours = parseInt(match[1]);
+  const fdm = (match[2] || '').toUpperCase() === 'FDM';
+  if (fdm) {
+    const finMois = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    finMois.setDate(finMois.getDate() + jours);
+    return finMois;
+  }
+  const result = new Date(base);
+  result.setDate(result.getDate() + jours);
+  return result;
+}
+
 export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number | null {
   if (poidsKg <= 0) return 0;
   if (poidsKg > 2000) {

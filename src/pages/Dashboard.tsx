@@ -1,10 +1,10 @@
 import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis, formatMontant } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck } from 'lucide-react';
+import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
-  const { clients, produits, fournisseurs, devis } = useCRM();
+  const { clients, produits, fournisseurs, devis, commandesFournisseur } = useCRM();
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
@@ -32,6 +32,22 @@ export default function Dashboard() {
   const devisMensuels = devisAnnuels.filter(d => new Date(d.dateCreation).getMonth() === currentMonth);
   const margeAnnuelle = calcMarge(devisAnnuels);
   const margeMensuelle = calcMarge(devisMensuels);
+
+  // Échéances fournisseurs
+  const echeancesFournisseurs = commandesFournisseur
+    .filter(cf => cf.statut === 'recue')
+    .map(cf => {
+      const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
+      const delai = fourn?.delaiReglement || '45j FDM';
+      const dateEch = calculerDateEcheance(cf.dateCreation, delai);
+      return { cf, fourn, dateEch };
+    })
+    .sort((a, b) => a.dateEch.getTime() - b.dateEch.getTime());
+
+  const now = new Date();
+  const echeancesEchues = echeancesFournisseurs.filter(e => e.dateEch < now);
+  const totalEchu = echeancesEchues.reduce((s, e) => s + e.cf.totalTTC, 0);
+  const totalEncours = echeancesFournisseurs.reduce((s, e) => s + e.cf.totalTTC, 0);
 
   const stats = [
     { label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
@@ -69,7 +85,50 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
+      <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
+        {/* Encours fournisseurs */}
+        {echeancesFournisseurs.length > 0 && (
+          <div className="bg-card rounded-xl border border-border p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+                <Clock className="w-5 h-5 text-warning" />
+                Échéances fournisseurs
+              </h2>
+              <Link to="/fournisseurs" className="text-sm text-primary hover:underline">Voir tout</Link>
+            </div>
+            {totalEchu > 0 && (
+              <div className="mb-3 p-2 rounded-lg bg-destructive/10 text-destructive text-sm font-medium flex justify-between">
+                <span>⚠ Montant échu</span>
+                <span>{formatMontant(totalEchu)}</span>
+              </div>
+            )}
+            <div className="mb-3 p-2 rounded-lg bg-muted/50 text-sm flex justify-between">
+              <span className="text-muted-foreground">Total encours</span>
+              <span className="font-semibold">{formatMontant(totalEncours)}</span>
+            </div>
+            <div className="space-y-2">
+              {echeancesFournisseurs.slice(0, 6).map(({ cf, fourn, dateEch }) => {
+                const echu = dateEch < now;
+                const joursRestants = Math.round((dateEch.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                return (
+                  <div key={cf.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                    <div className="min-w-0">
+                      <p className="font-medium text-sm truncate">{fourn?.societe || '—'}</p>
+                      <p className="text-xs text-muted-foreground">{cf.numero}</p>
+                    </div>
+                    <div className="text-right shrink-0 ml-3">
+                      <p className="text-sm font-semibold">{formatMontant(cf.totalTTC)}</p>
+                      <p className={`text-xs font-medium ${echu ? 'text-destructive' : joursRestants <= 10 ? 'text-warning' : 'text-muted-foreground'}`}>
+                        {echu ? `Échu depuis ${Math.abs(joursRestants)}j` : joursRestants === 0 ? `Aujourd'hui` : `Dans ${joursRestants}j — ${dateEch.toLocaleDateString('fr-FR')}`}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Recent Quotes */}
         <div className="bg-card rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">

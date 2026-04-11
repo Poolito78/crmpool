@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, type Fournisseur } from '@/lib/store';
+import { generateId, formatMontant, calculerDateEcheance, type Fournisseur } from '@/lib/store';
 import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
@@ -46,20 +46,21 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
 
-  // Calculate encours dû per fournisseur (commandes reçues non payées)
+  // Encours calculés dynamiquement depuis delaiReglement du fournisseur
   const encoursDuParFournisseur = useMemo(() => {
-    const map: Record<string, { montant: number; echeances: { montant: number; date: string }[] }> = {};
+    const map: Record<string, { montant: number; echeances: { montant: number; date: Date }[] }> = {};
     commandesFournisseur.forEach(cf => {
       if (cf.statut === 'recue') {
+        const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
+        const delai = fourn?.delaiReglement || '45j FDM';
+        const dateEch = calculerDateEcheance(cf.dateCreation, delai);
         if (!map[cf.fournisseurId]) map[cf.fournisseurId] = { montant: 0, echeances: [] };
         map[cf.fournisseurId].montant += cf.totalTTC;
-        if (cf.dateEcheance) {
-          map[cf.fournisseurId].echeances.push({ montant: cf.totalTTC, date: cf.dateEcheance });
-        }
+        map[cf.fournisseurId].echeances.push({ montant: cf.totalTTC, date: dateEch });
       }
     });
     return map;
-  }, [commandesFournisseur]);
+  }, [commandesFournisseur, fournisseurs]);
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Fournisseur | null>(null);
@@ -243,7 +244,8 @@ export default function Fournisseurs() {
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Délai règlement</th>
+              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours / Échéance</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -251,8 +253,11 @@ export default function Fournisseurs() {
             {filtered.map(f => {
               const encours = encoursDuParFournisseur[f.id];
               const montantDu = encours?.montant || 0;
-              const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
+              const now = new Date();
+              const echeancesDepassees = encours?.echeances.filter(e => e.date < now) || [];
               const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
+              const prochainesEcheances = encours?.echeances.filter(e => e.date >= now).sort((a, b) => a.date.getTime() - b.date.getTime()) || [];
+              const prochaineDate = prochainesEcheances[0]?.date;
               return (
                 <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-3 font-medium">{f.societe}</td>
@@ -260,10 +265,16 @@ export default function Fournisseurs() {
                   <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
                   <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
                   <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-sm">{f.delaiReglement || '—'}</td>
                   <td className="px-4 py-3 text-right">
                     {montantDu > 0 ? (
                       <div>
                         <span className="font-medium">{formatMontant(montantDu)}</span>
+                        {prochaineDate && (
+                          <div className="text-xs text-muted-foreground">
+                            éch. {prochaineDate.toLocaleDateString('fr-FR')}
+                          </div>
+                        )}
                         {montantDepasse > 0 && (
                           <div className="text-xs text-destructive font-medium">
                             {formatMontant(montantDepasse)} échu
