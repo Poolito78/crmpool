@@ -133,6 +133,12 @@ export default function CommandesClient() {
     setCmdFournisseurDevis(linkedDevis);
   }
 
+  function openEmailFacture(cmd: CommandeClient) {
+    const client = clients.find(c => c.id === cmd.clientId);
+    if (!client) { toast.error('Client introuvable'); return; }
+    setEmailTarget({ type: 'facture', commande: cmd, contact: client });
+  }
+
   // ---- Action: Envoi AR ----
   function openArDialog(cmd: CommandeClient) {
     setArCommande(cmd);
