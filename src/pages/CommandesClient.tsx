@@ -37,6 +37,7 @@ export default function CommandesClient() {
 
   // Commande fournisseur dialog
   const [cmdFournisseurDevis, setCmdFournisseurDevis] = useState<any>(null);
+  const [emailTarget, setEmailTarget] = useState<any>(null);
 
   // Form state
   const [clientId, setClientId] = useState('');
