@@ -44,7 +44,6 @@ export default function Dashboard() {
     })
     .sort((a, b) => a.dateEch.getTime() - b.dateEch.getTime());
 
-  const now = new Date();
   const echeancesEchues = echeancesFournisseurs.filter(e => e.dateEch < now);
   const totalEchu = echeancesEchues.reduce((s, e) => s + e.cf.totalTTC, 0);
   const totalEncours = echeancesFournisseurs.reduce((s, e) => s + e.cf.totalTTC, 0);
