@@ -591,6 +591,13 @@ export default function CommandesClient() {
         }}
       />
 
+      {/* Email Dialog */}
+      <CommandeEmailDialog
+        open={!!emailTarget}
+        onOpenChange={open => { if (!open) setEmailTarget(null); }}
+        target={emailTarget}
+      />
+
       {/* Delete confirmation */}
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
