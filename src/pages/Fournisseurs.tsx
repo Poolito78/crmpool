@@ -259,7 +259,7 @@ export default function Fournisseurs() {
               const prochainesEcheances = encours?.echeances.filter(e => e.date >= now).sort((a, b) => a.date.getTime() - b.date.getTime()) || [];
               const prochaineDate = prochainesEcheances[0]?.date;
               return (
-                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(f)}>
                   <td className="px-4 py-3 font-medium">{f.societe}</td>
                   <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
                   <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
@@ -286,7 +286,7 @@ export default function Fournisseurs() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                      <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                     </div>
                   </td>
                 </tr>
@@ -299,12 +299,12 @@ export default function Fournisseurs() {
 
       <div className="md:hidden space-y-3">
         {filtered.map(f => (
-          <div key={f.id} className="bg-card rounded-xl border border-border p-4">
+          <div key={f.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={() => openEdit(f)}>
             <div className="flex justify-between items-start">
               <div><p className="font-medium">{f.societe}</p><p className="text-sm text-muted-foreground">{f.nom}</p></div>
               <div className="flex gap-1">
                 <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                <button onClick={() => confirmRemove(f.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
             <div className="mt-2 text-sm text-muted-foreground space-y-0.5">
