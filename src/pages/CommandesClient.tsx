@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import ClientCombobox from '@/components/ClientCombobox';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
-
+import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
 export default function CommandesClient() {
