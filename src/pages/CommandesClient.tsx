@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import ClientCombobox from '@/components/ClientCombobox';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
-
+import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
 export default function CommandesClient() {
@@ -37,6 +37,7 @@ export default function CommandesClient() {
 
   // Commande fournisseur dialog
   const [cmdFournisseurDevis, setCmdFournisseurDevis] = useState<any>(null);
+  const [emailTarget, setEmailTarget] = useState<any>(null);
 
   // Form state
   const [clientId, setClientId] = useState('');
@@ -130,6 +131,12 @@ export default function CommandesClient() {
       return;
     }
     setCmdFournisseurDevis(linkedDevis);
+  }
+
+  function openEmailFacture(cmd: CommandeClient) {
+    const client = clients.find(c => c.id === cmd.clientId);
+    if (!client) { toast.error('Client introuvable'); return; }
+    setEmailTarget({ type: 'facture', commande: cmd, contact: client });
   }
 
   // ---- Action: Envoi AR ----
@@ -305,6 +312,9 @@ export default function CommandesClient() {
                       </button>
                       <button onClick={() => openFactureDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Facturer">
                         <Receipt className="w-4 h-4 text-muted-foreground" />
+                      </button>
+                      <button onClick={() => openEmailFacture(cmd)} className="p-1.5 rounded hover:bg-muted" title="Envoyer par email">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
                       </button>
                       <button onClick={() => setPreviewCommande(cmd)} className="p-1.5 rounded hover:bg-muted" title="Aperçu">
                         <Eye className="w-4 h-4 text-muted-foreground" />
@@ -579,6 +589,13 @@ export default function CommandesClient() {
         onSaveCommandes={(commandes) => {
           updateCommandesFournisseur(prev => [...prev, ...commandes]);
         }}
+      />
+
+      {/* Email Dialog */}
+      <CommandeEmailDialog
+        open={!!emailTarget}
+        onOpenChange={open => { if (!open) setEmailTarget(null); }}
+        target={emailTarget}
       />
 
       {/* Delete confirmation */}

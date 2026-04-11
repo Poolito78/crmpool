@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { type CommandeFournisseur, formatMontant, formatDate } from '@/lib/store';
-import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search } from 'lucide-react';
+import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import CommandeFournisseurEditDialog from '@/components/CommandeFournisseurEditDialog';
+import CommandeFournisseurPreviewDialog from '@/components/CommandeFournisseurPreviewDialog';
+import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 
 const statutConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   en_attente: { label: 'En attente', color: 'bg-warning/10 text-warning', icon: Clock },
@@ -15,10 +18,13 @@ const statutConfig: Record<string, { label: string; color: string; icon: typeof 
 };
 
 export default function Commandes() {
-  const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis } = useCRM();
+  const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis, produits } = useCRM();
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editCommande, setEditCommande] = useState<CommandeFournisseur | null>(null);
+  const [previewCommande, setPreviewCommande] = useState<CommandeFournisseur | null>(null);
+  const [emailTarget, setEmailTarget] = useState<any>(null);
 
   const filtered = commandesFournisseur
     .filter(cf => {
@@ -43,11 +49,21 @@ export default function Commandes() {
     toast.success('Commande supprimée');
   }
 
+  function handleSaveEdit(updated: CommandeFournisseur) {
+    updateCommandesFournisseur(prev => prev.map(cf => cf.id === updated.id ? updated : cf));
+  }
+
+  function openEmail(cf: CommandeFournisseur) {
+    const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
+    if (!fourn) { toast.error('Fournisseur introuvable'); return; }
+    setEmailTarget({ type: 'fournisseur', commande: cf, contact: fourn });
+  }
+
   const stats = {
     enAttente: commandesFournisseur.filter(c => c.statut === 'en_attente').length,
     passees: commandesFournisseur.filter(c => c.statut === 'passee').length,
     recues: commandesFournisseur.filter(c => c.statut === 'recue').length,
-    totalEnCours: commandesFournisseur.filter(c => c.statut !== 'recue').reduce((s, c) => s + c.totalTTC, 0),
+    totalEnCours: commandesFournisseur.filter(c => c.statut !== 'recue' && c.statut !== 'payee').reduce((s, c) => s + c.totalTTC, 0),
   };
 
   return (
@@ -133,6 +149,15 @@ export default function Commandes() {
                       <option value="recue">Reçue</option>
                       <option value="payee">Payée</option>
                     </select>
+                    <button onClick={() => setPreviewCommande(cf)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu">
+                      <Eye className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button onClick={() => setEditCommande(cf)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier">
+                      <Pencil className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button onClick={() => openEmail(cf)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email">
+                      <Mail className="w-4 h-4 text-muted-foreground" />
+                    </button>
                     <button onClick={() => setDeleteId(cf.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -144,6 +169,37 @@ export default function Commandes() {
         })}
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucune commande fournisseur</p>}
       </div>
+
+      {/* Edit Dialog */}
+      <CommandeFournisseurEditDialog
+        open={!!editCommande}
+        onOpenChange={open => { if (!open) setEditCommande(null); }}
+        commande={editCommande}
+        fournisseurs={fournisseurs}
+        produits={produits}
+        onSave={handleSaveEdit}
+      />
+
+      {/* Preview Dialog */}
+      <CommandeFournisseurPreviewDialog
+        open={!!previewCommande}
+        onOpenChange={open => { if (!open) setPreviewCommande(null); }}
+        commande={previewCommande}
+        fournisseur={previewCommande ? fournisseurs.find(f => f.id === previewCommande.fournisseurId) : undefined}
+        onEmail={() => {
+          if (previewCommande) {
+            openEmail(previewCommande);
+            setPreviewCommande(null);
+          }
+        }}
+      />
+
+      {/* Email Dialog */}
+      <CommandeEmailDialog
+        open={!!emailTarget}
+        onOpenChange={open => { if (!open) setEmailTarget(null); }}
+        target={emailTarget}
+      />
 
       <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
         <AlertDialogContent>
