@@ -120,7 +120,7 @@ export default function Commandes() {
           return (
             <div key={cf.id} className="bg-card rounded-xl border border-border p-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setPreviewCommande(cf)}>
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-heading font-semibold">{cf.numero}</p>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${config.color}`}>{config.label}</span>
