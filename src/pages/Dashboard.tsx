@@ -110,7 +110,7 @@ export default function Dashboard() {
                 const echu = dateEch < now;
                 const joursRestants = Math.round((dateEch.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                 return (
-                  <div key={cf.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                  <Link key={cf.id} to={`/commandes?search=${encodeURIComponent(cf.numero)}`} className="flex items-center justify-between py-2 border-b border-border last:border-0 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors cursor-pointer">
                     <div className="min-w-0">
                       <p className="font-medium text-sm truncate">{fourn?.societe || '—'}</p>
                       <p className="text-xs text-muted-foreground">{cf.numero}</p>
@@ -121,7 +121,7 @@ export default function Dashboard() {
                         {echu ? `Échu depuis ${Math.abs(joursRestants)}j` : joursRestants === 0 ? `Aujourd'hui` : `Dans ${joursRestants}j — ${dateEch.toLocaleDateString('fr-FR')}`}
                       </p>
                     </div>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -139,7 +139,7 @@ export default function Dashboard() {
               const client = clients.find(c => c.id === d.clientId);
               const total = calculerTotalDevis(d.lignes);
               return (
-                <div key={d.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+                <Link key={d.id} to={`/devis?editDevis=${d.id}`} className="flex items-center justify-between py-2 border-b border-border last:border-0 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors cursor-pointer">
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{d.numero}</p>
                     <p className="text-xs text-muted-foreground truncate">{client?.nom || 'Client inconnu'}</p>
@@ -150,7 +150,7 @@ export default function Dashboard() {
                     </span>
                     <span className="text-sm font-semibold whitespace-nowrap">{formatMontant(total.totalTTC)}</span>
                   </div>
-                </div>
+                </Link>
               );
             })}
             {devis.length === 0 && <p className="text-sm text-muted-foreground">Aucun devis</p>}
@@ -165,7 +165,7 @@ export default function Dashboard() {
           </div>
           <div className="space-y-3">
             {produitsStockBas.slice(0, 5).map(p => (
-              <div key={p.id} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+              <Link key={p.id} to={`/produits?search=${encodeURIComponent(p.reference)}&highlight=${p.id}`} className="flex items-center justify-between py-2 border-b border-border last:border-0 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors cursor-pointer">
                 <div className="min-w-0">
                   <p className="font-medium text-sm truncate">{p.description}</p>
                   <p className="text-xs text-muted-foreground">{p.reference}</p>
@@ -174,7 +174,7 @@ export default function Dashboard() {
                   <span className="text-sm font-semibold text-warning">{p.stock}</span>
                   <span className="text-xs text-muted-foreground">/ {p.stockMin} min</span>
                 </div>
-              </div>
+              </Link>
             ))}
             {produitsStockBas.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">✅ Stock OK</p>}
           </div>

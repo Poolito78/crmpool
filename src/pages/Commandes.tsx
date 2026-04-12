@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { type CommandeFournisseur, formatMontant, formatDate } from '@/lib/store';
 import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail } from 'lucide-react';
@@ -19,7 +20,8 @@ const statutConfig: Record<string, { label: string; color: string; icon: typeof 
 
 export default function Commandes() {
   const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis, produits } = useCRM();
-  const [search, setSearch] = useState('');
+  const [searchParams] = useSearchParams();
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editCommande, setEditCommande] = useState<CommandeFournisseur | null>(null);
