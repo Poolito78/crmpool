@@ -1,0 +1,171 @@
+diff --git a/src/pages/Produits.tsx b/src/pages/Produits.tsx
+index 145042a..4d07aba 100644
+--- a/src/pages/Produits.tsx
++++ b/src/pages/Produits.tsx
+@@ -93,16 +93,34 @@ export default function Produits() {
+   // Force remise revendeur to 30% for all products
+   const safeProduits = useMemo(() => {
+     let needsUpdate = false;
++
++    // Helper to calculate prixAchat of a composite product from its composants
++    // Uses raw produits to avoid circular reference
++    function calcPrixAchatCompose(p: typeof produits[0]): number {
++      if (!p.composants || p.composants.length === 0) return p.prixAchat ?? 0;
++      const total = p.composants.reduce((sum, c) => {
++        const comp = produits.find(pr => pr.id === c.produitId);
++        if (!comp) return sum;
++        // Recursive for nested composites
++        const compPrix = (comp.composants && comp.composants.length > 0)
++          ? calcPrixAchatCompose(comp)
++          : (comp.prixAchat ?? 0);
++        return sum + compPrix * c.quantite;
++      }, 0);
++      return Math.round(total * 100) / 100;
++    }
++
+     const safe = produits.map(p => {
+-      const prixAchat = p.prixAchat ?? 0;
+-      const remise = 30; // Force 30%
++      const isCompose = p.composants && p.composants.length > 0;
++      const prixAchat = isCompose ? calcPrixAchatCompose(p) : (p.prixAchat ?? 0);
++      const remise = 30;
+       const prixRevendeur = p.prixRevendeur ?? 0;
+       const coefficient = prixAchat > 0 && prixRevendeur > 0
+         ? prixRevendeur / prixAchat
+         : (p.coefficient ?? 1.6);
+       const recalcRevendeur = calcPrixRevendeurFromCoeff(prixAchat, coefficient);
+       const recalcPublic = calcPrixPublicFromRevendeur(recalcRevendeur, remise);
+-      if (p.remiseRevendeur !== 30 || p.prixHT !== recalcPublic) needsUpdate = true;
++      if (p.remiseRevendeur !== 30 || p.prixHT !== recalcPublic || (isCompose && p.prixAchat !== prixAchat)) needsUpdate = true;
+       return {
+         ...p,
+         prixAchat,
+@@ -113,7 +131,6 @@ export default function Produits() {
+         prixHT: recalcPublic,
+       };
+     });
+-    // Persist the fix
+     if (needsUpdate) {
+       setTimeout(() => updateProduits(() => safe), 0);
+     }
+@@ -179,8 +196,19 @@ export default function Produits() {
+   function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setDialogOpen(true); }
+   function openEdit(p: Produit) {
+     setEditing(p);
+-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+     const comps = p.composants || [];
++    // Recalculate prixAchat from composants if composite
++    let prixAchat = p.prixAchat;
++    if (comps.length > 0) {
++      const total = comps.reduce((sum, c) => {
++        const cp = produits.find(pr => pr.id === c.produitId);
++        return sum + (cp ? cp.prixAchat * c.quantite : 0);
++      }, 0);
++      if (total > 0) prixAchat = Math.round(total * 100) / 100;
++    }
++    const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
++    const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
++    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+     setComposants(comps);
+     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
+     setComposantOpenIdx(null);
+@@ -662,10 +690,10 @@ export default function Produits() {
+       </AlertDialog>
+ 
+       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
++        <DialogContent className="w-full max-w-[98vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto">
+           <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau produit'}</DialogTitle></DialogHeader>
+           <div className="grid gap-4 py-2">
+-            <div className="grid grid-cols-2 gap-4">
++            <div className="grid grid-cols-2 gap-3">
+               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
+               <div><Label>Catégorie</Label><Input value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} /></div>
+             </div>
+@@ -675,16 +703,19 @@ export default function Produits() {
+             {/* Tarif Revendeur - coefficient pilote */}
+             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+               <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
+-              <div className="grid grid-cols-3 gap-3">
++              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                 <div>
+-                  <Label className="text-xs">Prix Achat *</Label>
+-                  <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
++                  <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
++                  {composants.length > 0
++                    ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" title="Calculé automatiquement depuis les composants" />
++                    : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
++                  }
+                 </div>
+                 <div>
+                   <Label className="text-xs">Coefficient</Label>
+                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
+                 </div>
+-                <div>
++                <div className="col-span-2 sm:col-span-1">
+                   <Label className="text-xs">Prix Revendeur HT</Label>
+                   <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+                 </div>
+@@ -704,7 +735,7 @@ export default function Produits() {
+             {/* Prix public déduit de la remise */}
+             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+               <p className="text-sm font-semibold text-foreground">Tarif Public (déduit via remise)</p>
+-              <div className="grid grid-cols-3 gap-3">
++              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                 <div>
+                   <Label className="text-xs">Remise revendeur %</Label>
+                   <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
+@@ -713,7 +744,7 @@ export default function Produits() {
+                   <Label className="text-xs">Coeff. public</Label>
+                   <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
+                 </div>
+-                <div>
++                <div className="col-span-2 sm:col-span-1">
+                   <Label className="text-xs">Prix Vente HT (public)</Label>
+                   <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                 </div>
+@@ -730,14 +761,16 @@ export default function Produits() {
+               </div>
+             </div>
+ 
+-            <div className="grid grid-cols-4 gap-4">
++            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+               <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
+               <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
+               <div><Label>Poids (kg)</Label><Input type="number" step="0.01" value={form.poids || ''} onChange={e => setForm(p => ({ ...p, poids: parseFloat(e.target.value) || 0 }))} /></div>
+-              <div><Label>Consommation (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
++              <div><Label>Conso. (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
++            </div>
++            <div className="grid grid-cols-2 gap-3">
+               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
++              <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+             </div>
+-            <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+ 
+             {/* Composition */}
+             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+@@ -772,9 +805,9 @@ export default function Produits() {
+                 }
+ 
+                 return (
+-                  <div key={idx} className="flex items-start gap-2">
++                  <div key={idx} className="flex flex-wrap sm:flex-nowrap items-start gap-2">
+                     {/* Combobox */}
+-                    <div className="flex-1 relative">
++                    <div className="flex-1 min-w-0 relative">
+                       <Input
+                         value={search}
+                         onChange={e => {
+@@ -836,10 +869,10 @@ export default function Produits() {
+                         setComposants(updated);
+                         recalc(updated);
+                       }}
+-                      className="w-20 text-sm"
++                      className="w-20 shrink-0 text-sm"
+                       placeholder="Qté"
+                     />
+-                    <span className="text-xs text-muted-foreground w-20 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
++                    <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
+                     <button
+                       type="button"
+                       onClick={() => {
