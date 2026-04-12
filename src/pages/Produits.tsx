@@ -64,6 +64,8 @@ export default function Produits() {
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
   const [composants, setComposants] = useState<ComposantProduit[]>([]);
+  const [composantSearches, setComposantSearches] = useState<string[]>([]);
+  const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
@@ -174,11 +176,14 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
     setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
-    setComposants(p.composants || []);
+    const comps = p.composants || [];
+    setComposants(comps);
+    setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
+    setComposantOpenIdx(null);
     setDialogOpen(true);
   }
 
@@ -740,7 +745,7 @@ export default function Produits() {
                 <p className="text-sm font-semibold flex items-center gap-2"><Layers className="w-4 h-4" /> Produit composé</p>
                 <button
                   type="button"
-                  onClick={() => setComposants(prev => [...prev, { produitId: '', quantite: 1 }])}
+                  onClick={() => { setComposants(prev => [...prev, { produitId: '', quantite: 1 }]); setComposantSearches(prev => [...prev, '']); setComposantOpenIdx(composants.length); }}
                   className="text-xs text-primary hover:underline flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" /> Ajouter un composant
@@ -751,28 +756,75 @@ export default function Produits() {
               )}
               {composants.map((comp, idx) => {
                 const compProd = produits.find(p => p.id === comp.produitId);
+                const search = composantSearches[idx] || '';
+                const isOpen = composantOpenIdx === idx;
+                const availableProduits = produits
+                  .filter(p => (!editing || p.id !== editing.id) && !composants.some((c, i) => i !== idx && c.produitId === p.id))
+                  .filter(p => !search || `${p.reference} ${p.description}`.toLowerCase().includes(search.toLowerCase()))
+                  .sort((a, b) => a.reference.localeCompare(b.reference));
+
+                function recalc(updated: typeof composants) {
+                  const total = updated.reduce((sum, c) => {
+                    const p = produits.find(pr => pr.id === c.produitId);
+                    return sum + (p ? p.prixAchat * c.quantite : 0);
+                  }, 0);
+                  if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
+                }
+
                 return (
-                  <div key={idx} className="flex items-center gap-2">
-                    <select
-                      value={comp.produitId}
-                      onChange={e => {
-                        const updated = [...composants];
-                        updated[idx] = { ...updated[idx], produitId: e.target.value };
-                        setComposants(updated);
-                        // Recalcul prix achat
-                        const prixAchatCalc = updated.reduce((sum, c) => {
-                          const p = produits.find(pr => pr.id === c.produitId);
-                          return sum + (p ? p.prixAchat * c.quantite : 0);
-                        }, 0);
-                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
-                      }}
-                      className="flex-1 text-sm rounded border border-input bg-background px-2 py-1.5"
-                    >
-                      <option value="">— Choisir un produit —</option>
-                      {produits.filter(p => !editing || p.id !== editing.id).map(p => (
-                        <option key={p.id} value={p.id}>{p.reference} — {p.description}</option>
-                      ))}
-                    </select>
+                  <div key={idx} className="flex items-start gap-2">
+                    {/* Combobox */}
+                    <div className="flex-1 relative">
+                      <Input
+                        value={search}
+                        onChange={e => {
+                          const searches = [...composantSearches];
+                          searches[idx] = e.target.value;
+                          setComposantSearches(searches);
+                          setComposantOpenIdx(idx);
+                          if (!e.target.value) {
+                            const updated = [...composants];
+                            updated[idx] = { ...updated[idx], produitId: '' };
+                            setComposants(updated);
+                          }
+                        }}
+                        onFocus={() => setComposantOpenIdx(idx)}
+                        placeholder="Rechercher un produit…"
+                        className="text-sm"
+                      />
+                      {compProd && !isOpen && (
+                        <p className="text-xs text-primary mt-0.5 truncate">{compProd.reference} — {compProd.description}</p>
+                      )}
+                      {isOpen && (
+                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                          {availableProduits.length === 0 && (
+                            <p className="text-xs text-muted-foreground px-3 py-2">Aucun produit trouvé</p>
+                          )}
+                          {availableProduits.map(p => (
+                            <button
+                              key={p.id}
+                              type="button"
+                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                              onMouseDown={e => {
+                                e.preventDefault();
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], produitId: p.id };
+                                setComposants(updated);
+                                const searches = [...composantSearches];
+                                searches[idx] = `${p.reference} — ${p.description}`;
+                                setComposantSearches(searches);
+                                setComposantOpenIdx(null);
+                                recalc(updated);
+                              }}
+                            >
+                              <span><span className="font-mono text-xs text-muted-foreground">{p.reference}</span> {p.description}</span>
+                              <span className="text-xs text-muted-foreground shrink-0">{formatMontant(p.prixAchat)}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {/* Quantité */}
                     <Input
                       type="number"
                       min={0.01}
@@ -782,28 +834,22 @@ export default function Produits() {
                         const updated = [...composants];
                         updated[idx] = { ...updated[idx], quantite: parseFloat(e.target.value) || 1 };
                         setComposants(updated);
-                        const prixAchatCalc = updated.reduce((sum, c) => {
-                          const p = produits.find(pr => pr.id === c.produitId);
-                          return sum + (p ? p.prixAchat * c.quantite : 0);
-                        }, 0);
-                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
+                        recalc(updated);
                       }}
                       className="w-20 text-sm"
                       placeholder="Qté"
                     />
-                    <span className="text-xs text-muted-foreground w-20 text-right">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
+                    <span className="text-xs text-muted-foreground w-20 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
                     <button
                       type="button"
                       onClick={() => {
                         const updated = composants.filter((_, i) => i !== idx);
+                        const searches = composantSearches.filter((_, i) => i !== idx);
                         setComposants(updated);
-                        const prixAchatCalc = updated.reduce((sum, c) => {
-                          const p = produits.find(pr => pr.id === c.produitId);
-                          return sum + (p ? p.prixAchat * c.quantite : 0);
-                        }, 0);
-                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
+                        setComposantSearches(searches);
+                        recalc(updated);
                       }}
-                      className="p-1 hover:bg-destructive/10 rounded text-destructive"
+                      className="p-1 hover:bg-destructive/10 rounded text-destructive mt-0.5"
                     >
                       <Trash className="w-4 h-4" />
                     </button>
