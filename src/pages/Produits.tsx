@@ -662,10 +662,10 @@ export default function Produits() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-full max-w-[98vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau produit'}</DialogTitle></DialogHeader>
           <div className="grid gap-4 py-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
               <div><Label>Catégorie</Label><Input value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} /></div>
             </div>
@@ -675,7 +675,7 @@ export default function Produits() {
             {/* Tarif Revendeur - coefficient pilote */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *</Label>
                   <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
@@ -684,7 +684,7 @@ export default function Produits() {
                   <Label className="text-xs">Coefficient</Label>
                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <Label className="text-xs">Prix Revendeur HT</Label>
                   <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
                 </div>
@@ -704,7 +704,7 @@ export default function Produits() {
             {/* Prix public déduit de la remise */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <p className="text-sm font-semibold text-foreground">Tarif Public (déduit via remise)</p>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Remise revendeur %</Label>
                   <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
@@ -713,7 +713,7 @@ export default function Produits() {
                   <Label className="text-xs">Coeff. public</Label>
                   <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
                 </div>
-                <div>
+                <div className="col-span-2 sm:col-span-1">
                   <Label className="text-xs">Prix Vente HT (public)</Label>
                   <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                 </div>
@@ -730,14 +730,16 @@ export default function Produits() {
               </div>
             </div>
 
-            <div className="grid grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
               <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
               <div><Label>Poids (kg)</Label><Input type="number" step="0.01" value={form.poids || ''} onChange={e => setForm(p => ({ ...p, poids: parseFloat(e.target.value) || 0 }))} /></div>
-              <div><Label>Consommation (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
-              <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
+              <div><Label>Conso. (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
             </div>
-            <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
+              <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+            </div>
 
             {/* Composition */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
@@ -772,9 +774,9 @@ export default function Produits() {
                 }
 
                 return (
-                  <div key={idx} className="flex items-start gap-2">
+                  <div key={idx} className="flex flex-wrap sm:flex-nowrap items-start gap-2">
                     {/* Combobox */}
-                    <div className="flex-1 relative">
+                    <div className="flex-1 min-w-0 relative">
                       <Input
                         value={search}
                         onChange={e => {
@@ -836,10 +838,10 @@ export default function Produits() {
                         setComposants(updated);
                         recalc(updated);
                       }}
-                      className="w-20 text-sm"
+                      className="w-20 shrink-0 text-sm"
                       placeholder="Qté"
                     />
-                    <span className="text-xs text-muted-foreground w-20 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
+                    <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
                     <button
                       type="button"
                       onClick={() => {
