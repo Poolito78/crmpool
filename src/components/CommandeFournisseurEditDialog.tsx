@@ -134,7 +134,7 @@ export default function CommandeFournisseurEditDialog({ open, onOpenChange, comm
               </select>
             </div>
             <div>
-              <Label>Date d'échéance</Label>
+              <Label>Date de livraison</Label>
               <Input type="date" value={dateEcheance} onChange={e => setDateEcheance(e.target.value)} />
             </div>
           </div>

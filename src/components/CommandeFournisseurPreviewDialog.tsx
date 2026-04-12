@@ -36,7 +36,7 @@ export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, c
               <p className="font-heading font-bold text-lg">COMMANDE FOURNISSEUR</p>
               <p className="text-muted-foreground text-xs">N° {commande.numero}</p>
               <p className="text-muted-foreground text-xs">Date : {formatDate(commande.dateCreation)}</p>
-              {commande.dateEcheance && <p className="text-muted-foreground text-xs">Échéance : {formatDate(commande.dateEcheance)}</p>}
+              {commande.dateEcheance && <p className="text-muted-foreground text-xs">Livraison prévue : {formatDate(commande.dateEcheance)}</p>}
             </div>
           </div>
 
