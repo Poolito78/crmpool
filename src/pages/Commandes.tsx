@@ -188,6 +188,12 @@ export default function Commandes() {
         onOpenChange={open => { if (!open) setPreviewCommande(null); }}
         commande={previewCommande}
         fournisseur={previewCommande ? fournisseurs.find(f => f.id === previewCommande.fournisseurId) : undefined}
+        onEdit={() => {
+          if (previewCommande) {
+            setEditCommande(previewCommande);
+            setPreviewCommande(null);
+          }
+        }}
         onEmail={() => {
           if (previewCommande) {
             openEmail(previewCommande);

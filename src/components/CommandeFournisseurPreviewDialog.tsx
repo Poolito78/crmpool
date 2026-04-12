@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Printer, Mail, FileText } from 'lucide-react';
+import { Printer, Mail, FileText, Pencil } from 'lucide-react';
 import { type CommandeFournisseur, type Fournisseur, formatMontant, formatDate } from '@/lib/store';
 
 interface Props {
@@ -9,9 +9,10 @@ interface Props {
   commande: CommandeFournisseur | null;
   fournisseur?: Fournisseur;
   onEmail?: () => void;
+  onEdit?: () => void;
 }
 
-export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, commande, fournisseur, onEmail }: Props) {
+export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, commande, fournisseur, onEmail, onEdit }: Props) {
   if (!commande) return null;
   const lignes = Array.isArray(commande.lignes) ? commande.lignes : [];
 
@@ -94,6 +95,11 @@ export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, c
 
         <DialogFooter className="flex-col sm:flex-row gap-2 print:hidden">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
+          {onEdit && (
+            <Button variant="outline" onClick={onEdit}>
+              <Pencil className="w-4 h-4 mr-2" /> Modifier
+            </Button>
+          )}
           <Button variant="outline" onClick={() => window.print()}>
             <Printer className="w-4 h-4 mr-2" /> Imprimer / PDF
           </Button>
