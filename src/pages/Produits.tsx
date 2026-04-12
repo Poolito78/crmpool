@@ -905,7 +905,7 @@ export default function Produits() {
                 </div>
               ) : (
                 <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
-              )}
+              )
             )}
 
             <div className="flex justify-end gap-2">
