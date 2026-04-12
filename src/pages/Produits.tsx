@@ -260,11 +260,11 @@ export default function Produits() {
     clearTimeout(autoSaveProdRef.current);
     autoSaveProdRef.current = setTimeout(() => {
       if (form.reference.trim() && form.description.trim()) {
-        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composants.length > 0 ? composants : undefined } : p));
       }
     }, 500);
     return () => clearTimeout(autoSaveProdRef.current);
-  }, [form, editing, dialogOpen]);
+  }, [form, composants, editing, dialogOpen]);
 
   function remove(id: string) {
     confirmDelete(id);
@@ -898,14 +898,14 @@ export default function Produits() {
             </div>
 
             {editing && (
-              composants.length > 0 ? (
+              {composants.length > 0 ? (
                 <div className="border border-border rounded-lg p-3 bg-muted/20 text-xs text-muted-foreground flex items-start gap-2">
                   <span className="text-base leading-none">ℹ️</span>
                   <span>Produit composé — les fournisseurs et prix achat sont gérés au niveau de chaque composant.</span>
                 </div>
               ) : (
                 <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
-              )
+              )}
             )}
 
             <div className="flex justify-end gap-2">
