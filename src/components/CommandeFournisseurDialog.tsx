@@ -27,39 +27,68 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
   const navigate = useNavigate();
 
   const { commandesParFournisseur, produitsSansFournisseur } = useMemo(() => {
-    if (!devis) return { commandesParFournisseur: new Map<string, { fournisseur: Fournisseur; lignes: LigneCommande[] }>(), produitsSansFournisseur: [] as { produit: Produit; quantite: number }[] };
+    if (!devis) return { commandesParFournisseur: new Map<string, { fournisseur: Fournisseur; lignes: LigneCommande[] }>(), produitsSansFournisseur: [] as { produit: Produit; quantite: number; produitParent?: Produit }[] };
 
     const devisLignes = Array.isArray(devis.lignes) ? devis.lignes : [];
-    const sansFournisseur: { produit: Produit; quantite: number }[] = [];
+    const sansFournisseur: { produit: Produit; quantite: number; produitParent?: Produit }[] = [];
     const parFournisseur = new Map<string, { fournisseur: Fournisseur; lignes: LigneCommande[] }>();
+
+    // Résout une ligne en liste de (produit, quantité, produitParent?)
+    // Si le produit est composé, on descend dans ses composants
+    function resoudreLigne(produitId: string, qteParent: number, produitParent?: Produit): { produit: Produit; quantite: number; produitParent?: Produit }[] {
+      const produit = produits.find(p => p.id === produitId);
+      if (!produit) return [];
+
+      if (produit.composants && produit.composants.length > 0) {
+        // Produit composé : on éclate en composants
+        const result: { produit: Produit; quantite: number; produitParent?: Produit }[] = [];
+        for (const composant of produit.composants) {
+          const lignesComposant = resoudreLigne(composant.produitId, composant.quantite * qteParent, produit);
+          result.push(...lignesComposant);
+        }
+        return result;
+      }
+
+      // Produit simple
+      return [{ produit, quantite: qteParent, produitParent }];
+    }
 
     for (const ligne of devisLignes) {
       if (!ligne.produitId) continue;
-      const produit = produits.find(p => p.id === ligne.produitId);
-      if (!produit) continue;
+      const qteLigne = Number.isFinite(Number(ligne.quantite)) && Number(ligne.quantite) > 0 ? Number(ligne.quantite) : 1;
 
-      const quantite = Number.isFinite(Number(ligne.quantite)) && Number(ligne.quantite) > 0 ? Number(ligne.quantite) : 1;
-      const pf = calculerFournisseurPrioritaire(produit.id, quantite, produitFournisseurs, fournisseurs);
-      if (!pf) {
-        sansFournisseur.push({ produit, quantite });
-        continue;
-      }
+      const unitesACommander = resoudreLigne(ligne.produitId, qteLigne);
 
-      const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
-      if (!fourn) {
-        sansFournisseur.push({ produit, quantite });
-        continue;
-      }
+      for (const { produit, quantite, produitParent } of unitesACommander) {
+        const pf = calculerFournisseurPrioritaire(produit.id, quantite, produitFournisseurs, fournisseurs);
+        if (!pf) {
+          sansFournisseur.push({ produit, quantite, produitParent });
+          continue;
+        }
 
-      if (!parFournisseur.has(fourn.id)) {
-        parFournisseur.set(fourn.id, { fournisseur: fourn, lignes: [] });
+        const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
+        if (!fourn) {
+          sansFournisseur.push({ produit, quantite, produitParent });
+          continue;
+        }
+
+        if (!parFournisseur.has(fourn.id)) {
+          parFournisseur.set(fourn.id, { fournisseur: fourn, lignes: [] });
+        }
+
+        // Si le même produit/composant est déjà dans la commande fournisseur (cas de composants partagés), on cumule
+        const existant = parFournisseur.get(fourn.id)!.lignes.find(l => l.produit.id === produit.id);
+        if (existant) {
+          existant.quantite += Math.max(quantite, Number(pf.conditionnementMin) || 1);
+        } else {
+          parFournisseur.get(fourn.id)!.lignes.push({
+            produit,
+            quantite: Math.max(quantite, Number(pf.conditionnementMin) || 1),
+            pf,
+            fournisseur: fourn,
+          });
+        }
       }
-      parFournisseur.get(fourn.id)!.lignes.push({
-        produit,
-        quantite: Math.max(quantite, Number(pf.conditionnementMin) || 1),
-        pf,
-        fournisseur: fourn,
-      });
     }
 
     return { commandesParFournisseur: parFournisseur, produitsSansFournisseur: sansFournisseur };
@@ -122,9 +151,9 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
               <div>
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-300">Produits sans fournisseur</p>
                 <ul className="text-xs text-amber-700 dark:text-amber-400 mt-1 space-y-1">
-                  {produitsSansFournisseur.map(({ produit, quantite }) => (
-                    <li key={produit.id} className="flex items-center gap-1 flex-wrap">
-                      <span>• {produit.reference} — {produit.description} (Qté: {quantite})</span>
+                  {produitsSansFournisseur.map(({ produit, quantite, produitParent }, idx) => (
+                    <li key={`${produit.id}-${idx}`} className="flex items-center gap-1 flex-wrap">
+                      <span>• {produit.reference} — {produit.description} (Qté: {quantite}){produitParent && <span className="text-amber-500 ml-1">— composant de {produitParent.reference}</span>}</span>
                       <Button
                         variant="link"
                         size="sm"
