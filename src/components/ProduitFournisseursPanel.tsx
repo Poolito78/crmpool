@@ -121,7 +121,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
               <div>
                 <Label className="text-xs flex items-center gap-1"><Clock className="w-3 h-3" /> Délai (j)</Label>
                 <Input type="number" value={pf.delaiLivraison}
-                  onChange={e => updatePf(pf.id, { delaiLivraison: parseInt(e.target.value) || 0 })}
+                  onChange={e => updatePf(pf.id, { delaiLivraison: parseInt(e.target.value) || 0 }))
                   className="h-8 text-xs" />
               </div>
               <div>
