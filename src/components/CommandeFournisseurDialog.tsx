@@ -103,7 +103,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
     const commandes: CommandeFournisseur[] = [];
     let idx = 1;
     for (const [, { fournisseur, lignes }] of commandesParFournisseur) {
-      const totalAchat = lignes.reduce((acc, l) => acc + l.pf.prixAchat * l.quantite, 0);
+      const totalAchat = lignes.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
       const francoAtteint = totalAchat >= fournisseur.francoPort;
       const transport = francoAtteint ? 0 : fournisseur.coutTransport;
       commandes.push({
@@ -118,8 +118,8 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
           description: l.produit.description,
           reference: l.pf.referenceFournisseur || l.produit.reference,
           quantite: l.quantite,
-          prixAchat: l.pf.prixAchat,
-          total: l.pf.prixAchat * l.quantite,
+          prixAchat: l.produit.prixAchat,
+          total: l.produit.prixAchat * l.quantite,
         })),
         totalHT: totalAchat,
         fraisTransport: transport,
@@ -174,7 +174,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
 
           <div className="space-y-4 py-2" id="commande-print">
             {Array.from(commandesParFournisseur.entries()).map(([fournId, { fournisseur, lignes }]) => {
-              const totalAchat = lignes.reduce((acc, l) => acc + l.pf.prixAchat * l.quantite, 0);
+              const totalAchat = lignes.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
               const francoAtteint = totalAchat >= fournisseur.francoPort;
               const transport = francoAtteint ? 0 : fournisseur.coutTransport;
               const totalCommande = totalAchat + transport;
@@ -203,10 +203,10 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                         <p className="text-xs text-muted-foreground font-mono">{pf.referenceFournisseur || produit.reference}</p>
                         <div className="flex justify-between text-xs">
                           <span>Qté: {quantite} (min. {pf.conditionnementMin})</span>
-                          <span className="font-medium">{formatMontant(pf.prixAchat * quantite)}</span>
+                          <span className="font-medium">{formatMontant(produit.prixAchat * quantite)}</span>
                         </div>
                         <div className="flex justify-between text-xs text-muted-foreground">
-                          <span>P.U. {formatMontant(pf.prixAchat)}</span>
+                          <span>P.U. {formatMontant(produit.prixAchat)}</span>
                           <span>Délai {pf.delaiLivraison}j</span>
                         </div>
                       </div>
@@ -234,8 +234,8 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
                             <td className="py-2">{produit.description}</td>
                             <td className="py-2 text-right">{quantite}</td>
                             <td className="py-2 text-right">{pf.conditionnementMin}</td>
-                            <td className="py-2 text-right">{formatMontant(pf.prixAchat)}</td>
-                            <td className="py-2 text-right font-medium">{formatMontant(pf.prixAchat * quantite)}</td>
+                            <td className="py-2 text-right">{formatMontant(produit.prixAchat)}</td>
+                            <td className="py-2 text-right font-medium">{formatMontant(produit.prixAchat * quantite)}</td>
                             <td className="py-2 text-right text-muted-foreground">{pf.delaiLivraison}j</td>
                           </tr>
                         ))}
