@@ -565,7 +565,7 @@ export default function Produits() {
                 const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
                 const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
                 return (
-                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     <td className="px-3 py-3 font-mono text-xs">{p.reference}{p.composants && p.composants.length > 0 && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>
                     <td className="px-3 py-3 font-medium">{p.description}</td>
@@ -608,7 +608,7 @@ export default function Produits() {
           const marge = calcMargeBrute(p.prixHT, p.prixAchat);
           const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
           return (
-            <div key={p.id} className="bg-card rounded-xl border border-border p-4">
+            <div key={p.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
               <div className="flex justify-between items-start">
                 <div className="flex items-start gap-2">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
