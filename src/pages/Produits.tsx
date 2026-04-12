@@ -93,16 +93,34 @@ export default function Produits() {
   // Force remise revendeur to 30% for all products
   const safeProduits = useMemo(() => {
     let needsUpdate = false;
+
+    // Helper to calculate prixAchat of a composite product from its composants
+    // Uses raw produits to avoid circular reference
+    function calcPrixAchatCompose(p: typeof produits[0]): number {
+      if (!p.composants || p.composants.length === 0) return p.prixAchat ?? 0;
+      const total = p.composants.reduce((sum, c) => {
+        const comp = produits.find(pr => pr.id === c.produitId);
+        if (!comp) return sum;
+        // Recursive for nested composites
+        const compPrix = (comp.composants && comp.composants.length > 0)
+          ? calcPrixAchatCompose(comp)
+          : (comp.prixAchat ?? 0);
+        return sum + compPrix * c.quantite;
+      }, 0);
+      return Math.round(total * 100) / 100;
+    }
+
     const safe = produits.map(p => {
-      const prixAchat = p.prixAchat ?? 0;
-      const remise = 30; // Force 30%
+      const isCompose = p.composants && p.composants.length > 0;
+      const prixAchat = isCompose ? calcPrixAchatCompose(p) : (p.prixAchat ?? 0);
+      const remise = 30;
       const prixRevendeur = p.prixRevendeur ?? 0;
       const coefficient = prixAchat > 0 && prixRevendeur > 0
         ? prixRevendeur / prixAchat
         : (p.coefficient ?? 1.6);
       const recalcRevendeur = calcPrixRevendeurFromCoeff(prixAchat, coefficient);
       const recalcPublic = calcPrixPublicFromRevendeur(recalcRevendeur, remise);
-      if (p.remiseRevendeur !== 30 || p.prixHT !== recalcPublic) needsUpdate = true;
+      if (p.remiseRevendeur !== 30 || p.prixHT !== recalcPublic || (isCompose && p.prixAchat !== prixAchat)) needsUpdate = true;
       return {
         ...p,
         prixAchat,
@@ -113,7 +131,6 @@ export default function Produits() {
         prixHT: recalcPublic,
       };
     });
-    // Persist the fix
     if (needsUpdate) {
       setTimeout(() => updateProduits(() => safe), 0);
     }
@@ -179,8 +196,19 @@ export default function Produits() {
   function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
     const comps = p.composants || [];
+    // Recalculate prixAchat from composants if composite
+    let prixAchat = p.prixAchat;
+    if (comps.length > 0) {
+      const total = comps.reduce((sum, c) => {
+        const cp = produits.find(pr => pr.id === c.produitId);
+        return sum + (cp ? cp.prixAchat * c.quantite : 0);
+      }, 0);
+      if (total > 0) prixAchat = Math.round(total * 100) / 100;
+    }
+    const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
+    const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -677,8 +705,11 @@ export default function Produits() {
               <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Prix Achat *</Label>
-                  <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
+                  <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
+                  {composants.length > 0
+                    ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" title="Calculé automatiquement depuis les composants" />
+                    : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
+                  }
                 </div>
                 <div>
                   <Label className="text-xs">Coefficient</Label>
@@ -867,7 +898,14 @@ export default function Produits() {
             </div>
 
             {editing && (
-              <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
+              {composants.length > 0 ? (
+                <div className="border border-border rounded-lg p-3 bg-muted/20 text-xs text-muted-foreground flex items-start gap-2">
+                  <span className="text-base leading-none">ℹ️</span>
+                  <span>Produit composé — les fournisseurs et prix achat sont gérés au niveau de chaque composant.</span>
+                </div>
+              ) : (
+                <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
+              )}
             )}
 
             <div className="flex justify-end gap-2">
