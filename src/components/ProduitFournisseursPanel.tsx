@@ -13,15 +13,21 @@ interface Props {
 }
 
 export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }: Props) {
-  const { fournisseurs, produitFournisseurs, updateProduitFournisseurs } = useCRM();
+  const { fournisseurs, produits, updateProduits, produitFournisseurs, updateProduitFournisseurs } = useCRM();
   const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({ fournisseurId: '', prixAchat: 0, referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
+  const [form, setForm] = useState({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
 
+  const produit = produits.find(p => p.id === produitId);
   const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
   const prioritaire = calculerFournisseurPrioritaire(produitId, qteCommande, produitFournisseurs, fournisseurs);
-
-  // Fournisseurs pas encore associés
   const availableFournisseurs = fournisseurs.filter(f => !pfs.some(pf => pf.fournisseurId === f.id));
+
+  const prixAchatConditionne = produit?.prixAchat ?? 0;
+
+  function updatePrixAchat(newPrix: number) {
+    updateProduits(prev => prev.map(p => p.id === produitId ? { ...p, prixAchat: newPrix } : p));
+    updateProduitFournisseurs(prev => prev.map(pf => pf.produitId === produitId ? { ...pf, prixAchat: newPrix } : pf));
+  }
 
   function addFournisseur() {
     if (!form.fournisseurId) { toast.error('Sélectionnez un fournisseur'); return; }
@@ -29,14 +35,14 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
       id: generateId(),
       produitId,
       fournisseurId: form.fournisseurId,
-      prixAchat: form.prixAchat,
+      prixAchat: prixAchatConditionne,
       referenceFournisseur: form.referenceFournisseur,
       delaiLivraison: form.delaiLivraison,
       conditionnementMin: form.conditionnementMin,
       estPrioritaire: false,
     };
     updateProduitFournisseurs(prev => [...prev, newPf]);
-    setForm({ fournisseurId: '', prixAchat: 0, referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
+    setForm({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
     setAdding(false);
     toast.success('Fournisseur ajouté');
   }
@@ -54,9 +60,9 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
     if (!fourn) return null;
     const qte = Math.max(qteCommande, pf.conditionnementMin);
-    const totalAchat = pf.prixAchat * qte;
+    const totalAchat = prixAchatConditionne * qte;
     const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
-    return { totalAchat, transport, coutGlobal: totalAchat + transport, coutUnitaire: (totalAchat + transport) / qte, qte, francoAtteint: totalAchat >= fourn.francoPort };
+    return { totalAchat, transport, coutUnitaire: (totalAchat + transport) / qte, qte, francoAtteint: totalAchat >= fourn.francoPort };
   }
 
   return (
@@ -70,6 +76,19 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             <Plus className="w-3 h-3 mr-1" /> Ajouter
           </Button>
         )}
+      </div>
+
+      {/* Prix achat conditionné commun à tous les fournisseurs */}
+      <div className="flex items-center gap-3 bg-muted/40 rounded-md px-3 py-2">
+        <Label className="text-xs shrink-0">Prix achat conditionné</Label>
+        <Input
+          type="number"
+          step="0.01"
+          value={prixAchatConditionne}
+          onChange={e => updatePrixAchat(parseFloat(e.target.value) || 0)}
+          className="h-7 text-xs w-28 font-semibold"
+        />
+        <span className="text-xs text-muted-foreground">Commun à tous les fournisseurs</span>
       </div>
 
       {pfs.length === 0 && !adding && (
@@ -92,13 +111,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-              <div>
-                <Label className="text-xs">Prix achat</Label>
-                <Input type="number" step="0.01" value={pf.prixAchat}
-                  onChange={e => updatePf(pf.id, { prixAchat: parseFloat(e.target.value) || 0 })}
-                  className="h-8 text-xs" />
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <div>
                 <Label className="text-xs">Réf. fournisseur</Label>
                 <Input value={pf.referenceFournisseur}
@@ -149,12 +162,6 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
               </select>
             </div>
             <div>
-              <Label className="text-xs">Prix achat</Label>
-              <Input type="number" step="0.01" value={form.prixAchat}
-                onChange={e => setForm(p => ({ ...p, prixAchat: parseFloat(e.target.value) || 0 }))}
-                className="h-8 text-xs" />
-            </div>
-            <div>
               <Label className="text-xs">Réf. fournisseur</Label>
               <Input value={form.referenceFournisseur}
                 onChange={e => setForm(p => ({ ...p, referenceFournisseur: e.target.value }))}
@@ -163,7 +170,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             <div>
               <Label className="text-xs">Délai (jours)</Label>
               <Input type="number" value={form.delaiLivraison}
-                onChange={e => setForm(p => ({ ...p, delaiLivraison: parseInt(e.target.value) || 0 }))}
+                onChange={e => setForm(p => ({ ...p, delaiLivraison: parseInt(e.target.value) || 0 })}
                 className="h-8 text-xs" />
             </div>
             <div>
