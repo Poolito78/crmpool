@@ -1,8 +1,8 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download } from 'lucide-react';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -63,6 +63,7 @@ export default function Produits() {
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [fromDevis, setFromDevis] = useState(false);
   const [returnDevisId, setReturnDevisId] = useState<string | null>(null);
+  const [composants, setComposants] = useState<ComposantProduit[]>([]);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
@@ -173,10 +174,11 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setDialogOpen(true); }
   function openEdit(p: Produit) {
     setEditing(p);
     setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat: p.prixAchat, coefficient: p.coefficient, prixHT: p.prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur: p.prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+    setComposants(p.composants || []);
     setDialogOpen(true);
   }
 
@@ -194,7 +196,7 @@ export default function Produits() {
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     if (editing) {
-      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p));
+      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composants.length > 0 ? composants : undefined } : p));
       // Répercuter les modifications dans les lignes de devis liées
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -208,7 +210,7 @@ export default function Produits() {
       })));
       toast.success('Produit modifié');
     } else {
-      updateProduits(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
+      updateProduits(prev => [...prev, { ...form, id: generateId(), composants: composants.length > 0 ? composants : undefined, dateCreation: new Date().toISOString().split('T')[0] }]);
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
@@ -560,7 +562,7 @@ export default function Produits() {
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
-                    <td className="px-3 py-3 font-mono text-xs">{p.reference}</td>
+                    <td className="px-3 py-3 font-mono text-xs">{p.reference}{p.composants && p.composants.length > 0 && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>
                     <td className="px-3 py-3 font-medium">{p.description}</td>
                     <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
                     <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
@@ -606,7 +608,7 @@ export default function Produits() {
                 <div className="flex items-start gap-2">
                   <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
                   <div>
-                    <p className="font-medium">{p.description}</p>
+                    <p className="font-medium">{p.description}{p.composants && p.composants.length > 0 && <span className="ml-2 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Composé</span>}</p>
                     <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                   </div>
                 </div>
@@ -731,6 +733,90 @@ export default function Produits() {
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
             </div>
             <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+
+            {/* Composition */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold flex items-center gap-2"><Layers className="w-4 h-4" /> Produit composé</p>
+                <button
+                  type="button"
+                  onClick={() => setComposants(prev => [...prev, { produitId: '', quantite: 1 }])}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"
+                >
+                  <Plus className="w-3 h-3" /> Ajouter un composant
+                </button>
+              </div>
+              {composants.length === 0 && (
+                <p className="text-xs text-muted-foreground">Aucun composant — cliquez sur "Ajouter" pour créer un produit composé</p>
+              )}
+              {composants.map((comp, idx) => {
+                const compProd = produits.find(p => p.id === comp.produitId);
+                return (
+                  <div key={idx} className="flex items-center gap-2">
+                    <select
+                      value={comp.produitId}
+                      onChange={e => {
+                        const updated = [...composants];
+                        updated[idx] = { ...updated[idx], produitId: e.target.value };
+                        setComposants(updated);
+                        // Recalcul prix achat
+                        const prixAchatCalc = updated.reduce((sum, c) => {
+                          const p = produits.find(pr => pr.id === c.produitId);
+                          return sum + (p ? p.prixAchat * c.quantite : 0);
+                        }, 0);
+                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
+                      }}
+                      className="flex-1 text-sm rounded border border-input bg-background px-2 py-1.5"
+                    >
+                      <option value="">— Choisir un produit —</option>
+                      {produits.filter(p => !editing || p.id !== editing.id).map(p => (
+                        <option key={p.id} value={p.id}>{p.reference} — {p.description}</option>
+                      ))}
+                    </select>
+                    <Input
+                      type="number"
+                      min={0.01}
+                      step={0.01}
+                      value={comp.quantite}
+                      onChange={e => {
+                        const updated = [...composants];
+                        updated[idx] = { ...updated[idx], quantite: parseFloat(e.target.value) || 1 };
+                        setComposants(updated);
+                        const prixAchatCalc = updated.reduce((sum, c) => {
+                          const p = produits.find(pr => pr.id === c.produitId);
+                          return sum + (p ? p.prixAchat * c.quantite : 0);
+                        }, 0);
+                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
+                      }}
+                      className="w-20 text-sm"
+                      placeholder="Qté"
+                    />
+                    <span className="text-xs text-muted-foreground w-20 text-right">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = composants.filter((_, i) => i !== idx);
+                        setComposants(updated);
+                        const prixAchatCalc = updated.reduce((sum, c) => {
+                          const p = produits.find(pr => pr.id === c.produitId);
+                          return sum + (p ? p.prixAchat * c.quantite : 0);
+                        }, 0);
+                        if (prixAchatCalc > 0) updateFormPrix({ prixAchat: Math.round(prixAchatCalc * 100) / 100 });
+                      }}
+                      className="p-1 hover:bg-destructive/10 rounded text-destructive"
+                    >
+                      <Trash className="w-4 h-4" />
+                    </button>
+                  </div>
+                );
+              })}
+              {composants.length > 0 && (
+                <div className="flex justify-between text-xs font-medium pt-1 border-t border-border">
+                  <span className="text-muted-foreground">Prix achat calculé</span>
+                  <span>{formatMontant(composants.reduce((sum, c) => { const p = produits.find(pr => pr.id === c.produitId); return sum + (p ? p.prixAchat * c.quantite : 0); }, 0))}</span>
+                </div>
+              )}
+            </div>
 
             {editing && (
               <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />

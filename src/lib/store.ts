@@ -47,6 +47,11 @@ export interface Fournisseur {
   dateCreation: string;
 }
 
+export interface ComposantProduit {
+  produitId: string;
+  quantite: number;
+}
+
 export interface Produit {
   id: string;
   reference: string;
@@ -66,6 +71,7 @@ export interface Produit {
   stockMin: number;
   fournisseurId?: string;
   categorie?: string;
+  composants?: ComposantProduit[];
   dateCreation: string;
 }
 
@@ -252,6 +258,7 @@ function dbToProduit(r: any): Produit {
     stockMin: Number(r.stock_min) || 0,
     fournisseurId: r.fournisseur_id || undefined,
     categorie: r.categorie || undefined,
+    composants: r.composants ? (Array.isArray(r.composants) ? r.composants : JSON.parse(r.composants)) : undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
 }
@@ -277,6 +284,7 @@ function produitToDb(p: Produit, userId: string) {
     stock_min: p.stockMin,
     fournisseur_id: p.fournisseurId || null,
     categorie: p.categorie || null,
+    composants: p.composants && p.composants.length > 0 ? p.composants : null,
     date_creation: p.dateCreation,
   };
 }
