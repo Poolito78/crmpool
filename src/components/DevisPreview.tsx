@@ -13,7 +13,7 @@ interface Props {
 
 export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
   const [showConso, setShowConso] = useState(false);
-  const [showRemise, setShowRemise] = useState(true);
+  const [showRemise, setShowRemise] = useState(false);
   const isSurfaceMode = devis.modeCalcul === 'surface';
 
   const poidsTotal = devis.lignes.reduce((sum, l) => {
