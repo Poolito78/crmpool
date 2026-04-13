@@ -66,6 +66,7 @@ export default function Produits() {
   const [composants, setComposants] = useState<ComposantProduit[]>([]);
   const [composantSearches, setComposantSearches] = useState<string[]>([]);
   const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
+  const [showPrixPublic, setShowPrixPublic] = useState(false);
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
@@ -700,14 +701,27 @@ export default function Produits() {
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
 
-            {/* Tarif Revendeur - coefficient pilote */}
+            {/* Tarif — revendeur par défaut, public en option */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarif Revendeur (coefficient)</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">Tarif</p>
+                <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={showPrixPublic}
+                    onChange={e => setShowPrixPublic(e.target.checked)}
+                    className="rounded border-input"
+                  />
+                  Afficher tarif public
+                </label>
+              </div>
+
+              {/* Tarif Revendeur */}
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
                   {composants.length > 0
-                    ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" title="Calculé automatiquement depuis les composants" />
+                    ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" />
                     : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
                   }
                 </div>
@@ -730,35 +744,39 @@ export default function Produits() {
                   <Input value={`${calcTauxMarque(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
               </div>
-            </div>
 
-            {/* Prix public déduit de la remise */}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Tarif Public (déduit via remise)</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-xs">Remise revendeur %</Label>
-                  <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
-                </div>
-                <div>
-                  <Label className="text-xs">Coeff. public</Label>
-                  <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
-                </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <Label className="text-xs">Prix Vente HT (public)</Label>
-                  <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Marge brute pub.</Label>
-                  <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
-                </div>
-                <div>
-                  <Label className="text-xs">Marge %</Label>
-                  <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
-                </div>
-              </div>
+              {/* Tarif Public — masqué par défaut */}
+              {showPrixPublic && (
+                <>
+                  <div className="border-t border-border pt-3 mt-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Tarif Public (déduit via remise)</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                      <div>
+                        <Label className="text-xs">Remise revendeur %</Label>
+                        <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Coeff. public</Label>
+                        <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
+                      </div>
+                      <div className="col-span-2 sm:col-span-1">
+                        <Label className="text-xs">Prix Vente HT (public)</Label>
+                        <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mt-3">
+                      <div>
+                        <Label className="text-xs">Marge brute pub.</Label>
+                        <Input value={formatMontant(calcMargeBrute(form.prixHT, form.prixAchat))} readOnly className="bg-muted font-semibold" />
+                      </div>
+                      <div>
+                        <Label className="text-xs">Marge %</Label>
+                        <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
