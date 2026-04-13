@@ -170,7 +170,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             <div>
               <Label className="text-xs">Délai (jours)</Label>
               <Input type="number" value={form.delaiLivraison}
-                onChange={e => setForm(p => ({ ...p, delaiLivraison: parseInt(e.target.value) || 0 })}}
+                onChange={e => setForm(p => ({ ...p, delaiLivraison: parseInt(e.target.value) || 0 })}
                 className="h-8 text-xs" />
             </div>
             <div>
