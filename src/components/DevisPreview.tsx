@@ -158,23 +158,28 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
 
         {/* Table */}
         {(() => {
-          // Calcul qté consommée par ligne : ⌈ surface × conso / poids_cond ⌉
-          const qtesConsommees: Record<string, number | null> = {};
+          // Qté conso brute (kg) = surface × conso  (décimal, ex: 1.99)
+          // Qté cmd = ⌈ qté_conso / poids_cond ⌉  (unités entières, ex: 2)
+          const qtesConsoKg: Record<string, number | null> = {};
+          const qtesCmd: Record<string, number | null> = {};
           for (const l of lignesEffectives) {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
             const conso = l.consommation || prod?.consommation || 0;
             const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
             const poidsCond = prod?.poids || 0;
-            if (surface > 0 && conso > 0 && poidsCond > 0) {
-              qtesConsommees[l.id] = Math.ceil(surface * conso / poidsCond);
+            if (surface > 0 && conso > 0) {
+              const kg = Math.round(surface * conso * 1000) / 1000;
+              qtesConsoKg[l.id] = kg;
+              qtesCmd[l.id] = poidsCond > 0 ? Math.ceil(kg / poidsCond) : null;
             } else {
-              qtesConsommees[l.id] = null;
+              qtesConsoKg[l.id] = null;
+              qtesCmd[l.id] = null;
             }
           }
           // Coût total matières (achat) quand showConso
           const coutMatieres = showConso ? lignesEffectives.reduce((sum, l) => {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            const qte = qtesConsommees[l.id];
+            const qte = qtesCmd[l.id];
             return sum + (qte != null && prod ? qte * prod.prixAchat : 0);
           }, 0) : 0;
 
@@ -186,8 +191,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     <th className="text-left py-2 font-semibold">Description</th>
                     {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
                     {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
-                    <th className="text-right py-2 font-semibold w-16">Qté</th>
                     {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
+                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté cmd.</th>}
+                    <th className="text-right py-2 font-semibold w-16">Qté</th>
                     <th className="text-center py-2 font-semibold w-16">Unité</th>
                     {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
                     {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
@@ -202,7 +208,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     const conso = l.consommation || prod?.consommation || 0;
                     const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
                     const composants = prod?.composants;
-                    const qteConsommee = qtesConsommees[l.id];
+                    const qteConsoKg = qtesConsoKg[l.id];
+                    const qteCmd = qtesCmd[l.id];
 
                     return (
                       <Fragment key={l.id}>
@@ -226,12 +233,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                             </td>
                           )}
                           {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
+                          {showConso && <td className="py-2 text-right">{qteConsoKg != null ? qteConsoKg : '—'}</td>}
+                          {showConso && <td className="py-2 text-right font-medium text-primary">{qteCmd != null ? `${qteCmd}u` : '—'}</td>}
                           <td className="py-2 text-right">{l.quantite}</td>
-                          {showConso && (
-                            <td className="py-2 text-right font-medium text-primary">
-                              {qteConsommee != null ? qteConsommee : '—'}
-                            </td>
-                          )}
                           <td className="py-2 text-center">{l.unite || '—'}</td>
                           {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
                           {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
@@ -248,13 +252,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                           if (!compProd) return null;
                           const qteTotale = Math.round(comp.quantite * l.quantite * 1000) / 1000;
                           // kg/m² composant = part proportionnelle × conso_parent
-                          // comp.quantite / Σ(quantités) × conso_parent
                           const consoComp = totalPoidsComposants > 0 && conso > 0
                             ? Math.round(comp.quantite / totalPoidsComposants * conso * 10000) / 10000
                             : null;
-                          // Qté conso = ⌈ surface × kg/m²_comp / poids_cond ⌉
-                          const qteCondComp = consoComp != null && surface > 0 && compProd.poids && compProd.poids > 0
-                            ? Math.ceil(surface * consoComp / compProd.poids)
+                          // Qté conso brute (kg) = surface × kg/m²_comp
+                          const qteConsoKgComp = consoComp != null && surface > 0
+                            ? Math.round(surface * consoComp * 1000) / 1000
+                            : null;
+                          // Qté cmd = ⌈ qté_conso / poids_cond ⌉
+                          const qteCmdComp = qteConsoKgComp != null && compProd.poids && compProd.poids > 0
+                            ? Math.ceil(qteConsoKgComp / compProd.poids)
                             : null;
                           return (
                             <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
@@ -263,17 +270,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                                 {compProd.poids ? <span className="ml-1 text-muted-foreground/70">({compProd.poids} kg/cond.)</span> : null}
                               </td>
                               {showConso && <td className="py-1 text-right text-muted-foreground/50">—</td>}
-                              {showConso && (
-                                <td className="py-1 text-right">
-                                  {consoComp != null ? consoComp : '—'}
-                                </td>
-                              )}
+                              {showConso && <td className="py-1 text-right">{consoComp != null ? consoComp : '—'}</td>}
+                              {showConso && <td className="py-1 text-right">{qteConsoKgComp != null ? qteConsoKgComp : '—'}</td>}
+                              {showConso && <td className="py-1 text-right font-medium text-primary">{qteCmdComp != null ? `${qteCmdComp}u` : '—'}</td>}
                               <td className="py-1 text-right">{qteTotale}</td>
-                              {showConso && (
-                                <td className="py-1 text-right font-medium text-primary">
-                                  {qteCondComp != null ? qteCondComp : '—'}
-                                </td>
-                              )}
                               <td className="py-1 text-center">{compProd.unite || '—'}</td>
                               <td colSpan={showRemise ? 2 : 1} />
                               <td />
