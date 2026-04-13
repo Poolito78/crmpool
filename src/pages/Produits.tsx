@@ -130,6 +130,7 @@ export default function Produits() {
         remiseRevendeur: remise,
         prixRevendeur: recalcRevendeur,
         prixHT: recalcPublic,
+        composants: p.composants, // toujours préserver explicitement
       };
     });
     if (needsUpdate) {
@@ -229,8 +230,9 @@ export default function Produits() {
 
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
+    const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
     if (editing) {
-      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composants.length > 0 ? composants : undefined } : p));
+      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined } : p));
       // Répercuter les modifications dans les lignes de devis liées
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -244,7 +246,7 @@ export default function Produits() {
       })));
       toast.success('Produit modifié');
     } else {
-      updateProduits(prev => [...prev, { ...form, id: generateId(), composants: composants.length > 0 ? composants : undefined, dateCreation: new Date().toISOString().split('T')[0] }]);
+      updateProduits(prev => [...prev, { ...form, id: generateId(), composants: composantsValides.length > 0 ? composantsValides : undefined, dateCreation: new Date().toISOString().split('T')[0] }]);
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
@@ -261,7 +263,8 @@ export default function Produits() {
     clearTimeout(autoSaveProdRef.current);
     autoSaveProdRef.current = setTimeout(() => {
       if (form.reference.trim() && form.description.trim()) {
-        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composants.length > 0 ? composants : undefined } : p));
+        const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
+        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined } : p));
       }
     }, 500);
     return () => clearTimeout(autoSaveProdRef.current);
