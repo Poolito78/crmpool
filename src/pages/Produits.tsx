@@ -134,7 +134,19 @@ export default function Produits() {
       };
     });
     if (needsUpdate) {
-      setTimeout(() => updateProduits(() => safe), 0);
+      setTimeout(() => updateProduits(prev => prev.map(p => {
+        const safeP = safe.find(s => s.id === p.id);
+        if (!safeP) return p;
+        return {
+          ...p, // préserve composants et tous les champs depuis l'état actuel
+          prixAchat: safeP.prixAchat,
+          coefficient: safeP.coefficient,
+          coeffRevendeur: safeP.coeffRevendeur,
+          remiseRevendeur: safeP.remiseRevendeur,
+          prixRevendeur: safeP.prixRevendeur,
+          prixHT: safeP.prixHT,
+        };
+      })), 0);
     }
     return safe;
   }, [produits]); // eslint-disable-line react-hooks/exhaustive-deps
