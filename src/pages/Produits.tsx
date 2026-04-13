@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
+import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
@@ -243,9 +244,15 @@ export default function Produits() {
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
+    const composantsToSave = composantsValides.length > 0 ? composantsValides : null;
+
     if (editing) {
-      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined } : p));
-      // Répercuter les modifications dans les lignes de devis liées
+      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined };
+      updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
+      // Écriture directe Supabase pour garantir la persistance des composants
+      supabase.from('produits').update({ composants: composantsToSave as any }).eq('id', editing.id).then(({ error }) => {
+        if (error) console.error('Erreur sauvegarde composants:', error);
+      });
       updateDevis(prev => prev.map(d => ({
         ...d,
         lignes: d.lignes.map(l => l.produitId === editing.id ? {
@@ -258,7 +265,15 @@ export default function Produits() {
       })));
       toast.success('Produit modifié');
     } else {
-      updateProduits(prev => [...prev, { ...form, id: generateId(), composants: composantsValides.length > 0 ? composantsValides : undefined, dateCreation: new Date().toISOString().split('T')[0] }]);
+      const newId = generateId();
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      updateProduits(prev => [...prev, newProd]);
+      // Écriture directe Supabase pour garantir la persistance des composants
+      if (composantsToSave) {
+        supabase.from('produits').update({ composants: composantsToSave as any }).eq('id', newId).then(({ error }) => {
+          if (error) console.error('Erreur sauvegarde composants nouveau produit:', error);
+        });
+      }
       toast.success('Produit ajouté');
     }
     setDialogOpen(false);
