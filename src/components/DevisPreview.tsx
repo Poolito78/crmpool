@@ -186,8 +186,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     <th className="text-left py-2 font-semibold">Description</th>
                     {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
                     {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
-                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
                     <th className="text-right py-2 font-semibold w-16">Qté</th>
+                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
                     <th className="text-center py-2 font-semibold w-16">Unité</th>
                     {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
                     {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
@@ -226,12 +226,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                             </td>
                           )}
                           {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
+                          <td className="py-2 text-right">{l.quantite}</td>
                           {showConso && (
                             <td className="py-2 text-right font-medium text-primary">
                               {qteConsommee != null ? qteConsommee : '—'}
                             </td>
                           )}
-                          <td className="py-2 text-right">{l.quantite}</td>
                           <td className="py-2 text-center">{l.unite || '—'}</td>
                           {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
                           {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
@@ -268,12 +268,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                                   {consoComp != null ? consoComp : '—'}
                                 </td>
                               )}
+                              <td className="py-1 text-right">{qteTotale}</td>
                               {showConso && (
                                 <td className="py-1 text-right font-medium text-primary">
                                   {qteCondComp != null ? qteCondComp : '—'}
                                 </td>
                               )}
-                              <td className="py-1 text-right">{qteTotale}</td>
                               <td className="py-1 text-center">{compProd.unite || '—'}</td>
                               <td colSpan={showRemise ? 2 : 1} />
                               <td />
