@@ -14,9 +14,32 @@ interface Props {
 export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
   const [showConso, setShowConso] = useState(false);
   const [showRemise, setShowRemise] = useState(false);
-  const isSurfaceMode = devis.modeCalcul === 'surface';
+  const [showComposants, setShowComposants] = useState(false);
+  const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>(() =>
+    Object.fromEntries(devis.lignes.map(l => [l.id, l.surfaceM2 || devis.surfaceGlobaleM2 || 0]))
+  );
 
-  const poidsTotal = devis.lignes.reduce((sum, l) => {
+  function setSurface(ligneId: string, val: number) {
+    setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
+  }
+
+  // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
+  const lignesEffectives = devis.lignes.map(l => {
+    const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
+    if (!showConso || !surface) return l;
+    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+    const conso = l.consommation || prod?.consommation || 0;
+    const poids = prod?.poids || 1;
+    if (conso && poids) {
+      const newQty = Math.round(surface * conso / poids * 100) / 100;
+      return { ...l, surfaceM2: surface, quantite: newQty > 0 ? newQty : l.quantite };
+    }
+    return { ...l, surfaceM2: surface };
+  });
+
+  const totals = calculerTotalDevis(lignesEffectives, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
+
+  const poidsTotal = lignesEffectives.reduce((sum, l) => {
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
     return sum + (prod?.poids || 0) * l.quantite;
   }, 0);
@@ -25,22 +48,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
     window.print();
   }
 
-  const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
-
   return (
     <div className="bg-card">
       {/* Print / Edit buttons */}
       <div className="flex justify-end gap-2 p-4 print:hidden items-center flex-wrap">
-        <div className="flex items-center gap-4 mr-auto">
-          {isSurfaceMode && (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-              <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
-              Afficher consommation/m²
-            </label>
-          )}
+        <div className="flex items-center gap-4 mr-auto flex-wrap">
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
+            Afficher m²/consommation
+          </label>
           <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
             <input type="checkbox" checked={showRemise} onChange={e => setShowRemise(e.target.checked)} className="rounded" />
             Afficher remise
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={showComposants} onChange={e => setShowComposants(e.target.checked)} className="rounded" />
+            Afficher composants
           </label>
         </div>
         {onEdit && (
@@ -119,7 +142,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
               <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(devis.dateValidite)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Statut :</span><span className="font-medium capitalize">{devis.statut}</span></div>
               {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
-              {isSurfaceMode && devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
+              {devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
                 <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
               )}
             </div>
@@ -136,38 +159,78 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         {/* Table */}
         <table className="w-full mb-6">
           <thead>
-             <tr className="border-b-2 border-primary">
-               <th className="text-left py-2 font-semibold">Description</th>
-               {showConso && <th className="text-right py-2 font-semibold w-16">m²</th>}
-               {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
-               <th className="text-right py-2 font-semibold w-16">Qté</th>
-               <th className="text-center py-2 font-semibold w-16">Unité</th>
-               <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
-               {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
-               <th className="text-right py-2 font-semibold w-28">Total HT</th>
-             </tr>
-           </thead>
+            <tr className="border-b-2 border-primary">
+              <th className="text-left py-2 font-semibold">Description</th>
+              {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
+              {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
+              <th className="text-right py-2 font-semibold w-16">Qté</th>
+              <th className="text-center py-2 font-semibold w-16">Unité</th>
+              <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
+              {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
+              <th className="text-right py-2 font-semibold w-28">Total HT</th>
+            </tr>
+          </thead>
           <tbody>
-            {devis.lignes.map((l) => {
+            {lignesEffectives.map((l) => {
               const t = calculerTotalLigne(l);
               const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
               const conso = l.consommation || prod?.consommation || 0;
+              const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
+              const composants = prod?.composants;
+
               return (
-                <tr key={l.id} className="border-b border-border">
-                   <td className="py-2">
-                     {l.description}
-                     {prod?.descriptionDetaillee && (
-                       <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
-                     )}
-                   </td>
-                   {showConso && <td className="py-2 text-right">{l.surfaceM2 || devis.surfaceGlobaleM2 || '—'}</td>}
-                   {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
-                   <td className="py-2 text-right">{l.quantite}</td>
-                   <td className="py-2 text-center">{l.unite || '—'}</td>
-                   <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
-                   {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
-                   <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
-                 </tr>
+                <>
+                  <tr key={l.id} className="border-b border-border">
+                    <td className="py-2">
+                      {l.description}
+                      {prod?.descriptionDetaillee && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
+                      )}
+                    </td>
+                    {showConso && (
+                      <td className="py-2 text-right">
+                        {/* Écran : input éditable */}
+                        <input
+                          type="number"
+                          min={0}
+                          step={0.01}
+                          value={surface || ''}
+                          onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
+                          className="w-16 text-right border border-border rounded px-1 py-0.5 text-sm bg-background print:hidden"
+                          placeholder="0"
+                        />
+                        {/* Impression : valeur simple */}
+                        <span className="hidden print:inline">{surface || '—'}</span>
+                      </td>
+                    )}
+                    {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
+                    <td className="py-2 text-right">{l.quantite}</td>
+                    <td className="py-2 text-center">{l.unite || '—'}</td>
+                    <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
+                    {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
+                    <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+                  </tr>
+
+                  {/* Sous-lignes composants */}
+                  {showComposants && composants && composants.length > 0 && composants.map(comp => {
+                    const compProd = produits.find(p => p.id === comp.produitId);
+                    if (!compProd) return null;
+                    const qteComp = Math.round(comp.quantite * l.quantite * 1000) / 1000;
+                    return (
+                      <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
+                        <td className="py-1 pl-6 italic">
+                          ↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}
+                        </td>
+                        {showConso && <td />}
+                        {showConso && <td />}
+                        <td className="py-1 text-right">{qteComp}</td>
+                        <td className="py-1 text-center">{compProd.unite || '—'}</td>
+                        <td colSpan={showRemise ? 2 : 1} />
+                        <td />
+                      </tr>
+                    );
+                  })}
+                </>
               );
             })}
           </tbody>
