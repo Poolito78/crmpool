@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -211,6 +211,19 @@ export default function Produits() {
   }
 
   function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setDialogOpen(true); }
+
+  function duplicate(p: Produit) {
+    const newId = generateId();
+    const newRef = `${p.reference}-COPIE`;
+    const newProd = { ...p, id: newId, reference: newRef, dateCreation: new Date().toISOString().split('T')[0] };
+    updateProduits(prev => [...prev, newProd]);
+    if (newProd.composants && newProd.composants.length > 0) {
+      supabase.from('produits').update({ composants: newProd.composants as any }).eq('id', newId).then(({ error }) => {
+        if (error) console.error('Erreur duplication composants:', error);
+      });
+    }
+    toast.success(`Produit dupliqué — réf. ${newRef}`);
+  }
   function openEdit(p: Produit) {
     setEditing(p);
     const comps = p.composants || [];
@@ -650,8 +663,9 @@ export default function Produits() {
                     </td>
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
-                        <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => duplicate(p)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                        <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
@@ -679,8 +693,9 @@ export default function Produits() {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
+                  <button onClick={() => duplicate(p)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                  <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
