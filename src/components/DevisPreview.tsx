@@ -157,84 +157,131 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         )}
 
         {/* Table */}
-        <table className="w-full mb-6">
-          <thead>
-            <tr className="border-b-2 border-primary">
-              <th className="text-left py-2 font-semibold">Description</th>
-              {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
-              {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
-              <th className="text-right py-2 font-semibold w-16">Qté</th>
-              <th className="text-center py-2 font-semibold w-16">Unité</th>
-              <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
-              {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
-              <th className="text-right py-2 font-semibold w-28">Total HT</th>
-            </tr>
-          </thead>
-          <tbody>
-            {lignesEffectives.map((l) => {
-              const t = calculerTotalLigne(l);
-              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-              const conso = l.consommation || prod?.consommation || 0;
-              const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
-              const composants = prod?.composants;
+        {(() => {
+          // Calcul qté consommée par ligne : ⌈ surface × conso / poids_cond ⌉
+          const qtesConsommees: Record<string, number | null> = {};
+          for (const l of lignesEffectives) {
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const conso = l.consommation || prod?.consommation || 0;
+            const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
+            const poidsCond = prod?.poids || 0;
+            if (surface > 0 && conso > 0 && poidsCond > 0) {
+              qtesConsommees[l.id] = Math.ceil(surface * conso / poidsCond);
+            } else {
+              qtesConsommees[l.id] = null;
+            }
+          }
+          // Coût total matières (achat) quand showConso
+          const coutMatieres = showConso ? lignesEffectives.reduce((sum, l) => {
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const qte = qtesConsommees[l.id];
+            return sum + (qte != null && prod ? qte * prod.prixAchat : 0);
+          }, 0) : 0;
 
-              return (
-                <Fragment key={l.id}>
-                  <tr className="border-b border-border">
-                    <td className="py-2">
-                      {l.description}
-                      {prod?.descriptionDetaillee && (
-                        <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
-                      )}
-                    </td>
-                    {showConso && (
-                      <td className="py-2 text-right">
-                        {/* Écran : input éditable */}
-                        <input
-                          type="number"
-                          min={0}
-                          step={0.01}
-                          value={surface || ''}
-                          onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
-                          className="w-16 text-right border border-border rounded px-1 py-0.5 text-sm bg-background print:hidden"
-                          placeholder="0"
-                        />
-                        {/* Impression : valeur simple */}
-                        <span className="hidden print:inline">{surface || '—'}</span>
-                      </td>
-                    )}
-                    {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
-                    <td className="py-2 text-right">{l.quantite}</td>
-                    <td className="py-2 text-center">{l.unite || '—'}</td>
-                    <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
-                    {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
-                    <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+          return (
+            <>
+              <table className="w-full mb-6">
+                <thead>
+                  <tr className="border-b-2 border-primary">
+                    <th className="text-left py-2 font-semibold">Description</th>
+                    {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
+                    {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
+                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
+                    <th className="text-right py-2 font-semibold w-16">Qté</th>
+                    <th className="text-center py-2 font-semibold w-16">Unité</th>
+                    <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
+                    {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
+                    <th className="text-right py-2 font-semibold w-28">Total HT</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {lignesEffectives.map((l) => {
+                    const t = calculerTotalLigne(l);
+                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const conso = l.consommation || prod?.consommation || 0;
+                    const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
+                    const composants = prod?.composants;
+                    const qteConsommee = qtesConsommees[l.id];
 
-                  {/* Sous-lignes composants */}
-                  {showComposants && composants && composants.length > 0 && composants.map(comp => {
-                    const compProd = produits.find(p => p.id === comp.produitId);
-                    if (!compProd) return null;
-                    const qteComp = Math.round(comp.quantite * l.quantite * 1000) / 1000;
                     return (
-                      <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
-                        <td className="py-1 pl-6 italic">
-                          ↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}
-                        </td>
-                        {showConso && <td />}
-                        {showConso && <td />}
-                        <td className="py-1 text-right">{qteComp}</td>
-                        <td className="py-1 text-center">{compProd.unite || '—'}</td>
-                        <td colSpan={showRemise ? 2 : 1} />
-                        <td />
-                      </tr>
+                      <Fragment key={l.id}>
+                        <tr className="border-b border-border">
+                          <td className="py-2">
+                            {l.description}
+                            {prod?.descriptionDetaillee && (
+                              <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
+                            )}
+                          </td>
+                          {showConso && (
+                            <td className="py-2 text-right">
+                              <input
+                                type="number" min={0} step={0.01}
+                                value={surface || ''}
+                                onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
+                                className="w-16 text-right border border-border rounded px-1 py-0.5 text-sm bg-background print:hidden"
+                                placeholder="0"
+                              />
+                              <span className="hidden print:inline">{surface || '—'}</span>
+                            </td>
+                          )}
+                          {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
+                          {showConso && (
+                            <td className="py-2 text-right font-medium text-primary">
+                              {qteConsommee != null ? qteConsommee : '—'}
+                            </td>
+                          )}
+                          <td className="py-2 text-right">{l.quantite}</td>
+                          <td className="py-2 text-center">{l.unite || '—'}</td>
+                          <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
+                          {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
+                          <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+                        </tr>
+
+                        {/* Sous-lignes composants */}
+                        {showComposants && composants && composants.length > 0 && composants.map(comp => {
+                          const compProd = produits.find(p => p.id === comp.produitId);
+                          if (!compProd) return null;
+                          const qteTotale = Math.round(comp.quantite * l.quantite * 1000) / 1000;
+                          const qteCondComp = compProd.poids && compProd.poids > 0
+                            ? Math.ceil(qteTotale / compProd.poids)
+                            : null;
+                          return (
+                            <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
+                              <td className="py-1 pl-6 italic">
+                                ↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}
+                              </td>
+                              {showConso && <td />}
+                              {showConso && <td />}
+                              {showConso && (
+                                <td className="py-1 text-right font-medium text-primary">
+                                  {qteCondComp != null ? qteCondComp : '—'}
+                                </td>
+                              )}
+                              <td className="py-1 text-right">{qteTotale}</td>
+                              <td className="py-1 text-center">{compProd.unite || '—'}</td>
+                              <td colSpan={showRemise ? 2 : 1} />
+                              <td />
+                            </tr>
+                          );
+                        })}
+                      </Fragment>
                     );
                   })}
-                </Fragment>
-              );
-            })}
-          </tbody>
-        </table>
+                </tbody>
+              </table>
+
+              {/* Coût matières (visible uniquement quand showConso) */}
+              {showConso && coutMatieres > 0 && (
+                <div className="mb-4 p-3 bg-muted/30 rounded-lg text-sm">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground font-medium">Coût total matières (achat)</span>
+                    <span className="font-semibold">{formatMontant(coutMatieres)}</span>
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
 
         {/* Totals */}
         <div className="flex justify-between items-end mb-8">
