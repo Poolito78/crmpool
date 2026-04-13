@@ -57,8 +57,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h2 className="font-heading text-2xl font-bold text-primary">ISOFLOOR</h2>
-            <p className="text-muted-foreground text-xs mt-1">ZA DU MONAY</p>
+            <img src="/logo-isofloor.png" alt="ISOFLOOR" className="h-14 mb-2" />
+            <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
             <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
             <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
             <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
