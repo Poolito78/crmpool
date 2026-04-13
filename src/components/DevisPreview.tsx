@@ -189,8 +189,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
                     <th className="text-right py-2 font-semibold w-16">Qté</th>
                     <th className="text-center py-2 font-semibold w-16">Unité</th>
-                    <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
+                    {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
                     {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
+                    <th className="text-right py-2 font-semibold w-24">P.U. net HT</th>
                     <th className="text-right py-2 font-semibold w-28">Total HT</th>
                   </tr>
                 </thead>
@@ -232,8 +233,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                           )}
                           <td className="py-2 text-right">{l.quantite}</td>
                           <td className="py-2 text-center">{l.unite || '—'}</td>
-                          <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
+                          {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
                           {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
+                          <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
                           <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
                         </tr>
 
