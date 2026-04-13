@@ -67,6 +67,8 @@ export default function Produits() {
   const [composants, setComposants] = useState<ComposantProduit[]>([]);
   const [composantSearches, setComposantSearches] = useState<string[]>([]);
   const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
+  const [composantPickerOpen, setComposantPickerOpen] = useState(false);
+  const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [showPrixPublic, setShowPrixPublic] = useState(false);
 
   // Auto-open product from query param (e.g. from devis)
@@ -826,7 +828,7 @@ export default function Produits() {
                 <p className="text-sm font-semibold flex items-center gap-2"><Layers className="w-4 h-4" /> Produit composé</p>
                 <button
                   type="button"
-                  onClick={() => { setComposants(prev => [...prev, { produitId: '', quantite: 1 }]); setComposantSearches(prev => [...prev, '']); setComposantOpenIdx(composants.length); }}
+                  onClick={() => { setComposantPickerSearch(''); setComposantPickerOpen(true); }}
                   className="text-xs text-primary hover:underline flex items-center gap-1"
                 >
                   <Plus className="w-3 h-3" /> Ajouter un composant
@@ -944,6 +946,56 @@ export default function Produits() {
                 </div>
               )}
             </div>
+
+            {/* Picker composant */}
+            <Dialog open={composantPickerOpen} onOpenChange={open => { setComposantPickerOpen(open); if (!open) setComposantPickerSearch(''); }}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2"><Layers className="w-4 h-4" /> Sélectionner un composant</DialogTitle>
+                </DialogHeader>
+                <div className="relative">
+                  <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    autoFocus
+                    placeholder="Rechercher par référence ou désignation…"
+                    value={composantPickerSearch}
+                    onChange={e => setComposantPickerSearch(e.target.value)}
+                    className="pl-8 text-sm"
+                  />
+                </div>
+                <div className="max-h-72 overflow-y-auto border border-border rounded-md divide-y divide-border">
+                  {(() => {
+                    const available = produits
+                      .filter(p => (!editing || p.id !== editing.id) && !composants.some(c => c.produitId === p.id))
+                      .filter(p => !composantPickerSearch || `${p.reference} ${p.description}`.toLowerCase().includes(composantPickerSearch.toLowerCase()))
+                      .sort((a, b) => a.reference.localeCompare(b.reference));
+                    if (available.length === 0) return <p className="text-xs text-muted-foreground px-3 py-4 text-center">Aucun produit trouvé</p>;
+                    return available.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                        onClick={() => {
+                          const newComp = { produitId: p.id, quantite: 1 };
+                          const updated = [...composants, newComp];
+                          setComposants(updated);
+                          setComposantSearches(prev => [...prev, `${p.reference} — ${p.description}`]);
+                          setComposantPickerOpen(false);
+                          const total = updated.reduce((sum, c) => {
+                            const pr = produits.find(pr => pr.id === c.produitId);
+                            return sum + (pr ? pr.prixAchat * c.quantite : 0);
+                          }, 0);
+                          if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
+                        }}
+                      >
+                        <span><span className="font-mono text-xs text-muted-foreground">{p.reference}</span> {p.description}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatMontant(p.prixAchat)}</span>
+                      </button>
+                    ));
+                  })()}
+                </div>
+              </DialogContent>
+            </Dialog>
 
             {editing && (
               composants.length > 0 ? (
