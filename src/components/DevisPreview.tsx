@@ -194,13 +194,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
 
             const compDatas: CompData[] = isComposite ? composants!.map(comp => {
               const compProd = produits.find(p => p.id === comp.produitId);
-              const consoComp = totalPoidsComp > 0 && conso > 0
-                ? Math.round(comp.quantite / totalPoidsComp * conso * 10000) / 10000 : null;
-              const totalKgComp = consoComp != null && surfaceGlobale > 0
+              // comp.quantite EST directement le kg/m² de ce composant
+              const consoComp = comp.quantite;
+              const totalKgComp = surfaceGlobale > 0
                 ? Math.round(surfaceGlobale * consoComp * 1000) / 1000 : null;
               const poidsC = compProd?.poids || null;
               const unitesComp = totalKgComp != null && poidsC ? Math.ceil(totalKgComp / poidsC) : null;
-              const condKgComp = unitesComp != null && poidsC ? unitesComp * poidsC : null;
+              const condKgComp = unitesComp != null && poidsC ? Math.round(unitesComp * poidsC * 10) / 10 : null;
               const prixUnite = compProd?.prixHT || 0;
               const prixKg = poidsC && prixUnite ? Math.round(prixUnite / poidsC * 100) / 100 : null;
               const totalHTComp = unitesComp != null ? unitesComp * prixUnite : 0;
@@ -214,14 +214,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0;
           for (const { conso, isComposite, compDatas } of allLines) {
             if (isComposite) {
+              // comp.quantite = kg/m² direct → on somme
               for (const { consoComp, condKgComp } of compDatas) {
-                if (consoComp) sumConsoKgM2 += consoComp;
+                sumConsoKgM2 += consoComp;
                 if (condKgComp) sumCondKg += condKgComp;
               }
-            } else if (conso > 0 && surfaceGlobale > 0) {
+            } else if (conso > 0) {
               sumConsoKgM2 += conso;
-              const prod = allLines.find(x => x.l === allLines[0]?.l)?.prod;
-              sumCondKg += 0; // handled below
+              // pour produit simple : condKg calculé séparément
             }
           }
           sumTotalKg = surfaceGlobale > 0 ? Math.round(surfaceGlobale * sumConsoKgM2 * 100) / 100 : 0;
