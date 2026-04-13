@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import logoIsofloor from '@/assets/logo-isofloor.png';
 
 interface Props {
   devis: Devis;
@@ -57,7 +58,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <img src="/logo-isofloor.png" alt="ISOFLOOR" className="h-14 mb-2" />
+            <img src={logoIsofloor} alt="ISOFLOOR" className="h-16 mb-2" />
             <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
             <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
             <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
