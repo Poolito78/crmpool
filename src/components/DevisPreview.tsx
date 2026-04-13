@@ -240,22 +240,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                         </tr>
 
                         {/* Sous-lignes composants */}
-                        {showComposants && composants && composants.length > 0 && composants.map(comp => {
+                        {showComposants && composants && composants.length > 0 && (() => {
+                          // Poids total de tous les composants = base de répartition
+                          const totalPoidsComposants = composants.reduce((s, c) => s + c.quantite, 0);
+                          return composants.map(comp => {
                           const compProd = produits.find(p => p.id === comp.produitId);
                           if (!compProd) return null;
                           const qteTotale = Math.round(comp.quantite * l.quantite * 1000) / 1000;
-                          // kg/m² du composant = comp.quantite × conso_parent / poids_parent
-                          const parentConso = conso; // kg/m² du produit parent
-                          const parentPoids = prod?.poids || 0;
-                          const consoComp = parentConso > 0 && parentPoids > 0
-                            ? Math.round(comp.quantite * parentConso / parentPoids * 10000) / 10000
+                          // kg/m² composant = part proportionnelle × conso_parent
+                          // comp.quantite / Σ(quantités) × conso_parent
+                          const consoComp = totalPoidsComposants > 0 && conso > 0
+                            ? Math.round(comp.quantite / totalPoidsComposants * conso * 10000) / 10000
                             : null;
-                          // Qté conso = ⌈ surface × consoComp / poids_cond_composant ⌉
+                          // Qté conso = ⌈ surface × kg/m²_comp / poids_cond ⌉
                           const qteCondComp = consoComp != null && surface > 0 && compProd.poids && compProd.poids > 0
                             ? Math.ceil(surface * consoComp / compProd.poids)
-                            : compProd.poids && compProd.poids > 0
-                              ? Math.ceil(qteTotale / compProd.poids)
-                              : null;
+                            : null;
                           return (
                             <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
                               <td className="py-1 pl-6 italic">
@@ -279,7 +279,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                               <td />
                             </tr>
                           );
-                        })}
+                        });
+                        })()}
                       </Fragment>
                     );
                   })}
