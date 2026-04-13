@@ -12,7 +12,13 @@ interface Props {
 
 export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
   const [showConso, setShowConso] = useState(false);
+  const [showRemise, setShowRemise] = useState(true);
   const isSurfaceMode = devis.modeCalcul === 'surface';
+
+  const poidsTotal = devis.lignes.reduce((sum, l) => {
+    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+    return sum + (prod?.poids || 0) * l.quantite;
+  }, 0);
 
   function handlePrint() {
     window.print();
@@ -23,13 +29,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
   return (
     <div className="bg-card">
       {/* Print / Edit buttons */}
-      <div className="flex justify-end gap-2 p-4 print:hidden items-center">
-        {isSurfaceMode && (
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer mr-auto">
-            <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
-            Afficher consommation/m²
+      <div className="flex justify-end gap-2 p-4 print:hidden items-center flex-wrap">
+        <div className="flex items-center gap-4 mr-auto">
+          {isSurfaceMode && (
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
+              Afficher consommation/m²
+            </label>
+          )}
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <input type="checkbox" checked={showRemise} onChange={e => setShowRemise(e.target.checked)} className="rounded" />
+            Afficher remise
           </label>
-        )}
+        </div>
         {onEdit && (
           <Button variant="outline" size="sm" onClick={onEdit}>
             <Pencil className="w-4 h-4 mr-2" /> Modifier
@@ -130,7 +142,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                <th className="text-right py-2 font-semibold w-16">Qté</th>
                <th className="text-center py-2 font-semibold w-16">Unité</th>
                <th className="text-right py-2 font-semibold w-24">P.U. HT</th>
-               <th className="text-right py-2 font-semibold w-16">Rem.</th>
+               {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
                <th className="text-right py-2 font-semibold w-28">Total HT</th>
              </tr>
            </thead>
@@ -152,7 +164,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                    <td className="py-2 text-right">{l.quantite}</td>
                    <td className="py-2 text-center">{l.unite || '—'}</td>
                    <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>
-                   <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>
+                   {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
                    <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
                  </tr>
               );
@@ -161,8 +173,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         </table>
 
         {/* Totals */}
-        <div className="flex justify-end mb-8">
-          <div className="w-64 space-y-1">
+        <div className="flex justify-between items-end mb-8">
+          {poidsTotal > 0 && (
+            <div className="text-sm text-muted-foreground">
+              <span className="font-semibold text-foreground">Poids total :</span> {poidsTotal % 1 === 0 ? poidsTotal : poidsTotal.toFixed(2)} kg
+            </div>
+          )}
+          <div className="w-64 space-y-1 ml-auto">
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
             {(devis.fraisPortHT || 0) > 0 && (
               <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>
