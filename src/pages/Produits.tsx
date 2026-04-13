@@ -846,11 +846,17 @@ export default function Produits() {
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
                 // Propage les modifications de quantité aux composants en mode %
+                // Formule : pct/100 × quantite_base × poids_produit_base
+                function calcQtyPct(pct: number, baseComp: typeof composants[0]) {
+                  const baseProd = produits.find(pr => pr.id === baseComp.produitId);
+                  const poidBase = baseProd?.poids ?? 1;
+                  return Math.round(baseComp.quantite * poidBase * pct / 100 * 10000) / 10000 || 0.0001;
+                }
                 function propagatePct(updated: typeof composants) {
                   return updated.map(c => {
                     if (c.consommationPct != null && c.baseComposantId) {
                       const base = updated.find(b => b.produitId === c.baseComposantId);
-                      if (base) return { ...c, quantite: Math.round(base.quantite * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
+                      if (base) return { ...c, quantite: calcQtyPct(c.consommationPct, base) };
                     }
                     return c;
                   });
@@ -927,7 +933,7 @@ export default function Produits() {
                               onChange={e => {
                                 const pct = parseFloat(e.target.value) || 0;
                                 const base = composants.find(c => c.produitId === comp.baseComposantId);
-                                const newQty = base ? Math.round(base.quantite * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const newQty = base ? calcQtyPct(pct, base) : comp.quantite;
                                 const updated = [...composants];
                                 updated[idx] = { ...updated[idx], consommationPct: pct, quantite: newQty };
                                 setComposants(updated);
@@ -942,7 +948,7 @@ export default function Produits() {
                               onChange={e => {
                                 const baseId = e.target.value;
                                 const base = composants.find(c => c.produitId === baseId);
-                                const newQty = base && comp.consommationPct ? Math.round(base.quantite * comp.consommationPct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const newQty = base && comp.consommationPct ? calcQtyPct(comp.consommationPct, base) : comp.quantite;
                                 const updated = [...composants];
                                 updated[idx] = { ...updated[idx], baseComposantId: baseId, quantite: newQty };
                                 setComposants(updated);
@@ -1008,11 +1014,18 @@ export default function Produits() {
                           <Trash className="w-4 h-4" />
                         </button>
                       </div>
-                      {modePercent && comp.baseComposantId && (
-                        <p className="text-xs text-muted-foreground pl-1">
-                          {comp.consommationPct}% de {produits.find(p => p.id === comp.baseComposantId)?.reference} ({composants.find(c => c.produitId === comp.baseComposantId)?.quantite ?? '?'} unité(s)) → {comp.quantite}
-                        </p>
-                      )}
+                      {modePercent && comp.baseComposantId && (() => {
+                        const baseComp = composants.find(c => c.produitId === comp.baseComposantId);
+                        const baseProd = produits.find(p => p.id === comp.baseComposantId);
+                        if (!baseComp || !baseProd) return null;
+                        const poidsBase = baseProd.poids ?? 1;
+                        const masseBase = baseComp.quantite * poidsBase;
+                        return (
+                          <p className="text-xs text-muted-foreground pl-1">
+                            {comp.consommationPct}% × {baseComp.quantite} × {poidsBase} kg ({baseProd.reference}) = <span className="font-medium text-foreground">{comp.quantite} kg</span>
+                          </p>
+                        );
+                      })()}
                     </div>
                   );
                 });
