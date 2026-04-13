@@ -837,108 +837,186 @@ export default function Produits() {
               {composants.length === 0 && (
                 <p className="text-xs text-muted-foreground">Aucun composant — cliquez sur "Ajouter" pour créer un produit composé</p>
               )}
-              {composants.map((comp, idx) => {
-                const compProd = produits.find(p => p.id === comp.produitId);
-                const search = composantSearches[idx] || '';
-                const isOpen = composantOpenIdx === idx;
-                const availableProduits = produits
-                  .filter(p => (!editing || p.id !== editing.id) && !composants.some((c, i) => i !== idx && c.produitId === p.id))
-                  .filter(p => !search || `${p.reference} ${p.description}`.toLowerCase().includes(search.toLowerCase()))
-                  .sort((a, b) => a.reference.localeCompare(b.reference));
-
-                function recalc(updated: typeof composants) {
+              {(() => {
+                function recalcPrix(updated: typeof composants) {
                   const total = updated.reduce((sum, c) => {
                     const p = produits.find(pr => pr.id === c.produitId);
                     return sum + (p ? p.prixAchat * c.quantite : 0);
                   }, 0);
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
+                // Propage les modifications de quantité aux composants en mode %
+                function propagatePct(updated: typeof composants) {
+                  return updated.map(c => {
+                    if (c.consommationPct != null && c.baseComposantId) {
+                      const base = updated.find(b => b.produitId === c.baseComposantId);
+                      if (base) return { ...c, quantite: Math.round(base.quantite * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
+                    }
+                    return c;
+                  });
+                }
+                return composants.map((comp, idx) => {
+                  const compProd = produits.find(p => p.id === comp.produitId);
+                  const search = composantSearches[idx] || '';
+                  const isOpen = composantOpenIdx === idx;
+                  const modePercent = comp.consommationPct != null;
+                  const availableProduits = produits
+                    .filter(p => (!editing || p.id !== editing.id) && !composants.some((c, i) => i !== idx && c.produitId === p.id))
+                    .filter(p => !search || `${p.reference} ${p.description}`.toLowerCase().includes(search.toLowerCase()))
+                    .sort((a, b) => a.reference.localeCompare(b.reference));
+                  // Composants disponibles comme base pour le % (tous sauf soi-même, avec un produit sélectionné)
+                  const basesDisponibles = composants.filter((c, i) => i !== idx && c.produitId);
 
-                return (
-                  <div key={idx} className="flex flex-wrap sm:flex-nowrap items-start gap-2">
-                    {/* Combobox */}
-                    <div className="flex-1 min-w-0 relative">
-                      <Input
-                        value={search}
-                        onChange={e => {
-                          const searches = [...composantSearches];
-                          searches[idx] = e.target.value;
-                          setComposantSearches(searches);
-                          setComposantOpenIdx(idx);
-                          if (!e.target.value) {
-                            const updated = [...composants];
-                            updated[idx] = { ...updated[idx], produitId: '' };
-                            setComposants(updated);
-                          }
-                        }}
-                        onFocus={() => setComposantOpenIdx(idx)}
-                        placeholder="Rechercher un produit…"
-                        className="text-sm"
-                      />
-                      {compProd && !isOpen && (
-                        <p className="text-xs text-primary mt-0.5 truncate">{compProd.reference} — {compProd.description}</p>
-                      )}
-                      {isOpen && (
-                        <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
-                          {availableProduits.length === 0 && (
-                            <p className="text-xs text-muted-foreground px-3 py-2">Aucun produit trouvé</p>
-                          )}
-                          {availableProduits.map(p => (
-                            <button
-                              key={p.id}
-                              type="button"
-                              className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
-                              onMouseDown={e => {
-                                e.preventDefault();
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex flex-wrap sm:flex-nowrap items-start gap-2">
+                        {/* Combobox produit */}
+                        <div className="flex-1 min-w-0 relative">
+                          <Input
+                            value={search}
+                            onChange={e => {
+                              const searches = [...composantSearches];
+                              searches[idx] = e.target.value;
+                              setComposantSearches(searches);
+                              setComposantOpenIdx(idx);
+                              if (!e.target.value) {
                                 const updated = [...composants];
-                                updated[idx] = { ...updated[idx], produitId: p.id };
+                                updated[idx] = { ...updated[idx], produitId: '' };
                                 setComposants(updated);
-                                const searches = [...composantSearches];
-                                searches[idx] = `${p.reference} — ${p.description}`;
-                                setComposantSearches(searches);
-                                setComposantOpenIdx(null);
-                                recalc(updated);
-                              }}
-                            >
-                              <span><span className="font-mono text-xs text-muted-foreground">{p.reference}</span> {p.description}</span>
-                              <span className="text-xs text-muted-foreground shrink-0">{formatMontant(p.prixAchat)}</span>
-                            </button>
-                          ))}
+                              }
+                            }}
+                            onFocus={() => setComposantOpenIdx(idx)}
+                            placeholder="Rechercher un produit…"
+                            className="text-sm"
+                          />
+                          {compProd && !isOpen && (
+                            <p className="text-xs text-primary mt-0.5 truncate">{compProd.reference} — {compProd.description}</p>
+                          )}
+                          {isOpen && (
+                            <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
+                              {availableProduits.length === 0 && <p className="text-xs text-muted-foreground px-3 py-2">Aucun produit trouvé</p>}
+                              {availableProduits.map(p => (
+                                <button key={p.id} type="button"
+                                  className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                                  onMouseDown={e => {
+                                    e.preventDefault();
+                                    const updated = [...composants];
+                                    updated[idx] = { ...updated[idx], produitId: p.id };
+                                    setComposants(updated);
+                                    const searches = [...composantSearches];
+                                    searches[idx] = `${p.reference} — ${p.description}`;
+                                    setComposantSearches(searches);
+                                    setComposantOpenIdx(null);
+                                    recalcPrix(updated);
+                                  }}
+                                >
+                                  <span><span className="font-mono text-xs text-muted-foreground">{p.reference}</span> {p.description}</span>
+                                  <span className="text-xs text-muted-foreground shrink-0">{formatMontant(p.prixAchat)}</span>
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
+
+                        {/* Quantité fixe ou calculée en % */}
+                        {modePercent ? (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Input
+                              type="number" min={0.01} max={100} step={0.1}
+                              value={comp.consommationPct}
+                              onChange={e => {
+                                const pct = parseFloat(e.target.value) || 0;
+                                const base = composants.find(c => c.produitId === comp.baseComposantId);
+                                const newQty = base ? Math.round(base.quantite * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], consommationPct: pct, quantite: newQty };
+                                setComposants(updated);
+                                recalcPrix(updated);
+                              }}
+                              className="w-16 text-sm"
+                              placeholder="%"
+                            />
+                            <span className="text-xs text-muted-foreground">%</span>
+                            <select
+                              value={comp.baseComposantId || ''}
+                              onChange={e => {
+                                const baseId = e.target.value;
+                                const base = composants.find(c => c.produitId === baseId);
+                                const newQty = base && comp.consommationPct ? Math.round(base.quantite * comp.consommationPct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], baseComposantId: baseId, quantite: newQty };
+                                setComposants(updated);
+                                recalcPrix(updated);
+                              }}
+                              className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[110px]"
+                            >
+                              <option value="">de…</option>
+                              {basesDisponibles.map(c => {
+                                const p = produits.find(pr => pr.id === c.produitId);
+                                return p ? <option key={c.produitId} value={c.produitId}>{p.reference}</option> : null;
+                              })}
+                            </select>
+                            <span className="text-xs text-muted-foreground shrink-0">= {comp.quantite}</span>
+                            <button type="button" title="Repasser en quantité fixe"
+                              onClick={() => {
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], consommationPct: undefined, baseComposantId: undefined };
+                                setComposants(updated);
+                              }}
+                              className="text-xs text-muted-foreground hover:text-destructive"
+                            >✕</button>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-1 shrink-0">
+                            <Input
+                              type="number" min={0.01} step={0.01}
+                              value={comp.quantite}
+                              onChange={e => {
+                                const updated = propagatePct([...composants]);
+                                updated[idx] = { ...updated[idx], quantite: parseFloat(e.target.value) || 1 };
+                                const propagated = propagatePct(updated);
+                                setComposants(propagated);
+                                recalcPrix(propagated);
+                              }}
+                              className="w-20 text-sm"
+                              placeholder="Qté"
+                            />
+                            <button type="button" title="Définir en % d'un autre composant"
+                              onClick={() => {
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], consommationPct: 10, baseComposantId: '' };
+                                setComposants(updated);
+                              }}
+                              className="text-xs px-1.5 py-1 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary"
+                            >%</button>
+                          </div>
+                        )}
+
+                        <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">
+                          {compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}
+                        </span>
+                        <button type="button"
+                          onClick={() => {
+                            const updated = composants.filter((_, i) => i !== idx);
+                            const searches = composantSearches.filter((_, i) => i !== idx);
+                            setComposants(updated);
+                            setComposantSearches(searches);
+                            recalcPrix(updated);
+                          }}
+                          className="p-1 hover:bg-destructive/10 rounded text-destructive mt-0.5"
+                        >
+                          <Trash className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {modePercent && comp.baseComposantId && (
+                        <p className="text-xs text-muted-foreground pl-1">
+                          {comp.consommationPct}% de {produits.find(p => p.id === comp.baseComposantId)?.reference} ({composants.find(c => c.produitId === comp.baseComposantId)?.quantite ?? '?'} unité(s)) → {comp.quantite}
+                        </p>
                       )}
                     </div>
-                    {/* Quantité */}
-                    <Input
-                      type="number"
-                      min={0.01}
-                      step={0.01}
-                      value={comp.quantite}
-                      onChange={e => {
-                        const updated = [...composants];
-                        updated[idx] = { ...updated[idx], quantite: parseFloat(e.target.value) || 1 };
-                        setComposants(updated);
-                        recalc(updated);
-                      }}
-                      className="w-20 shrink-0 text-sm"
-                      placeholder="Qté"
-                    />
-                    <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">{compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const updated = composants.filter((_, i) => i !== idx);
-                        const searches = composantSearches.filter((_, i) => i !== idx);
-                        setComposants(updated);
-                        setComposantSearches(searches);
-                        recalc(updated);
-                      }}
-                      className="p-1 hover:bg-destructive/10 rounded text-destructive mt-0.5"
-                    >
-                      <Trash className="w-4 h-4" />
-                    </button>
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
               {composants.length > 0 && (
                 <div className="flex justify-between text-xs font-medium pt-1 border-t border-border">
                   <span className="text-muted-foreground">Prix achat calculé</span>
