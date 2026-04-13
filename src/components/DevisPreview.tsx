@@ -57,11 +57,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <h2 className="font-heading text-2xl font-bold text-primary">MonCRM</h2>
-            <p className="text-muted-foreground text-xs mt-1">Votre entreprise</p>
-            <p className="text-muted-foreground text-xs">123 Rue Exemple, 75001 Paris</p>
-            <p className="text-muted-foreground text-xs">contact@moncrm.fr • 01 23 45 67 89</p>
-            <p className="text-muted-foreground text-xs">SIRET : 123 456 789 00012</p>
+            <h2 className="font-heading text-2xl font-bold text-primary">ISOFLOOR</h2>
+            <p className="text-muted-foreground text-xs mt-1">ZA DU MONAY</p>
+            <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
+            <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
+            <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
           </div>
           <div className="text-right">
             <h1 className="font-heading text-3xl font-bold tracking-tight">DEVIS</h1>
