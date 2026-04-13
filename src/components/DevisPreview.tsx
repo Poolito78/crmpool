@@ -15,12 +15,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
   const [showConso, setShowConso] = useState(false);
   const [showRemise, setShowRemise] = useState(false);
   const [showComposants, setShowComposants] = useState(false);
+  const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>(() =>
     Object.fromEntries(devis.lignes.map(l => [l.id, l.surfaceM2 || devis.surfaceGlobaleM2 || 0]))
   );
 
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
+  }
+  function updateSurfaceGlobale(val: number) {
+    setSurfaceGlobale(val);
+    setSurfacesParLigne(Object.fromEntries(devis.lignes.map(l => [l.id, val])));
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
@@ -157,148 +162,236 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
         )}
 
         {/* Table */}
-        {(() => {
-          // Qté conso brute (kg) = surface × conso  (décimal, ex: 1.99)
-          // Qté cmd = ⌈ qté_conso / poids_cond ⌉  (unités entières, ex: 2)
-          const qtesConsoKg: Record<string, number | null> = {};
-          const qtesCmd: Record<string, number | null> = {};
-          for (const l of lignesEffectives) {
+        {showConso ? (() => {
+          // ── Pré-calcul données composants pour toutes les lignes ──
+          type CompData = {
+            comp: typeof devis.lignes[0] extends { id: string } ? any : any;
+            compProd: typeof produits[0] | undefined;
+            consoComp: number | null;
+            totalKgComp: number | null;
+            unitesComp: number | null;
+            condKgComp: number | null;
+            prixUnite: number;
+            prixKg: number | null;
+            totalHTComp: number;
+          };
+          type LineData = {
+            l: typeof lignesEffectives[0];
+            prod: typeof produits[0] | null | undefined;
+            conso: number;
+            t: ReturnType<typeof calculerTotalLigne>;
+            compDatas: CompData[];
+            isComposite: boolean;
+          };
+
+          const allLines: LineData[] = lignesEffectives.map(l => {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
             const conso = l.consommation || prod?.consommation || 0;
-            const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
-            const poidsCond = prod?.poids || 0;
-            if (surface > 0 && conso > 0) {
-              const kg = Math.round(surface * conso * 1000) / 1000;
-              qtesConsoKg[l.id] = kg;
-              qtesCmd[l.id] = poidsCond > 0 ? Math.ceil(kg / poidsCond) : null;
-            } else {
-              qtesConsoKg[l.id] = null;
-              qtesCmd[l.id] = null;
+            const t = calculerTotalLigne(l);
+            const composants = prod?.composants;
+            const isComposite = !!(composants && composants.length > 0);
+            const totalPoidsComp = isComposite ? composants!.reduce((s, c) => s + c.quantite, 0) : 0;
+
+            const compDatas: CompData[] = isComposite ? composants!.map(comp => {
+              const compProd = produits.find(p => p.id === comp.produitId);
+              const consoComp = totalPoidsComp > 0 && conso > 0
+                ? Math.round(comp.quantite / totalPoidsComp * conso * 10000) / 10000 : null;
+              const totalKgComp = consoComp != null && surfaceGlobale > 0
+                ? Math.round(surfaceGlobale * consoComp * 1000) / 1000 : null;
+              const poidsC = compProd?.poids || null;
+              const unitesComp = totalKgComp != null && poidsC ? Math.ceil(totalKgComp / poidsC) : null;
+              const condKgComp = unitesComp != null && poidsC ? unitesComp * poidsC : null;
+              const prixUnite = compProd?.prixHT || 0;
+              const prixKg = poidsC && prixUnite ? Math.round(prixUnite / poidsC * 100) / 100 : null;
+              const totalHTComp = unitesComp != null ? unitesComp * prixUnite : 0;
+              return { comp, compProd, consoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
+            }) : [];
+
+            return { l, prod, conso, t, compDatas, isComposite };
+          });
+
+          // ── Totaux ligne récapitulatif ──
+          let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0;
+          for (const { conso, isComposite, compDatas } of allLines) {
+            if (isComposite) {
+              for (const { consoComp, condKgComp } of compDatas) {
+                if (consoComp) sumConsoKgM2 += consoComp;
+                if (condKgComp) sumCondKg += condKgComp;
+              }
+            } else if (conso > 0 && surfaceGlobale > 0) {
+              sumConsoKgM2 += conso;
+              const prod = allLines.find(x => x.l === allLines[0]?.l)?.prod;
+              sumCondKg += 0; // handled below
             }
           }
-          // Coût total matières (achat) quand showConso
-          const coutMatieres = showConso ? lignesEffectives.reduce((sum, l) => {
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            const qte = qtesCmd[l.id];
-            return sum + (qte != null && prod ? qte * prod.prixAchat : 0);
-          }, 0) : 0;
+          sumTotalKg = surfaceGlobale > 0 ? Math.round(surfaceGlobale * sumConsoKgM2 * 100) / 100 : 0;
+          const coutChantierM2 = surfaceGlobale > 0 && totals.totalHT > 0
+            ? Math.round(totals.totalHT / surfaceGlobale * 100) / 100 : null;
 
           return (
-            <>
-              <table className="w-full mb-6">
-                <thead>
-                  <tr className="border-b-2 border-primary">
-                    <th className="text-left py-2 font-semibold">Description</th>
-                    {showConso && <th className="text-right py-2 font-semibold w-20">m²</th>}
-                    {showConso && <th className="text-right py-2 font-semibold w-20">kg/m²</th>}
-                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté conso.</th>}
-                    {showConso && <th className="text-right py-2 font-semibold w-20">Qté cmd.</th>}
-                    <th className="text-right py-2 font-semibold w-16">Qté</th>
-                    <th className="text-center py-2 font-semibold w-16">Unité</th>
-                    {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
-                    {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
-                    <th className="text-right py-2 font-semibold w-24">P.U. net HT</th>
-                    <th className="text-right py-2 font-semibold w-28">Total HT</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {lignesEffectives.map((l) => {
-                    const t = calculerTotalLigne(l);
-                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                    const conso = l.consommation || prod?.consommation || 0;
-                    const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
-                    const composants = prod?.composants;
-                    const qteConsoKg = qtesConsoKg[l.id];
-                    const qteCmd = qtesCmd[l.id];
+            <table className="w-full mb-6 text-xs border-collapse">
+              <thead>
+                {/* Ligne 1 : groupes */}
+                <tr className="bg-primary text-primary-foreground">
+                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-bottom border-r border-primary-foreground/20">
+                    Désignation
+                    {/* lien site */}
+                    <span className="block text-[10px] font-normal italic text-primary-foreground/70">Fiches système / Produit : www.isofloor.fr</span>
+                  </th>
+                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Conso. Estimée</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Conditionnement</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Prix</th>
+                </tr>
+                {/* Ligne 2 : sous-colonnes */}
+                <tr className="bg-primary text-primary-foreground text-xs">
+                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-14">kg/m²</th>
+                  <th className="py-1 px-1 text-right w-16">Total KG</th>
+                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-12">kg</th>
+                  <th className="py-1 px-1 text-right w-12">Unité</th>
+                  <th className="py-1 px-1 text-right w-16">Total KG</th>
+                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-20">Unité</th>
+                  <th className="py-1 px-1 text-right w-16">(Kg)</th>
+                  <th className="py-1 px-1 text-right w-20">Total HT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {/* Ligne récapitulatif surface + totaux */}
+                <tr className="bg-muted/50 border-b-2 border-primary text-xs italic font-medium">
+                  <td className="py-1.5 px-2 text-right text-primary font-bold not-italic">
+                    <input
+                      type="number" min={0} step={1}
+                      value={surfaceGlobale || ''}
+                      onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
+                      className="w-14 text-right border border-border rounded px-1 py-0.5 bg-background print:hidden font-normal text-foreground"
+                      placeholder="m²"
+                    />
+                    <span className="hidden print:inline">{surfaceGlobale}</span>
+                    <span className="ml-1 font-bold text-primary">m²</span>
+                  </td>
+                  <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(3) : '—'}</td>
+                  <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(2) : '—'}</td>
+                  <td /><td />
+                  <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : '—'}</td>
+                  <td className="py-1.5 px-1 text-right text-muted-foreground not-italic">Coût chantier :</td>
+                  <td />
+                  <td className="py-1.5 px-1 text-right font-bold text-primary not-italic">
+                    {coutChantierM2 != null ? `${coutChantierM2.toFixed(2)} €/m²` : '—'}
+                  </td>
+                </tr>
 
-                    return (
-                      <Fragment key={l.id}>
-                        <tr className="border-b border-border">
-                          <td className="py-2">
-                            {l.description}
-                            {prod?.descriptionDetaillee && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>
+                {/* Lignes produits */}
+                {allLines.map(({ l, prod, conso, t, compDatas, isComposite }) => (
+                  <Fragment key={l.id}>
+                    {/* Ligne produit principal */}
+                    <tr className="border-b border-border/60">
+                      <td className="py-1.5 px-2 font-medium">{l.description}</td>
+                      {isComposite ? (
+                        // Composite : colonnes conso vides, prix du devis à droite
+                        <><td /><td /><td /><td /><td />
+                          <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
+                          <td />
+                          <td className="py-1.5 px-1 text-right font-bold">{formatMontant(t.totalHT)}</td>
+                        </>
+                      ) : (() => {
+                        // Produit simple avec conso
+                        const kg = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 1000) / 1000 : null;
+                        const poidsC = prod?.poids || null;
+                        const unites = kg != null && poidsC ? Math.ceil(kg / poidsC) : null;
+                        const condKg = unites != null && poidsC ? unites * poidsC : null;
+                        const prixKg = poidsC && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsC * 100) / 100 : null;
+                        return (
+                          <>
+                            <td className="py-1.5 px-1 text-right">{conso > 0 ? conso : '—'}</td>
+                            <td className="py-1.5 px-1 text-right">{kg ?? '—'}</td>
+                            <td className="py-1.5 px-1 text-right">{poidsC ?? '—'}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? '—'}</td>
+                            <td className="py-1.5 px-1 text-right">{condKg ?? '—'}</td>
+                            <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
+                            <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKg != null ? formatMontant(prixKg) : '—'})</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{formatMontant(t.totalHT)}</td>
+                          </>
+                        );
+                      })()}
+                    </tr>
+
+                    {/* Sous-lignes composants */}
+                    {showComposants && compDatas.map(({ comp, compProd, consoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp }) =>
+                      compProd ? (
+                        <tr key={`${l.id}-${comp.produitId}`} className="border-b border-border/30 text-muted-foreground">
+                          <td className="py-1 px-2 pl-8">
+                            {comp.consommationPct != null && (
+                              <span className="text-xs font-semibold text-foreground mr-2">{comp.consommationPct}%</span>
                             )}
+                            {compProd.description}
+                            {compProd.poids ? <span className="ml-1 text-muted-foreground/60 text-[10px]">({compProd.poids} kg)</span> : null}
                           </td>
-                          {showConso && (
-                            <td className="py-2 text-right">
-                              <input
-                                type="number" min={0} step={0.01}
-                                value={surface || ''}
-                                onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
-                                className="w-16 text-right border border-border rounded px-1 py-0.5 text-sm bg-background print:hidden"
-                                placeholder="0"
-                              />
-                              <span className="hidden print:inline">{surface || '—'}</span>
-                            </td>
-                          )}
-                          {showConso && <td className="py-2 text-right">{conso > 0 ? conso : '—'}</td>}
-                          {showConso && <td className="py-2 text-right">{qteConsoKg != null ? qteConsoKg : '—'}</td>}
-                          {showConso && <td className="py-2 text-right font-medium text-primary">{qteCmd != null ? `${qteCmd}u` : '—'}</td>}
-                          <td className="py-2 text-right">{l.quantite}</td>
-                          <td className="py-2 text-center">{l.unite || '—'}</td>
-                          {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
-                          {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
-                          <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
-                          <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+                          <td className="py-1 px-1 text-right">{consoComp ?? '—'}</td>
+                          <td className="py-1 px-1 text-right">{totalKgComp ?? '—'}</td>
+                          <td className="py-1 px-1 text-right">{compProd.poids ?? '—'}</td>
+                          <td className="py-1 px-1 text-right font-semibold text-primary">{unitesComp ?? '—'}</td>
+                          <td className="py-1 px-1 text-right">{condKgComp ?? '—'}</td>
+                          <td className="py-1 px-1 text-right text-foreground">{formatMontant(prixUnite)}</td>
+                          <td className="py-1 px-1 text-right">({prixKg != null ? formatMontant(prixKg) : '—'})</td>
+                          <td className="py-1 px-1 text-right font-semibold text-foreground">{formatMontant(totalHTComp)}</td>
                         </tr>
-
-                        {/* Sous-lignes composants */}
-                        {showComposants && composants && composants.length > 0 && (() => {
-                          // Poids total de tous les composants = base de répartition
-                          const totalPoidsComposants = composants.reduce((s, c) => s + c.quantite, 0);
-                          return composants.map(comp => {
-                          const compProd = produits.find(p => p.id === comp.produitId);
-                          if (!compProd) return null;
-                          const qteTotale = Math.round(comp.quantite * l.quantite * 1000) / 1000;
-                          // kg/m² composant = part proportionnelle × conso_parent
-                          const consoComp = totalPoidsComposants > 0 && conso > 0
-                            ? Math.round(comp.quantite / totalPoidsComposants * conso * 10000) / 10000
-                            : null;
-                          // Qté conso brute (kg) = surface × kg/m²_comp
-                          const qteConsoKgComp = consoComp != null && surface > 0
-                            ? Math.round(surface * consoComp * 1000) / 1000
-                            : null;
-                          // Qté cmd = ⌈ qté_conso / poids_cond ⌉
-                          const qteCmdComp = qteConsoKgComp != null && compProd.poids && compProd.poids > 0
-                            ? Math.ceil(qteConsoKgComp / compProd.poids)
-                            : null;
-                          return (
-                            <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
-                              <td className="py-1 pl-6 italic">
-                                ↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}
-                                {compProd.poids ? <span className="ml-1 text-muted-foreground/70">({compProd.poids} kg/cond.)</span> : null}
-                              </td>
-                              {showConso && <td className="py-1 text-right text-muted-foreground/50">—</td>}
-                              {showConso && <td className="py-1 text-right">{consoComp != null ? consoComp : '—'}</td>}
-                              {showConso && <td className="py-1 text-right">{qteConsoKgComp != null ? qteConsoKgComp : '—'}</td>}
-                              {showConso && <td className="py-1 text-right font-medium text-primary">{qteCmdComp != null ? `${qteCmdComp}u` : '—'}</td>}
-                              <td className="py-1 text-right">{qteTotale}</td>
-                              <td className="py-1 text-center">{compProd.unite || '—'}</td>
-                              <td colSpan={showRemise ? 2 : 1} />
-                              <td />
-                            </tr>
-                          );
-                        });
-                        })()}
-                      </Fragment>
-                    );
-                  })}
-                </tbody>
-              </table>
-
-              {/* Coût matières (visible uniquement quand showConso) */}
-              {showConso && coutMatieres > 0 && (
-                <div className="mb-4 p-3 bg-muted/30 rounded-lg text-sm">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground font-medium">Coût total matières (achat)</span>
-                    <span className="font-semibold">{formatMontant(coutMatieres)}</span>
-                  </div>
-                </div>
-              )}
-            </>
+                      ) : null
+                    )}
+                  </Fragment>
+                ))}
+              </tbody>
+            </table>
           );
-        })()}
+        })() : (
+          /* Table simple (sans mode conso) */
+          <table className="w-full mb-6">
+            <thead>
+              <tr className="border-b-2 border-primary">
+                <th className="text-left py-2 font-semibold">Description</th>
+                <th className="text-right py-2 font-semibold w-16">Qté</th>
+                <th className="text-center py-2 font-semibold w-16">Unité</th>
+                {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
+                {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
+                <th className="text-right py-2 font-semibold w-24">P.U. net HT</th>
+                <th className="text-right py-2 font-semibold w-28">Total HT</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lignesEffectives.map(l => {
+                const t = calculerTotalLigne(l);
+                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                const composants = prod?.composants;
+                return (
+                  <Fragment key={l.id}>
+                    <tr className="border-b border-border">
+                      <td className="py-2">
+                        {l.description}
+                        {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
+                      </td>
+                      <td className="py-2 text-right">{l.quantite}</td>
+                      <td className="py-2 text-center">{l.unite || '—'}</td>
+                      {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
+                      {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
+                      <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
+                      <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+                    </tr>
+                    {showComposants && composants && composants.length > 0 && composants.map(comp => {
+                      const compProd = produits.find(p => p.id === comp.produitId);
+                      if (!compProd) return null;
+                      return (
+                        <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
+                          <td className="py-1 pl-8 italic">↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}</td>
+                          <td className="py-1 text-right">{Math.round(comp.quantite * l.quantite * 1000) / 1000}</td>
+                          <td className="py-1 text-center">{compProd.unite || '—'}</td>
+                          <td colSpan={showRemise ? 3 : 2} />
+                        </tr>
+                      );
+                    })}
+                  </Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
 
         {/* Totals */}
         <div className="flex justify-between items-end mb-8">
