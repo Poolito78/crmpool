@@ -242,16 +242,30 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                           const compProd = produits.find(p => p.id === comp.produitId);
                           if (!compProd) return null;
                           const qteTotale = Math.round(comp.quantite * l.quantite * 1000) / 1000;
-                          const qteCondComp = compProd.poids && compProd.poids > 0
-                            ? Math.ceil(qteTotale / compProd.poids)
+                          // kg/m² du composant = comp.quantite × conso_parent / poids_parent
+                          const parentConso = conso; // kg/m² du produit parent
+                          const parentPoids = prod?.poids || 0;
+                          const consoComp = parentConso > 0 && parentPoids > 0
+                            ? Math.round(comp.quantite * parentConso / parentPoids * 10000) / 10000
                             : null;
+                          // Qté conso = ⌈ surface × consoComp / poids_cond_composant ⌉
+                          const qteCondComp = consoComp != null && surface > 0 && compProd.poids && compProd.poids > 0
+                            ? Math.ceil(surface * consoComp / compProd.poids)
+                            : compProd.poids && compProd.poids > 0
+                              ? Math.ceil(qteTotale / compProd.poids)
+                              : null;
                           return (
                             <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
                               <td className="py-1 pl-6 italic">
                                 ↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}
+                                {compProd.poids ? <span className="ml-1 text-muted-foreground/70">({compProd.poids} kg/cond.)</span> : null}
                               </td>
-                              {showConso && <td />}
-                              {showConso && <td />}
+                              {showConso && <td className="py-1 text-right text-muted-foreground/50">—</td>}
+                              {showConso && (
+                                <td className="py-1 text-right">
+                                  {consoComp != null ? consoComp : '—'}
+                                </td>
+                              )}
                               {showConso && (
                                 <td className="py-1 text-right font-medium text-primary">
                                   {qteCondComp != null ? qteCondComp : '—'}
