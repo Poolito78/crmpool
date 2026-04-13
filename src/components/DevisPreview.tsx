@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -179,8 +179,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
               const composants = prod?.composants;
 
               return (
-                <>
-                  <tr key={l.id} className="border-b border-border">
+                <Fragment key={l.id}>
+                  <tr className="border-b border-border">
                     <td className="py-2">
                       {l.description}
                       {prod?.descriptionDetaillee && (
@@ -230,7 +230,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                       </tr>
                     );
                   })}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
