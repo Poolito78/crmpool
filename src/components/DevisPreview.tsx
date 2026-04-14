@@ -229,22 +229,26 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           });
 
           // ── Totaux ligne récapitulatif ──
-          let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumTotalHTConso = 0;
-          for (const { conso, isComposite, compDatas, t } of allLines) {
+          let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
+          for (const { conso, isComposite, compDatas, prod, l } of allLines) {
             if (isComposite) {
               if (conso > 0) sumConsoKgM2 += conso;
-              for (const { condKgComp, totalHTComp } of compDatas) {
+              for (const { condKgComp, totalKgComp, prixKg } of compDatas) {
                 if (condKgComp) sumCondKg += condKgComp;
-                sumTotalHTConso += totalHTComp;
+                // coût conso = total KG estimé × prix/kg
+                if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
               }
             } else if (conso > 0) {
               sumConsoKgM2 += conso;
-              sumTotalHTConso += t.totalHT;
+              const poidsP = prod?.poids || null;
+              const prixKgP = poidsP && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - l.remise / 100) / poidsP : null;
+              const totalKgP = surfaceGlobale > 0 ? surfaceGlobale * conso : null;
+              if (totalKgP != null && prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
             }
           }
           sumTotalKg = surfaceGlobale > 0 ? Math.round(surfaceGlobale * sumConsoKgM2 * 100) / 100 : 0;
-          const coutChantierM2 = surfaceGlobale > 0 && sumTotalHTConso > 0
-            ? Math.round(sumTotalHTConso / surfaceGlobale * 100) / 100 : null;
+          const coutChantierM2 = surfaceGlobale > 0 && sumCoutConsoHT > 0
+            ? Math.round(sumCoutConsoHT / surfaceGlobale * 100) / 100 : null;
 
           return (
             <table className="w-full mb-6 text-xs border-collapse">
