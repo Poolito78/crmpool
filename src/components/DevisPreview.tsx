@@ -266,31 +266,31 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
             <table className="w-full mb-6 text-xs border-collapse">
               <thead>
                 {/* Ligne 1 : groupes */}
-                <tr className="bg-primary text-primary-foreground">
-                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-bottom border-r border-primary-foreground/20">
+                <tr className="bg-[#CC0000] text-white">
+                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-bottom border-r border-white/20">
                     Désignation
                     {/* lien site */}
                     <span className="block text-[10px] font-normal italic text-primary-foreground/70">Fiches système / Produit : www.isofloor.fr</span>
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Conso. Estimée</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Conditionnement</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-primary-foreground/20">Prix</th>
+                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20">Conso. Estimée</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Conditionnement</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Prix</th>
                 </tr>
                 {/* Ligne 2 : sous-colonnes */}
-                <tr className="bg-primary text-primary-foreground text-xs">
-                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-14">kg/m²</th>
+                <tr className="bg-[#CC0000] text-white text-xs">
+                  <th className="py-1 px-1 text-right border-l border-white/20 w-14">kg/m²</th>
                   <th className="py-1 px-1 text-right w-16">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-12">kg</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20 w-12">kg</th>
                   <th className="py-1 px-1 text-right w-12">Unité</th>
                   <th className="py-1 px-1 text-right w-16">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-primary-foreground/20 w-20">Unité</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20 w-20">Unité</th>
                   <th className="py-1 px-1 text-right w-16">(Kg)</th>
                   <th className="py-1 px-1 text-right w-20">Total HT</th>
                 </tr>
               </thead>
               <tbody>
                 {/* Ligne récapitulatif surface + totaux */}
-                <tr className="bg-muted/50 border-b-2 border-primary text-xs italic font-medium">
+                <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td className="py-1.5 px-2 text-right text-primary font-bold not-italic">
                     <input
                       type="number" min={0} step={1}
@@ -404,7 +404,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           /* Table simple (sans mode conso) */
           <table className="w-full mb-6">
             <thead>
-              <tr className="border-b-2 border-primary">
+              <tr className="border-b-2 border-[#CC0000]">
                 <th className="text-left py-2 font-semibold">Description</th>
                 <th className="text-right py-2 font-semibold w-16">Qté</th>
                 <th className="text-center py-2 font-semibold w-16">Unité</th>
