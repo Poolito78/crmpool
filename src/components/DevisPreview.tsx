@@ -306,10 +306,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                   <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(2) : '—'}</td>
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : '—'}</td>
-                  <td className="py-1.5 px-1 text-right text-muted-foreground not-italic">Coût chantier :</td>
-                  <td />
-                  <td className="py-1.5 px-1 text-right font-bold text-primary not-italic">
-                    {coutChantierM2 != null ? `${coutChantierM2.toFixed(2)} €/m²` : '—'}
+                  <td colSpan={3} className="py-1.5 px-1 text-right font-bold text-[#CC0000] not-italic whitespace-nowrap">
+                    {coutChantierM2 != null ? `Coût chantier : ${coutChantierM2.toFixed(2)} €/m²` : ''}
                   </td>
                 </tr>
 
