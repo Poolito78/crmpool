@@ -221,7 +221,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
               const poidsC = compProd?.poids || null;
               const unitesComp = totalKgComp != null && poidsC ? Math.ceil(totalKgComp / poidsC) : null;
               const condKgComp = unitesComp != null && poidsC ? Math.round(unitesComp * poidsC * 10) / 10 : null;
-              const prixUnite = compProd?.prixHT || 0;
+              const prixUnite = compProd?.prixRevendeur || compProd?.prixHT || 0;
               const prixKg = poidsC && prixUnite ? Math.round(prixUnite / poidsC * 100) / 100 : null;
               const totalHTComp = unitesComp != null ? unitesComp * prixUnite : 0;
               return { comp, compProd, consoComp: finalConsoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
