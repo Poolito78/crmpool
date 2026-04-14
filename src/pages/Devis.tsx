@@ -264,8 +264,8 @@ export default function Devis() {
       if (!p || !p.poids) return l;
       const conso = l.consommation || p.consommation;
       if (!conso) return l;
-      const quantite = calcQuantiteSurface(p, l.surfaceM2 || surfaceGlobaleM2, l.consommation);
-      return { ...l, quantite, surfaceM2: l.surfaceM2 || surfaceGlobaleM2 };
+      const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation);
+      return { ...l, quantite, surfaceM2: surfaceGlobaleM2 };
     }));
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
 
