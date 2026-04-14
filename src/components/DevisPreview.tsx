@@ -233,8 +233,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
             if (isComposite) {
               if (conso > 0) sumConsoKgM2 += conso;
-              for (const { condKgComp, totalKgComp, prixKg } of compDatas) {
-                if (condKgComp) sumCondKg += condKgComp;
+              // Total KG conditionné = quantité devis × poids pack (cohérent avec la ligne produit)
+              const poidsParentRecap = prod?.poids || 0;
+              if (poidsParentRecap > 0) sumCondKg += Math.round(l.quantite * poidsParentRecap * 10) / 10;
+              for (const { totalKgComp, prixKg } of compDatas) {
                 // coût conso = total KG estimé × prix/kg
                 if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
               }
