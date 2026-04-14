@@ -33,6 +33,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
     const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+    // Pour les produits composites, ne pas recalculer la quantité depuis la surface
+    const isComposite = !!(prod?.composants && prod.composants.length > 0);
+    if (isComposite) return { ...l, surfaceM2: surface };
     const conso = l.consommation || prod?.consommation || 0;
     const poids = prod?.poids || 1;
     if (conso && poids) {
