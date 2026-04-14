@@ -259,7 +259,15 @@ export default function Produits() {
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-    const composantsToSave = composantsValides.length > 0 ? composantsValides : null;
+    // Recalcule les composants en % avec la formule corrigée avant sauvegarde
+    const composantsRecalc = composantsValides.map(c => {
+      if (c.consommationPct != null && c.baseComposantId) {
+        const base = composantsValides.find(b => b.produitId === c.baseComposantId);
+        if (base) return { ...c, quantite: Math.round(base.quantite * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
+      }
+      return c;
+    });
+    const composantsToSave = composantsRecalc.length > 0 ? composantsRecalc : null;
 
     if (editing) {
       const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined };
