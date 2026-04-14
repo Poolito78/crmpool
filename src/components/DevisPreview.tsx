@@ -236,9 +236,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
             if (isComposite) {
               if (conso > 0) sumConsoKgM2 += conso;
-              // Total KG conditionné = quantité devis × poids pack (cohérent avec la ligne produit)
+              // Total KG conditionné = Math.ceil(conso estimée / poids) × poids (cohérent avec la ligne)
               const poidsParentRecap = prod?.poids || 0;
-              if (poidsParentRecap > 0) sumCondKg += Math.round(l.quantite * poidsParentRecap * 10) / 10;
+              const totalKgConsoRecap = conso > 0 && surfaceGlobale > 0 ? surfaceGlobale * conso : 0;
+              if (poidsParentRecap > 0 && totalKgConsoRecap > 0) {
+                const unitesRecap = Math.ceil(totalKgConsoRecap / poidsParentRecap);
+                sumCondKg += Math.round(unitesRecap * poidsParentRecap * 10) / 10;
+              }
               for (const { totalKgComp, prixKg } of compDatas) {
                 // coût conso = total KG estimé × prix/kg
                 if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
@@ -315,15 +319,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                       {isComposite ? (() => {
                         const totalKgConso = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 100) / 100 : null;
                         const poidsComp = prod?.poids || null;
-                        // Conditionnement basé sur la quantité commandée dans le devis
-                        const condKgComp = poidsComp ? Math.round(l.quantite * poidsComp * 10) / 10 : null;
+                        // Conditionnement basé sur la conso estimée (s'adapte à la surface)
+                        const unitesComp = totalKgConso != null && poidsComp ? Math.ceil(totalKgConso / poidsComp) : null;
+                        const condKgComp = unitesComp != null && poidsComp ? Math.round(unitesComp * poidsComp * 10) / 10 : null;
                         const prixKgComp = poidsComp && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsComp * 100) / 100 : null;
                         return (
                           <>
                             <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(3) : '—'}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? totalKgConso.toFixed(2) : '—'}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? '—'}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKgComp != null ? formatMontant(prixKgComp) : '—'})</td>
