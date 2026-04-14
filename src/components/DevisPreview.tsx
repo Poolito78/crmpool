@@ -308,17 +308,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">{l.description}</td>
                       {isComposite ? (() => {
-                        const totalKgComp = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 100) / 100 : null;
+                        const totalKgConso = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 100) / 100 : null;
                         const poidsComp = prod?.poids || null;
-                        const unitesComp = totalKgComp != null && poidsComp ? Math.ceil(totalKgComp / poidsComp) : null;
-                        const condKgComp = unitesComp != null && poidsComp ? Math.round(unitesComp * poidsComp * 10) / 10 : null;
+                        // Conditionnement basé sur la quantité commandée dans le devis
+                        const condKgComp = poidsComp ? Math.round(l.quantite * poidsComp * 10) / 10 : null;
                         const prixKgComp = poidsComp && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsComp * 100) / 100 : null;
                         return (
                           <>
                             <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(3) : '—'}</td>
-                            <td className="py-1.5 px-1 text-right">{totalKgComp != null ? totalKgComp.toFixed(2) : '—'}</td>
+                            <td className="py-1.5 px-1 text-right">{totalKgConso != null ? totalKgConso.toFixed(2) : '—'}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? '—'}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? '—'}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite}</td>
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKgComp != null ? formatMontant(prixKgComp) : '—'})</td>
