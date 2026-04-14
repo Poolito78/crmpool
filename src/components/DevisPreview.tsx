@@ -207,14 +207,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
             }) : [];
 
             // Passe 2 : kg/m² des composants en % (base_kg/m² × pct/100)
+            const surfaceLigneCalc = surfacesParLigne[l.id] || 0;
             const compDatas: CompData[] = compBase.map(({ comp, compProd, consoComp }) => {
               let finalConsoComp = consoComp;
               if (comp.consommationPct != null && comp.baseComposantId) {
                 const base = compBase.find(c => c.comp.produitId === comp.baseComposantId);
                 if (base) finalConsoComp = Math.round(base.consoComp * comp.consommationPct / 100 * 10000) / 10000 || 0.0001;
               }
-              const totalKgComp = surfaceGlobale > 0
-                ? Math.round(surfaceGlobale * finalConsoComp * 1000) / 1000 : null;
+              const totalKgComp = surfaceLigneCalc > 0
+                ? Math.round(surfaceLigneCalc * finalConsoComp * 1000) / 1000 : null;
               const poidsC = compProd?.poids || null;
               const unitesComp = totalKgComp != null && poidsC ? Math.ceil(totalKgComp / poidsC) : null;
               const condKgComp = unitesComp != null && poidsC ? Math.round(unitesComp * poidsC * 10) / 10 : null;
