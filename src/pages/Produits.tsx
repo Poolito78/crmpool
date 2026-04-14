@@ -861,11 +861,9 @@ export default function Produits() {
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
                 // Propage les modifications de quantité aux composants en mode %
-                // Formule : pct/100 × quantite_base × poids_produit_base
+                // Formule : pct/100 × quantite_base (kg/m²)
                 function calcQtyPct(pct: number, baseComp: typeof composants[0]) {
-                  const baseProd = produits.find(pr => pr.id === baseComp.produitId);
-                  const poidBase = baseProd?.poids ?? 1;
-                  return Math.round(baseComp.quantite * poidBase * pct / 100 * 10000) / 10000 || 0.0001;
+                  return Math.round(baseComp.quantite * pct / 100 * 10000) / 10000 || 0.0001;
                 }
                 function propagatePct(updated: typeof composants) {
                   return updated.map(c => {

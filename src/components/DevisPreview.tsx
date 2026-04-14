@@ -214,14 +214,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0;
           for (const { conso, isComposite, compDatas } of allLines) {
             if (isComposite) {
-              // comp.quantite = kg/m² direct → on somme
-              for (const { consoComp, condKgComp } of compDatas) {
-                sumConsoKgM2 += consoComp;
+              // Pour composite : utiliser prod.consommation (ex: 0,9 kg/m²)
+              if (conso > 0) sumConsoKgM2 += conso;
+              for (const { condKgComp } of compDatas) {
                 if (condKgComp) sumCondKg += condKgComp;
               }
             } else if (conso > 0) {
               sumConsoKgM2 += conso;
-              // pour produit simple : condKg calculé séparément
             }
           }
           sumTotalKg = surfaceGlobale > 0 ? Math.round(surfaceGlobale * sumConsoKgM2 * 100) / 100 : 0;
@@ -286,8 +285,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">{l.description}</td>
                       {isComposite ? (
-                        // Composite : colonnes conso vides, prix du devis à droite
-                        <><td /><td /><td /><td /><td />
+                        // Composite : affiche kg/m² global + total kg, puis conditionnement vide
+                        <>
+                          <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(3) : '—'}</td>
+                          <td className="py-1.5 px-1 text-right">{conso > 0 && surfaceGlobale > 0 ? (Math.round(surfaceGlobale * conso * 100) / 100).toFixed(2) : '—'}</td>
+                          <td /><td /><td />
                           <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
                           <td />
                           <td className="py-1.5 px-1 text-right font-bold">{formatMontant(t.totalHT)}</td>
