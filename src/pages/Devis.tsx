@@ -388,6 +388,14 @@ export default function Devis() {
         {filtered.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
+          const totalAchatD = d.lignes.reduce((acc, l) => {
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            return acc + (prod?.prixAchat || 0) * l.quantite;
+          }, 0);
+          const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
+          const margeD = totalHTD - totalAchatD;
+          const tauxMargeD = totalHTD > 0 ? (margeD / totalHTD) * 100 : 0;
+          const coeffD = totalAchatD > 0 ? Math.round(totalHTD / totalAchatD * 100) / 100 : null;
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -416,6 +424,14 @@ export default function Devis() {
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                 </div>
                 <div className="flex items-center gap-3">
+                  {totalAchatD > 0 && (
+                    <div className="text-right text-xs hidden sm:block">
+                      <p className={`font-semibold ${margeD >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
+                        {formatMontant(margeD)} · {tauxMargeD.toFixed(1)}%
+                      </p>
+                      <p className="text-muted-foreground">Marge · Coeff {coeffD ?? '—'}</p>
+                    </div>
+                  )}
                   <div className="text-right">
                     <p className="font-heading font-bold text-lg">{formatMontant(t.totalTTC)}</p>
                     <p className="text-xs text-muted-foreground">TTC</p>
