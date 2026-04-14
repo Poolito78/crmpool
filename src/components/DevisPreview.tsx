@@ -190,26 +190,36 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
             const t = calculerTotalLigne(l);
             const composants = prod?.composants;
             const isComposite = !!(composants && composants.length > 0);
-            const totalPoidsComp = isComposite ? composants!.reduce((s, c) => s + c.quantite, 0) : 0;
 
-            const compDatas: CompData[] = isComposite ? composants!.map(comp => {
+            // Passe 1 : kg/m² des composants directs (non-%)
+            // Formule : quantite_unités × poids_composant / poids_parent × conso_parent
+            const poidsParent = prod?.poids || 0;
+            const compBase = isComposite ? composants!.map(comp => {
               const compProd = produits.find(p => p.id === comp.produitId);
-              // Recompute % composants à la volée (les valeurs stockées peuvent être obsolètes)
-              let consoComp = comp.quantite;
+              const poidsC = compProd?.poids || 0;
+              const consoCompDirect = poidsParent > 0 && poidsC > 0 && conso > 0
+                ? Math.round(comp.quantite * poidsC / poidsParent * conso * 10000) / 10000
+                : comp.quantite;
+              return { comp, compProd, consoComp: consoCompDirect };
+            }) : [];
+
+            // Passe 2 : kg/m² des composants en % (base_kg/m² × pct/100)
+            const compDatas: CompData[] = compBase.map(({ comp, compProd, consoComp }) => {
+              let finalConsoComp = consoComp;
               if (comp.consommationPct != null && comp.baseComposantId) {
-                const baseComp = composants!.find(c => c.produitId === comp.baseComposantId);
-                if (baseComp) consoComp = Math.round(baseComp.quantite * comp.consommationPct / 100 * 10000) / 10000 || 0.0001;
+                const base = compBase.find(c => c.comp.produitId === comp.baseComposantId);
+                if (base) finalConsoComp = Math.round(base.consoComp * comp.consommationPct / 100 * 10000) / 10000 || 0.0001;
               }
               const totalKgComp = surfaceGlobale > 0
-                ? Math.round(surfaceGlobale * consoComp * 1000) / 1000 : null;
+                ? Math.round(surfaceGlobale * finalConsoComp * 1000) / 1000 : null;
               const poidsC = compProd?.poids || null;
               const unitesComp = totalKgComp != null && poidsC ? Math.ceil(totalKgComp / poidsC) : null;
               const condKgComp = unitesComp != null && poidsC ? Math.round(unitesComp * poidsC * 10) / 10 : null;
               const prixUnite = compProd?.prixHT || 0;
               const prixKg = poidsC && prixUnite ? Math.round(prixUnite / poidsC * 100) / 100 : null;
               const totalHTComp = unitesComp != null ? unitesComp * prixUnite : 0;
-              return { comp, compProd, consoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
-            }) : [];
+              return { comp, compProd, consoComp: finalConsoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
+            });
 
             // Si produit composite sans consommation globale renseignée → somme des composants
             const consoEffective = isComposite && conso === 0
