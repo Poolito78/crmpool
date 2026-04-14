@@ -315,9 +315,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                   <Fragment key={l.id}>
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
-                      <td className="py-1.5 px-2 font-medium">{l.description}</td>
+                      <td className="py-1.5 px-2 font-medium">
+                        {l.description}
+                        <span className="ml-2 print:hidden">
+                          <input
+                            type="number" min={0} step={1}
+                            value={surfacesParLigne[l.id] || ''}
+                            onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
+                            className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
+                            placeholder="m²"
+                          />
+                          <span className="text-xs text-muted-foreground ml-0.5">m²</span>
+                        </span>
+                      </td>
                       {isComposite ? (() => {
-                        const totalKgConso = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 100) / 100 : null;
+                        const surfaceLigne = surfacesParLigne[l.id] || 0;
+                        const totalKgConso = conso > 0 && surfaceLigne > 0 ? Math.round(surfaceLigne * conso * 100) / 100 : null;
                         const poidsComp = prod?.poids || null;
                         // Conditionnement basé sur la conso estimée (s'adapte à la surface)
                         const unitesComp = totalKgConso != null && poidsComp ? Math.ceil(totalKgConso / poidsComp) : null;
