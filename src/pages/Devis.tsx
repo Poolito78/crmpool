@@ -426,7 +426,7 @@ export default function Devis() {
                 <div className="flex items-center gap-3">
                   {totalAchatD > 0 && (
                     <div className="text-right text-xs hidden sm:block">
-                      <p className={`font-semibold ${margeD >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
+                      <p className={`font-semibold ${coeffD != null && coeffD >= 1.43 ? 'text-emerald-600 dark:text-emerald-400' : 'text-destructive'}`}>
                         {formatMontant(margeD)} · {tauxMargeD.toFixed(1)}%
                       </p>
                       <p className="text-muted-foreground">Marge · Coeff {coeffD ?? '—'}</p>
