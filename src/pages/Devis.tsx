@@ -433,8 +433,8 @@ export default function Devis() {
                     </div>
                   )}
                   <div className="text-right">
-                    <p className="font-heading font-bold text-lg">{formatMontant(t.totalTTC)}</p>
-                    <p className="text-xs text-muted-foreground">TTC</p>
+                    <p className="font-heading font-bold text-lg">{formatMontant(t.totalHT)}</p>
+                    <p className="text-xs text-muted-foreground">HT</p>
                   </div>
                   <div className="flex gap-1">
                     <select
