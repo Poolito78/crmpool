@@ -16,21 +16,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
   const [showRemise, setShowRemise] = useState(false);
   const [showComposants, setShowComposants] = useState(false);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
-  const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>(() =>
-    Object.fromEntries(devis.lignes.map(l => [l.id, l.surfaceM2 || devis.surfaceGlobaleM2 || 0]))
-  );
+  // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
+  const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
 
+  function getSurfaceLigne(ligneId: string): number {
+    return surfacesParLigne[ligneId] ?? surfaceGlobale;
+  }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
-    setSurfacesParLigne(Object.fromEntries(devis.lignes.map(l => [l.id, val])));
+    setSurfacesParLigne({}); // réinitialise les overrides → toutes les lignes utilisent val
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
   const lignesEffectives = devis.lignes.map(l => {
-    const surface = surfacesParLigne[l.id] ?? l.surfaceM2 ?? devis.surfaceGlobaleM2 ?? 0;
+    const surface = getSurfaceLigne(l.id);
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
     // Pour les produits composites, ne pas recalculer la quantité depuis la surface
@@ -207,7 +209,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
             }) : [];
 
             // Passe 2 : kg/m² des composants en % (base_kg/m² × pct/100)
-            const surfaceLigneCalc = surfacesParLigne[l.id] || 0;
+            const surfaceLigneCalc = getSurfaceLigne(l.id) || 0;
             const compDatas: CompData[] = compBase.map(({ comp, compProd, consoComp }) => {
               let finalConsoComp = consoComp;
               if (comp.consommationPct != null && comp.baseComposantId) {
@@ -321,7 +323,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                         <span className="ml-2 print:hidden">
                           <input
                             type="number" min={0} step={1}
-                            value={surfacesParLigne[l.id] || ''}
+                            value={getSurfaceLigne(l.id) || ''}
                             onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                             className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
                             placeholder="m²"
@@ -330,7 +332,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
                         </span>
                       </td>
                       {isComposite ? (() => {
-                        const surfaceLigne = surfacesParLigne[l.id] || 0;
+                        const surfaceLigne = getSurfaceLigne(l.id) || 0;
                         const totalKgConso = conso > 0 && surfaceLigne > 0 ? Math.round(surfaceLigne * conso * 100) / 100 : null;
                         const poidsComp = prod?.poids || null;
                         // Conditionnement basé sur la conso estimée (s'adapte à la surface)
