@@ -167,7 +167,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
           type CompData = {
             comp: typeof devis.lignes[0] extends { id: string } ? any : any;
             compProd: typeof produits[0] | undefined;
-            consoComp: number | null;
+            consoComp: number;
             totalKgComp: number | null;
             unitesComp: number | null;
             condKgComp: number | null;
@@ -194,8 +194,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
 
             const compDatas: CompData[] = isComposite ? composants!.map(comp => {
               const compProd = produits.find(p => p.id === comp.produitId);
-              // comp.quantite EST directement le kg/m² de ce composant
-              const consoComp = comp.quantite;
+              // Recompute % composants à la volée (les valeurs stockées peuvent être obsolètes)
+              let consoComp = comp.quantite;
+              if (comp.consommationPct != null && comp.baseComposantId) {
+                const baseComp = composants!.find(c => c.produitId === comp.baseComposantId);
+                if (baseComp) consoComp = Math.round(baseComp.quantite * comp.consommationPct / 100 * 10000) / 10000 || 0.0001;
+              }
               const totalKgComp = surfaceGlobale > 0
                 ? Math.round(surfaceGlobale * consoComp * 1000) / 1000 : null;
               const poidsC = compProd?.poids || null;
@@ -207,7 +211,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
               return { comp, compProd, consoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
             }) : [];
 
-            return { l, prod, conso, t, compDatas, isComposite };
+            // Si produit composite sans consommation globale renseignée → somme des composants
+            const consoEffective = isComposite && conso === 0
+              ? Math.round(compDatas.reduce((s, c) => s + c.consoComp, 0) * 10000) / 10000
+              : conso;
+            return { l, prod, conso: consoEffective, t, compDatas, isComposite };
           });
 
           // ── Totaux ligne récapitulatif ──
