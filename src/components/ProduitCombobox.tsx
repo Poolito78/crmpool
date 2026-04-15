@@ -30,6 +30,13 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
     );
   }, [produits, query]);
 
+  // Focus input when dropdown opens (needed on mobile where autoFocus is ignored)
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => inputRef.current?.focus(), 80);
+    }
+  }, [open]);
+
   // Reset highlight when filtered list changes
   useEffect(() => { setHighlightIndex(0); }, [filtered]);
 
