@@ -180,21 +180,17 @@ Private Function TrouverNumeroDevis(strTexte As String) As String
 End Function
 
 ' ------------------------------------------------------------
-' Extrait les mots-cles significatifs d'une description produit
-' - Garde les codes tout en MAJUSCULES (>= 2 chars) ex: "SNL", "LE", "SF41"
-' - Garde les mots communs de plus de 2 chars non stopwords
+' Extrait les tokens de la description (longueur >= 2) pour la recherche
+' Logique simple : split sur separateurs, garder tout token >= 2 chars
 Private Function ExtraireMots(strRef As String) As String()
-    Dim clean    As String
+    Dim clean     As String
     Dim parties() As String
-    Dim result() As String
-    Dim i As Integer, n As Integer
-    Dim motOrig As String, mot As String
-    Dim stopWords As String
-    Dim estCode As Boolean
+    Dim result()  As String
+    Dim i         As Integer
+    Dim n         As Integer
+    Dim mot       As String
 
-    stopWords = "|de|du|des|en|et|ou|un|une|par|sur|au|aux|kg|"
-
-    clean = strRef
+    clean = LCase(strRef)
     clean = Replace(clean, "(", " ")
     clean = Replace(clean, ")", " ")
     clean = Replace(clean, ",", " ")
@@ -207,22 +203,10 @@ Private Function ExtraireMots(strRef As String) As String()
     n = 0
 
     For i = 0 To UBound(parties)
-        motOrig = Trim(parties(i))
-        If motOrig <> "" Then
-            mot = LCase(motOrig)
-            ' Code produit : tout en majuscules, >= 2 chars, pas numerique pur
-            estCode = (motOrig = UCase(motOrig)) And Len(motOrig) >= 2 And Not IsNumeric(motOrig)
-            ' Nombre de 3+ chiffres = code modele produit (ex: 319, 1000, 405)
-            Dim estNombreProduit As Boolean
-            estNombreProduit = IsNumeric(motOrig) And Len(motOrig) >= 3
-
-            If estCode Or estNombreProduit Then
-                result(n) = mot
-                n = n + 1
-            ElseIf Len(mot) > 2 And Not IsNumeric(mot) And InStr(stopWords, "|" & mot & "|") = 0 Then
-                result(n) = mot
-                n = n + 1
-            End If
+        mot = Trim(parties(i))
+        If Len(mot) >= 2 Then
+            result(n) = mot
+            n = n + 1
         End If
     Next i
 
