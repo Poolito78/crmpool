@@ -180,12 +180,50 @@ Private Function TrouverNumeroDevis(strTexte As String) As String
 End Function
 
 ' ------------------------------------------------------------
+' Verifie si tous les mots-cles de la description sont dans le nom de fichier
+Private Function FichierCorrespond(strNomFichier As String, strRef As String) As Boolean
+    Dim nomN   As String
+    Dim refN   As String
+    Dim mots() As String
+    Dim mot    As String
+    Dim i      As Integer
+
+    FichierCorrespond = False
+
+    ' Normaliser : tout en minuscules, remplacer separateurs par espaces
+    nomN = LCase(strNomFichier)
+    nomN = Replace(nomN, "-", " ")
+    nomN = Replace(nomN, "_", " ")
+    nomN = Replace(nomN, ".", " ")
+
+    refN = LCase(Trim(strRef))
+    refN = Replace(refN, "(", " ")
+    refN = Replace(refN, ")", " ")
+    refN = Replace(refN, ",", " ")
+    refN = Replace(refN, "-", " ")
+    refN = Replace(refN, "_", " ")
+
+    mots = Split(refN, " ")
+
+    ' Tous les mots significatifs (> 2 chars, pas une unite) doivent etre dans le nom
+    For i = 0 To UBound(mots)
+        mot = Trim(mots(i))
+        If Len(mot) > 2 And mot <> "kg" And mot <> "les" And mot <> "par" And mot <> "sur" Then
+            If InStr(nomN, mot) = 0 Then
+                Exit Function   ' mot absent -> pas de correspondance
+            End If
+        End If
+    Next i
+
+    FichierCorrespond = True
+End Function
+
+' ------------------------------------------------------------
 Private Function ChercherDansDossier(strDossier As String, strRef As String) As String
     Dim fso    As Object
     Dim folder As Object
     Dim subF   As Object
     Dim fich   As Object
-    Dim ref    As String
     Dim found  As String
 
     ChercherDansDossier = ""
@@ -193,11 +231,10 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
     If Not fso.FolderExists(strDossier) Then Exit Function
 
     Set folder = fso.GetFolder(strDossier)
-    ref = LCase(Trim(strRef))
 
     For Each fich In folder.Files
         If LCase(Right(fich.Name, 4)) = ".pdf" Then
-            If InStr(LCase(fich.Name), ref) > 0 Then
+            If FichierCorrespond(fich.Name, strRef) Then
                 ChercherDansDossier = fich.Path
                 Exit Function
             End If
