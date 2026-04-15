@@ -45,20 +45,18 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
 
-Suite à notre échange, veuillez trouver ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalTTC)} TTC.
-
+Suite à notre échange, veuillez trouver ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Détail :
-- Total HT : ${formatMontant(totals.totalHT)}
-- Total TVA : ${formatMontant(totals.totalTVA)}
-- Total TTC : ${formatMontant(totals.totalTTC)}
-
-Restant à votre disposition pour toute question.
+Restant à votre disposition pour tout complément d'information.
 
 Cordialement,
-[Votre nom]
-[Votre entreprise]`
+
+François MOUHOT
+📞 06 31 61 15 96
+📧 f.mouhot@isosign.fr
+🌐 www.isosign.fr
+🌐 www.isofloor.fr`
     );
 
     if (pdfContainerRef?.current) {
