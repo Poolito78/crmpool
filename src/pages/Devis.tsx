@@ -39,6 +39,7 @@ export default function Devis() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
@@ -875,16 +876,32 @@ export default function Devis() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Conteneur caché pour génération PDF */}
+      {emailDevis && (
+        <div
+          ref={pdfContainerRef}
+          style={{ position: 'fixed', left: '-9999px', top: '0', width: '794px', background: 'white', zIndex: -1 }}
+          aria-hidden="true"
+        >
+          <DevisPreview
+            devis={emailDevis}
+            client={clients.find(c => c.id === emailDevis.clientId)}
+            produits={produits}
+          />
+        </div>
+      )}
+
       {/* Email Dialog */}
       <DevisEmailDialog
         open={!!emailDevis}
         onOpenChange={(open) => { if (!open) setEmailDevis(null); }}
         devis={emailDevis}
         client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
+        pdfContainerRef={pdfContainerRef}
         onSent={() => {
           if (emailDevis) {
             updateDevis(prev => prev.map(d => d.id === emailDevis.id ? { ...d, statut: 'envoyé' } : d));
-            toast.success('Devis marqué comme envoyé');
+            toast.success('Devis envoyé — statut mis à jour');
           }
         }}
       />
