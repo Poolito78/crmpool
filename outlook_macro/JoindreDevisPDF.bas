@@ -27,12 +27,35 @@ Sub JoindreDevisPDF()
     Dim msg         As String
     Dim i           As Integer
 
+    ' Methode 1 : fenetre de composition active
     On Error Resume Next
     Set objItem = Application.ActiveInspector.CurrentItem
     On Error GoTo 0
 
+    ' Methode 2 : fenetre active (si methode 1 echoue)
     If objItem Is Nothing Then
-        MsgBox "Aucun message ouvert en redaction.", vbExclamation, "Joindre PDF devis"
+        On Error Resume Next
+        Set objItem = Application.ActiveWindow.CurrentItem
+        On Error GoTo 0
+    End If
+
+    ' Methode 3 : parcourir les inspecteurs ouverts
+    If objItem Is Nothing Then
+        Dim insp As Object
+        On Error Resume Next
+        For Each insp In Application.Inspectors
+            If insp.CurrentItem.Class = 43 Then  ' 43 = olMail
+                Set objItem = insp.CurrentItem
+                Exit For
+            End If
+        Next insp
+        On Error GoTo 0
+    End If
+
+    If objItem Is Nothing Then
+        MsgBox "Aucun message ouvert en redaction." & vbCrLf & _
+               "Ouvrez le message avant de cliquer le bouton.", _
+               vbExclamation, "Joindre PDF devis"
         Exit Sub
     End If
 
