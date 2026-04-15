@@ -481,7 +481,7 @@ export default function Devis() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
-        <DialogContent className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -661,7 +661,7 @@ export default function Devis() {
                       </div>
                     </div>
                     {modeCalcul === 'surface' && (
-                      <div className="grid grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
                         <div>
                           <Label className="text-xs">Surface (m²)</Label>
                           <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
@@ -694,7 +694,7 @@ export default function Devis() {
                         })()}
                       </div>
                     )}
-                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-4' : 'grid-cols-4'}`}>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                        <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
                        <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                        <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
