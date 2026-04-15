@@ -24,6 +24,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [printing, setPrinting] = useState(false);
+  const [pdfMode, setPdfMode] = useState(false); // masque les inputs pendant la capture
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
@@ -67,45 +68,28 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   async function handlePrint() {
     if (!printAreaRef.current) return;
     setPrinting(true);
+
+    // 1. Passer en mode PDF (remplace les inputs par du texte brut)
+    setPdfMode(true);
+
+    // 2. Attendre que React re-rende sans les inputs
+    await new Promise(resolve => setTimeout(resolve, 80));
+
     try {
       const fileName = `Devis_${devis.numero}.pdf`;
-
-      // Vérifier si un dossier est configuré
-      const dirHandle = await getStoredDirHandle();
-      if (dirHandle) {
-        const res = await savePdfFromElement(printAreaRef.current, fileName);
-        toast.success(`PDF sauvegardé${res.folderName ? ` dans "${res.folderName}"` : ''}`, {
-          description: fileName,
-          duration: 6000,
-        });
+      const res = await savePdfFromElement(printAreaRef.current, fileName);
+      if (res.ok) {
+        toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
       } else {
-        // Aucun dossier configuré — demander
-        const res = await writeFileToFolder(
-          fileName,
-          await (async () => {
-            const { generatePdfFromElement } = await import('@/lib/pdfFolder');
-            const b64 = await generatePdfFromElement(printAreaRef.current!);
-            return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
-          })(),
-        );
-        if (res.ok) {
-          toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
-        } else {
-          // Fallback téléchargement
-          const { savePdfFromElement: save } = await import('@/lib/pdfFolder');
-          await save(printAreaRef.current!, fileName);
-          toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
-        }
+        toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
       }
-
-      // Mettre à jour le statut
-      if (onPrint) {
-        onPrint();
-      }
+      if (onPrint) onPrint();
     } catch (err) {
       console.error(err);
       toast.error('Erreur lors de la génération du PDF');
     } finally {
+      // 3. Restaurer l'affichage normal
+      setPdfMode(false);
       setPrinting(false);
     }
   }
@@ -365,7 +349,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        {hideControls ? (
+                        {(hideControls || pdfMode) ? (
                           <span className="ml-2 text-xs text-muted-foreground">
                             {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
                           </span>
