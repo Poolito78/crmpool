@@ -700,7 +700,7 @@ export default function Clients() {
                 <Label className="text-base font-semibold flex items-center gap-2">
                   <MapPin className="w-4 h-4" /> Adresses de livraison
                 </Label>
-                <Button type="button" variant="outline" size="sm" onClick={() => { setAdresseForm(emptyAdresse); setEditingAdresse(null); setShowAdresseForm(true); }}>
+                <Button type="button" variant="outline" size="sm" onClick={() => { setAdresseForm({ ...emptyAdresse, adresse: form.adresse, ville: form.ville, codePostal: form.codePostal }); setEditingAdresse(null); setShowAdresseForm(true); }}>
                   <Plus className="w-3 h-3 mr-1" /> Ajouter
                 </Button>
               </div>
