@@ -848,9 +848,25 @@ export default function Devis() {
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={() => save()}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
+          <div className="flex justify-between gap-2">
+            <Button variant="outline" onClick={() => {
+              const existing = editingId ? devis.find(d => d.id === editingId) : null;
+              const preview: DevisType = {
+                id: editingId || 'preview',
+                numero: existing?.numero || 'APERÇU',
+                clientId, adresseLivraisonId: adresseLivraisonId || undefined,
+                dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions,
+                fraisPortHT, fraisPortTVA, modeCalcul,
+                surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+              };
+              setPreviewDevis(preview);
+            }}>
+              <Eye className="w-4 h-4 mr-2" /> Aperçu
+            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button onClick={() => save()}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
