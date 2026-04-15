@@ -9,12 +9,17 @@ interface Props {
   client?: Client;
   produits?: Produit[];
   onEdit?: () => void;
+  hideControls?: boolean;
+  initialShowConso?: boolean;
+  initialShowRemise?: boolean;
+  initialShowComposants?: boolean;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean }) => void;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit }: Props) {
-  const [showConso, setShowConso] = useState(false);
-  const [showRemise, setShowRemise] = useState(false);
-  const [showComposants, setShowComposants] = useState(false);
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, onOptionsChange }: Props) {
+  const [showConso, setShowConso] = useState(initialShowConso);
+  const [showRemise, setShowRemise] = useState(initialShowRemise);
+  const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
@@ -60,31 +65,33 @@ export default function DevisPreview({ devis, client, produits = [], onEdit }: P
 
   return (
     <div className="bg-card">
-      {/* Print / Edit buttons */}
-      <div className="flex justify-end gap-2 p-4 print:hidden items-center flex-wrap">
-        <div className="flex items-center gap-4 mr-auto flex-wrap">
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={showConso} onChange={e => setShowConso(e.target.checked)} className="rounded" />
-            Afficher m²/consommation
-          </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={showRemise} onChange={e => setShowRemise(e.target.checked)} className="rounded" />
-            Afficher remise
-          </label>
-          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
-            <input type="checkbox" checked={showComposants} onChange={e => setShowComposants(e.target.checked)} className="rounded" />
-            Afficher composants
-          </label>
-        </div>
-        {onEdit && (
-          <Button variant="outline" size="sm" onClick={onEdit}>
-            <Pencil className="w-4 h-4 mr-2" /> Modifier
+      {/* Print / Edit buttons — masqués pour la génération PDF */}
+      {!hideControls && (
+        <div className="flex justify-end gap-2 p-4 print:hidden items-center flex-wrap">
+          <div className="flex items-center gap-4 mr-auto flex-wrap">
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants }); }} className="rounded" />
+              Afficher m²/consommation
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants }); }} className="rounded" />
+              Afficher remise
+            </label>
+            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked }); }} className="rounded" />
+              Afficher composants
+            </label>
+          </div>
+          {onEdit && (
+            <Button variant="outline" size="sm" onClick={onEdit}>
+              <Pencil className="w-4 h-4 mr-2" /> Modifier
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={handlePrint}>
+            <Printer className="w-4 h-4 mr-2" /> Imprimer / PDF
           </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={handlePrint}>
-          <Printer className="w-4 h-4 mr-2" /> Imprimer / PDF
-        </Button>
-      </div>
+        </div>
+      )}
 
       {/* Devis document */}
       <div className="px-8 pb-8 print:px-0 max-w-[800px] mx-auto text-sm" id="devis-print">

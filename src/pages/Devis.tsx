@@ -40,6 +40,7 @@ export default function Devis() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const [previewOptions, setPreviewOptions] = useState({ showConso: false, showRemise: false, showComposants: false });
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
@@ -858,7 +859,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} />
           </DialogContent>
         </Dialog>
       )}
@@ -887,6 +888,10 @@ export default function Devis() {
             devis={emailDevis}
             client={clients.find(c => c.id === emailDevis.clientId)}
             produits={produits}
+            hideControls={true}
+            initialShowConso={previewOptions.showConso}
+            initialShowRemise={previewOptions.showRemise}
+            initialShowComposants={previewOptions.showComposants}
           />
         </div>
       )}
