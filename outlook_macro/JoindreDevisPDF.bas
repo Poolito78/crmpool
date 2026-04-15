@@ -1,21 +1,16 @@
 Attribute VB_Name = "JoindreDevisPDF"
 ' ============================================================
-'  MACRO OUTLOOK — Joindre le PDF du devis + fiches produits
-'
-'  Dossier Préco  : C:\Users\f.mouhot\OneDrive - ISOSIGN\
-'                   Documents\ISOFLOOR\04 Vente\Préco\
-'  Fiches produit : C:\Users\f.mouhot\OneDrive - ISOSIGN\
-'                   Documents\ISOFLOOR\02 MARKETING\Fiches Produit\
+'  MACRO OUTLOOK - Joindre le PDF du devis + fiches produits
 ' ============================================================
 
 Private Const PRECO_FOLDER As String = _
-    "C:\Users\f.mouhot\OneDrive - ISOSIGN\Documents\ISOFLOOR\04 Vente\Préco\"
+    "C:\Users\f.mouhot\OneDrive - ISOSIGN\Documents\ISOFLOOR\04 Vente\Pr" & Chr(233) & "co\"
 
 Private Const FICHES_FOLDER As String = _
     "C:\Users\f.mouhot\OneDrive - ISOSIGN\Documents\ISOFLOOR\02 MARKETING\Fiches Produit\"
 
 ' ------------------------------------------------------------
-'  Point d'entrée principal
+'  Point d'entree principal
 ' ------------------------------------------------------------
 Sub JoindreDevisPDF()
 
@@ -28,51 +23,53 @@ Sub JoindreDevisPDF()
     Dim nbJoints  As Integer
     Dim msg       As String
 
-    ' --- Message en cours de rédaction ---
     On Error Resume Next
     Set objItem = Application.ActiveInspector.CurrentItem
     On Error GoTo 0
 
     If objItem Is Nothing Then
-        MsgBox "Aucun message ouvert en rédaction.", vbExclamation, "Joindre PDF devis"
+        MsgBox "Aucun message ouvert en redaction.", vbExclamation, "Joindre PDF devis"
         Exit Sub
     End If
 
-    ' --- Extraire le numéro de devis ---
     strNum = ExtraireNumeroDevis(objItem.Subject & " " & objItem.Body)
 
     If strNum = "" Then
-        MsgBox "Numéro de devis introuvable (format DEV-YYYY-NNN)." & vbCrLf & _
-               "Vérifiez l'objet ou le corps du message.", vbExclamation, "Joindre PDF devis"
+        MsgBox "Numero de devis introuvable (format DEV-YYYY-NNN)." & vbCrLf & _
+               "Verifiez l'objet ou le corps du message.", vbExclamation, "Joindre PDF devis"
         Exit Sub
     End If
 
     nbJoints = 0
     msg = "Devis " & strNum & " :" & vbCrLf
 
-    ' ── 1. PDF du devis ─────────────────────────────────────
+    ' -- 1. PDF du devis ------------------------------------
     strPdf = PRECO_FOLDER & "Devis_" & strNum & ".pdf"
 
     If Dir(strPdf) <> "" Then
         If Not DejaJoint(objItem, "Devis_" & strNum & ".pdf") Then
             objItem.Attachments.Add strPdf
             nbJoints = nbJoints + 1
-            msg = msg & vbCrLf & "  ✔ Devis_" & strNum & ".pdf"
+            msg = msg & vbCrLf & "  [OK] Devis_" & strNum & ".pdf"
         Else
-            msg = msg & vbCrLf & "  — Devis_" & strNum & ".pdf (déjà joint)"
+            msg = msg & vbCrLf & "  [--] Devis_" & strNum & ".pdf (deja joint)"
         End If
     Else
-        msg = msg & vbCrLf & "  ✗ PDF devis introuvable dans Préco"
+        msg = msg & vbCrLf & "  [NON] PDF devis introuvable dans :" & vbCrLf & _
+              "        " & PRECO_FOLDER
     End If
 
-    ' ── 2. Fiches produits via fichier refs ─────────────────
+    ' -- 2. Fiches produits --------------------------------
     Dim strRefsFile As String
     strRefsFile = PRECO_FOLDER & "Devis_" & strNum & "_refs.txt"
 
     If Dir(strRefsFile) <> "" Then
         strRefs = LireFichier(strRefsFile)
         If strRefs <> "" Then
-            arrRefs = Split(strRefs, vbLf)
+            ' Gerer les fins de ligne Windows (\r\n) et Unix (\n)
+            strRefs = Replace(strRefs, Chr(13) & Chr(10), Chr(10))
+            strRefs = Replace(strRefs, Chr(13), Chr(10))
+            arrRefs = Split(strRefs, Chr(10))
             msg = msg & vbCrLf & vbCrLf & "Fiches produits :"
             For i = 0 To UBound(arrRefs)
                 Dim ref As String
@@ -80,7 +77,7 @@ Sub JoindreDevisPDF()
                 If ref = "" Then GoTo SuivantRef
 
                 Dim fichePath As String
-                fichePath = TrouverFicheProduit(ref)
+                fichePath = ChercherDansDossier(FICHES_FOLDER, ref)
 
                 If fichePath <> "" Then
                     Dim nomFiche As String
@@ -88,29 +85,29 @@ Sub JoindreDevisPDF()
                     If Not DejaJoint(objItem, nomFiche) Then
                         objItem.Attachments.Add fichePath
                         nbJoints = nbJoints + 1
-                        msg = msg & vbCrLf & "  ✔ " & nomFiche & " (" & ref & ")"
+                        msg = msg & vbCrLf & "  [OK] " & nomFiche
                     Else
-                        msg = msg & vbCrLf & "  — " & nomFiche & " (déjà joint)"
+                        msg = msg & vbCrLf & "  [--] " & nomFiche & " (deja joint)"
                     End If
                 Else
-                    msg = msg & vbCrLf & "  ✗ Fiche introuvable : " & ref
+                    msg = msg & vbCrLf & "  [NON] Fiche introuvable : " & ref
                 End If
 SuivantRef:
             Next i
         End If
     Else
-        msg = msg & vbCrLf & vbCrLf & "(Fichier _refs.txt absent — fiches produits non jointes)"
+        msg = msg & vbCrLf & vbCrLf & _
+              "Info : fichier _refs.txt absent." & vbCrLf & _
+              "Utilisez 'Enregistrer PDF' ou 'Envoyer' depuis le CRM pour le generer."
     End If
 
-    ' ── 3. Sauvegarde + résumé ──────────────────────────────
+    ' -- 3. Sauvegarde + resume ----------------------------
     If nbJoints > 0 Then objItem.Save
 
     MsgBox msg, IIf(nbJoints > 0, vbInformation, vbExclamation), "Joindre PDF devis"
 
 End Sub
 
-' ------------------------------------------------------------
-'  Extraire le numéro de devis (ex: DEV-2024-001)
 ' ------------------------------------------------------------
 Private Function ExtraireNumeroDevis(strTexte As String) As String
     Dim regex   As Object
@@ -128,13 +125,6 @@ Private Function ExtraireNumeroDevis(strTexte As String) As String
 End Function
 
 ' ------------------------------------------------------------
-'  Chercher une fiche produit par référence (récursif)
-'  Retourne le chemin complet ou "" si non trouvé
-' ------------------------------------------------------------
-Private Function TrouverFicheProduit(strRef As String) As String
-    TrouverFicheProduit = ChercherDansDossier(FICHES_FOLDER, strRef)
-End Function
-
 Private Function ChercherDansDossier(strDossier As String, strRef As String) As String
     Dim fso     As Object
     Dim folder  As Object
@@ -148,7 +138,6 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
     Set folder = fso.GetFolder(strDossier)
     ref = LCase(Trim(strRef))
 
-    ' Chercher dans les fichiers du dossier courant
     For Each fichier In folder.Files
         If LCase(Right(fichier.Name, 4)) = ".pdf" Then
             If InStr(LCase(fichier.Name), ref) > 0 Then
@@ -158,7 +147,6 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
         End If
     Next fichier
 
-    ' Chercher récursivement dans les sous-dossiers
     For Each subF In folder.SubFolders
         Dim found As String
         found = ChercherDansDossier(subF.Path, strRef)
@@ -170,19 +158,15 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
 End Function
 
 ' ------------------------------------------------------------
-'  Lire le contenu d'un fichier texte
-' ------------------------------------------------------------
 Private Function LireFichier(strPath As String) As String
-    Dim fso  As Object
-    Dim f    As Object
+    Dim fso As Object
+    Dim f   As Object
     Set fso = CreateObject("Scripting.FileSystemObject")
-    Set f = fso.OpenTextFile(strPath, 1, False, -2) ' -2 = UTF-8
+    Set f = fso.OpenTextFile(strPath, 1, False, -1)
     LireFichier = f.ReadAll
     f.Close
 End Function
 
-' ------------------------------------------------------------
-'  Extraire le nom de fichier depuis un chemin
 ' ------------------------------------------------------------
 Private Function NomFichier(strPath As String) As String
     Dim fso As Object
@@ -190,8 +174,6 @@ Private Function NomFichier(strPath As String) As String
     NomFichier = fso.GetFileName(strPath)
 End Function
 
-' ------------------------------------------------------------
-'  Vérifier si un fichier est déjà joint
 ' ------------------------------------------------------------
 Private Function DejaJoint(objItem As Object, strNom As String) As Boolean
     Dim att As Object
