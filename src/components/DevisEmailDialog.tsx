@@ -3,9 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, Download } from 'lucide-react';
 import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { supabase } from '@/integrations/supabase/client';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -22,14 +21,14 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [sending, setSending] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
-  const pdfBlobRef = useRef<string | null>(null);
+  const pdfBase64Ref = useRef<string | null>(null);
 
   useEffect(() => {
     if (!devis || !open) {
       setPdfReady(false);
-      pdfBlobRef.current = null;
+      pdfBase64Ref.current = null;
       return;
     }
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
@@ -55,17 +54,17 @@ Cordialement,
 [Votre entreprise]`
     );
 
-    // Génération automatique du PDF dès l'ouverture du dialog
+    // Génération automatique du PDF dès l'ouverture
     if (pdfContainerRef?.current) {
       setPdfReady(false);
-      pdfBlobRef.current = null;
-      // Légère attente pour laisser le DOM se stabiliser
+      pdfBase64Ref.current = null;
       setTimeout(() => generatePdf(), 600);
     }
   }, [devis, client, open]);
 
   async function generatePdf() {
     if (!pdfContainerRef?.current || !devis) return;
+    setGenerating(true);
     try {
       const element = pdfContainerRef.current;
       const canvas = await html2canvas(element, {
@@ -74,99 +73,63 @@ Cordialement,
         logging: false,
         backgroundColor: '#ffffff',
       });
-      const imgData = canvas.toDataURL('image/jpeg', 0.92);
+
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pageWidth = pdf.internal.pageSize.getWidth();
       const pageHeight = pdf.internal.pageSize.getHeight();
-      const ratio = canvas.width / canvas.height;
       const imgWidth = pageWidth;
-      const imgHeight = imgWidth / ratio;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      let yPos = 0;
-      let remainingHeight = imgHeight;
-
-      while (remainingHeight > 0) {
-        const sliceHeight = Math.min(remainingHeight, pageHeight);
-        const srcY = (imgHeight - remainingHeight) / imgHeight * canvas.height;
-        const srcH = sliceHeight / imgHeight * canvas.height;
+      let yOffset = 0;
+      let page = 0;
+      while (yOffset < imgHeight) {
+        if (page > 0) pdf.addPage();
+        const srcY = (yOffset / imgHeight) * canvas.height;
+        const srcH = Math.min((pageHeight / imgHeight) * canvas.height, canvas.height - srcY);
+        const sliceH = (srcH / canvas.height) * imgHeight;
 
         const pageCanvas = document.createElement('canvas');
         pageCanvas.width = canvas.width;
         pageCanvas.height = srcH;
-        const ctx = pageCanvas.getContext('2d')!;
-        ctx.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+        pageCanvas.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, imgWidth, sliceH);
 
-        const pageImg = pageCanvas.toDataURL('image/jpeg', 0.92);
-        if (yPos > 0) pdf.addPage();
-        pdf.addImage(pageImg, 'JPEG', 0, 0, imgWidth, sliceHeight);
-
-        remainingHeight -= sliceHeight;
-        yPos += sliceHeight;
+        yOffset += pageHeight;
+        page++;
       }
 
-      // Convertir en base64 (sans le préfixe data:)
-      const base64 = pdf.output('datauristring').split(',')[1];
-      pdfBlobRef.current = base64;
+      pdfBase64Ref.current = pdf.output('datauristring').split(',')[1];
       setPdfReady(true);
     } catch (err) {
       console.error('Erreur génération PDF:', err);
-    }
-  }
-
-  async function handleSend() {
-    if (!to || !devis) return;
-    setSending(true);
-    try {
-      const fileName = `Devis_${devis.numero}.pdf`;
-
-      if (pdfBlobRef.current) {
-        // Envoi via Supabase edge function (Resend)
-        const { data, error } = await supabase.functions.invoke('send-devis-email', {
-          body: {
-            to,
-            subject,
-            body,
-            pdfBase64: pdfBlobRef.current,
-            fileName,
-          },
-        });
-
-        if (error || data?.error) {
-          throw new Error(error?.message || data?.error || 'Erreur envoi');
-        }
-      } else {
-        // Fallback mailto sans PDF si la génération a échoué
-        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(mailto, '_blank');
-      }
-
-      onSent();
-      onOpenChange(false);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      // Fallback mailto en cas d'erreur edge function
-      if (msg.includes('RESEND_API_KEY') || msg.includes('non configuré')) {
-        alert(`⚠️ Resend non configuré.\n\nVotre client mail va s'ouvrir. Pensez à joindre manuellement le PDF.\n\nErreur : ${msg}`);
-        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(mailto, '_blank');
-        // Proposer de télécharger le PDF quand même
-        if (pdfBlobRef.current) downloadPdf();
-        onSent();
-        onOpenChange(false);
-      } else {
-        alert(`Erreur lors de l'envoi : ${msg}`);
-      }
     } finally {
-      setSending(false);
+      setGenerating(false);
     }
   }
 
   function downloadPdf() {
-    if (!pdfBlobRef.current || !devis) return;
+    if (!pdfBase64Ref.current || !devis) return;
     const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${pdfBlobRef.current}`;
+    link.href = `data:application/pdf;base64,${pdfBase64Ref.current}`;
     link.download = `Devis_${devis.numero}.pdf`;
     link.click();
+  }
+
+  function handleSend() {
+    if (!to || !devis) return;
+
+    // 1. Télécharger le PDF automatiquement
+    if (pdfBase64Ref.current) {
+      downloadPdf();
+    }
+
+    // 2. Ouvrir Outlook avec le mail pré-rempli
+    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    window.open(mailto, '_blank');
+
+    // 3. Statut → envoyé
+    onSent();
+    onOpenChange(false);
   }
 
   if (!devis) return null;
@@ -198,33 +161,35 @@ Cordialement,
             />
           </div>
 
-          {/* Indicateur état PDF */}
-          <div className="flex items-center gap-3">
-            {pdfContainerRef ? (
-              pdfReady ? (
-                <div className="flex items-center gap-2 text-sm text-emerald-600">
-                  <FileText className="w-4 h-4" />
-                  <span>PDF prêt — sera joint automatiquement à l'email</span>
-                  <button onClick={downloadPdf} className="underline text-xs text-muted-foreground ml-2">Télécharger</button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Génération du PDF en cours…</span>
-                </div>
-              )
+          {/* Statut PDF */}
+          <div className="rounded-md border px-3 py-2 text-sm flex items-center gap-2">
+            {generating ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                <span className="text-muted-foreground">Génération du PDF…</span>
+              </>
+            ) : pdfReady ? (
+              <>
+                <FileText className="w-4 h-4 text-emerald-600" />
+                <span className="text-emerald-700 font-medium">PDF prêt</span>
+                <span className="text-muted-foreground">— sera téléchargé automatiquement, puis joignez-le dans Outlook</span>
+                <button onClick={downloadPdf} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline">
+                  <Download className="w-3 h-3" /> Télécharger
+                </button>
+              </>
             ) : (
-              <p className="text-xs text-muted-foreground">
-                💡 Cliquer sur "Envoyer" ouvrira votre client mail. Pensez à joindre le PDF du devis.
-              </p>
+              <>
+                <FileText className="w-4 h-4 text-muted-foreground" />
+                <span className="text-muted-foreground">PDF non disponible — Outlook s'ouvrira sans pièce jointe</span>
+              </>
             )}
           </div>
         </div>
+
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>Annuler</Button>
-          <Button onClick={handleSend} disabled={!to || sending}>
-            {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
-            {sending ? 'Envoi…' : 'Envoyer'}
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          <Button onClick={handleSend} disabled={!to}>
+            <Send className="w-4 h-4 mr-2" /> Envoyer via Outlook
           </Button>
         </DialogFooter>
       </DialogContent>
