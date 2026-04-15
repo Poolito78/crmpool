@@ -12,6 +12,13 @@ Private Function DossierFiches() As String
 End Function
 
 ' ------------------------------------------------------------
+' SOUS-ROUTINE DE TEST : lier ce bouton en premier pour verifier
+' que les macros sont bien actives
+Sub TestBouton()
+    MsgBox "Le bouton fonctionne ! Les macros sont actives.", vbInformation, "Test"
+End Sub
+
+' ------------------------------------------------------------
 Sub JoindreDevisPDF()
 
     Dim objItem     As Object
@@ -26,6 +33,8 @@ Sub JoindreDevisPDF()
     Dim nbJoints    As Integer
     Dim msg         As String
     Dim i           As Integer
+    Dim insp        As Object
+    Dim nbInsp      As Integer
 
     ' Methode 1 : fenetre de composition active
     On Error Resume Next
@@ -39,22 +48,46 @@ Sub JoindreDevisPDF()
         On Error GoTo 0
     End If
 
-    ' Methode 3 : parcourir les inspecteurs ouverts
+    ' Methode 3 : parcourir tous les inspecteurs ouverts
     If objItem Is Nothing Then
-        Dim insp As Object
+        nbInsp = 0
         On Error Resume Next
+        nbInsp = Application.Inspectors.Count
+        On Error GoTo 0
         For Each insp In Application.Inspectors
-            If insp.CurrentItem.Class = 43 Then  ' 43 = olMail
-                Set objItem = insp.CurrentItem
-                Exit For
+            On Error Resume Next
+            If Not insp Is Nothing Then
+                If insp.CurrentItem.Class = 43 Then
+                    Set objItem = insp.CurrentItem
+                End If
             End If
+            On Error GoTo 0
+            If Not objItem Is Nothing Then Exit For
         Next insp
+    End If
+
+    ' Methode 4 : explorer les fenetres via Application.ActiveExplorer
+    If objItem Is Nothing Then
+        On Error Resume Next
+        Dim exp As Object
+        Set exp = Application.ActiveExplorer
+        If Not exp Is Nothing Then
+            If exp.Selection.Count > 0 Then
+                If exp.Selection.Item(1).Class = 43 Then
+                    Set objItem = exp.Selection.Item(1)
+                End If
+            End If
+        End If
         On Error GoTo 0
     End If
 
     If objItem Is Nothing Then
-        MsgBox "Aucun message ouvert en redaction." & vbCrLf & _
-               "Ouvrez le message avant de cliquer le bouton.", _
+        MsgBox "Aucun message ouvert en redaction." & vbCrLf & vbCrLf & _
+               "Astuces :" & vbCrLf & _
+               "  - Le message doit etre ouvert dans sa propre fenetre" & vbCrLf & _
+               "  - Cliquer dans le corps du message puis sur le bouton" & vbCrLf & _
+               "  - Ou executer depuis VBA (Alt+F11) avec F5" & vbCrLf & vbCrLf & _
+               "Inspectors detectes : " & nbInsp, _
                vbExclamation, "Joindre PDF devis"
         Exit Sub
     End If
