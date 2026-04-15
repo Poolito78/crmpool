@@ -8,7 +8,7 @@ import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate 
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
-// ─── IndexedDB : persistance du handle de dossier ───────────────────────────
+// ─── IndexedDB : persistance du dossier mémorisé ─────────────────────────────
 
 const IDB_NAME = 'crmpool-settings';
 const IDB_STORE = 'handles';
@@ -59,54 +59,74 @@ async function clearStoredDirHandle(): Promise<void> {
   } catch { /* ignore */ }
 }
 
-// ─── Sauvegarde PDF dans le dossier mémorisé ─────────────────────────────────
+// ─── Écriture d'un fichier dans le dossier mémorisé ──────────────────────────
 
-async function savePdfToFolder(
+type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
+
+async function writeFileToFolder(
   fileName: string,
-  pdfBase64: string,
+  content: Uint8Array,
   forcePickFolder = false,
-): Promise<{ ok: boolean; folderName?: string; error?: string }> {
-  // File System Access API dispo ?
-  if (!('showDirectoryPicker' in window)) {
-    return { ok: false, error: 'non_supported' };
-  }
-
+): Promise<{ ok: boolean; folderName?: string }> {
+  if (!('showDirectoryPicker' in window)) return { ok: false };
   try {
-    let dirHandle: FileSystemDirectoryHandle | null = null;
-
-    if (!forcePickFolder) {
-      dirHandle = await getStoredDirHandle();
-      if (dirHandle) {
-        // Vérifier / demander la permission
-        // @ts-expect-error – queryPermission est dans la spec mais pas encore dans les types TS
-        const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
-        if (perm !== 'granted') dirHandle = null;
-      }
+    let dirHandle = await getStoredDirHandle();
+    if (!forcePickFolder && dirHandle) {
+      // @ts-expect-error – requestPermission pas encore dans les types DOM
+      const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') dirHandle = null;
     }
-
-    if (!dirHandle) {
-      // Ouvrir le sélecteur de dossier (requiert un geste utilisateur)
-      dirHandle = await (window as typeof window & { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> })
+    if (!dirHandle || forcePickFolder) {
+      dirHandle = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
         .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
       await storeDirHandle(dirHandle);
     }
-
-    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
-    const writable = await fileHandle.createWritable();
-    const bytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
-    await writable.write(bytes);
+    const fh = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fh.createWritable();
+    await writable.write(content);
     await writable.close();
-
     return { ok: true, folderName: dirHandle.name };
   } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') {
-      return { ok: false, error: 'annulé' };
-    }
-    return { ok: false, error: String(err) };
+    if (err instanceof Error && err.name === 'AbortError') return { ok: false };
+    console.error(err);
+    return { ok: false };
   }
 }
 
-// ─── Composant ───────────────────────────────────────────────────────────────
+// ─── Génération du fichier .eml (email + PDF en pièce jointe) ────────────────
+
+function buildEml(to: string, subject: string, body: string, pdfBase64: string, pdfFileName: string): Uint8Array {
+  const boundary = `----=_Boundary_${Date.now()}`;
+
+  // Découper le base64 en lignes de 76 caractères (RFC 2045)
+  const b64Lines = pdfBase64.match(/.{1,76}/g)?.join('\r\n') ?? pdfBase64;
+
+  const eml = [
+    'MIME-Version: 1.0',
+    `To: ${to}`,
+    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8',
+    'Content-Transfer-Encoding: 8bit',
+    '',
+    body,
+    '',
+    `--${boundary}`,
+    `Content-Type: application/pdf; name="${pdfFileName}"`,
+    `Content-Disposition: attachment; filename="${pdfFileName}"`,
+    'Content-Transfer-Encoding: base64',
+    '',
+    b64Lines,
+    '',
+    `--${boundary}--`,
+  ].join('\r\n');
+
+  return new TextEncoder().encode(eml);
+}
+
+// ─── Composant principal ──────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
@@ -126,7 +146,6 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
   const [savedFolder, setSavedFolder] = useState<string | null>(null);
   const pdfBase64Ref = useRef<string | null>(null);
 
-  // Charger le nom du dossier mémorisé
   useEffect(() => {
     getStoredDirHandle().then(h => setSavedFolder(h?.name ?? null));
   }, []);
@@ -172,30 +191,23 @@ Cordialement,
     setGenerating(true);
     try {
       const canvas = await html2canvas(pdfContainerRef.current, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
+        scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
       });
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pw = pdf.internal.pageSize.getWidth();
       const ph = pdf.internal.pageSize.getHeight();
       const imgH = (canvas.height * pw) / canvas.width;
-
-      let yOffset = 0;
-      let page = 0;
+      let yOffset = 0, page = 0;
       while (yOffset < imgH) {
         if (page > 0) pdf.addPage();
         const srcY = (yOffset / imgH) * canvas.height;
         const srcH = Math.min((ph / imgH) * canvas.height, canvas.height - srcY);
         const sliceH = (srcH / canvas.height) * imgH;
         const tmp = document.createElement('canvas');
-        tmp.width = canvas.width;
-        tmp.height = srcH;
+        tmp.width = canvas.width; tmp.height = srcH;
         tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
         pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
-        yOffset += ph;
-        page++;
+        yOffset += ph; page++;
       }
       pdfBase64Ref.current = pdf.output('datauristring').split(',')[1];
       setPdfReady(true);
@@ -207,39 +219,53 @@ Cordialement,
   }
 
   async function handlePickFolder() {
-    const result = await savePdfToFolder('test.pdf', btoa('test'), true);
-    if (result.ok) {
-      setSavedFolder(result.folderName ?? null);
-    }
-  }
-
-  async function handleClearFolder() {
-    await clearStoredDirHandle();
-    setSavedFolder(null);
+    const dummy = new Uint8Array(0);
+    const res = await writeFileToFolder('_init', dummy, true);
+    if (res.ok) setSavedFolder(res.folderName ?? null);
   }
 
   async function handleSend() {
     if (!to || !devis) return;
-    const fileName = `Devis_${devis.numero}.pdf`;
+
+    const pdfFileName = `Devis_${devis.numero}.pdf`;
+    const emlFileName = `Devis_${devis.numero}.eml`;
 
     if (pdfBase64Ref.current) {
-      // Essayer de sauvegarder dans le dossier mémorisé
-      const result = await savePdfToFolder(fileName, pdfBase64Ref.current);
-      if (result.ok) {
-        setSavedFolder(result.folderName ?? null);
-      } else if (result.error === 'non_supported') {
-        // Navigateur non compatible → téléchargement classique
-        const link = document.createElement('a');
-        link.href = `data:application/pdf;base64,${pdfBase64Ref.current}`;
-        link.download = fileName;
-        link.click();
-      }
-      // Si annulé par l'utilisateur → on continue quand même avec Outlook
-    }
+      const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
+      const emlBytes = buildEml(to, subject, body, pdfBase64Ref.current, pdfFileName);
 
-    // Ouvrir Outlook
-    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailto, '_blank');
+      // 1. Sauvegarder PDF + EML dans le dossier mémorisé
+      let savedToFolder = false;
+      const resPdf = await writeFileToFolder(pdfFileName, pdfBytes);
+      if (resPdf.ok) {
+        await writeFileToFolder(emlFileName, emlBytes);
+        setSavedFolder(resPdf.folderName ?? null);
+        savedToFolder = true;
+      }
+
+      // 2. Télécharger le fichier .eml → s'ouvre dans Outlook avec le PDF en pièce jointe
+      const blob = new Blob([emlBytes], { type: 'message/rfc822' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = emlFileName;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+
+      if (!savedToFolder) {
+        // Fallback : télécharger aussi le PDF séparément
+        const pdfUrl = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
+        const b = document.createElement('a');
+        b.href = pdfUrl;
+        b.download = pdfFileName;
+        b.click();
+        setTimeout(() => URL.revokeObjectURL(pdfUrl), 5000);
+      }
+    } else {
+      // Pas de PDF : ouvrir Outlook via mailto classique
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailto, '_blank');
+    }
 
     onSent();
     onOpenChange(false);
@@ -275,31 +301,29 @@ Cordialement,
             />
           </div>
 
-          {/* Dossier de sauvegarde */}
-          <div className="rounded-md border px-3 py-2 space-y-2">
-            <div className="flex items-center gap-2 text-sm">
+          {/* Dossier + état PDF */}
+          <div className="rounded-md border px-3 py-2 space-y-2 text-sm">
+            <div className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
               {savedFolder ? (
                 <>
                   <span className="text-muted-foreground">Dossier :</span>
                   <span className="font-medium truncate">{savedFolder}</span>
                   <button onClick={handlePickFolder} className="ml-auto text-xs text-muted-foreground hover:text-foreground underline shrink-0">Changer</button>
-                  <button onClick={handleClearFolder} className="text-muted-foreground hover:text-destructive shrink-0" title="Oublier ce dossier"><X className="w-3.5 h-3.5" /></button>
+                  <button onClick={async () => { await clearStoredDirHandle(); setSavedFolder(null); }} className="text-muted-foreground hover:text-destructive shrink-0" title="Oublier"><X className="w-3.5 h-3.5" /></button>
                 </>
               ) : (
                 <>
-                  <span className="text-muted-foreground text-xs">Aucun dossier configuré — le PDF sera téléchargé dans Téléchargements</span>
+                  <span className="text-muted-foreground text-xs">Aucun dossier — les fichiers seront téléchargés dans Téléchargements</span>
                   <button onClick={handlePickFolder} className="ml-auto text-xs text-primary hover:underline shrink-0">Choisir un dossier</button>
                 </>
               )}
             </div>
-
-            {/* État PDF */}
-            <div className="flex items-center gap-2 text-sm border-t pt-2">
+            <div className="flex items-center gap-2 border-t pt-2">
               {generating ? (
                 <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Génération du PDF…</span></>
               ) : pdfReady ? (
-                <><FileText className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground">— sera sauvegardé automatiquement à l'envoi</span></>
+                <><FileText className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground ml-1">— un fichier .eml s'ouvrira dans Outlook avec le PDF en pièce jointe</span></>
               ) : (
                 <><FileText className="w-4 h-4 text-muted-foreground" /><span className="text-muted-foreground">PDF non disponible</span></>
               )}
@@ -309,8 +333,8 @@ Cordialement,
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={handleSend} disabled={!to}>
-            <Send className="w-4 h-4 mr-2" /> Envoyer via Outlook
+          <Button onClick={handleSend} disabled={!to || generating}>
+            <Send className="w-4 h-4 mr-2" /> Envoyer
           </Button>
         </DialogFooter>
       </DialogContent>
