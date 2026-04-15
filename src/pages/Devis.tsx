@@ -859,7 +859,7 @@ export default function Devis() {
                 fraisPortHT, fraisPortTVA, modeCalcul,
                 surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
               };
-              setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' }));
+              setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
               setPreviewDevis(preview);
             }}>
               <Eye className="w-4 h-4 mr-2" /> Aperçu
@@ -876,7 +876,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-4xl max-h-[95vh] overflow-y-auto p-0">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface'} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); setTimeout(() => window.print(), 80); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); setTimeout(() => window.print(), 80); }} />
           </DialogContent>
         </Dialog>
       )}
