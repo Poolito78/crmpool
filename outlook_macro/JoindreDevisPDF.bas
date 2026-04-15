@@ -21,6 +21,8 @@ End Sub
 ' ------------------------------------------------------------
 Sub JoindreDevisPDF()
 
+    MsgBox "DEBUT macro JoindreDevisPDF", vbInformation, "Debug"
+
     Dim objItem     As Object
     Dim strNum      As String
     Dim strPdf      As String
