@@ -305,15 +305,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {/* Ligne récapitulatif surface + totaux */}
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td className="py-1.5 px-2 text-right text-primary font-bold not-italic">
-                    <input
-                      type="number" min={0} step={1}
-                      value={surfaceGlobale || ''}
-                      onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
-                      className="w-14 text-right border border-border rounded px-1 py-0.5 bg-background print:hidden font-normal text-foreground"
-                      placeholder="m²"
-                    />
-                    <span className="hidden print:inline">{surfaceGlobale}</span>
-                    <span className="ml-1 font-bold text-primary">m²</span>
+                    {hideControls ? (
+                      <span>{surfaceGlobale > 0 ? surfaceGlobale : '—'} m²</span>
+                    ) : (
+                      <>
+                        <input
+                          type="number" min={0} step={1}
+                          value={surfaceGlobale || ''}
+                          onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
+                          className="w-14 text-right border border-border rounded px-1 py-0.5 bg-background print:hidden font-normal text-foreground"
+                          placeholder="m²"
+                        />
+                        <span className="hidden print:inline">{surfaceGlobale}</span>
+                        <span className="ml-1 font-bold text-primary">m²</span>
+                      </>
+                    )}
                   </td>
                   <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(3) : '—'}</td>
                   <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(2) : '—'}</td>
@@ -331,16 +337,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        <span className="ml-2 print:hidden">
-                          <input
-                            type="number" min={0} step={1}
-                            value={getSurfaceLigne(l.id) || ''}
-                            onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
-                            className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                            placeholder="m²"
-                          />
-                          <span className="text-xs text-muted-foreground ml-0.5">m²</span>
-                        </span>
+                        {hideControls ? (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
+                          </span>
+                        ) : (
+                          <span className="ml-2 print:hidden">
+                            <input
+                              type="number" min={0} step={1}
+                              value={getSurfaceLigne(l.id) || ''}
+                              onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
+                              className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
+                              placeholder="m²"
+                            />
+                            <span className="text-xs text-muted-foreground ml-0.5">m²</span>
+                          </span>
+                        )}
                       </td>
                       {isComposite ? (() => {
                         const surfaceLigne = getSurfaceLigne(l.id) || 0;
