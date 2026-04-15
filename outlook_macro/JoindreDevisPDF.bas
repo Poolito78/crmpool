@@ -12,16 +12,7 @@ Private Function DossierFiches() As String
 End Function
 
 ' ------------------------------------------------------------
-' SOUS-ROUTINE DE TEST : lier ce bouton en premier pour verifier
-' que les macros sont bien actives
-Sub TestBouton()
-    MsgBox "Le bouton fonctionne ! Les macros sont actives.", vbInformation, "Test"
-End Sub
-
-' ------------------------------------------------------------
 Sub JoindreDevisPDF()
-
-    MsgBox "DEBUT macro JoindreDevisPDF", vbInformation, "Debug"
 
     Dim objItem     As Object
     Dim strNum      As String
