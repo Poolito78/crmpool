@@ -61,8 +61,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }, 0);
 
   function handlePrint() {
-    onPrint?.();
-    window.print();
+    if (onPrint) {
+      // Laisser le parent mettre à jour le statut + déclencher l'impression
+      onPrint();
+    } else {
+      window.print();
+    }
   }
 
   return (
