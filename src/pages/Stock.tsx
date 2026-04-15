@@ -66,7 +66,7 @@ export default function Stock() {
           };
         }), 'stock', 'Stock')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="stat-card text-center">
           <Package className="w-5 h-5 mx-auto text-primary mb-1" />
           <p className="text-2xl font-heading font-bold">{totalStock}</p>

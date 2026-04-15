@@ -133,7 +133,7 @@ export default function CRMLayout() {
           </h1>
         </header>
 
-        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6">
+        <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 overflow-x-hidden">
           <Outlet />
         </main>
       </div>
