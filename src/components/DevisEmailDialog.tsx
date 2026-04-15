@@ -3,10 +3,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle } from 'lucide-react';
 import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Props {
   open: boolean;
@@ -22,6 +23,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [generating, setGenerating] = useState(false);
+  const [sending, setSending] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
   const [savedFolder, setSavedFolder] = useState<string | null>(null);
   const pdfBase64Ref = useRef<string | null>(null);
@@ -84,37 +86,54 @@ Cordialement,
   }
 
   async function handleSend() {
-    if (!to || !devis) return;
+    if (!to || !devis || !pdfBase64Ref.current) return;
+    setSending(true);
+
     const pdfFileName = `Devis_${devis.numero}.pdf`;
+    const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
 
-    if (pdfBase64Ref.current) {
-      const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
-      const res = await writeFileToFolder(pdfFileName, pdfBytes);
-      if (res.ok) setSavedFolder(res.folderName ?? null);
-      else {
-        // Fallback téléchargement classique
-        const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
-        const a = document.createElement('a'); a.href = url; a.download = pdfFileName; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-      }
-    }
+    // 1. Sauvegarder dans le dossier Préco
+    const folderRes = await writeFileToFolder(pdfFileName, pdfBytes);
+    if (folderRes.ok) setSavedFolder(folderRes.folderName ?? null);
 
-    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailto, '_blank');
-
-    onSent();
-    onOpenChange(false);
-
-    if (pdfBase64Ref.current) {
-      toast.info(`📎 Joignez le PDF dans Outlook : ${pdfFileName}`, {
-        description: savedFolder ? `Sauvegardé dans "${savedFolder}"` : 'Vérifie ton dossier Téléchargements',
-        duration: 10000,
-        action: { label: 'Copier le nom', onClick: () => navigator.clipboard.writeText(pdfFileName) },
+    // 2. Envoyer via Resend (edge function) avec PDF en pièce jointe
+    try {
+      const { data, error } = await supabase.functions.invoke('send-devis-email', {
+        body: {
+          to,
+          subject,
+          body,
+          pdfBase64: pdfBase64Ref.current,
+          fileName: pdfFileName,
+        },
       });
+
+      if (error || data?.error) {
+        throw new Error(error?.message || data?.error || 'Erreur envoi');
+      }
+
+      toast.success('Mail envoyé avec le PDF en pièce jointe', {
+        description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
+        duration: 6000,
+      });
+      onSent();
+      onOpenChange(false);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Fallback mailto si Resend non configuré
+      toast.error(`Envoi échoué — ouverture Outlook (${msg})`, { duration: 8000 });
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      window.open(mailto, '_blank');
+      onSent();
+      onOpenChange(false);
+    } finally {
+      setSending(false);
     }
   }
 
   if (!devis) return null;
+
+  const canSend = !!(to && pdfReady && !generating && !sending);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -138,50 +157,57 @@ Cordialement,
           <div>
             <Label>Corps du message</Label>
             <textarea
-              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[280px] font-mono"
+              className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[260px] font-mono"
               value={body}
               onChange={e => setBody(e.target.value)}
             />
           </div>
 
+          {/* Statut PDF + dossier */}
           <div className="rounded-md border px-3 py-2 space-y-2 text-sm">
+            {/* PDF */}
             <div className="flex items-center gap-2">
+              {generating ? (
+                <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" /><span className="text-muted-foreground">Génération du PDF…</span></>
+              ) : pdfReady ? (
+                <><CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground ml-1">— sera joint automatiquement</span></>
+              ) : (
+                <><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" /><span className="text-amber-600">PDF non disponible</span></>
+              )}
+            </div>
+
+            {/* Dossier Préco */}
+            <div className="flex items-center gap-2 border-t pt-2">
               <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
               {savedFolder ? (
                 <>
-                  <span className="text-muted-foreground">Dossier PDF :</span>
+                  <span className="text-muted-foreground">Copie dans :</span>
                   <span className="font-medium truncate">{savedFolder}</span>
                   <button onClick={handlePickFolder} className="ml-auto text-xs text-muted-foreground hover:text-foreground underline shrink-0">Changer</button>
                   <button onClick={async () => { await clearStoredDirHandle(); setSavedFolder(null); }} className="text-muted-foreground hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
                 </>
               ) : (
                 <>
-                  <span className="text-muted-foreground text-xs">Aucun dossier — PDF téléchargé dans Téléchargements</span>
-                  <button onClick={handlePickFolder} className="ml-auto text-xs text-primary hover:underline shrink-0">Choisir un dossier</button>
+                  <span className="text-muted-foreground text-xs">Aucun dossier de copie configuré</span>
+                  <button onClick={handlePickFolder} className="ml-auto text-xs text-primary hover:underline shrink-0">Choisir Préco…</button>
                 </>
               )}
             </div>
-            <div className="flex items-center gap-2 border-t pt-2">
-              {generating ? (
-                <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Génération du PDF…</span></>
-              ) : pdfReady ? (
-                <><FileText className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground ml-1">— sauvegardé dans {savedFolder ?? 'Téléchargements'} à l'envoi</span></>
-              ) : (
-                <><FileText className="w-4 h-4 text-muted-foreground" /><span className="text-muted-foreground">PDF non disponible</span></>
-              )}
-            </div>
-            {pdfReady && (
-              <p className="text-xs text-amber-600 border-t pt-2">
-                ⚠️ Outlook s'ouvrira sans pièce jointe — joignez le PDF depuis <strong>{savedFolder ?? 'Téléchargements'}</strong>
-              </p>
-            )}
+
+            <p className="text-xs text-muted-foreground border-t pt-2">
+              <FileText className="w-3 h-3 inline mr-1" />
+              Le PDF sera envoyé en pièce jointe via Resend et copié dans le dossier.
+            </p>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button onClick={handleSend} disabled={!to || generating}>
-            <Send className="w-4 h-4 mr-2" /> Ouvrir Outlook
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>Annuler</Button>
+          <Button onClick={handleSend} disabled={!canSend}>
+            {sending
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Envoi…</>
+              : <><Send className="w-4 h-4 mr-2" /> Envoyer</>
+            }
           </Button>
         </DialogFooter>
       </DialogContent>
