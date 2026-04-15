@@ -10,18 +10,16 @@ Private Const FICHES_FOLDER As String = _
     "C:\Users\f.mouhot\OneDrive - ISOSIGN\Documents\ISOFLOOR\02 MARKETING\Fiches Produit\"
 
 ' ------------------------------------------------------------
-'  Point d'entree principal
-' ------------------------------------------------------------
 Sub JoindreDevisPDF()
 
-    Dim objItem   As Object
-    Dim strNum    As String
-    Dim strPdf    As String
-    Dim strRefs   As String
+    Dim objItem  As Object
+    Dim strNum   As String
+    Dim strPdf   As String
+    Dim strRefs  As String
     Dim arrRefs() As String
-    Dim i         As Integer
-    Dim nbJoints  As Integer
-    Dim msg       As String
+    Dim i        As Integer
+    Dim nbJoints As Integer
+    Dim msg      As String
 
     On Error Resume Next
     Set objItem = Application.ActiveInspector.CurrentItem
@@ -32,20 +30,21 @@ Sub JoindreDevisPDF()
         Exit Sub
     End If
 
-    strNum = ExtraireNumeroDevis(objItem.Subject & " " & objItem.Body)
+    ' Chercher le numero de devis dans objet puis corps
+    strNum = TrouverNumeroDevis(objItem.Subject)
+    If strNum = "" Then strNum = TrouverNumeroDevis(objItem.Body)
 
     If strNum = "" Then
-        MsgBox "Numero de devis introuvable (format DEV-YYYY-NNN)." & vbCrLf & _
-               "Verifiez l'objet ou le corps du message.", vbExclamation, "Joindre PDF devis"
+        MsgBox "Numero de devis introuvable (format DEV-2026-001)." & vbCrLf & _
+               "Verifiez l'objet du message.", vbExclamation, "Joindre PDF devis"
         Exit Sub
     End If
 
     nbJoints = 0
     msg = "Devis " & strNum & " :" & vbCrLf
 
-    ' -- 1. PDF du devis ------------------------------------
+    ' -- PDF du devis ---------------------------------------
     strPdf = PRECO_FOLDER & "Devis_" & strNum & ".pdf"
-
     If Dir(strPdf) <> "" Then
         If Not DejaJoint(objItem, "Devis_" & strNum & ".pdf") Then
             objItem.Attachments.Add strPdf
@@ -55,53 +54,47 @@ Sub JoindreDevisPDF()
             msg = msg & vbCrLf & "  [--] Devis_" & strNum & ".pdf (deja joint)"
         End If
     Else
-        msg = msg & vbCrLf & "  [NON] PDF devis introuvable dans :" & vbCrLf & _
-              "        " & PRECO_FOLDER
+        msg = msg & vbCrLf & "  [NON] PDF introuvable :" & vbCrLf & "  " & strPdf
     End If
 
-    ' -- 2. Fiches produits --------------------------------
+    ' -- Fiches produits ------------------------------------
     Dim strRefsFile As String
     strRefsFile = PRECO_FOLDER & "Devis_" & strNum & "_refs.txt"
 
     If Dir(strRefsFile) <> "" Then
         strRefs = LireFichier(strRefsFile)
+        strRefs = Replace(strRefs, Chr(13) & Chr(10), Chr(10))
+        strRefs = Replace(strRefs, Chr(13), Chr(10))
         If strRefs <> "" Then
-            ' Gerer les fins de ligne Windows (\r\n) et Unix (\n)
-            strRefs = Replace(strRefs, Chr(13) & Chr(10), Chr(10))
-            strRefs = Replace(strRefs, Chr(13), Chr(10))
             arrRefs = Split(strRefs, Chr(10))
             msg = msg & vbCrLf & vbCrLf & "Fiches produits :"
+            Dim ref As String
+            Dim fiche As String
+            Dim nomF As String
             For i = 0 To UBound(arrRefs)
-                Dim ref As String
                 ref = Trim(arrRefs(i))
-                If ref = "" Then GoTo SuivantRef
-
-                Dim fichePath As String
-                fichePath = ChercherDansDossier(FICHES_FOLDER, ref)
-
-                If fichePath <> "" Then
-                    Dim nomFiche As String
-                    nomFiche = NomFichier(fichePath)
-                    If Not DejaJoint(objItem, nomFiche) Then
-                        objItem.Attachments.Add fichePath
-                        nbJoints = nbJoints + 1
-                        msg = msg & vbCrLf & "  [OK] " & nomFiche
+                If ref <> "" Then
+                    fiche = ChercherDansDossier(FICHES_FOLDER, ref)
+                    If fiche <> "" Then
+                        nomF = NomFichier(fiche)
+                        If Not DejaJoint(objItem, nomF) Then
+                            objItem.Attachments.Add fiche
+                            nbJoints = nbJoints + 1
+                            msg = msg & vbCrLf & "  [OK] " & nomF
+                        Else
+                            msg = msg & vbCrLf & "  [--] " & nomF & " (deja joint)"
+                        End If
                     Else
-                        msg = msg & vbCrLf & "  [--] " & nomFiche & " (deja joint)"
+                        msg = msg & vbCrLf & "  [NON] Fiche introuvable : " & ref
                     End If
-                Else
-                    msg = msg & vbCrLf & "  [NON] Fiche introuvable : " & ref
                 End If
-SuivantRef:
             Next i
         End If
     Else
         msg = msg & vbCrLf & vbCrLf & _
-              "Info : fichier _refs.txt absent." & vbCrLf & _
-              "Utilisez 'Enregistrer PDF' ou 'Envoyer' depuis le CRM pour le generer."
+              "Info : _refs.txt absent - utilisez 'Enregistrer PDF' dans le CRM."
     End If
 
-    ' -- 3. Sauvegarde + resume ----------------------------
     If nbJoints > 0 Then objItem.Save
 
     MsgBox msg, IIf(nbJoints > 0, vbInformation, vbExclamation), "Joindre PDF devis"
@@ -109,28 +102,46 @@ SuivantRef:
 End Sub
 
 ' ------------------------------------------------------------
-Private Function ExtraireNumeroDevis(strTexte As String) As String
-    Dim regex   As Object
-    Dim matches As Object
-    Set regex = CreateObject("VBScript.RegExp")
-    regex.Pattern = "DEV-\d{4}-\d+"
-    regex.IgnoreCase = True
-    regex.Global = False
-    Set matches = regex.Execute(strTexte)
-    If matches.Count > 0 Then
-        ExtraireNumeroDevis = matches(0).Value
-    Else
-        ExtraireNumeroDevis = ""
+'  Trouver le numero de devis dans un texte (ex: DEV-2026-001)
+'  Sans regex - recherche manuelle
+' ------------------------------------------------------------
+Private Function TrouverNumeroDevis(strTexte As String) As String
+    Dim i      As Long
+    Dim pos    As Long
+    Dim debut  As Long
+    Dim extrait As String
+
+    TrouverNumeroDevis = ""
+    pos = InStr(1, strTexte, "DEV-", vbTextCompare)
+    If pos = 0 Then Exit Function
+
+    ' Extraire a partir de "DEV-" jusqu'au prochain espace ou fin
+    debut = pos
+    Dim j As Long
+    For j = pos + 4 To Len(strTexte)
+        Dim c As String
+        c = Mid(strTexte, j, 1)
+        If c = " " Or c = Chr(9) Or c = Chr(10) Or c = Chr(13) Or _
+           c = ")" Or c = "]" Or c = "," Or c = ";" Then
+            Exit For
+        End If
+    Next j
+
+    extrait = Mid(strTexte, debut, j - debut)
+
+    ' Verifier format minimal : DEV-XXXX-XXX (au moins 10 caracteres)
+    If Len(extrait) >= 10 Then
+        TrouverNumeroDevis = extrait
     End If
 End Function
 
 ' ------------------------------------------------------------
 Private Function ChercherDansDossier(strDossier As String, strRef As String) As String
-    Dim fso     As Object
-    Dim folder  As Object
-    Dim subF    As Object
-    Dim fichier As Object
-    Dim ref     As String
+    Dim fso    As Object
+    Dim folder As Object
+    Dim subF   As Object
+    Dim fich   As Object
+    Dim ref    As String
 
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(strDossier) Then Exit Function
@@ -138,17 +149,17 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
     Set folder = fso.GetFolder(strDossier)
     ref = LCase(Trim(strRef))
 
-    For Each fichier In folder.Files
-        If LCase(Right(fichier.Name, 4)) = ".pdf" Then
-            If InStr(LCase(fichier.Name), ref) > 0 Then
-                ChercherDansDossier = fichier.Path
+    For Each fich In folder.Files
+        If LCase(Right(fich.Name, 4)) = ".pdf" Then
+            If InStr(LCase(fich.Name), ref) > 0 Then
+                ChercherDansDossier = fich.Path
                 Exit Function
             End If
         End If
-    Next fichier
+    Next fich
 
+    Dim found As String
     For Each subF In folder.SubFolders
-        Dim found As String
         found = ChercherDansDossier(subF.Path, strRef)
         If found <> "" Then
             ChercherDansDossier = found
@@ -177,11 +188,11 @@ End Function
 ' ------------------------------------------------------------
 Private Function DejaJoint(objItem As Object, strNom As String) As Boolean
     Dim att As Object
+    DejaJoint = False
     For Each att In objItem.Attachments
         If LCase(att.FileName) = LCase(strNom) Then
             DejaJoint = True
             Exit Function
         End If
     Next att
-    DejaJoint = False
 End Function
