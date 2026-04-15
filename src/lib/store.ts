@@ -15,6 +15,14 @@ export interface AdresseLivraison {
   type: TypeAdresse;
 }
 
+export interface Contact {
+  id: string;
+  nom: string;
+  email?: string;
+  telephone?: string;
+  fonction?: string;
+}
+
 export interface Client {
   id: string;
   nom: string;
@@ -29,6 +37,7 @@ export interface Client {
   adressesLivraison: AdresseLivraison[];
   estRevendeur?: boolean;
   remisesParCategorie?: Record<string, number>;
+  contacts?: Contact[];
 }
 
 export interface Fournisseur {

@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText } from 'lucide-react';
+import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,7 +15,7 @@ import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}
+  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
 };
 
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
@@ -126,7 +126,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {} });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts: c.contacts || [] });
     setDialogOpen(true);
   }
 
@@ -506,6 +506,18 @@ export default function Clients() {
               <p>{c.telephone}</p>
               <p>{c.ville}</p>
             </div>
+            {(c.contacts || []).length > 0 && (
+              <div className="mt-2 space-y-1">
+                {(c.contacts || []).map(ct => (
+                  <div key={ct.id} className="text-xs text-muted-foreground flex items-center gap-2 border-l-2 border-border pl-2">
+                    <span className="font-medium text-foreground">{ct.nom}</span>
+                    {ct.fonction && <span className="text-muted-foreground">· {ct.fonction}</span>}
+                    {ct.email && <span>{ct.email}</span>}
+                    {ct.telephone && <span>{ct.telephone}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
             {(c.adressesLivraison?.length || 0) > 0 && (
               <div className="mt-3">
                 <button
@@ -579,6 +591,42 @@ export default function Clients() {
                 />
               </div>
             ))}
+            {/* Contacts supplémentaires */}
+            <div className="border-t border-border pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Contacts supplémentaires</Label>
+                <Button type="button" variant="outline" size="sm" onClick={() => setForm(prev => ({ ...prev, contacts: [...(prev.contacts || []), { id: generateId(), nom: '', email: '', telephone: '', fonction: '' }] }))}>
+                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Ajouter
+                </Button>
+              </div>
+              {(form.contacts || []).map((ct, idx) => (
+                <div key={ct.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs text-muted-foreground font-medium">Contact {idx + 1}</span>
+                    <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Nom *</Label>
+                      <Input className="h-8 text-sm" value={ct.nom} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, nom: e.target.value } : c) }))} placeholder="Prénom Nom" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Fonction</Label>
+                      <Input className="h-8 text-sm" value={ct.fonction || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, fonction: e.target.value } : c) }))} placeholder="Ex: Directeur" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Email</Label>
+                      <Input className="h-8 text-sm" type="email" value={ct.email || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, email: e.target.value } : c) }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Téléphone</Label>
+                      <Input className="h-8 text-sm" type="tel" value={ct.telephone || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, telephone: e.target.value } : c) }))} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div>
               <Label>Notes</Label>
               <textarea
