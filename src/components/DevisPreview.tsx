@@ -121,7 +121,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <Button variant="outline" size="sm" onClick={handlePrint} disabled={printing}>
             {printing
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Génération…</>
-              : <><Printer className="w-4 h-4 mr-2" /> Imprimer / PDF</>
+              : <><Printer className="w-4 h-4 mr-2" /> Enregistrer PDF</>
             }
           </Button>
         </div>
