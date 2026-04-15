@@ -215,12 +215,14 @@ End Function
 
 ' ------------------------------------------------------------
 Private Function LireFichier(strPath As String) As String
-    Dim fso As Object
-    Dim f   As Object
-    Set fso = CreateObject("Scripting.FileSystemObject")
-    Set f = fso.OpenTextFile(strPath, 1, False, -1)
-    LireFichier = f.ReadAll
-    f.Close
+    Dim stream As Object
+    Set stream = CreateObject("ADODB.Stream")
+    stream.Type = 2          ' texte
+    stream.Charset = "UTF-8"
+    stream.Open
+    stream.LoadFromFile strPath
+    LireFichier = stream.ReadText
+    stream.Close
 End Function
 
 ' ------------------------------------------------------------
