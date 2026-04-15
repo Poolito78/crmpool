@@ -180,53 +180,107 @@ Private Function TrouverNumeroDevis(strTexte As String) As String
 End Function
 
 ' ------------------------------------------------------------
-' Verifie si tous les mots-cles de la description sont dans le nom de fichier
-Private Function FichierCorrespond(strNomFichier As String, strRef As String) As Boolean
+' Extrait les mots-cles significatifs d'une description produit
+' - Garde les codes tout en MAJUSCULES (>= 2 chars) ex: "SNL", "LE", "SF41"
+' - Garde les mots communs de plus de 2 chars non stopwords
+Private Function ExtraireMots(strRef As String) As String()
+    Dim clean    As String
+    Dim parties() As String
+    Dim result() As String
+    Dim i As Integer, n As Integer
+    Dim motOrig As String, mot As String
+    Dim stopWords As String
+    Dim estCode As Boolean
+
+    stopWords = "|de|du|des|en|et|ou|un|une|par|sur|au|aux|kg|"
+
+    clean = strRef
+    clean = Replace(clean, "(", " ")
+    clean = Replace(clean, ")", " ")
+    clean = Replace(clean, ",", " ")
+    clean = Replace(clean, ".", " ")
+    clean = Replace(clean, "-", " ")
+    clean = Replace(clean, "_", " ")
+
+    parties = Split(clean, " ")
+    ReDim result(UBound(parties))
+    n = 0
+
+    For i = 0 To UBound(parties)
+        motOrig = Trim(parties(i))
+        If motOrig <> "" Then
+            mot = LCase(motOrig)
+            ' Code produit : tout en majuscules, >= 2 chars, pas numerique pur
+            estCode = (motOrig = UCase(motOrig)) And Len(motOrig) >= 2 And Not IsNumeric(motOrig)
+            If estCode Then
+                result(n) = mot
+                n = n + 1
+            ElseIf Len(mot) > 2 And Not IsNumeric(mot) And InStr(stopWords, "|" & mot & "|") = 0 Then
+                result(n) = mot
+                n = n + 1
+            End If
+        End If
+    Next i
+
+    If n = 0 Then
+        ReDim result(0)
+        result(0) = LCase(Trim(strRef))
+    Else
+        ReDim Preserve result(n - 1)
+    End If
+
+    ExtraireMots = result
+End Function
+
+' ------------------------------------------------------------
+' Correspondance par mots-cles (bExact=True : tous les mots, False : au moins 2/3+)
+Private Function FichierCorrespond(strNomFichier As String, strRef As String, bExact As Boolean) As Boolean
     Dim nomN   As String
-    Dim refN   As String
     Dim mots() As String
     Dim mot    As String
     Dim i      As Integer
+    Dim nTotal As Integer
+    Dim nFound As Integer
 
     FichierCorrespond = False
 
-    ' Normaliser : tout en minuscules, remplacer separateurs par espaces
     nomN = LCase(strNomFichier)
     nomN = Replace(nomN, "-", " ")
     nomN = Replace(nomN, "_", " ")
     nomN = Replace(nomN, ".", " ")
 
-    refN = LCase(Trim(strRef))
-    refN = Replace(refN, "(", " ")
-    refN = Replace(refN, ")", " ")
-    refN = Replace(refN, ",", " ")
-    refN = Replace(refN, "-", " ")
-    refN = Replace(refN, "_", " ")
+    mots = ExtraireMots(strRef)
+    nTotal = 0
+    nFound = 0
 
-    mots = Split(refN, " ")
-
-    ' Tous les mots significatifs (> 2 chars, pas une unite) doivent etre dans le nom
     For i = 0 To UBound(mots)
         mot = Trim(mots(i))
-        If Len(mot) > 2 And mot <> "kg" And mot <> "les" And mot <> "par" And mot <> "sur" Then
-            If InStr(nomN, mot) = 0 Then
-                Exit Function   ' mot absent -> pas de correspondance
-            End If
+        If mot <> "" Then
+            nTotal = nTotal + 1
+            If InStr(nomN, mot) > 0 Then nFound = nFound + 1
         End If
     Next i
 
-    FichierCorrespond = True
+    If nTotal = 0 Then Exit Function
+
+    If bExact Then
+        FichierCorrespond = (nFound = nTotal)
+    Else
+        ' Partiel : tous trouves, ou au moins 2 sur 3+
+        FichierCorrespond = (nFound = nTotal) Or (nTotal >= 3 And nFound >= 2)
+    End If
 End Function
 
 ' ------------------------------------------------------------
-Private Function ChercherDansDossier(strDossier As String, strRef As String) As String
+' Recherche recursive avec mode exact ou partiel
+Private Function ChercherRec(strDossier As String, strRef As String, bExact As Boolean) As String
     Dim fso    As Object
     Dim folder As Object
     Dim subF   As Object
     Dim fich   As Object
     Dim found  As String
 
-    ChercherDansDossier = ""
+    ChercherRec = ""
     Set fso = CreateObject("Scripting.FileSystemObject")
     If Not fso.FolderExists(strDossier) Then Exit Function
 
@@ -234,20 +288,29 @@ Private Function ChercherDansDossier(strDossier As String, strRef As String) As 
 
     For Each fich In folder.Files
         If LCase(Right(fich.Name, 4)) = ".pdf" Then
-            If FichierCorrespond(fich.Name, strRef) Then
-                ChercherDansDossier = fich.Path
+            If FichierCorrespond(fich.Name, strRef, bExact) Then
+                ChercherRec = fich.Path
                 Exit Function
             End If
         End If
     Next fich
 
     For Each subF In folder.SubFolders
-        found = ChercherDansDossier(subF.Path, strRef)
+        found = ChercherRec(subF.Path, strRef, bExact)
         If found <> "" Then
-            ChercherDansDossier = found
+            ChercherRec = found
             Exit Function
         End If
     Next subF
+End Function
+
+' ------------------------------------------------------------
+' Double passe : exact d'abord, puis partiel si rien trouve
+Private Function ChercherDansDossier(strDossier As String, strRef As String) As String
+    ChercherDansDossier = ChercherRec(strDossier, strRef, True)
+    If ChercherDansDossier = "" Then
+        ChercherDansDossier = ChercherRec(strDossier, strRef, False)
+    End If
 End Function
 
 ' ------------------------------------------------------------
