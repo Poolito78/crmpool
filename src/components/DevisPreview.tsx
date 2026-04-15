@@ -14,9 +14,10 @@ interface Props {
   initialShowRemise?: boolean;
   initialShowComposants?: boolean;
   onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean }) => void;
+  onPrint?: () => void;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, onOptionsChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, onOptionsChange, onPrint }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -60,6 +61,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }, 0);
 
   function handlePrint() {
+    onPrint?.();
     window.print();
   }
 
