@@ -3,10 +3,110 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, Download } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X } from 'lucide-react';
 import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+
+// ─── IndexedDB : persistance du handle de dossier ───────────────────────────
+
+const IDB_NAME = 'crmpool-settings';
+const IDB_STORE = 'handles';
+const IDB_KEY = 'pdf-folder';
+
+function openIdb(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, 1);
+    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function getStoredDirHandle(): Promise<FileSystemDirectoryHandle | null> {
+  try {
+    const db = await openIdb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
+      req.onsuccess = () => resolve((req.result as FileSystemDirectoryHandle) ?? null);
+      req.onerror = () => resolve(null);
+    });
+  } catch { return null; }
+}
+
+async function storeDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
+  try {
+    const db = await openIdb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* ignore */ }
+}
+
+async function clearStoredDirHandle(): Promise<void> {
+  try {
+    const db = await openIdb();
+    return new Promise((resolve) => {
+      const tx = db.transaction(IDB_STORE, 'readwrite');
+      tx.objectStore(IDB_STORE).delete(IDB_KEY);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => resolve();
+    });
+  } catch { /* ignore */ }
+}
+
+// ─── Sauvegarde PDF dans le dossier mémorisé ─────────────────────────────────
+
+async function savePdfToFolder(
+  fileName: string,
+  pdfBase64: string,
+  forcePickFolder = false,
+): Promise<{ ok: boolean; folderName?: string; error?: string }> {
+  // File System Access API dispo ?
+  if (!('showDirectoryPicker' in window)) {
+    return { ok: false, error: 'non_supported' };
+  }
+
+  try {
+    let dirHandle: FileSystemDirectoryHandle | null = null;
+
+    if (!forcePickFolder) {
+      dirHandle = await getStoredDirHandle();
+      if (dirHandle) {
+        // Vérifier / demander la permission
+        // @ts-expect-error – queryPermission est dans la spec mais pas encore dans les types TS
+        const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+        if (perm !== 'granted') dirHandle = null;
+      }
+    }
+
+    if (!dirHandle) {
+      // Ouvrir le sélecteur de dossier (requiert un geste utilisateur)
+      dirHandle = await (window as typeof window & { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> })
+        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+      await storeDirHandle(dirHandle);
+    }
+
+    const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+    const writable = await fileHandle.createWritable();
+    const bytes = Uint8Array.from(atob(pdfBase64), c => c.charCodeAt(0));
+    await writable.write(bytes);
+    await writable.close();
+
+    return { ok: true, folderName: dirHandle.name };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { ok: false, error: 'annulé' };
+    }
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ─── Composant ───────────────────────────────────────────────────────────────
 
 interface Props {
   open: boolean;
@@ -23,7 +123,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
   const [body, setBody] = useState('');
   const [generating, setGenerating] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
+  const [savedFolder, setSavedFolder] = useState<string | null>(null);
   const pdfBase64Ref = useRef<string | null>(null);
+
+  // Charger le nom du dossier mémorisé
+  useEffect(() => {
+    getStoredDirHandle().then(h => setSavedFolder(h?.name ?? null));
+  }, []);
 
   useEffect(() => {
     if (!devis || !open) {
@@ -54,7 +160,6 @@ Cordialement,
 [Votre entreprise]`
     );
 
-    // Génération automatique du PDF dès l'ouverture
     if (pdfContainerRef?.current) {
       setPdfReady(false);
       pdfBase64Ref.current = null;
@@ -66,38 +171,32 @@ Cordialement,
     if (!pdfContainerRef?.current || !devis) return;
     setGenerating(true);
     try {
-      const element = pdfContainerRef.current;
-      const canvas = await html2canvas(element, {
+      const canvas = await html2canvas(pdfContainerRef.current, {
         scale: 2,
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
       });
-
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      const imgH = (canvas.height * pw) / canvas.width;
 
       let yOffset = 0;
       let page = 0;
-      while (yOffset < imgHeight) {
+      while (yOffset < imgH) {
         if (page > 0) pdf.addPage();
-        const srcY = (yOffset / imgHeight) * canvas.height;
-        const srcH = Math.min((pageHeight / imgHeight) * canvas.height, canvas.height - srcY);
-        const sliceH = (srcH / canvas.height) * imgHeight;
-
-        const pageCanvas = document.createElement('canvas');
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = srcH;
-        pageCanvas.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-        pdf.addImage(pageCanvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, imgWidth, sliceH);
-
-        yOffset += pageHeight;
+        const srcY = (yOffset / imgH) * canvas.height;
+        const srcH = Math.min((ph / imgH) * canvas.height, canvas.height - srcY);
+        const sliceH = (srcH / canvas.height) * imgH;
+        const tmp = document.createElement('canvas');
+        tmp.width = canvas.width;
+        tmp.height = srcH;
+        tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+        pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
+        yOffset += ph;
         page++;
       }
-
       pdfBase64Ref.current = pdf.output('datauristring').split(',')[1];
       setPdfReady(true);
     } catch (err) {
@@ -107,27 +206,41 @@ Cordialement,
     }
   }
 
-  function downloadPdf() {
-    if (!pdfBase64Ref.current || !devis) return;
-    const link = document.createElement('a');
-    link.href = `data:application/pdf;base64,${pdfBase64Ref.current}`;
-    link.download = `Devis_${devis.numero}.pdf`;
-    link.click();
+  async function handlePickFolder() {
+    const result = await savePdfToFolder('test.pdf', btoa('test'), true);
+    if (result.ok) {
+      setSavedFolder(result.folderName ?? null);
+    }
   }
 
-  function handleSend() {
-    if (!to || !devis) return;
+  async function handleClearFolder() {
+    await clearStoredDirHandle();
+    setSavedFolder(null);
+  }
 
-    // 1. Télécharger le PDF automatiquement
+  async function handleSend() {
+    if (!to || !devis) return;
+    const fileName = `Devis_${devis.numero}.pdf`;
+
     if (pdfBase64Ref.current) {
-      downloadPdf();
+      // Essayer de sauvegarder dans le dossier mémorisé
+      const result = await savePdfToFolder(fileName, pdfBase64Ref.current);
+      if (result.ok) {
+        setSavedFolder(result.folderName ?? null);
+      } else if (result.error === 'non_supported') {
+        // Navigateur non compatible → téléchargement classique
+        const link = document.createElement('a');
+        link.href = `data:application/pdf;base64,${pdfBase64Ref.current}`;
+        link.download = fileName;
+        link.click();
+      }
+      // Si annulé par l'utilisateur → on continue quand même avec Outlook
     }
 
-    // 2. Ouvrir Outlook avec le mail pré-rempli
+    // Ouvrir Outlook
     const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailto, '_blank');
 
-    // 3. Statut → envoyé
     onSent();
     onOpenChange(false);
   }
@@ -143,6 +256,7 @@ Cordialement,
             Envoyer le devis {devis.numero}
           </DialogTitle>
         </DialogHeader>
+
         <div className="space-y-4 py-2">
           <div>
             <Label>Destinataire</Label>
@@ -161,28 +275,35 @@ Cordialement,
             />
           </div>
 
-          {/* Statut PDF */}
-          <div className="rounded-md border px-3 py-2 text-sm flex items-center gap-2">
-            {generating ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
-                <span className="text-muted-foreground">Génération du PDF…</span>
-              </>
-            ) : pdfReady ? (
-              <>
-                <FileText className="w-4 h-4 text-emerald-600" />
-                <span className="text-emerald-700 font-medium">PDF prêt</span>
-                <span className="text-muted-foreground">— sera téléchargé automatiquement, puis joignez-le dans Outlook</span>
-                <button onClick={downloadPdf} className="ml-auto flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground underline">
-                  <Download className="w-3 h-3" /> Télécharger
-                </button>
-              </>
-            ) : (
-              <>
-                <FileText className="w-4 h-4 text-muted-foreground" />
-                <span className="text-muted-foreground">PDF non disponible — Outlook s'ouvrira sans pièce jointe</span>
-              </>
-            )}
+          {/* Dossier de sauvegarde */}
+          <div className="rounded-md border px-3 py-2 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+              {savedFolder ? (
+                <>
+                  <span className="text-muted-foreground">Dossier :</span>
+                  <span className="font-medium truncate">{savedFolder}</span>
+                  <button onClick={handlePickFolder} className="ml-auto text-xs text-muted-foreground hover:text-foreground underline shrink-0">Changer</button>
+                  <button onClick={handleClearFolder} className="text-muted-foreground hover:text-destructive shrink-0" title="Oublier ce dossier"><X className="w-3.5 h-3.5" /></button>
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground text-xs">Aucun dossier configuré — le PDF sera téléchargé dans Téléchargements</span>
+                  <button onClick={handlePickFolder} className="ml-auto text-xs text-primary hover:underline shrink-0">Choisir un dossier</button>
+                </>
+              )}
+            </div>
+
+            {/* État PDF */}
+            <div className="flex items-center gap-2 text-sm border-t pt-2">
+              {generating ? (
+                <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Génération du PDF…</span></>
+              ) : pdfReady ? (
+                <><FileText className="w-4 h-4 text-emerald-600" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground">— sera sauvegardé automatiquement à l'envoi</span></>
+              ) : (
+                <><FileText className="w-4 h-4 text-muted-foreground" /><span className="text-muted-foreground">PDF non disponible</span></>
+              )}
+            </div>
           </div>
         </div>
 
