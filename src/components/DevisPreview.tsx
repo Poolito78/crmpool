@@ -132,7 +132,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
-            <img src={logoIsofloor} alt="ISOFLOOR" className="h-16 mb-2" />
+            <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
             <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
             <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
             <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
