@@ -102,7 +102,7 @@ Cordialement,
       const refs = devis.lignes
         .map(l => produits.find(p => p.id === l.produitId))
         .filter(Boolean)
-        .map(p => p!.reference || p!.description || '')
+        .map(p => p!.description || p!.reference || '')
         .filter(Boolean);
       if (refs.length > 0) {
         const refsContent = refs.join('\n');
