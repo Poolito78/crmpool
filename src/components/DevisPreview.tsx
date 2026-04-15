@@ -1,8 +1,10 @@
-import { useState, Fragment } from 'react';
+import { useState, useRef, Fragment } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer, Pencil } from 'lucide-react';
+import { Printer, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import logoIsofloor from '@/assets/logo-isofloor.png';
+import { savePdfFromElement, getStoredDirHandle, writeFileToFolder } from '@/lib/pdfFolder';
+import { toast } from 'sonner';
 
 interface Props {
   devis: Devis;
@@ -21,6 +23,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
+  const [printing, setPrinting] = useState(false);
+  const printAreaRef = useRef<HTMLDivElement>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
@@ -60,12 +64,49 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     return sum + (prod?.poids || 0) * l.quantite;
   }, 0);
 
-  function handlePrint() {
-    if (onPrint) {
-      // Laisser le parent mettre à jour le statut + déclencher l'impression
-      onPrint();
-    } else {
-      window.print();
+  async function handlePrint() {
+    if (!printAreaRef.current) return;
+    setPrinting(true);
+    try {
+      const fileName = `Devis_${devis.numero}.pdf`;
+
+      // Vérifier si un dossier est configuré
+      const dirHandle = await getStoredDirHandle();
+      if (dirHandle) {
+        const res = await savePdfFromElement(printAreaRef.current, fileName);
+        toast.success(`PDF sauvegardé${res.folderName ? ` dans "${res.folderName}"` : ''}`, {
+          description: fileName,
+          duration: 6000,
+        });
+      } else {
+        // Aucun dossier configuré — demander
+        const res = await writeFileToFolder(
+          fileName,
+          await (async () => {
+            const { generatePdfFromElement } = await import('@/lib/pdfFolder');
+            const b64 = await generatePdfFromElement(printAreaRef.current!);
+            return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+          })(),
+        );
+        if (res.ok) {
+          toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
+        } else {
+          // Fallback téléchargement
+          const { savePdfFromElement: save } = await import('@/lib/pdfFolder');
+          await save(printAreaRef.current!, fileName);
+          toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
+        }
+      }
+
+      // Mettre à jour le statut
+      if (onPrint) {
+        onPrint();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erreur lors de la génération du PDF');
+    } finally {
+      setPrinting(false);
     }
   }
 
@@ -93,14 +134,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <Pencil className="w-4 h-4 mr-2" /> Modifier
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={handlePrint}>
-            <Printer className="w-4 h-4 mr-2" /> Imprimer / PDF
+          <Button variant="outline" size="sm" onClick={handlePrint} disabled={printing}>
+            {printing
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Génération…</>
+              : <><Printer className="w-4 h-4 mr-2" /> Imprimer / PDF</>
+            }
           </Button>
         </div>
       )}
 
       {/* Devis document */}
-      <div className="px-8 pb-8 print:px-0 max-w-[800px] mx-auto text-sm" id="devis-print">
+      <div className="px-8 pb-8 print:px-0 max-w-[800px] mx-auto text-sm" id="devis-print" ref={printAreaRef}>
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>

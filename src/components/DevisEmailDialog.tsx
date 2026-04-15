@@ -3,96 +3,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, Copy } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X } from 'lucide-react';
 import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-
-// ─── IndexedDB : persistance du dossier mémorisé ─────────────────────────────
-
-const IDB_NAME = 'crmpool-settings';
-const IDB_STORE = 'handles';
-const IDB_KEY = 'pdf-folder';
-
-function openIdb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(IDB_NAME, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function getStoredDirHandle(): Promise<FileSystemDirectoryHandle | null> {
-  try {
-    const db = await openIdb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE, 'readonly');
-      const req = tx.objectStore(IDB_STORE).get(IDB_KEY);
-      req.onsuccess = () => resolve((req.result as FileSystemDirectoryHandle) ?? null);
-      req.onerror = () => resolve(null);
-    });
-  } catch { return null; }
-}
-
-async function storeDirHandle(handle: FileSystemDirectoryHandle): Promise<void> {
-  try {
-    const db = await openIdb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).put(handle, IDB_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  } catch { /* ignore */ }
-}
-
-async function clearStoredDirHandle(): Promise<void> {
-  try {
-    const db = await openIdb();
-    return new Promise((resolve) => {
-      const tx = db.transaction(IDB_STORE, 'readwrite');
-      tx.objectStore(IDB_STORE).delete(IDB_KEY);
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => resolve();
-    });
-  } catch { /* ignore */ }
-}
-
-type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
-
-async function writePdfToFolder(
-  fileName: string,
-  pdfBytes: Uint8Array,
-  forcePickFolder = false,
-): Promise<{ ok: boolean; folderName?: string }> {
-  if (!('showDirectoryPicker' in window)) return { ok: false };
-  try {
-    let dirHandle = await getStoredDirHandle();
-    if (!forcePickFolder && dirHandle) {
-      // @ts-expect-error – requestPermission pas encore dans les types DOM
-      const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
-      if (perm !== 'granted') dirHandle = null;
-    }
-    if (!dirHandle || forcePickFolder) {
-      dirHandle = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
-        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-      await storeDirHandle(dirHandle);
-    }
-    const fh = await dirHandle.getFileHandle(fileName, { create: true });
-    const writable = await fh.createWritable();
-    await writable.write(pdfBytes);
-    await writable.close();
-    return { ok: true, folderName: dirHandle.name };
-  } catch (err: unknown) {
-    if (err instanceof Error && err.name === 'AbortError') return { ok: false };
-    console.error(err);
-    return { ok: false };
-  }
-}
-
-// ─── Composant principal ──────────────────────────────────────────────────────
+import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 
 interface Props {
   open: boolean;
@@ -110,7 +24,6 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
   const [generating, setGenerating] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
   const [savedFolder, setSavedFolder] = useState<string | null>(null);
-  const [lastSavedFile, setLastSavedFile] = useState<string | null>(null);
   const pdfBase64Ref = useRef<string | null>(null);
 
   useEffect(() => {
@@ -121,7 +34,6 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, on
     if (!devis || !open) {
       setPdfReady(false);
       pdfBase64Ref.current = null;
-      setLastSavedFile(null);
       return;
     }
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
@@ -157,26 +69,7 @@ Cordialement,
     if (!pdfContainerRef?.current || !devis) return;
     setGenerating(true);
     try {
-      const canvas = await html2canvas(pdfContainerRef.current, {
-        scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff',
-      });
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      const imgH = (canvas.height * pw) / canvas.width;
-      let yOffset = 0, page = 0;
-      while (yOffset < imgH) {
-        if (page > 0) pdf.addPage();
-        const srcY = (yOffset / imgH) * canvas.height;
-        const srcH = Math.min((ph / imgH) * canvas.height, canvas.height - srcY);
-        const sliceH = (srcH / canvas.height) * imgH;
-        const tmp = document.createElement('canvas');
-        tmp.width = canvas.width; tmp.height = srcH;
-        tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-        pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
-        yOffset += ph; page++;
-      }
-      pdfBase64Ref.current = pdf.output('datauristring').split(',')[1];
+      pdfBase64Ref.current = await generatePdfFromElement(pdfContainerRef.current);
       setPdfReady(true);
     } catch (err) {
       console.error('Erreur génération PDF:', err);
@@ -186,52 +79,38 @@ Cordialement,
   }
 
   async function handlePickFolder() {
-    const dummy = new Uint8Array(0);
-    const res = await writePdfToFolder('_init', dummy, true);
+    const res = await writeFileToFolder('_init', new Uint8Array(0), true);
     if (res.ok) setSavedFolder(res.folderName ?? null);
   }
 
   async function handleSend() {
     if (!to || !devis) return;
-
     const pdfFileName = `Devis_${devis.numero}.pdf`;
 
-    // 1. Sauvegarder le PDF dans le dossier mémorisé (ou télécharger en fallback)
     if (pdfBase64Ref.current) {
       const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
-      const res = await writePdfToFolder(pdfFileName, pdfBytes);
-      if (res.ok) {
-        setSavedFolder(res.folderName ?? null);
-        setLastSavedFile(pdfFileName);
-      } else {
-        // Fallback : téléchargement classique
+      const res = await writeFileToFolder(pdfFileName, pdfBytes);
+      if (res.ok) setSavedFolder(res.folderName ?? null);
+      else {
+        // Fallback téléchargement classique
         const url = URL.createObjectURL(new Blob([pdfBytes], { type: 'application/pdf' }));
         const a = document.createElement('a'); a.href = url; a.download = pdfFileName; a.click();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
       }
     }
 
-    // 2. Ouvrir Outlook via mailto (s'ouvre directement dans Outlook)
     const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
     window.open(mailto, '_blank');
 
-    // 3. Statut → envoyé
     onSent();
     onOpenChange(false);
 
-    // 4. Toast persistant avec le nom du fichier à joindre
     if (pdfBase64Ref.current) {
-      toast.info(
-        `📎 Joignez le PDF dans Outlook : ${pdfFileName}`,
-        {
-          description: savedFolder ? `Sauvegardé dans le dossier "${savedFolder}"` : 'Vérifie ton dossier Téléchargements',
-          duration: 10000,
-          action: {
-            label: 'Copier le nom',
-            onClick: () => navigator.clipboard.writeText(pdfFileName),
-          },
-        }
-      );
+      toast.info(`📎 Joignez le PDF dans Outlook : ${pdfFileName}`, {
+        description: savedFolder ? `Sauvegardé dans "${savedFolder}"` : 'Vérifie ton dossier Téléchargements',
+        duration: 10000,
+        action: { label: 'Copier le nom', onClick: () => navigator.clipboard.writeText(pdfFileName) },
+      });
     }
   }
 
@@ -265,7 +144,6 @@ Cordialement,
             />
           </div>
 
-          {/* Dossier + état PDF */}
           <div className="rounded-md border px-3 py-2 space-y-2 text-sm">
             <div className="flex items-center gap-2">
               <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -274,7 +152,7 @@ Cordialement,
                   <span className="text-muted-foreground">Dossier PDF :</span>
                   <span className="font-medium truncate">{savedFolder}</span>
                   <button onClick={handlePickFolder} className="ml-auto text-xs text-muted-foreground hover:text-foreground underline shrink-0">Changer</button>
-                  <button onClick={async () => { await clearStoredDirHandle(); setSavedFolder(null); }} className="text-muted-foreground hover:text-destructive shrink-0" title="Oublier"><X className="w-3.5 h-3.5" /></button>
+                  <button onClick={async () => { await clearStoredDirHandle(); setSavedFolder(null); }} className="text-muted-foreground hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
                 </>
               ) : (
                 <>
@@ -283,7 +161,6 @@ Cordialement,
                 </>
               )}
             </div>
-
             <div className="flex items-center gap-2 border-t pt-2">
               {generating ? (
                 <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /><span className="text-muted-foreground">Génération du PDF…</span></>
@@ -293,10 +170,9 @@ Cordialement,
                 <><FileText className="w-4 h-4 text-muted-foreground" /><span className="text-muted-foreground">PDF non disponible</span></>
               )}
             </div>
-
             {pdfReady && (
               <p className="text-xs text-amber-600 border-t pt-2">
-                ⚠️ Outlook s'ouvrira sans pièce jointe — joignez le PDF depuis le dossier <strong>{savedFolder ?? 'Téléchargements'}</strong>
+                ⚠️ Outlook s'ouvrira sans pièce jointe — joignez le PDF depuis <strong>{savedFolder ?? 'Téléchargements'}</strong>
               </p>
             )}
           </div>
