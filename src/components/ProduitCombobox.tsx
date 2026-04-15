@@ -11,7 +11,7 @@ interface ProduitComboboxProps {
 }
 
 export default function ProduitCombobox({ produits, value, onSelect, autoFocus }: ProduitComboboxProps) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(!!autoFocus);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -19,12 +19,6 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
   const listRef = useRef<HTMLDivElement>(null);
 
   const selected = produits.find(p => p.id === value);
-
-  useEffect(() => {
-    if (autoFocus) {
-      setTimeout(() => { inputRef.current?.focus(); setOpen(true); }, 50);
-    }
-  }, [autoFocus]);
 
   const filtered = useMemo(() => {
     if (!query) return produits;
