@@ -157,8 +157,12 @@ export default function Devis() {
     toast.success('Devis dupliqué');
   }
 
+  const [newLigneId, setNewLigneId] = useState<string | null>(null);
+
   function addLigne() {
-    setLignes(prev => [...prev, { id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    const id = generateId();
+    setLignes(prev => [...prev, { id, description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    setNewLigneId(id);
   }
 
   function updateLigne(id: string, field: string, value: any) {
@@ -629,7 +633,8 @@ export default function Devis() {
                             <ProduitCombobox
                               produits={produits}
                               value={l.produitId || ''}
-                              onSelect={(produitId) => produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined)}
+                              onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }}
+                              autoFocus={l.id === newLigneId}
                             />
                           </div>
                           {l.produitId && (
