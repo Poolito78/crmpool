@@ -304,10 +304,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <tbody>
                 {/* Ligne récapitulatif surface + totaux */}
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
-                  <td className="py-1.5 px-2 text-right text-primary font-bold not-italic">
-                    {hideControls ? (
-                      <span>{surfaceGlobale > 0 ? surfaceGlobale : '—'} m²</span>
-                    ) : (
+                  <td className="py-1.5 px-2">
+                    {!hideControls && (
                       <>
                         <input
                           type="number" min={0} step={1}
@@ -316,8 +314,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           className="w-14 text-right border border-border rounded px-1 py-0.5 bg-background print:hidden font-normal text-foreground"
                           placeholder="m²"
                         />
-                        <span className="hidden print:inline">{surfaceGlobale}</span>
-                        <span className="ml-1 font-bold text-primary">m²</span>
+                        <span className="hidden print:inline text-primary font-bold">{surfaceGlobale} m²</span>
                       </>
                     )}
                   </td>
