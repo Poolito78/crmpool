@@ -212,7 +212,11 @@ Private Function ExtraireMots(strRef As String) As String()
             mot = LCase(motOrig)
             ' Code produit : tout en majuscules, >= 2 chars, pas numerique pur
             estCode = (motOrig = UCase(motOrig)) And Len(motOrig) >= 2 And Not IsNumeric(motOrig)
-            If estCode Then
+            ' Nombre de 3+ chiffres = code modele produit (ex: 319, 1000, 405)
+            Dim estNombreProduit As Boolean
+            estNombreProduit = IsNumeric(motOrig) And Len(motOrig) >= 3
+
+            If estCode Or estNombreProduit Then
                 result(n) = mot
                 n = n + 1
             ElseIf Len(mot) > 2 And Not IsNumeric(mot) And InStr(stopWords, "|" & mot & "|") = 0 Then
