@@ -727,6 +727,12 @@ export default function Devis() {
                   </div>
                 ))}
               </div>
+              <button
+                onClick={addLigne}
+                className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+              >
+                <Plus className="w-4 h-4" /> Ajouter une ligne
+              </button>
             </div>
 
             {/* Frais de port */}
