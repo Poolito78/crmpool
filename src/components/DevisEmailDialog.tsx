@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle } from 'lucide-react';
-import { type Devis, type Client, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,11 +14,12 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   devis: Devis | null;
   client?: Client;
+  produits?: Produit[];
   onSent: () => void;
   pdfContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
-export default function DevisEmailDialog({ open, onOpenChange, devis, client, onSent, pdfContainerRef }: Props) {
+export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], onSent, pdfContainerRef }: Props) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -92,9 +93,24 @@ Cordialement,
     const pdfFileName = `Devis_${devis.numero}.pdf`;
     const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
 
-    // 1. Sauvegarder dans le dossier Préco
+    // 1. Sauvegarder PDF dans le dossier Préco
     const folderRes = await writeFileToFolder(pdfFileName, pdfBytes);
     if (folderRes.ok) setSavedFolder(folderRes.folderName ?? null);
+
+    // 1b. Sauvegarder les références produits pour la macro VBA Outlook
+    if (folderRes.ok && devis && produits.length > 0) {
+      const refs = devis.lignes
+        .map(l => produits.find(p => p.id === l.produitId))
+        .filter(Boolean)
+        .map(p => p!.reference || p!.description || '')
+        .filter(Boolean);
+      if (refs.length > 0) {
+        const refsContent = refs.join('\n');
+        const refsBytes = new TextEncoder().encode(refsContent);
+        const refsFileName = `Devis_${devis.numero}_refs.txt`;
+        await writeFileToFolder(refsFileName, refsBytes);
+      }
+    }
 
     // 2. Envoyer via Resend (edge function) avec PDF en pièce jointe
     try {

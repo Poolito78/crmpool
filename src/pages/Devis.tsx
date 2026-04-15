@@ -919,6 +919,7 @@ export default function Devis() {
         onOpenChange={(open) => { if (!open) setEmailDevis(null); }}
         devis={emailDevis}
         client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
+        produits={produits}
         pdfContainerRef={pdfContainerRef}
         onSent={() => {
           if (emailDevis) {
