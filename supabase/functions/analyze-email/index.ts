@@ -5,36 +5,36 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-async function callClaude(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-      "content-type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-3-5-haiku-20241022",
+      model: "llama-3.3-70b-versatile",
       max_tokens: 1024,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }],
-      tools: [tool],
-      tool_choice: { type: "tool", name: tool.name },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+      tools: [{ type: "function", function: tool }],
+      tool_choice: { type: "function", function: { name: tool.name } },
     }),
   });
 
   if (!response.ok) {
     if (response.status === 429) throw new Error("Trop de requêtes, réessayez dans quelques instants.");
-    if (response.status === 402 || response.status === 529) throw new Error("Crédits AI insuffisants.");
     const t = await response.text();
-    console.error("Anthropic API error:", response.status, t);
+    console.error("Groq API error:", response.status, t);
     throw new Error("Erreur d'analyse AI");
   }
 
   const data = await response.json();
-  const toolUse = data.content?.find((b: any) => b.type === "tool_use");
-  if (!toolUse) throw new Error("Impossible d'extraire les données");
-  return toolUse.input;
+  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+  if (!toolCall) throw new Error("Impossible d'extraire les données");
+  return JSON.parse(toolCall.function.arguments);
 }
 
 serve(async (req) => {
@@ -42,8 +42,8 @@ serve(async (req) => {
 
   try {
     const body = await req.json();
-    const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
+    const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
+    if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
     // ── Mode extraction de contact ──────────────────────────────────────────
     if (body.action === "extract-contact") {
@@ -66,7 +66,7 @@ RÈGLES :
       const tool = {
         name: "extract_contact_data",
         description: `Extraire les coordonnées d'un ${entityLabel} depuis un email`,
-        input_schema: {
+        parameters: {
           type: "object",
           properties: {
             nom: { type: "string" },
@@ -82,7 +82,7 @@ RÈGLES :
         },
       };
 
-      const result = await callClaude(systemPrompt, `Extrais les coordonnées du ${entityLabel} depuis ce texte :\n\n${emailText}`, tool, ANTHROPIC_API_KEY);
+      const result = await callGroq(systemPrompt, `Extrais les coordonnées du ${entityLabel} depuis ce texte :\n\n${emailText}`, tool, GROQ_API_KEY);
       return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
@@ -110,7 +110,7 @@ ${produitsList}`;
     const tool = {
       name: "extract_devis_data",
       description: "Extraire les données d'un devis à partir d'un email client",
-      input_schema: {
+      parameters: {
         type: "object",
         properties: {
           clientId: { type: "string", description: "ID du client identifié, vide si non trouvé" },
@@ -135,7 +135,7 @@ ${produitsList}`;
       },
     };
 
-    const result = await callClaude(systemPrompt, `Analyse ce message et extrais le client et les produits demandés :\n\n${emailText}`, tool, ANTHROPIC_API_KEY);
+    const result = await callGroq(systemPrompt, `Analyse ce message et extrais le client et les produits demandés :\n\n${emailText}`, tool, GROQ_API_KEY);
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e: any) {
