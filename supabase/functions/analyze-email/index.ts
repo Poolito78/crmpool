@@ -89,8 +89,27 @@ RÈGLES :
     // ── Mode analyse devis ──────────────────────────────────────────────────
     const { emailText, clients, produits } = body;
 
-    const clientsList = clients.map((c: any) => `- ID: "${c.id}" | Nom: "${c.nom}" | Société: "${c.societe || ''}" | Email: "${c.email}"`).join("\n");
-    const produitsList = produits.map((p: any) => `- ID: "${p.id}" | Réf: "${p.reference}" | Description: "${p.description}" | Prix HT: ${p.prixHT}€ | TVA: ${p.tva}% | Unité: "${p.unite}"`).join("\n");
+    // Pré-filtrer produits par mots-clés de l'email pour rester sous 6000 tokens (limite Groq)
+    const emailLower = String(emailText).toLowerCase();
+    const emailMots = emailLower.split(/[\s,;.!?()]+/).filter((w: string) => w.length >= 3);
+
+    const produitsFiltered = (produits as any[]).filter((p: any) => {
+      const ref = String(p.reference || '').toLowerCase();
+      const desc = String(p.description || '').toLowerCase();
+      return emailMots.some((m: string) => ref.includes(m) || desc.includes(m));
+    });
+    const produitsLimites = produitsFiltered.length >= 2
+      ? produitsFiltered.slice(0, 25)
+      : (produits as any[]).slice(0, 25);
+
+    const clientsLimites = (clients as any[]).slice(0, 25);
+
+    const clientsList = clientsLimites.map((c: any) =>
+      `- ID:"${c.id}" Nom:"${c.nom}" Soc:"${(c.societe||'').substring(0,30)}" Email:"${c.email}"`
+    ).join("\n");
+    const produitsList = produitsLimites.map((p: any) =>
+      `- ID:"${p.id}" Réf:"${p.reference}" Desc:"${String(p.description).substring(0, 45)}" U:${p.unite}`
+    ).join("\n");
 
     const systemPrompt = `Tu es un assistant spécialisé dans l'analyse de demandes clients pour un CRM de vente de produits (peintures, résines, granulats, etc.).
 À partir du texte fourni, identifie le client et les produits demandés.
