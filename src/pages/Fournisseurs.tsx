@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerDateEcheance, type Fournisseur } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload, Download } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, Download, Mail } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
@@ -73,6 +74,7 @@ export default function Fournisseurs() {
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const filtered = fournisseurs.filter(f =>
     [f.nom, f.email, f.societe, f.telephone].some(v => v?.toLowerCase().includes(search.toLowerCase()))
@@ -84,6 +86,24 @@ export default function Fournisseurs() {
   }, [importPreview]);
 
   function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
+
+  function handleEmailExtracted(contact: ExtractedContact) {
+    setEditing(null);
+    setForm({
+      nom: contact.nom,
+      email: contact.email,
+      telephone: contact.telephone,
+      adresse: contact.adresse,
+      ville: contact.ville,
+      codePostal: contact.codePostal,
+      societe: contact.societe,
+      notes: contact.notes,
+      francoPort: 0,
+      coutTransport: 0,
+      delaiReglement: '45j FDM',
+    });
+    setDialogOpen(true);
+  }
   function openEdit(f: Fournisseur) {
     setEditing(f);
     setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
@@ -228,9 +248,10 @@ export default function Fournisseurs() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code postal': f.codePostal, 'Franco port': f.francoPort, 'Coût transport': f.coutTransport, Notes: f.notes || '' })), 'fournisseurs', 'Fournisseurs')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+          <Button variant="outline" onClick={() => setEmailDialogOpen(true)}><Mail className="w-4 h-4 mr-2" /> Depuis email</Button>
           <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
         </div>
       </div>
@@ -334,6 +355,11 @@ export default function Fournisseurs() {
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau fournisseur'}</DialogTitle></DialogHeader>
+          {!editing && (
+            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
+              <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
+            </Button>
+          )}
           <div className="grid gap-4 py-2">
             {[
               { key: 'societe', label: 'Société *' },
@@ -388,6 +414,13 @@ export default function Fournisseurs() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EmailToContactDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        type="fournisseur"
+        onExtracted={handleEmailExtracted}
+      />
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">

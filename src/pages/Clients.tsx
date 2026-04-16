@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
+import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
@@ -97,6 +98,7 @@ export default function Clients() {
   const [importSelectedCols, setImportSelectedCols] = useState<Set<string>>(new Set());
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
   const villes = useMemo(() => Array.from(new Set(clients.map(c => c.ville).filter(Boolean))).sort(), [clients]);
   const departements = useMemo(() => Array.from(new Set(clients.map(c => c.codePostal?.substring(0, 2)).filter(Boolean))).sort(), [clients]);
@@ -121,6 +123,22 @@ export default function Clients() {
   function openNew() {
     setEditingClient(null);
     setForm(emptyClient);
+    setDialogOpen(true);
+  }
+
+  function handleEmailExtracted(contact: ExtractedContact) {
+    setEditingClient(null);
+    setForm({
+      ...emptyClient,
+      nom: contact.nom,
+      email: contact.email,
+      telephone: contact.telephone,
+      adresse: contact.adresse,
+      ville: contact.ville,
+      codePostal: contact.codePostal,
+      societe: contact.societe,
+      notes: contact.notes,
+    });
     setDialogOpen(true);
   }
 
@@ -315,7 +333,7 @@ export default function Clients() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="relative">
             <Filter className="w-4 h-4 mr-2" /> Filtres
             {activeFilterCount > 0 && (
@@ -325,6 +343,7 @@ export default function Clients() {
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
+          <Button variant="outline" onClick={() => setEmailDialogOpen(true)}><Mail className="w-4 h-4 mr-2" /> Depuis email</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
         </div>
       </div>
@@ -549,6 +568,13 @@ export default function Clients() {
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun client trouvé</p>}
       </div>
 
+      <EmailToContactDialog
+        open={emailDialogOpen}
+        onOpenChange={setEmailDialogOpen}
+        type="client"
+        onExtracted={handleEmailExtracted}
+      />
+
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -572,6 +598,11 @@ export default function Clients() {
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
+          {!editingClient && (
+            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
+              <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
+            </Button>
+          )}
           <div className="grid gap-4 py-2">
             {[
               { key: 'nom', label: 'Nom *', type: 'text' },
