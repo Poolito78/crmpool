@@ -97,6 +97,14 @@ export interface ProduitFournisseur {
   estPrioritaire: boolean;
 }
 
+export interface LigneReception {
+  produitId: string;
+  description: string;
+  reference: string;
+  quantiteCommandee: number;
+  quantiteRecue: number;
+}
+
 export interface CommandeFournisseur {
   id: string;
   devisId?: string;
@@ -110,6 +118,9 @@ export interface CommandeFournisseur {
   totalTTC: number;
   notes?: string;
   dateEcheance?: string;
+  dateReception?: string;
+  dateLivraisonClientPrevue?: string;
+  lignesRecues?: LigneReception[];
 }
 
 export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_envoyee' | 'livre' | 'facture' | 'payee';
@@ -386,6 +397,9 @@ function dbToCommandeFournisseur(r: any): CommandeFournisseur {
     totalTTC: Number(r.total_ttc) || 0,
     notes: r.notes || undefined,
     dateEcheance: r.date_echeance || undefined,
+    dateReception: r.date_reception || undefined,
+    dateLivraisonClientPrevue: r.date_livraison_client_prevue || undefined,
+    lignesRecues: r.lignes_recues ? (Array.isArray(r.lignes_recues) ? r.lignes_recues : JSON.parse(r.lignes_recues)) : undefined,
   };
 }
 
@@ -404,6 +418,9 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
     total_ttc: cf.totalTTC,
     notes: cf.notes || null,
     date_echeance: cf.dateEcheance || null,
+    date_reception: cf.dateReception || null,
+    date_livraison_client_prevue: cf.dateLivraisonClientPrevue || null,
+    lignes_recues: cf.lignesRecues && cf.lignesRecues.length > 0 ? cf.lignesRecues as any : null,
   };
 }
 

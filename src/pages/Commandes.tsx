@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { type CommandeFournisseur, formatMontant, formatDate } from '@/lib/store';
+import { type CommandeFournisseur, type LigneReception, formatMontant, formatDate } from '@/lib/store';
 import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import CommandeFournisseurEditDialog from '@/components/CommandeFournisseurEditDialog';
 import CommandeFournisseurPreviewDialog from '@/components/CommandeFournisseurPreviewDialog';
 import CommandeEmailDialog from '@/components/CommandeEmailDialog';
+import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 
 const statutConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
   en_attente: { label: 'En attente', color: 'bg-warning/10 text-warning', icon: Clock },
@@ -27,6 +28,7 @@ export default function Commandes() {
   const [editCommande, setEditCommande] = useState<CommandeFournisseur | null>(null);
   const [previewCommande, setPreviewCommande] = useState<CommandeFournisseur | null>(null);
   const [emailTarget, setEmailTarget] = useState<any>(null);
+  const [receptionCommande, setReceptionCommande] = useState<CommandeFournisseur | null>(null);
 
   const filtered = commandesFournisseur
     .filter(cf => {
@@ -40,8 +42,23 @@ export default function Commandes() {
     .sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 
   function updateStatut(id: string, statut: CommandeFournisseur['statut']) {
+    if (statut === 'recue') {
+      const cf = commandesFournisseur.find(c => c.id === id);
+      if (cf) { setReceptionCommande(cf); return; }
+    }
     updateCommandesFournisseur(prev => prev.map(cf => cf.id === id ? { ...cf, statut } : cf));
     toast.success('Statut mis à jour');
+  }
+
+  function handleReception(data: { dateReception: string; dateLivraisonClientPrevue: string; dateEcheance: string; lignesRecues: LigneReception[] }) {
+    if (!receptionCommande) return;
+    updateCommandesFournisseur(prev => prev.map(cf =>
+      cf.id === receptionCommande.id
+        ? { ...cf, statut: 'recue' as const, ...data }
+        : cf
+    ));
+    setReceptionCommande(null);
+    toast.success('Réception enregistrée');
   }
 
   function handleDelete() {
@@ -132,6 +149,22 @@ export default function Commandes() {
                   <p className="text-xs text-muted-foreground mt-1">
                     {lignes.length} produit{lignes.length > 1 ? 's' : ''} : {lignes.map(l => `${l.description} (×${l.quantite})`).join(', ')}
                   </p>
+                  {cf.statut === 'recue' && (
+                    <div className="flex flex-wrap gap-2 mt-1.5">
+                      {cf.dateReception && (
+                        <span className="text-xs text-success">Reçu le {formatDate(cf.dateReception)}</span>
+                      )}
+                      {cf.dateLivraisonClientPrevue && (
+                        <span className="text-xs text-muted-foreground">• Livraison client : {formatDate(cf.dateLivraisonClientPrevue)}</span>
+                      )}
+                      {cf.dateEcheance && (
+                        <span className="text-xs text-muted-foreground">• Règlement : {formatDate(cf.dateEcheance)}</span>
+                      )}
+                      {cf.lignesRecues && cf.lignesRecues.some(l => l.quantiteRecue < l.quantiteCommandee) && (
+                        <span className="text-xs text-warning font-medium">⚠ Livraison incomplète</span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="text-right">
@@ -200,6 +233,15 @@ export default function Commandes() {
             setPreviewCommande(null);
           }
         }}
+      />
+
+      {/* Reception Dialog */}
+      <ReceptionCommandeDialog
+        open={!!receptionCommande}
+        onOpenChange={open => { if (!open) setReceptionCommande(null); }}
+        commande={receptionCommande}
+        fournisseur={receptionCommande ? fournisseurs.find(f => f.id === receptionCommande.fournisseurId) : undefined}
+        onConfirm={handleReception}
       />
 
       {/* Email Dialog */}
