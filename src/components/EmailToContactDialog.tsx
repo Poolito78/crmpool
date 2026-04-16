@@ -72,8 +72,8 @@ export default function EmailToContactDialog({ open, onOpenChange, type, onExtra
     }
     setLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('extract-contact', {
-        body: { emailText, type },
+      const { data, error } = await supabase.functions.invoke('analyze-email', {
+        body: { action: 'extract-contact', emailText, type },
       });
       if (error) throw new Error(error.message);
       if (data.error) throw new Error(data.error);

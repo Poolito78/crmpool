@@ -251,7 +251,6 @@ export default function Fournisseurs() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code postal': f.codePostal, 'Franco port': f.francoPort, 'Coût transport': f.coutTransport, Notes: f.notes || '' })), 'fournisseurs', 'Fournisseurs')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button variant="outline" onClick={() => setEmailDialogOpen(true)}><Mail className="w-4 h-4 mr-2" /> Depuis email</Button>
           <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
         </div>
       </div>
