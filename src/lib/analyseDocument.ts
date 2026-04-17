@@ -1,0 +1,137 @@
+import * as pdfjsLib from 'pdfjs-dist';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+  'pdfjs-dist/build/pdf.worker.mjs',
+  import.meta.url
+).toString();
+
+export type TypeDocument =
+  | 'commande_fournisseur'
+  | 'bon_livraison'
+  | 'devis_client'
+  | 'commande_client'
+  | 'facture_fournisseur'
+  | 'facture_client'
+  | 'autre';
+
+export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
+  commande_fournisseur: { label: 'Commande fournisseur', color: 'bg-info/10 text-info' },
+  bon_livraison:        { label: 'Bon de livraison',      color: 'bg-accent/10 text-accent' },
+  devis_client:         { label: 'Devis client',          color: 'bg-primary/10 text-primary' },
+  commande_client:      { label: 'Commande client',       color: 'bg-success/10 text-success' },
+  facture_fournisseur:  { label: 'Facture fournisseur',   color: 'bg-warning/10 text-warning' },
+  facture_client:       { label: 'Facture client',        color: 'bg-warning/10 text-warning' },
+  autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
+};
+
+export interface LigneAnalysee {
+  reference: string;
+  description: string;
+  quantite: number;
+  prixUnitaireHT?: number;
+  tva?: number;
+}
+
+export interface DocumentAnalysis {
+  typeDocument: TypeDocument;
+  numeroDocument?: string;
+  nomPartenaire?: string;
+  referencePartenaire?: string;
+  dateDocument?: string;
+  dateLivraisonPrevue?: string;
+  dateEcheance?: string;
+  lignes: LigneAnalysee[];
+  totalHT?: number;
+  totalTTC?: number;
+  notes?: string;
+}
+
+const PROMPT = `Tu es un assistant spécialisé dans l'extraction de données depuis des documents commerciaux (commandes fournisseur, bons de livraison, devis, commandes client, factures, emails commerciaux).
+
+Identifie le type de document et extrait les informations. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
+
+{
+  "typeDocument": "commande_fournisseur | bon_livraison | devis_client | commande_client | facture_fournisseur | facture_client | autre",
+  "numeroDocument": "numéro du document ou null",
+  "nomPartenaire": "nom du fournisseur OU du client selon le type, ou null",
+  "referencePartenaire": "référence interne du partenaire (leur propre n° de commande/devis) ou null",
+  "dateDocument": "date au format YYYY-MM-DD ou null",
+  "dateLivraisonPrevue": "date de livraison prévue au format YYYY-MM-DD ou null",
+  "dateEcheance": "date d'échéance de paiement au format YYYY-MM-DD ou null",
+  "totalHT": nombre ou null,
+  "totalTTC": nombre ou null,
+  "notes": "remarques importantes ou null",
+  "lignes": [
+    {
+      "reference": "référence article ou null",
+      "description": "désignation de l'article",
+      "quantite": 0,
+      "prixUnitaireHT": nombre ou null,
+      "tva": taux TVA en % ou null
+    }
+  ]
+}
+
+Règles de classification :
+- commande_fournisseur : bon de commande envoyé à un fournisseur, arc de commande, confirmation d'achat
+- bon_livraison : bon de livraison, avis d'expédition
+- devis_client : devis, offre de prix adressé à un client
+- commande_client : bon de commande reçu d'un client
+- facture_fournisseur : facture reçue d'un fournisseur
+- facture_client : facture envoyée à un client
+
+Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
+
+async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item: any) => item.str).join(' '));
+  }
+  return pages.join('\n');
+}
+
+export async function analyserDocument(
+  input: { type: 'pdf'; buffer: ArrayBuffer } | { type: 'text'; texte: string },
+  apiKey: string
+): Promise<DocumentAnalysis> {
+  const texte =
+    input.type === 'pdf'
+      ? await extraireTextePDF(input.buffer)
+      : input.texte;
+
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.3-70b-versatile',
+      temperature: 0,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: PROMPT },
+        { role: 'user', content: `Document :\n${texte}` },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Erreur API Groq : ${response.status} — ${err}`);
+  }
+
+  const data = await response.json();
+  const text: string = data.choices?.[0]?.message?.content ?? '';
+
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Réponse invalide : aucun JSON trouvé');
+
+  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+  return parsed;
+}

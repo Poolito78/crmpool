@@ -1,10 +1,14 @@
+import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock } from 'lucide-react';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur } = useCRM();
+  const [analyseOpen, setAnalyseOpen] = useState(false);
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
@@ -83,6 +87,25 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
+
+      {/* Document analysis */}
+      <div className="bg-card rounded-xl border border-border p-5 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+            <ScanText className="w-5 h-5 text-primary" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm">Analyse de document</p>
+            <p className="text-xs text-muted-foreground">Commande · Devis · Facture · BL — importer un PDF ou coller un email</p>
+          </div>
+        </div>
+        <Button onClick={() => setAnalyseOpen(true)} className="shrink-0">
+          <ScanText className="w-4 h-4 mr-2" />
+          Analyser
+        </Button>
+      </div>
+
+      <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}

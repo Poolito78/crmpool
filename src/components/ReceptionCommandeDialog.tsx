@@ -18,6 +18,10 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   commande: CommandeFournisseur | null;
   fournisseur?: Fournisseur;
+  /** Quantités reçues pré-remplies depuis un document analysé (produitId → quantité) */
+  initialQuantitesRecues?: Record<string, number>;
+  /** Date de livraison client pré-remplie depuis un document analysé */
+  initialDateLivraison?: string;
   onConfirm: (data: {
     dateReception: string;
     dateLivraisonClientPrevue: string;
@@ -26,7 +30,7 @@ interface Props {
   }) => void;
 }
 
-export default function ReceptionCommandeDialog({ open, onOpenChange, commande, fournisseur, onConfirm }: Props) {
+export default function ReceptionCommandeDialog({ open, onOpenChange, commande, fournisseur, initialQuantitesRecues, initialDateLivraison, onConfirm }: Props) {
   const today = new Date().toISOString().split('T')[0];
 
   const [dateReception, setDateReception] = useState(today);
@@ -42,11 +46,11 @@ export default function ReceptionCommandeDialog({ open, onOpenChange, commande, 
         description: l.description,
         reference: l.reference,
         quantiteCommandee: l.quantite,
-        quantiteRecue: l.quantite,
+        quantiteRecue: initialQuantitesRecues?.[l.produitId] ?? l.quantite,
       }));
       setLignesRecues(initialLignes);
       setDateReception(today);
-      setDateLivraisonClientPrevue('');
+      setDateLivraisonClientPrevue(initialDateLivraison ?? '');
       const echeance = calculerDateEcheance(today, fournisseur?.delaiReglement || '45j FDM')
         .toISOString()
         .split('T')[0];
