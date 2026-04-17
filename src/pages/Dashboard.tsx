@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText } from 'lucide-react';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
@@ -9,6 +9,35 @@ import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur } = useCRM();
   const [analyseOpen, setAnalyseOpen] = useState(false);
+  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0); // compteur pour ignorer les dragenter/leave des enfants
+
+  const handlePageDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current++;
+    if (e.dataTransfer.types.some(t => t === 'Files')) setIsDragging(true);
+  }, []);
+
+  const handlePageDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+  }, []);
+
+  const handlePageDragLeave = useCallback((e: React.DragEvent) => {
+    dragCounter.current--;
+    if (dragCounter.current <= 0) { dragCounter.current = 0; setIsDragging(false); }
+  }, []);
+
+  const handlePageDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) {
+      setDroppedFiles(files);
+      setAnalyseOpen(true);
+    }
+  }, []);
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
@@ -80,7 +109,27 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div
+      className="space-y-6 relative"
+      onDragEnter={handlePageDragEnter}
+      onDragOver={handlePageDragOver}
+      onDragLeave={handlePageDragLeave}
+      onDrop={handlePageDrop}
+    >
+      {/* ── Overlay drag-and-drop plein écran ── */}
+      {isDragging && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 pointer-events-none"
+          style={{ background: 'rgba(var(--primary-rgb, 59 130 246) / 0.08)', backdropFilter: 'blur(2px)' }}>
+          <div className="rounded-3xl border-4 border-dashed border-primary bg-background/80 px-16 py-12 flex flex-col items-center gap-4 shadow-2xl">
+            <div className="w-20 h-20 rounded-2xl bg-primary/15 flex items-center justify-center">
+              <Upload className="w-10 h-10 text-primary animate-bounce" />
+            </div>
+            <p className="text-2xl font-bold text-primary">Déposer pour analyser</p>
+            <p className="text-sm text-muted-foreground text-center">PDF · Excel · Email (.eml / .msg)</p>
+          </div>
+        </div>
+      )}
+
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         {stats.map(stat => (
@@ -113,7 +162,11 @@ export default function Dashboard() {
         </Button>
       </div>
 
-      <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
+      <AnalyseDocumentDialog
+        open={analyseOpen}
+        onOpenChange={(v) => { setAnalyseOpen(v); if (!v) setDroppedFiles([]); }}
+        initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
+      />
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}

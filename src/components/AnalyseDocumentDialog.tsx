@@ -21,12 +21,14 @@ import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Fichiers pré-chargés depuis le drag-and-drop du tableau de bord */
+  initialFiles?: File[];
 }
 
 const today = () => new Date().toISOString().split('T')[0];
 const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T')[0];
 
-export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
+export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles }: Props) {
   const {
     commandesFournisseur, fournisseurs, produits, clients,
     updateCommandesFournisseur, updateCommandesClient,
@@ -140,39 +142,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     }
   }, [apiKey, commandesFournisseur]);
 
-  /* ── drag & drop ── */
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault(); setDragging(false);
+  /* ── traitement des fichiers pré-chargés depuis le dashboard ── */
+  useEffect(() => {
+    if (!open || !initialFiles || initialFiles.length === 0) return;
+    processFiles(initialFiles);
+  }, [open, initialFiles]); // eslint-disable-line react-hooks/exhaustive-deps
 
-    const files = Array.from(e.dataTransfer.files);
-
-    // ── Texte glissé directement (sélection dans mail) ──
-    if (files.length === 0) {
-      const txtPlain = e.dataTransfer.getData('text/plain');
-      const txtHtml  = e.dataTransfer.getData('text/html');
-      if (txtPlain) {
-        setTexte(txtPlain);
-        lancerAnalyse(null, txtPlain, []);
-        return;
-      }
-      if (txtHtml) {
-        const div = document.createElement('div');
-        div.innerHTML = txtHtml;
-        const t = (div.innerText || div.textContent || '').trim();
-        if (t) { setTexte(t); lancerAnalyse(null, t, []); return; }
-      }
-      toast.error('Rien à importer');
-      return;
-    }
-
+  /** Traitement commun fichiers (drop interne ou depuis dashboard) */
+  const processFiles = useCallback(async (files: File[]) => {
     const isExcel = (f: File) => /\.(xlsx|xls|csv|ods)$/i.test(f.name) ||
       ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
        'application/vnd.ms-excel', 'text/csv', 'application/vnd.oasis.opendocument.spreadsheet'].includes(f.type);
 
-    const pdfFiles   = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    const emlFiles   = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
-    const msgFiles   = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
-    const xlsxFiles  = files.filter(isExcel);
+    const pdfFiles  = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    const emlFiles  = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
+    const msgFiles  = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
+    const xlsxFiles = files.filter(isExcel);
 
     const allPdfBuffers: { name: string; buffer: ArrayBuffer }[] = [];
     let emailTexte = '';
@@ -184,7 +169,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
         allPdfBuffers.push(...eml.pdfBuffers);
       } catch { /* ignore */ }
     }
-
     for (const f of msgFiles) {
       try {
         const { extraireTexteDeMsg } = await import('@/lib/parseMsgPdf');
@@ -194,49 +178,48 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
         allPdfBuffers.push(...pdfs);
       } catch { /* ignore */ }
     }
-
     for (const f of pdfFiles) {
       allPdfBuffers.push({ name: f.name, buffer: await f.arrayBuffer() });
     }
-
-    // ── Excel / CSV : extraire le texte tabulaire ──
     if (xlsxFiles.length > 0) {
       let xlTexte = '';
       for (const f of xlsxFiles) {
-        try {
-          const xls = await parseExcel(f);
-          if (xls.texte) xlTexte += (xlTexte ? '\n\n' : '') + xls.texte;
-        } catch { /* ignore */ }
+        try { const xls = await parseExcel(f); if (xls.texte) xlTexte += (xlTexte ? '\n\n' : '') + xls.texte; } catch { /* ignore */ }
       }
-      if (xlTexte) {
-        setTexte(xlTexte);
-        setFichier(null); setEmlPdfs([]);
-        toast.success(`Excel importé (${xlsxFiles.map(f => f.name).join(', ')})`);
-        lancerAnalyse(null, xlTexte, []);
-        return;
-      }
+      if (xlTexte) { setTexte(xlTexte); setFichier(null); setEmlPdfs([]); lancerAnalyse(null, xlTexte, []); return; }
     }
-
     if (allPdfBuffers.length > 0) {
       if (emailTexte) setTexte(emailTexte);
       setEmlPdfs(allPdfBuffers);
       const blob = new Blob([allPdfBuffers[0].buffer], { type: 'application/pdf' });
       const firstFile = new File([blob], allPdfBuffers[0].name, { type: 'application/pdf' });
       setFichier(firstFile);
-      // Analyse automatique immédiate avec les données fraîches
       lancerAnalyse(firstFile, emailTexte, allPdfBuffers);
     } else if (emailTexte) {
       setTexte(emailTexte);
       lancerAnalyse(null, emailTexte, []);
-    } else {
-      const f = files[0];
-      try {
-        const raw = await f.text();
-        if (raw.trim()) { setTexte(raw.trim()); lancerAnalyse(null, raw.trim(), []); }
-        else toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)');
-      } catch { toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)'); }
     }
   }, [lancerAnalyse]);
+
+  /* ── drag & drop ── */
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length === 0) {
+      // Texte glissé directement (sélection dans mail)
+      const txtPlain = e.dataTransfer.getData('text/plain');
+      const txtHtml  = e.dataTransfer.getData('text/html');
+      if (txtPlain) { setTexte(txtPlain); lancerAnalyse(null, txtPlain, []); return; }
+      if (txtHtml) {
+        const div = document.createElement('div');
+        div.innerHTML = txtHtml;
+        const t = (div.innerText || div.textContent || '').trim();
+        if (t) { setTexte(t); lancerAnalyse(null, t, []); return; }
+      }
+      toast.error('Rien à importer'); return;
+    }
+    await processFiles(files);
+  }, [lancerAnalyse, processFiles]);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
