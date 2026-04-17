@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml } from '@/lib/parseEml';
 import { extrairePDFsDeMsg } from '@/lib/parseMsgPdf';
+import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type CommandeFournisseur, type LigneReception, type CommandeClient,
@@ -164,9 +165,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
       return;
     }
 
-    const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
-    const emlFiles = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
-    const msgFiles = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
+    const isExcel = (f: File) => /\.(xlsx|xls|csv|ods)$/i.test(f.name) ||
+      ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+       'application/vnd.ms-excel', 'text/csv', 'application/vnd.oasis.opendocument.spreadsheet'].includes(f.type);
+
+    const pdfFiles   = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    const emlFiles   = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
+    const msgFiles   = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
+    const xlsxFiles  = files.filter(isExcel);
 
     const allPdfBuffers: { name: string; buffer: ArrayBuffer }[] = [];
     let emailTexte = '';
@@ -191,6 +197,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
 
     for (const f of pdfFiles) {
       allPdfBuffers.push({ name: f.name, buffer: await f.arrayBuffer() });
+    }
+
+    // ── Excel / CSV : extraire le texte tabulaire ──
+    if (xlsxFiles.length > 0) {
+      let xlTexte = '';
+      for (const f of xlsxFiles) {
+        try {
+          const xls = await parseExcel(f);
+          if (xls.texte) xlTexte += (xlTexte ? '\n\n' : '') + xls.texte;
+        } catch { /* ignore */ }
+      }
+      if (xlTexte) {
+        setTexte(xlTexte);
+        setFichier(null); setEmlPdfs([]);
+        toast.success(`Excel importé (${xlsxFiles.map(f => f.name).join(', ')})`);
+        lancerAnalyse(null, xlTexte, []);
+        return;
+      }
     }
 
     if (allPdfBuffers.length > 0) {
@@ -353,7 +377,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                 {dragging && (
                   <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-primary flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
                     <Upload className="w-8 h-8 text-primary" />
-                    <span className="text-sm font-semibold text-primary">Relâcher pour importer le PDF</span>
+                    <span className="text-sm font-semibold text-primary">Relâcher pour importer</span>
                   </div>
                 )}
 
@@ -378,7 +402,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
 
                 {/* Textarea */}
                 <Textarea
-                  placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF ci-dessus'}
+                  placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF, Excel (.xlsx) ou email'}
                   value={texte}
                   onChange={e => setTexte(e.target.value)}
                   className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[120px]' : 'min-h-[200px]'}`}
@@ -390,21 +414,37 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  {fichier ? 'Changer le fichier' : 'Parcourir un PDF ou email (.eml)…'}
+                  {fichier ? 'Changer le fichier' : 'Parcourir PDF, Excel, email (.eml)…'}
                 </button>
-                <input ref={fileRef} type="file" accept="application/pdf,.eml,message/rfc822" className="hidden" onChange={async e => {
-                  const f = e.target.files?.[0]; e.target.value = '';
-                  if (!f) return;
-                  if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
-                    const eml = await parseEml(f);
-                    if (eml.texte) setTexte(eml.texte);
-                    if (eml.pdfBuffers.length > 0) {
-                      setEmlPdfs(eml.pdfBuffers);
-                      const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });
-                      setFichier(new File([blob], eml.pdfBuffers[0].name, { type: 'application/pdf' }));
+                <input ref={fileRef} type="file"
+                  accept="application/pdf,.eml,message/rfc822,.xlsx,.xls,.csv,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  className="hidden"
+                  onChange={async e => {
+                    const f = e.target.files?.[0]; e.target.value = '';
+                    if (!f) return;
+                    if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
+                      const eml = await parseEml(f);
+                      if (eml.texte) setTexte(eml.texte);
+                      if (eml.pdfBuffers.length > 0) {
+                        setEmlPdfs(eml.pdfBuffers);
+                        const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });
+                        setFichier(new File([blob], eml.pdfBuffers[0].name, { type: 'application/pdf' }));
+                      }
+                    } else if (/\.(xlsx|xls|csv|ods)$/i.test(f.name) || f.type.includes('spreadsheet') || f.type.includes('excel') || f.type === 'text/csv') {
+                      try {
+                        const xls = await parseExcel(f);
+                        if (xls.texte) {
+                          setTexte(xls.texte);
+                          setFichier(null); setEmlPdfs([]);
+                          toast.success(`Excel importé : ${f.name} (${xls.feuilles.length} feuille${xls.feuilles.length > 1 ? 's' : ''})`);
+                          lancerAnalyse(null, xls.texte, []);
+                        }
+                      } catch { toast.error('Impossible de lire le fichier Excel'); }
+                    } else {
+                      setFichier(f);
+                      lancerAnalyse(f, texte, emlPdfs);
                     }
-                  } else setFichier(f);
-                }} />
+                  }} />
               </div>
 
               <Button onClick={handleAnalyse} disabled={loading || (!fichier && !texte.trim())} className="w-full">
