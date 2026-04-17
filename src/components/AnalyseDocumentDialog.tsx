@@ -323,7 +323,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogContent className="w-[98vw] max-w-6xl max-h-[92vh] overflow-hidden flex flex-col p-6">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
@@ -332,10 +332,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
           </DialogHeader>
 
           {/* ── Layout 2 colonnes sur desktop ── */}
-          <div className="flex flex-col md:flex-row gap-0 flex-1 min-h-0 pt-2">
+          <div className="flex flex-col lg:flex-row gap-0 flex-1 min-h-0 pt-3">
 
             {/* ══ COLONNE GAUCHE : zone unifiée PDF + texte ══ */}
-            <div className={`flex flex-col gap-3 shrink-0 ${result ? 'md:w-[300px] md:border-r md:border-border md:pr-5' : 'w-full'}`}>
+            <div className={`flex flex-col gap-3 shrink-0 ${result ? 'lg:w-[380px] lg:border-r lg:border-border lg:pr-6' : 'w-full max-w-2xl mx-auto'}`}>
 
               {/* Zone combinée drag-and-drop + textarea */}
               <div
@@ -379,7 +379,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF ci-dessus'}
                   value={texte}
                   onChange={e => setTexte(e.target.value)}
-                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[100px]' : 'min-h-[160px]'}`}
+                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[120px]' : 'min-h-[200px]'}`}
                 />
 
                 {/* Bouton parcourir PDF */}
@@ -418,7 +418,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
 
             {/* ══ COLONNE DROITE : résultats ══ */}
             {result && (
-              <div className="flex flex-col gap-4 flex-1 min-h-0 md:pl-5 md:overflow-y-auto mt-4 md:mt-0">
+              <div className="flex flex-col gap-4 flex-1 min-h-0 lg:pl-6 lg:overflow-y-auto mt-4 lg:mt-0">
 
                 {/* Badge type + corriger */}
                 {typeMeta && (
@@ -457,41 +457,86 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                 )}
 
                 {/* Métadonnées */}
-                <div className="rounded-lg border border-border p-3 space-y-2">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
-                    {result.numeroDocument && <><span className="text-muted-foreground text-xs">N° document</span><span className="font-medium text-xs">{result.numeroDocument}</span></>}
-                    {result.nomPartenaire && <><span className="text-muted-foreground text-xs">{isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client'}</span><span className="font-medium text-xs">{result.nomPartenaire}</span></>}
-                    {result.referencePartenaire && <><span className="text-muted-foreground text-xs">Réf. partenaire</span><span className="font-medium text-xs">{result.referencePartenaire}</span></>}
-                    {result.dateDocument && <><span className="text-muted-foreground text-xs">Date</span><span className="font-medium text-xs">{new Date(result.dateDocument).toLocaleDateString('fr-FR')}</span></>}
-                    {result.dateLivraisonPrevue && <><span className="text-muted-foreground text-xs">Livraison prévue</span><span className="font-medium text-xs">{new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')}</span></>}
-                    {result.dateEcheance && <><span className="text-muted-foreground text-xs">Échéance</span><span className="font-medium text-xs">{new Date(result.dateEcheance).toLocaleDateString('fr-FR')}</span></>}
-                    {result.totalHT != null && <><span className="text-muted-foreground text-xs">Total HT</span><span className="font-medium text-xs">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
-                    {result.totalTTC != null && <><span className="text-muted-foreground text-xs">Total TTC</span><span className="font-semibold text-xs">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
+                <div className="rounded-lg border border-border p-4 space-y-2">
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-2">
+                    {result.numeroDocument && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">N° document</p>
+                        <p className="text-sm font-semibold">{result.numeroDocument}</p>
+                      </div>
+                    )}
+                    {result.nomPartenaire && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client'}</p>
+                        <p className="text-sm font-semibold">{result.nomPartenaire}</p>
+                      </div>
+                    )}
+                    {result.referencePartenaire && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Réf. partenaire</p>
+                        <p className="text-sm font-medium">{result.referencePartenaire}</p>
+                      </div>
+                    )}
+                    {result.dateDocument && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Date</p>
+                        <p className="text-sm font-medium">{new Date(result.dateDocument).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                    )}
+                    {result.dateLivraisonPrevue && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Livraison prévue</p>
+                        <p className="text-sm font-medium">{new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                    )}
+                    {result.dateEcheance && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Échéance</p>
+                        <p className="text-sm font-medium">{new Date(result.dateEcheance).toLocaleDateString('fr-FR')}</p>
+                      </div>
+                    )}
+                    {result.totalHT != null && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total HT</p>
+                        <p className="text-sm font-medium">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                      </div>
+                    )}
+                    {result.totalTTC != null && (
+                      <div className="space-y-0.5">
+                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total TTC</p>
+                        <p className="text-base font-bold text-primary">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                      </div>
+                    )}
                   </div>
-                  {result.notes && <p className="text-xs text-muted-foreground italic border-t border-border pt-2">{result.notes}</p>}
+                  {result.notes && <p className="text-xs text-muted-foreground italic border-t border-border pt-2 mt-1">{result.notes}</p>}
                 </div>
 
                 {/* Lignes */}
                 {result.lignes.length > 0 && (
                   <div className="rounded-lg border border-border overflow-hidden">
                     <table className="w-full text-xs">
-                      <thead className="bg-muted/50">
+                      <thead className="bg-muted/60">
                         <tr>
-                          <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Réf.</th>
-                          <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Description</th>
-                          <th className="text-center px-2 py-1.5 font-medium text-muted-foreground">Qté</th>
-                          <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">P.U. HT</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Réf.</th>
+                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Description</th>
+                          <th className="text-center px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Qté</th>
+                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">P.U. HT</th>
+                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Total HT</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
-                        {result.lignes.map((l, i) => (
-                          <tr key={i} className="hover:bg-muted/20">
-                            <td className="px-2 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
-                            <td className="px-2 py-1.5">{l.description || '—'}</td>
-                            <td className="px-2 py-1.5 text-center font-semibold">{l.quantite}</td>
-                            <td className="px-2 py-1.5 text-right whitespace-nowrap">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
-                          </tr>
-                        ))}
+                        {result.lignes.map((l, i) => {
+                          const total = l.prixUnitaireHT != null ? l.prixUnitaireHT * l.quantite : null;
+                          return (
+                            <tr key={i} className="hover:bg-muted/20 transition-colors">
+                              <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
+                              <td className="px-3 py-2 max-w-[260px]">{l.description || '—'}</td>
+                              <td className="px-3 py-2 text-center font-bold">{l.quantite}</td>
+                              <td className="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                              <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
