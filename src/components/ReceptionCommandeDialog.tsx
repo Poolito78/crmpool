@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   formatDate,
+  formatDateISO,
   calculerDateEcheance,
   type CommandeFournisseur,
   type Fournisseur,
@@ -51,9 +52,7 @@ export default function ReceptionCommandeDialog({ open, onOpenChange, commande, 
       setLignesRecues(initialLignes);
       setDateReception(today);
       setDateLivraisonClientPrevue(initialDateLivraison ?? '');
-      const echeance = calculerDateEcheance(today, fournisseur?.delaiReglement || '45j FDM')
-        .toISOString()
-        .split('T')[0];
+      const echeance = formatDateISO(calculerDateEcheance(today, fournisseur?.delaiReglement || '45j FDM'));
       setDateEcheance(echeance);
     }
   }, [commande]);

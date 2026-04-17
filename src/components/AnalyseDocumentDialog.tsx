@@ -13,7 +13,7 @@ import { extrairePDFsDeMsg } from '@/lib/parseMsgPdf';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type CommandeFournisseur, type LigneReception, type CommandeClient,
-  generateId, calculerDateEcheance,
+  generateId, calculerDateEcheance, formatDateISO,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 
@@ -247,7 +247,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     if (!creerCFNumero.trim()) { toast.error('Veuillez saisir un numéro de commande'); return; }
     if (!creerCFDateReception) { toast.error('Veuillez saisir la date de réception'); return; }
     const fourn = fournisseurs.find(f => f.id === creerCFFournisseurId);
-    const dateEch = calculerDateEcheance(creerCFDateReception, fourn?.delaiReglement || '45j FDM').toISOString().split('T')[0];
+    const dateEch = formatDateISO(calculerDateEcheance(creerCFDateReception, fourn?.delaiReglement || '45j FDM'));
     const lignes = (result?.lignes ?? []).map(l => {
       const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase());
       const id = p?.id ?? generateId();

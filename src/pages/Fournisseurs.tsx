@@ -47,14 +47,20 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
 
-  // Encours calculés dynamiquement depuis delaiReglement du fournisseur
+  // Encours : utilise dateEcheance stockée si disponible, sinon recalcule depuis dateReception
   const encoursDuParFournisseur = useMemo(() => {
     const map: Record<string, { montant: number; echeances: { montant: number; date: Date }[] }> = {};
     commandesFournisseur.forEach(cf => {
       if (cf.statut === 'recue') {
-        const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
-        const delai = fourn?.delaiReglement || '45j FDM';
-        const dateEch = calculerDateEcheance(cf.dateCreation, delai);
+        let dateEch: Date;
+        if (cf.dateEcheance) {
+          const [y, mo, da] = cf.dateEcheance.split('-').map(Number);
+          dateEch = new Date(y, mo - 1, da);
+        } else {
+          const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
+          const delai = fourn?.delaiReglement || '45j FDM';
+          dateEch = calculerDateEcheance(cf.dateReception || cf.dateCreation, delai);
+        }
         if (!map[cf.fournisseurId]) map[cf.fournisseurId] = { montant: 0, echeances: [] };
         map[cf.fournisseurId].montant += cf.totalTTC;
         map[cf.fournisseurId].echeances.push({ montant: cf.totalTTC, date: dateEch });

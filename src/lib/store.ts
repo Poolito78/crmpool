@@ -668,15 +668,40 @@ export function formatDate(d: string) {
   return new Date(d).toLocaleDateString('fr-FR');
 }
 
-export function calculerDateEcheance(dateCreation: string, delaiReglement: string): Date {
-  const base = new Date(dateCreation);
-  if (!delaiReglement || delaiReglement === 'Comptant') return base;
-  const match = delaiReglement.match(/^(\d+)j\s*(FDM|net)?$/i);
+/**
+ * Formate une Date locale en "YYYY-MM-DD" sans décalage UTC.
+ * Utiliser à la place de .toISOString().split('T')[0] pour éviter le bug J-1 en France (UTC+1/+2).
+ */
+export function formatDateISO(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Calcule la date d'échéance de paiement selon le délai de règlement fournisseur.
+ * Formats acceptés : "Comptant", "30j", "30j net", "45j FDM", "60 jours", "30"
+ * FDM = Fin Du Mois : on va au dernier jour du mois de la date de base, puis on ajoute les jours.
+ */
+export function calculerDateEcheance(dateBase: string, delaiReglement: string): Date {
+  // Parse YYYY-MM-DD en LOCAL (pas UTC) pour éviter le décalage timezone
+  const [y, mo, da] = dateBase.split('-').map(Number);
+  const base = new Date(y, (mo || 1) - 1, da || 1);
+
+  if (!delaiReglement || delaiReglement.toLowerCase() === 'comptant') return base;
+
+  // Formats acceptés : "45j FDM", "30j net", "30j", "60 jours", "30", "45 FDM"
+  const match = delaiReglement.match(/^(\d+)\s*(?:j(?:ours?)?)?\s*(FDM|net)?$/i)
+              ?? delaiReglement.match(/^(\d+)\s*(FDM)/i);
   if (!match) return base;
+
   const jours = parseInt(match[1]);
   const fdm = (match[2] || '').toUpperCase() === 'FDM';
+
   if (fdm) {
-    const finMois = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+    // Fin du mois courant + jours
+    const finMois = new Date(base.getFullYear(), base.getMonth() + 1, 0); // dernier jour du mois
     finMois.setDate(finMois.getDate() + jours);
     return finMois;
   }

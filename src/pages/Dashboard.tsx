@@ -38,12 +38,20 @@ export default function Dashboard() {
   const margeMensuelle = calcMarge(devisMensuels);
 
   // Échéances fournisseurs
+  // Priorité : dateEcheance stockée (calculée à la réception) > recalcul depuis dateReception > dateCreation
   const echeancesFournisseurs = commandesFournisseur
-    .filter(cf => cf.statut === 'recue')
+    .filter(cf => cf.statut === 'recue' || cf.statut === 'payee')
     .map(cf => {
       const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
-      const delai = fourn?.delaiReglement || '45j FDM';
-      const dateEch = calculerDateEcheance(cf.dateCreation, delai);
+      let dateEch: Date;
+      if (cf.dateEcheance) {
+        const [y, mo, da] = cf.dateEcheance.split('-').map(Number);
+        dateEch = new Date(y, mo - 1, da);
+      } else {
+        const dateBase = cf.dateReception || cf.dateCreation;
+        const delai = fourn?.delaiReglement || '45j FDM';
+        dateEch = calculerDateEcheance(dateBase, delai);
+      }
       return { cf, fourn, dateEch };
     })
     .sort((a, b) => a.dateEch.getTime() - b.dateEch.getTime());
