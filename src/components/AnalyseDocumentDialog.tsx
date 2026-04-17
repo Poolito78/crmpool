@@ -9,7 +9,7 @@ import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, Pl
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml } from '@/lib/parseEml';
-import { extrairePDFsDeMsg } from '@/lib/parseMsgPdf';
+import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
@@ -174,9 +174,28 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         const { extraireTexteDeMsg } = await import('@/lib/parseMsgPdf');
         const msgTxt = await extraireTexteDeMsg(f);
         if (msgTxt) emailTexte += (emailTexte ? '\n\n' : '') + msgTxt;
-        const pdfs = await extrairePDFsDeMsg(f);
-        allPdfBuffers.push(...pdfs);
-      } catch { /* ignore */ }
+        const pjs = await extrairePJsDeMsg(f);
+        // PDF → pile normale
+        allPdfBuffers.push(...pjs.filter(p => p.type === 'pdf'));
+        // Excel embarqué → extraire le texte tabulaire directement
+        for (const xls of pjs.filter(p => p.type === 'xlsx')) {
+          try {
+            const xlFile = new File([xls.buffer], xls.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const parsed = await parseExcel(xlFile);
+            console.log('[msg→xlsx]', xls.name, '→ chars:', parsed.texte.length);
+            if (parsed.texte) {
+              // Excel prioritaire : analyser directement
+              setTexte(parsed.texte); setFichier(null); setEmlPdfs([]);
+              lancerAnalyse(null, parsed.texte, []);
+              return;
+            }
+          } catch (err) {
+            console.error('[msg→xlsx] erreur:', err);
+          }
+        }
+      } catch (err) {
+        console.error('[parseMsgPdf] erreur:', err);
+      }
     }
     for (const f of pdfFiles) {
       allPdfBuffers.push({ name: f.name, buffer: await f.arrayBuffer() });

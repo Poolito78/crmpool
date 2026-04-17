@@ -1,13 +1,16 @@
 /**
- * Extraction de PDF depuis un fichier .msg Outlook (format CFBF)
+ * Extraction de pièces jointes depuis un fichier .msg Outlook (format CFBF)
  *
- * Stratégie : balayage binaire des signatures PDF (%PDF-) et fins (%%EOF)
- * dans le flux brut du fichier .msg. Fonctionne pour la plupart des pièces
- * jointes PDF non compressées stockées dans le CFBF.
+ * Stratégie : balayage binaire des signatures connues dans le flux brut.
+ * - PDF  : %PDF- … %%EOF
+ * - XLSX : PK\x03\x04 … PK\x05\x06 (ZIP Local File Header … End of Central Dir)
+ * - XLS  : \xD0\xCF\x11\xE0 (CFBF header = vieux format Excel/Word)
  */
 
-const PDF_SIG   = [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
-const EOF_MARK  = [0x25, 0x25, 0x45, 0x4F, 0x46]; // %%EOF
+const PDF_SIG    = [0x25, 0x50, 0x44, 0x46, 0x2D]; // %PDF-
+const EOF_MARK   = [0x25, 0x25, 0x45, 0x4F, 0x46]; // %%EOF
+const ZIP_LFH    = [0x50, 0x4B, 0x03, 0x04];        // PK local file header (xlsx/ods/zip)
+const ZIP_EOCD   = [0x50, 0x4B, 0x05, 0x06];        // PK end of central directory
 
 function indexOf(bytes: Uint8Array, pattern: number[], from = 0): number {
   outer: for (let i = from; i <= bytes.length - pattern.length; i++) {
@@ -19,43 +22,95 @@ function indexOf(bytes: Uint8Array, pattern: number[], from = 0): number {
   return -1;
 }
 
+/** Lit un uint32 little-endian depuis bytes[pos] */
+function readU32LE(bytes: Uint8Array, pos: number): number {
+  return bytes[pos] | (bytes[pos + 1] << 8) | (bytes[pos + 2] << 16) | (bytes[pos + 3] << 24);
+}
+/** Lit un uint16 little-endian depuis bytes[pos] */
+function readU16LE(bytes: Uint8Array, pos: number): number {
+  return bytes[pos] | (bytes[pos + 1] << 8);
+}
+
 export interface PdfExtrait {
   name: string;
+  type: 'pdf' | 'xlsx';
   buffer: ArrayBuffer;
 }
 
-export async function extrairePDFsDeMsg(file: File): Promise<PdfExtrait[]> {
+/**
+ * Extrait les pièces jointes PDF et Excel d'un fichier .msg Outlook.
+ */
+export async function extrairePJsDeMsg(file: File): Promise<PdfExtrait[]> {
   const buffer = await file.arrayBuffer();
-  const bytes   = new Uint8Array(buffer);
+  const bytes  = new Uint8Array(buffer);
   const results: PdfExtrait[] = [];
-  let   search  = 0;
-  let   index   = 0;
 
+  // ── 1. PDF : %PDF- … %%EOF ──
+  let search = 0;
+  let idxPdf = 0;
   while (true) {
     const start = indexOf(bytes, PDF_SIG, search);
     if (start === -1) break;
-
-    // Chercher %%EOF après le début du PDF
     let end = indexOf(bytes, EOF_MARK, start + 100);
     if (end === -1) {
-      // Pas de marqueur de fin trouvé → prendre jusqu'à la prochaine signature ou fin du fichier
-      const nextPdf = indexOf(bytes, PDF_SIG, start + 10);
-      end = nextPdf !== -1 ? nextPdf : bytes.length;
+      const next = indexOf(bytes, PDF_SIG, start + 10);
+      end = next !== -1 ? next : bytes.length;
     } else {
-      end += EOF_MARK.length; // inclure %%EOF
+      end += EOF_MARK.length;
     }
-
     const slice = buffer.slice(start, end);
-    // Vérification minimale : un PDF valide fait au moins 100 octets
     if (slice.byteLength >= 100) {
-      index++;
-      results.push({ name: `piece-jointe-${index}.pdf`, buffer: slice });
+      idxPdf++;
+      results.push({ name: `piece-jointe-${idxPdf}.pdf`, type: 'pdf', buffer: slice });
     }
-
     search = end;
   }
 
+  // ── 2. XLSX/ZIP ──
+  // Stratégie : parcourir tous les EOCD (PK\x05\x06) et reconstruire le ZIP
+  // en calculant le vrai début depuis les offsets du répertoire central.
+  // Ceci contourne le problème des data descriptors (tailles à 0 dans LFH).
+  {
+    let idxXls = 0;
+    let eocdSearch = 0;
+    while (true) {
+      const eocdPos = indexOf(bytes, ZIP_EOCD, eocdSearch);
+      if (eocdPos === -1 || eocdPos + 22 > bytes.length) break;
+
+      const commentLen = readU16LE(bytes, eocdPos + 20);
+      const zipEnd     = eocdPos + 22 + commentLen;
+
+      // Offset et taille du répertoire central (relatifs au DÉBUT du ZIP)
+      const cdSize   = readU32LE(bytes, eocdPos + 12);
+      const cdOffset = readU32LE(bytes, eocdPos + 16);
+
+      // Ignorer les valeurs ZIP64 (0xFFFFFFFF) ou incohérentes
+      if (cdSize !== 0xFFFFFFFF && cdOffset !== 0xFFFFFFFF && cdSize > 0 && cdOffset < eocdPos) {
+        // Déduire le début du ZIP dans le binaire .msg
+        const zipStart = eocdPos - cdOffset - cdSize;
+
+        if (zipStart >= 0 && zipStart < eocdPos && zipEnd - zipStart >= 200) {
+          // Vérifier que le début ressemble à un LFH (PK\x03\x04) ou un fichier vide (PK\x05\x06)
+          const sig0 = bytes[zipStart]; const sig1 = bytes[zipStart + 1];
+          const isValidStart = (sig0 === 0x50 && sig1 === 0x4B); // "PK"
+          if (isValidStart) {
+            const slice = buffer.slice(zipStart, zipEnd);
+            idxXls++;
+            results.push({ name: `piece-jointe-${idxXls}.xlsx`, type: 'xlsx', buffer: slice });
+          }
+        }
+      }
+
+      eocdSearch = eocdPos + 1;
+    }
+  }
+
   return results;
+}
+
+/** @deprecated Utiliser extrairePJsDeMsg */
+export async function extrairePDFsDeMsg(file: File): Promise<PdfExtrait[]> {
+  return (await extrairePJsDeMsg(file)).filter(p => p.type === 'pdf');
 }
 
 /**
