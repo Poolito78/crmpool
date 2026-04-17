@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt } from 'lucide-react';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import { parseEml } from '@/lib/parseEml';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type CommandeFournisseur, type LigneReception, type CommandeClient,
@@ -35,6 +36,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
 
@@ -101,17 +103,41 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   }, [result]);
 
   /* ── drag & drop ── */
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
     const f = e.dataTransfer.files?.[0];
-    if (f?.type === 'application/pdf') { setFichier(f); setMode('pdf'); }
-    else if (f) toast.error('Seuls les fichiers PDF sont acceptés');
+    if (!f) return;
+
+    if (f.type === 'application/pdf') {
+      setFichier(f);
+      setEmlPdfs([]);
+    } else if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
+      // Email → parser le contenu + les PDF en pièces jointes
+      try {
+        const eml = await parseEml(f);
+        if (eml.texte) setTexte(eml.texte);
+        if (eml.pdfBuffers.length > 0) {
+          setEmlPdfs(eml.pdfBuffers);
+          // Mettre le premier PDF comme fichier principal
+          const first = eml.pdfBuffers[0];
+          const blob = new Blob([first.buffer], { type: 'application/pdf' });
+          setFichier(new File([blob], first.name, { type: 'application/pdf' }));
+          toast.success(`Email importé : ${eml.pdfBuffers.length} PDF trouvé${eml.pdfBuffers.length > 1 ? 's' : ''}`);
+        } else {
+          toast.success('Email importé (texte uniquement)');
+        }
+      } catch {
+        toast.error('Impossible de lire ce fichier email');
+      }
+    } else {
+      toast.error('Formats acceptés : PDF ou email (.eml)');
+    }
   }, []);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
-    setTexte(''); setFichier(null); setResult(null); setMatchedCF(null); setDragging(false);
+    setTexte(''); setFichier(null); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
     setCreerCFDateLivraison(''); setCreerCFNotes('');
@@ -127,7 +153,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
       let analysis: DocumentAnalysis;
       // PDF prioritaire, sinon texte
       if (fichier) {
-        analysis = await analyserDocument({ type: 'pdf', buffer: await fichier.arrayBuffer() }, apiKey);
+        // Si l'email avait aussi du texte, on le passe en contexte supplémentaire
+        const texteSuppl = emlPdfs.length > 0 && texte.trim() ? texte : undefined;
+        analysis = await analyserDocument({ type: 'pdf', buffer: await fichier.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey);
       } else if (texte.trim()) {
         analysis = await analyserDocument({ type: 'text', texte }, apiKey);
       } else {
@@ -280,12 +308,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
-                {/* Badge PDF si chargé */}
+                {/* Badge PDF / Email importé */}
                 {fichier && (
-                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
-                    <FileText className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-xs font-medium text-primary flex-1 truncate">{fichier.name}</span>
-                    <button onClick={() => setFichier(null)} className="text-primary/60 hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                      <FileText className="w-4 h-4 text-primary shrink-0" />
+                      <span className="text-xs font-medium text-primary flex-1 truncate">{fichier.name}</span>
+                      <button onClick={() => { setFichier(null); setEmlPdfs([]); }} className="text-primary/60 hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+                    </div>
+                    {/* PDF supplémentaires de l'email */}
+                    {emlPdfs.length > 1 && emlPdfs.slice(1).map((p, i) => (
+                      <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-muted/50 border border-border">
+                        <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-xs text-muted-foreground flex-1 truncate">{p.name}</span>
+                        <span className="text-xs text-muted-foreground">pj {i + 2}</span>
+                      </div>
+                    ))}
                   </div>
                 )}
 
@@ -303,9 +341,21 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  {fichier ? 'Changer le PDF' : 'Parcourir un PDF…'}
+                  {fichier ? 'Changer le fichier' : 'Parcourir un PDF ou email (.eml)…'}
                 </button>
-                <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFichier(f); e.target.value = ''; }} />
+                <input ref={fileRef} type="file" accept="application/pdf,.eml,message/rfc822" className="hidden" onChange={async e => {
+                  const f = e.target.files?.[0]; e.target.value = '';
+                  if (!f) return;
+                  if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
+                    const eml = await parseEml(f);
+                    if (eml.texte) setTexte(eml.texte);
+                    if (eml.pdfBuffers.length > 0) {
+                      setEmlPdfs(eml.pdfBuffers);
+                      const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });
+                      setFichier(new File([blob], eml.pdfBuffers[0].name, { type: 'application/pdf' }));
+                    }
+                  } else setFichier(f);
+                }} />
               </div>
 
               <Button onClick={handleAnalyse} disabled={loading || (!fichier && !texte.trim())} className="w-full">

@@ -94,13 +94,20 @@ async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
 }
 
 export async function analyserDocument(
-  input: { type: 'pdf'; buffer: ArrayBuffer } | { type: 'text'; texte: string },
+  input:
+    | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
+    | { type: 'text'; texte: string },
   apiKey: string
 ): Promise<DocumentAnalysis> {
-  const texte =
-    input.type === 'pdf'
-      ? await extraireTextePDF(input.buffer)
-      : input.texte;
+  let texte: string;
+  if (input.type === 'pdf') {
+    const textePDF = await extraireTextePDF(input.buffer);
+    texte = input.texteSupplementaire
+      ? `=== EMAIL ===\n${input.texteSupplementaire}\n\n=== PDF ===\n${textePDF}`
+      : textePDF;
+  } else {
+    texte = input.texte;
+  }
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
