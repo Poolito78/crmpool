@@ -30,13 +30,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   } = useCRM();
 
   /* ── état analyse ── */
-  const [mode, setMode] = useState<'pdf' | 'texte'>('pdf');
   const [texte, setTexte] = useState('');
   const [fichier, setFichier] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const zoneRef = useRef<HTMLDivElement>(null);
 
   /* ── état commande fournisseur ── */
   const [matchedCF, setMatchedCF] = useState<CommandeFournisseur | null>(null);
@@ -111,7 +111,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
-    setTexte(''); setFichier(null); setResult(null); setMatchedCF(null);
+    setTexte(''); setFichier(null); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
     setCreerCFDateLivraison(''); setCreerCFNotes('');
@@ -125,12 +125,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
     try {
       let analysis: DocumentAnalysis;
-      if (mode === 'pdf') {
-        if (!fichier) { toast.error('Veuillez sélectionner un fichier PDF'); return; }
+      // PDF prioritaire, sinon texte
+      if (fichier) {
         analysis = await analyserDocument({ type: 'pdf', buffer: await fichier.arrayBuffer() }, apiKey);
-      } else {
-        if (!texte.trim()) { toast.error('Veuillez coller le contenu du document'); return; }
+      } else if (texte.trim()) {
         analysis = await analyserDocument({ type: 'text', texte }, apiKey);
+      } else {
+        toast.error('Glissez un PDF ou collez du texte'); return;
       }
       setResult(analysis);
 
@@ -258,47 +259,56 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
           {/* ── Layout 2 colonnes sur desktop ── */}
           <div className="flex flex-col md:flex-row gap-0 flex-1 min-h-0 pt-2">
 
-            {/* ══ COLONNE GAUCHE : import ══ */}
-            <div className={`flex flex-col gap-4 shrink-0 ${result ? 'md:w-[300px] md:border-r md:border-border md:pr-5' : 'w-full'}`}>
-              {/* Mode selector */}
-              <div className="flex gap-2">
-                <button onClick={() => setMode('pdf')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${mode === 'pdf' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
-                  <FileText className="w-4 h-4" /> PDF
+            {/* ══ COLONNE GAUCHE : zone unifiée PDF + texte ══ */}
+            <div className={`flex flex-col gap-3 shrink-0 ${result ? 'md:w-[300px] md:border-r md:border-border md:pr-5' : 'w-full'}`}>
+
+              {/* Zone combinée drag-and-drop + textarea */}
+              <div
+                ref={zoneRef}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                className={`relative flex flex-col gap-2 rounded-xl border-2 transition-colors p-3 ${
+                  dragging ? 'border-primary bg-primary/10' : 'border-dashed border-border hover:border-primary/50'
+                }`}
+              >
+                {/* Overlay drag */}
+                {dragging && (
+                  <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-primary flex flex-col items-center justify-center gap-2 z-10 pointer-events-none">
+                    <Upload className="w-8 h-8 text-primary" />
+                    <span className="text-sm font-semibold text-primary">Relâcher pour importer le PDF</span>
+                  </div>
+                )}
+
+                {/* Badge PDF si chargé */}
+                {fichier && (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
+                    <FileText className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-xs font-medium text-primary flex-1 truncate">{fichier.name}</span>
+                    <button onClick={() => setFichier(null)} className="text-primary/60 hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                )}
+
+                {/* Textarea */}
+                <Textarea
+                  placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF ci-dessus'}
+                  value={texte}
+                  onChange={e => setTexte(e.target.value)}
+                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[100px]' : 'min-h-[160px]'}`}
+                />
+
+                {/* Bouton parcourir PDF */}
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {fichier ? 'Changer le PDF' : 'Parcourir un PDF…'}
                 </button>
-                <button onClick={() => setMode('texte')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${mode === 'texte' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
-                  <ScanText className="w-4 h-4" /> Texte / Email
-                </button>
+                <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFichier(f); e.target.value = ''; }} />
               </div>
 
-              {/* Input */}
-              {mode === 'pdf' ? (
-                <div className="space-y-2 flex-1">
-                  {fichier ? (
-                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-                      <FileText className="w-5 h-5 text-primary shrink-0" />
-                      <span className="text-sm flex-1 truncate">{fichier.name}</span>
-                      <button onClick={() => setFichier(null)} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
-                    </div>
-                  ) : (
-                    <div onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onClick={() => fileRef.current?.click()}
-                      className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-lg cursor-pointer transition-colors select-none ${result ? 'p-6' : 'p-10'} ${dragging ? 'border-primary bg-primary/10' : 'border-border hover:border-primary hover:bg-primary/5'}`}>
-                      <Upload className={`w-8 h-8 transition-colors ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
-                      <div className="text-center">
-                        <p className="text-sm text-muted-foreground">{dragging ? 'Relâcher pour importer' : 'Glisser-déposer un PDF'}</p>
-                        <p className="text-xs text-muted-foreground mt-1">ou cliquer pour sélectionner</p>
-                        {!result && <p className="text-xs text-muted-foreground/70 mt-2">Commande · Devis · Facture · BL</p>}
-                      </div>
-                    </div>
-                  )}
-                  <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFichier(f); e.target.value = ''; }} />
-                </div>
-              ) : (
-                <div className="flex-1">
-                  <Textarea id="doc-texte" placeholder="Coller le texte du document : commande, devis, facture, email…" value={texte} onChange={e => setTexte(e.target.value)} className={`font-mono text-xs w-full ${result ? 'min-h-[120px]' : 'min-h-[200px]'}`} />
-                </div>
-              )}
-
-              <Button onClick={handleAnalyse} disabled={loading || (mode === 'pdf' ? !fichier : !texte.trim())} className="w-full">
+              <Button onClick={handleAnalyse} disabled={loading || (!fichier && !texte.trim())} className="w-full">
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyse en cours…</> : <><ScanText className="w-4 h-4 mr-2" />Analyser</>}
               </Button>
 
