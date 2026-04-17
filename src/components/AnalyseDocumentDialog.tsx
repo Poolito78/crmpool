@@ -103,13 +103,67 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     setCreerCCNotes(result.notes || result.referencePartenaire || '');
   }, [result]);
 
+  /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
+  const lancerAnalyse = useCallback(async (
+    pdfFile: File | null,
+    texteCtx: string,
+    pdfsCtx: { name: string; buffer: ArrayBuffer }[]
+  ) => {
+    if (!apiKey) { toast.error('Clé API Groq manquante (VITE_GROQ_API_KEY)'); return; }
+    setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
+    try {
+      let analysis: DocumentAnalysis;
+      if (pdfFile) {
+        const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
+        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey);
+      } else if (texteCtx.trim()) {
+        analysis = await analyserDocument({ type: 'text', texte: texteCtx }, apiKey);
+      } else {
+        toast.error('Glissez un PDF ou collez du texte'); return;
+      }
+      setResult(analysis);
+      if (isFournisseurDoc(analysis.typeDocument) && analysis.numeroDocument) {
+        const match = commandesFournisseur.find(cf =>
+          cf.numero.toLowerCase().includes(analysis.numeroDocument!.toLowerCase()) ||
+          analysis.numeroDocument!.toLowerCase().includes(cf.numero.toLowerCase())
+        );
+        if (match) { setMatchedCF(match); toast.success(`Commande trouvée : ${match.numero}`); }
+        else toast.info('Aucune commande correspondante — vous pouvez la créer');
+      } else {
+        toast.success(`Document analysé : ${TYPE_LABELS[analysis.typeDocument]?.label}`);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'analyse');
+    } finally {
+      setLoading(false);
+    }
+  }, [apiKey, commandesFournisseur]);
+
   /* ── drag & drop ── */
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
 
     const files = Array.from(e.dataTransfer.files);
 
-    // ── Plusieurs fichiers : chercher PDF + email séparément ──
+    // ── Texte glissé directement (sélection dans mail) ──
+    if (files.length === 0) {
+      const txtPlain = e.dataTransfer.getData('text/plain');
+      const txtHtml  = e.dataTransfer.getData('text/html');
+      if (txtPlain) {
+        setTexte(txtPlain);
+        lancerAnalyse(null, txtPlain, []);
+        return;
+      }
+      if (txtHtml) {
+        const div = document.createElement('div');
+        div.innerHTML = txtHtml;
+        const t = (div.innerText || div.textContent || '').trim();
+        if (t) { setTexte(t); lancerAnalyse(null, t, []); return; }
+      }
+      toast.error('Rien à importer');
+      return;
+    }
+
     const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     const emlFiles = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
     const msgFiles = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
@@ -117,7 +171,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     const allPdfBuffers: { name: string; buffer: ArrayBuffer }[] = [];
     let emailTexte = '';
 
-    // ── EML : extraire texte + PDF joints ──
     for (const f of emlFiles) {
       try {
         const eml = await parseEml(f);
@@ -126,7 +179,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
       } catch { /* ignore */ }
     }
 
-    // ── MSG Outlook : scanner les PDF embarqués + extraire texte ──
     for (const f of msgFiles) {
       try {
         const { extraireTexteDeMsg } = await import('@/lib/parseMsgPdf');
@@ -137,49 +189,30 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
       } catch { /* ignore */ }
     }
 
-    // ── PDF standalone ──
     for (const f of pdfFiles) {
       allPdfBuffers.push({ name: f.name, buffer: await f.arrayBuffer() });
     }
 
-    // ── Texte glissé directement (sélection dans mail) ──
-    if (files.length === 0) {
-      const txtPlain = e.dataTransfer.getData('text/plain');
-      const txtHtml  = e.dataTransfer.getData('text/html');
-      if (txtPlain) { setTexte(txtPlain); toast.success('Texte importé'); return; }
-      if (txtHtml) {
-        const div = document.createElement('div');
-        div.innerHTML = txtHtml;
-        const t = (div.innerText || div.textContent || '').trim();
-        if (t) { setTexte(t); toast.success('Email importé (texte)'); return; }
-      }
-      toast.error('Rien à importer');
-      return;
-    }
-
-    // ── Appliquer les résultats ──
-    if (emailTexte) setTexte(emailTexte);
-
     if (allPdfBuffers.length > 0) {
+      if (emailTexte) setTexte(emailTexte);
       setEmlPdfs(allPdfBuffers);
       const blob = new Blob([allPdfBuffers[0].buffer], { type: 'application/pdf' });
-      setFichier(new File([blob], allPdfBuffers[0].name, { type: 'application/pdf' }));
-      const msgs2 = [];
-      if (emlFiles.length > 0 || msgFiles.length > 0) msgs2.push('email');
-      if (allPdfBuffers.length > 0) msgs2.push(`${allPdfBuffers.length} PDF`);
-      toast.success(`Importé : ${msgs2.join(' + ')}`);
+      const firstFile = new File([blob], allPdfBuffers[0].name, { type: 'application/pdf' });
+      setFichier(firstFile);
+      // Analyse automatique immédiate avec les données fraîches
+      lancerAnalyse(firstFile, emailTexte, allPdfBuffers);
     } else if (emailTexte) {
-      toast.success('Email importé (texte)');
+      setTexte(emailTexte);
+      lancerAnalyse(null, emailTexte, []);
     } else {
-      // Fichier inconnu → tenter lecture texte
       const f = files[0];
       try {
         const raw = await f.text();
-        if (raw.trim()) { setTexte(raw.trim()); toast.success(`Fichier importé : ${f.name}`); }
+        if (raw.trim()) { setTexte(raw.trim()); lancerAnalyse(null, raw.trim(), []); }
         else toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)');
       } catch { toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)'); }
     }
-  }, []);
+  }, [lancerAnalyse]);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
@@ -192,40 +225,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
     setCreerCCDateLivraison(''); setCreerCCNotes('');
   }
 
-  /* ── analyse ── */
-  async function handleAnalyse() {
-    if (!apiKey) { toast.error('Clé API Groq manquante (VITE_GROQ_API_KEY)'); return; }
-    setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
-    try {
-      let analysis: DocumentAnalysis;
-      // PDF prioritaire, sinon texte
-      if (fichier) {
-        // Si l'email avait aussi du texte, on le passe en contexte supplémentaire
-        const texteSuppl = emlPdfs.length > 0 && texte.trim() ? texte : undefined;
-        analysis = await analyserDocument({ type: 'pdf', buffer: await fichier.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey);
-      } else if (texte.trim()) {
-        analysis = await analyserDocument({ type: 'text', texte }, apiKey);
-      } else {
-        toast.error('Glissez un PDF ou collez du texte'); return;
-      }
-      setResult(analysis);
-
-      // Tenter de matcher une commande fournisseur
-      if (isFournisseurDoc(analysis.typeDocument) && analysis.numeroDocument) {
-        const match = commandesFournisseur.find(cf =>
-          cf.numero.toLowerCase().includes(analysis.numeroDocument!.toLowerCase()) ||
-          analysis.numeroDocument!.toLowerCase().includes(cf.numero.toLowerCase())
-        );
-        if (match) { setMatchedCF(match); toast.success(`Commande fournisseur ${match.numero} trouvée`); }
-        else toast.info('Aucune commande fournisseur correspondante — vous pouvez la créer');
-      } else {
-        toast.success(`Document analysé : ${TYPE_LABELS[analysis.typeDocument]?.label}`);
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Erreur lors de l\'analyse');
-    } finally {
-      setLoading(false);
-    }
+  /* ── analyse manuelle (bouton) → délègue à lancerAnalyse avec le state courant ── */
+  function handleAnalyse() {
+    lancerAnalyse(fichier, texte, emlPdfs);
   }
 
   /* ── réception commande fournisseur existante ── */
@@ -416,20 +418,32 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
               )}
             </div>
 
-            {/* ══ COLONNE DROITE : résultats ══ */}
-            {result && (
+            {/* ══ COLONNE DROITE : résultats / loading ══ */}
+            {(result || loading) && (
               <div className="flex flex-col gap-4 flex-1 min-h-0 lg:pl-6 lg:overflow-y-auto mt-4 lg:mt-0">
 
-                {/* Badge type + corriger */}
+                {/* ── Skeleton pendant l'analyse ── */}
+                {loading && !result && (
+                  <div className="flex flex-col items-center justify-center flex-1 gap-4 py-12 text-muted-foreground">
+                    <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                    <p className="text-sm font-medium">Analyse IA en cours…</p>
+                    <p className="text-xs text-center max-w-xs">Le document est lu et interprété par le modèle.</p>
+                  </div>
+                )}
+
+                {result && (<>
+
+                {/* ── En-tête : type + sélecteur correction ── */}
                 {typeMeta && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${typeMeta.color}`}>
-                      {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client' ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide ${typeMeta.color}`}>
+                      {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client'
+                        ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
                       {typeMeta.label}
                     </span>
                     <Select value={result.typeDocument} onValueChange={v => handleChangeType(v as TypeDocument)}>
-                      <SelectTrigger className="h-7 text-xs w-auto px-2 border-dashed">
-                        <span className="text-muted-foreground">Corriger le type</span>
+                      <SelectTrigger className="h-7 text-xs w-auto gap-1 px-2.5 border-dashed text-muted-foreground hover:text-foreground">
+                        <span>Corriger le type</span>
                       </SelectTrigger>
                       <SelectContent>
                         {(Object.entries(TYPE_LABELS) as [TypeDocument, { label: string; color: string }][]).map(([key, meta]) => (
@@ -442,130 +456,135 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
-                {/* Match / no-match banner */}
+                {/* ── Bandeaux match / no-match ── */}
                 {matchedCF && (
-                  <div className="flex items-center gap-2 rounded-lg bg-success/10 text-success px-3 py-2 text-sm font-medium">
+                  <div className="flex items-center gap-2.5 rounded-lg bg-success/10 border border-success/20 text-success px-4 py-2.5 text-sm font-medium">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    <span>Commande trouvée : <strong>{matchedCF.numero}</strong> — {fournisseurMatch?.societe}</span>
+                    <div>
+                      <span className="font-semibold">Commande trouvée</span>
+                      <span className="text-success/80"> · {matchedCF.numero}{fournisseurMatch ? ` — ${fournisseurMatch.societe}` : ''}</span>
+                    </div>
                   </div>
                 )}
                 {noMatchCF && (
-                  <div className="flex items-center gap-2 rounded-lg bg-warning/10 text-warning px-3 py-2 text-sm font-medium">
+                  <div className="flex items-center gap-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-700 px-4 py-2.5 text-sm font-medium dark:bg-amber-950/30 dark:border-amber-800 dark:text-amber-400">
                     <AlertTriangle className="w-4 h-4 shrink-0" />
-                    {result.numeroDocument ? `N° ${result.numeroDocument} non trouvé dans le CRM` : 'Aucune commande correspondante'}
+                    <span>{result.numeroDocument ? `N° ${result.numeroDocument} non trouvé dans le CRM` : 'Aucune commande correspondante'}</span>
                   </div>
                 )}
 
-                {/* Métadonnées */}
-                <div className="rounded-lg border border-border p-4 space-y-2">
-                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-x-6 gap-y-2">
-                    {result.numeroDocument && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">N° document</p>
-                        <p className="text-sm font-semibold">{result.numeroDocument}</p>
-                      </div>
-                    )}
-                    {result.nomPartenaire && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client'}</p>
-                        <p className="text-sm font-semibold">{result.nomPartenaire}</p>
-                      </div>
-                    )}
-                    {result.referencePartenaire && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Réf. partenaire</p>
-                        <p className="text-sm font-medium">{result.referencePartenaire}</p>
-                      </div>
-                    )}
-                    {result.dateDocument && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Date</p>
-                        <p className="text-sm font-medium">{new Date(result.dateDocument).toLocaleDateString('fr-FR')}</p>
-                      </div>
-                    )}
-                    {result.dateLivraisonPrevue && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Livraison prévue</p>
-                        <p className="text-sm font-medium">{new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')}</p>
-                      </div>
-                    )}
-                    {result.dateEcheance && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Échéance</p>
-                        <p className="text-sm font-medium">{new Date(result.dateEcheance).toLocaleDateString('fr-FR')}</p>
-                      </div>
-                    )}
+                {/* ── Strip montants (si présents) ── */}
+                {(result.totalHT != null || result.totalTTC != null) && (
+                  <div className="grid grid-cols-2 gap-3">
                     {result.totalHT != null && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total HT</p>
-                        <p className="text-sm font-medium">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                      <div className="rounded-lg bg-muted/50 border border-border px-4 py-3">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-0.5">Total HT</p>
+                        <p className="text-lg font-bold tabular-nums">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
                       </div>
                     )}
                     {result.totalTTC != null && (
-                      <div className="space-y-0.5">
-                        <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total TTC</p>
-                        <p className="text-base font-bold text-primary">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                      <div className="rounded-lg bg-primary/8 border border-primary/20 px-4 py-3">
+                        <p className="text-[10px] text-primary/70 uppercase tracking-widest font-semibold mb-0.5">Total TTC</p>
+                        <p className="text-lg font-bold text-primary tabular-nums">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
                       </div>
                     )}
                   </div>
-                  {result.notes && <p className="text-xs text-muted-foreground italic border-t border-border pt-2 mt-1">{result.notes}</p>}
+                )}
+
+                {/* ── Métadonnées ── */}
+                <div className="rounded-lg border border-border overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-2 border-b border-border">
+                    <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Informations extraites</p>
+                  </div>
+                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-px bg-border">
+                    {([
+                      result.numeroDocument  && ['N° document',   result.numeroDocument],
+                      result.nomPartenaire   && [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client', result.nomPartenaire],
+                      result.referencePartenaire && ['Réf. partenaire', result.referencePartenaire],
+                      result.dateDocument    && ['Date',          new Date(result.dateDocument).toLocaleDateString('fr-FR')],
+                      result.dateLivraisonPrevue && ['Livraison',  new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')],
+                      result.dateEcheance    && ['Échéance',       new Date(result.dateEcheance).toLocaleDateString('fr-FR')],
+                    ] as ([string, string] | false)[]).filter(Boolean).map(([label, value], i) => (
+                      <div key={i} className="bg-background px-4 py-2.5">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</p>
+                        <p className="text-sm font-semibold truncate" title={value}>{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                  {result.notes && (
+                    <div className="bg-background px-4 py-2.5 border-t border-border">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">Notes</p>
+                      <p className="text-xs text-muted-foreground italic">{result.notes}</p>
+                    </div>
+                  )}
                 </div>
 
-                {/* Lignes */}
+                {/* ── Lignes ── */}
                 {result.lignes.length > 0 && (
                   <div className="rounded-lg border border-border overflow-hidden">
-                    <table className="w-full text-xs">
-                      <thead className="bg-muted/60">
-                        <tr>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Réf.</th>
-                          <th className="text-left px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Description</th>
-                          <th className="text-center px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Qté</th>
-                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">P.U. HT</th>
-                          <th className="text-right px-3 py-2 font-semibold text-muted-foreground uppercase tracking-wide text-[11px]">Total HT</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-border">
-                        {result.lignes.map((l, i) => {
-                          const total = l.prixUnitaireHT != null ? l.prixUnitaireHT * l.quantite : null;
-                          return (
-                            <tr key={i} className="hover:bg-muted/20 transition-colors">
-                              <td className="px-3 py-2 font-mono text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
-                              <td className="px-3 py-2 max-w-[260px]">{l.description || '—'}</td>
-                              <td className="px-3 py-2 text-center font-bold">{l.quantite}</td>
-                              <td className="px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
-                              <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                    <div className="bg-muted/40 px-4 py-2 border-b border-border flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Lignes ({result.lignes.length})</p>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead className="bg-muted/20">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">Réf.</th>
+                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px]">Description</th>
+                            <th className="text-center px-3 py-2 font-semibold text-muted-foreground text-[11px]">Qté</th>
+                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">P.U. HT</th>
+                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">Total HT</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {result.lignes.map((l, i) => {
+                            const total = l.prixUnitaireHT != null ? l.prixUnitaireHT * l.quantite : null;
+                            return (
+                              <tr key={i} className="hover:bg-muted/20 transition-colors">
+                                <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
+                                <td className="px-3 py-2.5 max-w-[240px]">{l.description || '—'}</td>
+                                <td className="px-3 py-2.5 text-center font-bold text-sm">{l.quantite}</td>
+                                <td className="px-3 py-2.5 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                                <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
 
-                {/* ═══ ACTION commande fournisseur existante ═══ */}
+                {/* ═══ ACTION : commande fournisseur existante ═══ */}
                 {matchedCF && (
-                  <div className="flex gap-2 justify-end pt-1">
-                    {matchedCF.statut !== 'recue' && matchedCF.statut !== 'payee' ? (
-                      <Button onClick={() => setReceptionOpen(true)} className="w-full">
-                        <Package className="w-4 h-4 mr-2" />Enregistrer la réception
-                      </Button>
-                    ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <CheckCircle2 className="w-4 h-4 text-success" />Déjà réceptionnée
-                      </div>
-                    )}
-                  </div>
+                  matchedCF.statut !== 'recue' && matchedCF.statut !== 'payee' ? (
+                    <Button onClick={() => setReceptionOpen(true)} size="lg" className="w-full">
+                      <Package className="w-4 h-4 mr-2" />Enregistrer la réception
+                    </Button>
+                  ) : (
+                    <div className="flex items-center gap-2 justify-center text-sm text-muted-foreground py-2">
+                      <CheckCircle2 className="w-4 h-4 text-success" />Déjà réceptionnée
+                    </div>
+                  )
                 )}
 
-                {/* ═══ ACTION créer commande fournisseur ═══ */}
+                {/* ═══ ACTION : créer commande fournisseur ═══ */}
                 {noMatchCF && (
-                  <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold flex items-center gap-2"><PlusCircle className="w-4 h-4 text-primary" />Créer comme commande reçue</h3>
-                      <button onClick={() => setShowCreerCF(v => !v)} className="text-xs text-primary hover:underline">{showCreerCF ? 'Masquer' : 'Configurer'}</button>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                          <PlusCircle className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">Créer comme commande reçue</p>
+                          <p className="text-[11px] text-muted-foreground">Enregistrer dans les achats fournisseurs</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowCreerCF(v => !v)} className="text-xs text-primary hover:underline shrink-0">{showCreerCF ? 'Masquer' : 'Configurer'}</button>
                     </div>
                     {showCreerCF && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-1">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1"><Label className="text-xs">Fournisseur *</Label>
                             <Select value={creerCFFournisseurId} onValueChange={setCreerCFFournisseurId}>
@@ -586,15 +605,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
                   </div>
                 )}
 
-                {/* ═══ ACTION commande client ═══ */}
+                {/* ═══ ACTION : commande client ═══ */}
                 {isCC && (
-                  <div className="rounded-lg border border-dashed border-success/40 bg-success/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-success/30 bg-success/5 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold flex items-center gap-2"><PlusCircle className="w-4 h-4 text-success" />{result.typeDocument === 'devis_client' ? 'Créer comme commande client' : 'Créer la commande client'}</h3>
-                      <button onClick={() => setShowCreerCC(v => !v)} className="text-xs text-success hover:underline">{showCreerCC ? 'Masquer' : 'Configurer'}</button>
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-success/15 flex items-center justify-center shrink-0">
+                          <PlusCircle className="w-4 h-4 text-success" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">{result.typeDocument === 'devis_client' ? 'Créer comme commande client' : 'Créer la commande client'}</p>
+                          <p className="text-[11px] text-muted-foreground">Enregistrer dans les ventes</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowCreerCC(v => !v)} className="text-xs text-success hover:underline shrink-0">{showCreerCC ? 'Masquer' : 'Configurer'}</button>
                     </div>
                     {showCreerCC && (
-                      <div className="space-y-2">
+                      <div className="space-y-2 pt-1">
                         <div className="grid grid-cols-2 gap-2">
                           <div className="space-y-1"><Label className="text-xs">Client *</Label>
                             <Select value={creerCCClientId} onValueChange={setCreerCCClientId}>
@@ -617,11 +644,18 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
 
                 {/* ═══ Facture ═══ */}
                 {isFact && (
-                  <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-start gap-3 text-sm text-muted-foreground">
-                    <Receipt className="w-4 h-4 shrink-0 mt-0.5" />
-                    <span>Facture détectée. Rapprochez-la manuellement de la commande correspondante dans le CRM.</span>
+                  <div className="rounded-xl border border-border bg-muted/30 p-4 flex items-start gap-3">
+                    <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                      <Receipt className="w-4 h-4 text-muted-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold mb-0.5">Facture détectée</p>
+                      <p className="text-xs text-muted-foreground">Rapprochez-la manuellement de la commande correspondante dans le CRM.</p>
+                    </div>
                   </div>
                 )}
+
+                </>)}
               </div>
             )}
           </div>
