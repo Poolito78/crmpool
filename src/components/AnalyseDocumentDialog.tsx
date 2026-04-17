@@ -9,6 +9,7 @@ import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, Pl
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml } from '@/lib/parseEml';
+import { extrairePDFsDeMsg } from '@/lib/parseMsgPdf';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type CommandeFournisseur, type LigneReception, type CommandeClient,
@@ -106,63 +107,77 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
 
-    const f = e.dataTransfer.files?.[0];
-    const name = f?.name.toLowerCase() ?? '';
+    const files = Array.from(e.dataTransfer.files);
 
-    // ── PDF ──────────────────────────────────────────────
-    if (f && (f.type === 'application/pdf' || name.endsWith('.pdf'))) {
-      setFichier(f); setEmlPdfs([]);
-      return;
-    }
+    // ── Plusieurs fichiers : chercher PDF + email séparément ──
+    const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+    const emlFiles = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
+    const msgFiles = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
 
-    // ── EML ──────────────────────────────────────────────
-    if (f && (name.endsWith('.eml') || f.type === 'message/rfc822' || f.type === 'text/plain')) {
+    const allPdfBuffers: { name: string; buffer: ArrayBuffer }[] = [];
+    let emailTexte = '';
+
+    // ── EML : extraire texte + PDF joints ──
+    for (const f of emlFiles) {
       try {
         const eml = await parseEml(f);
-        if (eml.texte) setTexte(eml.texte);
-        if (eml.pdfBuffers.length > 0) {
-          setEmlPdfs(eml.pdfBuffers);
-          const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });
-          setFichier(new File([blob], eml.pdfBuffers[0].name, { type: 'application/pdf' }));
-          toast.success(`Email importé — ${eml.pdfBuffers.length} PDF trouvé${eml.pdfBuffers.length > 1 ? 's' : ''}`);
-        } else {
-          toast.success('Email importé (texte)');
-        }
-      } catch { toast.error('Impossible de lire ce fichier email'); }
+        if (eml.texte) emailTexte += (emailTexte ? '\n\n' : '') + eml.texte;
+        allPdfBuffers.push(...eml.pdfBuffers);
+      } catch { /* ignore */ }
+    }
+
+    // ── MSG Outlook : scanner les PDF embarqués + extraire texte ──
+    for (const f of msgFiles) {
+      try {
+        const { extraireTexteDeMsg } = await import('@/lib/parseMsgPdf');
+        const msgTxt = await extraireTexteDeMsg(f);
+        if (msgTxt) emailTexte += (emailTexte ? '\n\n' : '') + msgTxt;
+        const pdfs = await extrairePDFsDeMsg(f);
+        allPdfBuffers.push(...pdfs);
+      } catch { /* ignore */ }
+    }
+
+    // ── PDF standalone ──
+    for (const f of pdfFiles) {
+      allPdfBuffers.push({ name: f.name, buffer: await f.arrayBuffer() });
+    }
+
+    // ── Texte glissé directement (sélection dans mail) ──
+    if (files.length === 0) {
+      const txtPlain = e.dataTransfer.getData('text/plain');
+      const txtHtml  = e.dataTransfer.getData('text/html');
+      if (txtPlain) { setTexte(txtPlain); toast.success('Texte importé'); return; }
+      if (txtHtml) {
+        const div = document.createElement('div');
+        div.innerHTML = txtHtml;
+        const t = (div.innerText || div.textContent || '').trim();
+        if (t) { setTexte(t); toast.success('Email importé (texte)'); return; }
+      }
+      toast.error('Rien à importer');
       return;
     }
 
-    // ── MSG Outlook (binaire) → tenter lecture texte du drag ──
-    if (f && name.endsWith('.msg')) {
-      const txt = e.dataTransfer.getData('text/plain');
-      if (txt) { setTexte(txt); toast.success('Email Outlook importé (texte)'); }
-      else toast.info('Fichier .msg Outlook : enregistrez le mail en .eml (Fichier → Enregistrer sous) pour une analyse complète avec pièces jointes PDF');
-      return;
-    }
+    // ── Appliquer les résultats ──
+    if (emailTexte) setTexte(emailTexte);
 
-    // ── Texte glissé directement (ex: sélection dans le mail) ──
-    const txtPlain = e.dataTransfer.getData('text/plain');
-    const txtHtml  = e.dataTransfer.getData('text/html');
-
-    if (txtPlain) {
-      setTexte(txtPlain);
-      toast.success('Texte importé');
-      return;
-    }
-    if (txtHtml) {
-      const div = document.createElement('div');
-      div.innerHTML = txtHtml;
-      const stripped = div.innerText || div.textContent || '';
-      if (stripped.trim()) { setTexte(stripped.trim()); toast.success('Email importé (texte)'); return; }
-    }
-
-    // ── Fichier inconnu → tenter lecture comme texte ──
-    if (f) {
+    if (allPdfBuffers.length > 0) {
+      setEmlPdfs(allPdfBuffers);
+      const blob = new Blob([allPdfBuffers[0].buffer], { type: 'application/pdf' });
+      setFichier(new File([blob], allPdfBuffers[0].name, { type: 'application/pdf' }));
+      const msgs2 = [];
+      if (emlFiles.length > 0 || msgFiles.length > 0) msgs2.push('email');
+      if (allPdfBuffers.length > 0) msgs2.push(`${allPdfBuffers.length} PDF`);
+      toast.success(`Importé : ${msgs2.join(' + ')}`);
+    } else if (emailTexte) {
+      toast.success('Email importé (texte)');
+    } else {
+      // Fichier inconnu → tenter lecture texte
+      const f = files[0];
       try {
         const raw = await f.text();
         if (raw.trim()) { setTexte(raw.trim()); toast.success(`Fichier importé : ${f.name}`); }
-        else toast.error('Fichier non reconnu. Formats : PDF, .eml, ou texte');
-      } catch { toast.error('Fichier non reconnu. Formats : PDF, .eml, ou texte'); }
+        else toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)');
+      } catch { toast.error('Fichier non reconnu — glissez un PDF ou un email (.eml / .msg)'); }
     }
   }, []);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
