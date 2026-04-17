@@ -236,251 +236,238 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
 
   const typeMeta = result ? TYPE_LABELS[result.typeDocument] : null;
 
+  /* ── correction manuelle du type ── */
+  function handleChangeType(newType: TypeDocument) {
+    setResult(prev => prev ? { ...prev, typeDocument: newType } : prev);
+    setMatchedCF(null);
+    setShowCreerCF(false);
+    setShowCreerCC(false);
+  }
+
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
               Analyse de document
             </DialogTitle>
           </DialogHeader>
 
-          <div className="space-y-5 pt-1">
-            {/* Mode */}
-            <div className="flex gap-2">
-              <button onClick={() => setMode('pdf')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${mode === 'pdf' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
-                <FileText className="w-4 h-4" /> Fichier PDF
-              </button>
-              <button onClick={() => setMode('texte')} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-colors ${mode === 'texte' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
-                <ScanText className="w-4 h-4" /> Texte / Email
-              </button>
-            </div>
+          {/* ── Layout 2 colonnes sur desktop ── */}
+          <div className="flex flex-col md:flex-row gap-0 flex-1 min-h-0 pt-2">
 
-            {/* Input */}
-            {mode === 'pdf' ? (
-              <div className="space-y-2">
-                <Label>Document (commande, devis, facture, BL, email…)</Label>
-                {fichier ? (
-                  <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
-                    <FileText className="w-5 h-5 text-primary shrink-0" />
-                    <span className="text-sm flex-1 truncate">{fichier.name}</span>
-                    <button onClick={() => setFichier(null)} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
-                  </div>
-                ) : (
-                  <div onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onClick={() => fileRef.current?.click()}
-                    className={`w-full flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-lg p-8 cursor-pointer transition-colors select-none ${dragging ? 'border-primary bg-primary/10' : 'border-border hover:border-primary hover:bg-primary/5'}`}>
-                    <Upload className={`w-8 h-8 transition-colors ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
-                    <span className="text-sm text-muted-foreground text-center">{dragging ? 'Relâcher pour importer' : 'Glisser-déposer un PDF ici ou cliquer pour sélectionner'}</span>
-                    <span className="text-xs text-muted-foreground">Commande · Devis · Facture · Bon de livraison</span>
-                  </div>
-                )}
-                <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFichier(f); e.target.value = ''; }} />
+            {/* ══ COLONNE GAUCHE : import ══ */}
+            <div className={`flex flex-col gap-4 shrink-0 ${result ? 'md:w-[300px] md:border-r md:border-border md:pr-5' : 'w-full'}`}>
+              {/* Mode selector */}
+              <div className="flex gap-2">
+                <button onClick={() => setMode('pdf')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${mode === 'pdf' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
+                  <FileText className="w-4 h-4" /> PDF
+                </button>
+                <button onClick={() => setMode('texte')} className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-colors ${mode === 'texte' ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:bg-muted/50'}`}>
+                  <ScanText className="w-4 h-4" /> Texte / Email
+                </button>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label htmlFor="doc-texte">Contenu du document ou email</Label>
-                <Textarea id="doc-texte" placeholder="Coller ici le texte : commande fournisseur, devis, commande client, facture, email commercial…" value={texte} onChange={e => setTexte(e.target.value)} className="min-h-[160px] font-mono text-xs" />
-              </div>
-            )}
 
-            <Button onClick={handleAnalyse} disabled={loading || (mode === 'pdf' ? !fichier : !texte.trim())} className="w-full">
-              {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyse en cours…</> : <><ScanText className="w-4 h-4 mr-2" />Analyser le document</>}
-            </Button>
-
-            {/* ═══ RÉSULTATS ═══ */}
-            {result && (
-              <div className="space-y-4 pt-1">
-                <div className="h-px bg-border" />
-
-                {/* Badge type */}
-                {typeMeta && (
-                  <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold ${typeMeta.color}`}>
-                    {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client' ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
-                    {typeMeta.label}
-                  </div>
-                )}
-
-                {/* Match CF */}
-                {matchedCF && (
-                  <div className="flex items-center gap-2 rounded-lg bg-success/10 text-success px-4 py-2.5 text-sm font-medium">
-                    <CheckCircle2 className="w-4 h-4 shrink-0" />
-                    Commande trouvée : <span className="font-bold ml-1">{matchedCF.numero}</span>
-                    <span className="ml-1 font-normal text-muted-foreground">— {fournisseurMatch?.societe}</span>
-                  </div>
-                )}
-                {noMatchCF && (
-                  <div className="flex items-center gap-2 rounded-lg bg-warning/10 text-warning px-4 py-2.5 text-sm font-medium">
-                    <AlertTriangle className="w-4 h-4 shrink-0" />
-                    {result.numeroDocument ? `N° ${result.numeroDocument} non trouvé dans le CRM` : 'Aucune commande correspondante dans le CRM'}
-                  </div>
-                )}
-
-                {/* Données extraites */}
-                <div className="rounded-lg border border-border p-4 space-y-3">
-                  <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Données extraites</h3>
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    {result.numeroDocument && <><span className="text-muted-foreground">N° document</span><span className="font-medium">{result.numeroDocument}</span></>}
-                    {result.nomPartenaire && <><span className="text-muted-foreground">{isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client'}</span><span className="font-medium">{result.nomPartenaire}</span></>}
-                    {result.referencePartenaire && <><span className="text-muted-foreground">Réf. partenaire</span><span className="font-medium">{result.referencePartenaire}</span></>}
-                    {result.dateDocument && <><span className="text-muted-foreground">Date</span><span className="font-medium">{new Date(result.dateDocument).toLocaleDateString('fr-FR')}</span></>}
-                    {result.dateLivraisonPrevue && <><span className="text-muted-foreground">Livraison prévue</span><span className="font-medium">{new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')}</span></>}
-                    {result.dateEcheance && <><span className="text-muted-foreground">Échéance</span><span className="font-medium">{new Date(result.dateEcheance).toLocaleDateString('fr-FR')}</span></>}
-                    {result.totalHT != null && <><span className="text-muted-foreground">Total HT</span><span className="font-medium">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
-                    {result.totalTTC != null && <><span className="text-muted-foreground">Total TTC</span><span className="font-semibold">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
-                  </div>
-                  {result.notes && <p className="text-xs text-muted-foreground italic border-t border-border pt-2">{result.notes}</p>}
-
-                  {result.lignes.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold text-muted-foreground mb-2">Lignes ({result.lignes.length})</h4>
-                      <div className="rounded border border-border overflow-hidden">
-                        <table className="w-full text-xs">
-                          <thead className="bg-muted/50">
-                            <tr>
-                              <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Réf.</th>
-                              <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Description</th>
-                              <th className="text-center px-2 py-1.5 font-medium text-muted-foreground">Qté</th>
-                              <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">P.U. HT</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-border">
-                            {result.lignes.map((l, i) => (
-                              <tr key={i} className="hover:bg-muted/20">
-                                <td className="px-2 py-1.5 font-mono text-muted-foreground">{l.reference || '—'}</td>
-                                <td className="px-2 py-1.5">{l.description || '—'}</td>
-                                <td className="px-2 py-1.5 text-center font-semibold">{l.quantite}</td>
-                                <td className="px-2 py-1.5 text-right">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+              {/* Input */}
+              {mode === 'pdf' ? (
+                <div className="space-y-2 flex-1">
+                  {fichier ? (
+                    <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-muted/30">
+                      <FileText className="w-5 h-5 text-primary shrink-0" />
+                      <span className="text-sm flex-1 truncate">{fichier.name}</span>
+                      <button onClick={() => setFichier(null)} className="text-muted-foreground hover:text-destructive"><X className="w-4 h-4" /></button>
+                    </div>
+                  ) : (
+                    <div onDrop={handleDrop} onDragOver={handleDragOver} onDragLeave={handleDragLeave} onClick={() => fileRef.current?.click()}
+                      className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-lg cursor-pointer transition-colors select-none ${result ? 'p-6' : 'p-10'} ${dragging ? 'border-primary bg-primary/10' : 'border-border hover:border-primary hover:bg-primary/5'}`}>
+                      <Upload className={`w-8 h-8 transition-colors ${dragging ? 'text-primary' : 'text-muted-foreground'}`} />
+                      <div className="text-center">
+                        <p className="text-sm text-muted-foreground">{dragging ? 'Relâcher pour importer' : 'Glisser-déposer un PDF'}</p>
+                        <p className="text-xs text-muted-foreground mt-1">ou cliquer pour sélectionner</p>
+                        {!result && <p className="text-xs text-muted-foreground/70 mt-2">Commande · Devis · Facture · BL</p>}
                       </div>
                     </div>
                   )}
+                  <input ref={fileRef} type="file" accept="application/pdf" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) setFichier(f); e.target.value = ''; }} />
+                </div>
+              ) : (
+                <div className="flex-1">
+                  <Textarea id="doc-texte" placeholder="Coller le texte du document : commande, devis, facture, email…" value={texte} onChange={e => setTexte(e.target.value)} className={`font-mono text-xs w-full ${result ? 'min-h-[120px]' : 'min-h-[200px]'}`} />
+                </div>
+              )}
+
+              <Button onClick={handleAnalyse} disabled={loading || (mode === 'pdf' ? !fichier : !texte.trim())} className="w-full">
+                {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyse en cours…</> : <><ScanText className="w-4 h-4 mr-2" />Analyser</>}
+              </Button>
+
+              {result && (
+                <Button variant="outline" onClick={reset} className="w-full">
+                  <X className="w-4 h-4 mr-2" />Nouvelle analyse
+                </Button>
+              )}
+            </div>
+
+            {/* ══ COLONNE DROITE : résultats ══ */}
+            {result && (
+              <div className="flex flex-col gap-4 flex-1 min-h-0 md:pl-5 md:overflow-y-auto mt-4 md:mt-0">
+
+                {/* Badge type + corriger */}
+                {typeMeta && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${typeMeta.color}`}>
+                      {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client' ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                      {typeMeta.label}
+                    </span>
+                    <Select value={result.typeDocument} onValueChange={v => handleChangeType(v as TypeDocument)}>
+                      <SelectTrigger className="h-7 text-xs w-auto px-2 border-dashed">
+                        <span className="text-muted-foreground">Corriger le type</span>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {(Object.entries(TYPE_LABELS) as [TypeDocument, { label: string; color: string }][]).map(([key, meta]) => (
+                          <SelectItem key={key} value={key}>
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Match / no-match banner */}
+                {matchedCF && (
+                  <div className="flex items-center gap-2 rounded-lg bg-success/10 text-success px-3 py-2 text-sm font-medium">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>Commande trouvée : <strong>{matchedCF.numero}</strong> — {fournisseurMatch?.societe}</span>
+                  </div>
+                )}
+                {noMatchCF && (
+                  <div className="flex items-center gap-2 rounded-lg bg-warning/10 text-warning px-3 py-2 text-sm font-medium">
+                    <AlertTriangle className="w-4 h-4 shrink-0" />
+                    {result.numeroDocument ? `N° ${result.numeroDocument} non trouvé dans le CRM` : 'Aucune commande correspondante'}
+                  </div>
+                )}
+
+                {/* Métadonnées */}
+                <div className="rounded-lg border border-border p-3 space-y-2">
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                    {result.numeroDocument && <><span className="text-muted-foreground text-xs">N° document</span><span className="font-medium text-xs">{result.numeroDocument}</span></>}
+                    {result.nomPartenaire && <><span className="text-muted-foreground text-xs">{isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client'}</span><span className="font-medium text-xs">{result.nomPartenaire}</span></>}
+                    {result.referencePartenaire && <><span className="text-muted-foreground text-xs">Réf. partenaire</span><span className="font-medium text-xs">{result.referencePartenaire}</span></>}
+                    {result.dateDocument && <><span className="text-muted-foreground text-xs">Date</span><span className="font-medium text-xs">{new Date(result.dateDocument).toLocaleDateString('fr-FR')}</span></>}
+                    {result.dateLivraisonPrevue && <><span className="text-muted-foreground text-xs">Livraison prévue</span><span className="font-medium text-xs">{new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')}</span></>}
+                    {result.dateEcheance && <><span className="text-muted-foreground text-xs">Échéance</span><span className="font-medium text-xs">{new Date(result.dateEcheance).toLocaleDateString('fr-FR')}</span></>}
+                    {result.totalHT != null && <><span className="text-muted-foreground text-xs">Total HT</span><span className="font-medium text-xs">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
+                    {result.totalTTC != null && <><span className="text-muted-foreground text-xs">Total TTC</span><span className="font-semibold text-xs">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</span></>}
+                  </div>
+                  {result.notes && <p className="text-xs text-muted-foreground italic border-t border-border pt-2">{result.notes}</p>}
                 </div>
 
-                {/* ═══ ACTION : commande fournisseur existante ═══ */}
+                {/* Lignes */}
+                {result.lignes.length > 0 && (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Réf.</th>
+                          <th className="text-left px-2 py-1.5 font-medium text-muted-foreground">Description</th>
+                          <th className="text-center px-2 py-1.5 font-medium text-muted-foreground">Qté</th>
+                          <th className="text-right px-2 py-1.5 font-medium text-muted-foreground">P.U. HT</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {result.lignes.map((l, i) => (
+                          <tr key={i} className="hover:bg-muted/20">
+                            <td className="px-2 py-1.5 font-mono text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
+                            <td className="px-2 py-1.5">{l.description || '—'}</td>
+                            <td className="px-2 py-1.5 text-center font-semibold">{l.quantite}</td>
+                            <td className="px-2 py-1.5 text-right whitespace-nowrap">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* ═══ ACTION commande fournisseur existante ═══ */}
                 {matchedCF && (
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="outline" onClick={reset}>Nouvelle analyse</Button>
+                  <div className="flex gap-2 justify-end pt-1">
                     {matchedCF.statut !== 'recue' && matchedCF.statut !== 'payee' ? (
-                      <Button onClick={() => setReceptionOpen(true)}>
+                      <Button onClick={() => setReceptionOpen(true)} className="w-full">
                         <Package className="w-4 h-4 mr-2" />Enregistrer la réception
                       </Button>
                     ) : (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground px-3">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <CheckCircle2 className="w-4 h-4 text-success" />Déjà réceptionnée
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* ═══ ACTION : créer commande fournisseur (pas de match) ═══ */}
+                {/* ═══ ACTION créer commande fournisseur ═══ */}
                 {noMatchCF && (
-                  <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 space-y-4">
+                  <div className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <PlusCircle className="w-4 h-4 text-primary" />Créer comme nouvelle commande reçue
-                      </h3>
-                      <button onClick={() => setShowCreerCF(v => !v)} className="text-xs text-primary hover:underline">
-                        {showCreerCF ? 'Masquer' : 'Configurer'}
-                      </button>
+                      <h3 className="text-sm font-semibold flex items-center gap-2"><PlusCircle className="w-4 h-4 text-primary" />Créer comme commande reçue</h3>
+                      <button onClick={() => setShowCreerCF(v => !v)} className="text-xs text-primary hover:underline">{showCreerCF ? 'Masquer' : 'Configurer'}</button>
                     </div>
                     {showCreerCF && (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label>Fournisseur *</Label>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1"><Label className="text-xs">Fournisseur *</Label>
                             <Select value={creerCFFournisseurId} onValueChange={setCreerCFFournisseurId}>
-                              <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                               <SelectContent>{fournisseurs.map(f => <SelectItem key={f.id} value={f.id}>{f.societe || f.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label>N° commande *</Label>
-                            <Input value={creerCFNumero} onChange={e => setCreerCFNumero(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Date de réception *</Label>
-                            <Input type="date" value={creerCFDateReception} onChange={e => setCreerCFDateReception(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Date livraison client prévue</Label>
-                            <Input type="date" value={creerCFDateLivraison} onChange={e => setCreerCFDateLivraison(e.target.value)} />
-                          </div>
+                          <div className="space-y-1"><Label className="text-xs">N° commande *</Label><Input className="h-8 text-xs" value={creerCFNumero} onChange={e => setCreerCFNumero(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Date réception *</Label><Input className="h-8 text-xs" type="date" value={creerCFDateReception} onChange={e => setCreerCFDateReception(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Livraison client</Label><Input className="h-8 text-xs" type="date" value={creerCFDateLivraison} onChange={e => setCreerCFDateLivraison(e.target.value)} /></div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>Notes</Label>
-                          <Input value={creerCFNotes} onChange={e => setCreerCFNotes(e.target.value)} />
-                        </div>
+                        <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerCFNotes} onChange={e => setCreerCFNotes(e.target.value)} /></div>
                       </div>
                     )}
-                    <Button onClick={() => showCreerCF ? handleCreerCF() : setShowCreerCF(true)} className="w-full">
+                    <Button onClick={() => showCreerCF ? handleCreerCF() : setShowCreerCF(true)} className="w-full" size="sm">
                       <PlusCircle className="w-4 h-4 mr-2" />{showCreerCF ? 'Confirmer la création' : 'Créer la commande reçue'}
                     </Button>
                   </div>
                 )}
 
-                {/* ═══ ACTION : commande client / devis ═══ */}
+                {/* ═══ ACTION commande client ═══ */}
                 {isCC && (
-                  <div className="rounded-lg border border-dashed border-success/40 bg-success/5 p-4 space-y-4">
+                  <div className="rounded-lg border border-dashed border-success/40 bg-success/5 p-4 space-y-3">
                     <div className="flex items-center justify-between">
-                      <h3 className="text-sm font-semibold flex items-center gap-2">
-                        <PlusCircle className="w-4 h-4 text-success" />
-                        {result.typeDocument === 'devis_client' ? 'Créer comme commande client' : 'Créer la commande client'}
-                      </h3>
-                      <button onClick={() => setShowCreerCC(v => !v)} className="text-xs text-success hover:underline">
-                        {showCreerCC ? 'Masquer' : 'Configurer'}
-                      </button>
+                      <h3 className="text-sm font-semibold flex items-center gap-2"><PlusCircle className="w-4 h-4 text-success" />{result.typeDocument === 'devis_client' ? 'Créer comme commande client' : 'Créer la commande client'}</h3>
+                      <button onClick={() => setShowCreerCC(v => !v)} className="text-xs text-success hover:underline">{showCreerCC ? 'Masquer' : 'Configurer'}</button>
                     </div>
                     {showCreerCC && (
-                      <div className="space-y-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="space-y-1.5">
-                            <Label>Client *</Label>
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1"><Label className="text-xs">Client *</Label>
                             <Select value={creerCCClientId} onValueChange={setCreerCCClientId}>
-                              <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
                               <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
-                          <div className="space-y-1.5">
-                            <Label>N° commande *</Label>
-                            <Input value={creerCCNumero} onChange={e => setCreerCCNumero(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Date *</Label>
-                            <Input type="date" value={creerCCDate} onChange={e => setCreerCCDate(e.target.value)} />
-                          </div>
-                          <div className="space-y-1.5">
-                            <Label>Date livraison prévue</Label>
-                            <Input type="date" value={creerCCDateLivraison} onChange={e => setCreerCCDateLivraison(e.target.value)} />
-                          </div>
+                          <div className="space-y-1"><Label className="text-xs">N° commande *</Label><Input className="h-8 text-xs" value={creerCCNumero} onChange={e => setCreerCCNumero(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerCCDate} onChange={e => setCreerCCDate(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Livraison prévue</Label><Input className="h-8 text-xs" type="date" value={creerCCDateLivraison} onChange={e => setCreerCCDateLivraison(e.target.value)} /></div>
                         </div>
-                        <div className="space-y-1.5">
-                          <Label>Notes</Label>
-                          <Input value={creerCCNotes} onChange={e => setCreerCCNotes(e.target.value)} />
-                        </div>
+                        <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerCCNotes} onChange={e => setCreerCCNotes(e.target.value)} /></div>
                       </div>
                     )}
-                    <Button onClick={() => showCreerCC ? handleCreerCC() : setShowCreerCC(true)} className="w-full bg-success hover:bg-success/90 text-white">
+                    <Button onClick={() => showCreerCC ? handleCreerCC() : setShowCreerCC(true)} className="w-full bg-success hover:bg-success/90 text-white" size="sm">
                       <PlusCircle className="w-4 h-4 mr-2" />{showCreerCC ? 'Confirmer la création' : 'Créer la commande client'}
                     </Button>
                   </div>
                 )}
 
-                {/* ═══ Facture : info uniquement ═══ */}
+                {/* ═══ Facture ═══ */}
                 {isFact && (
                   <div className="rounded-lg border border-border bg-muted/30 p-3 flex items-start gap-3 text-sm text-muted-foreground">
                     <Receipt className="w-4 h-4 shrink-0 mt-0.5" />
                     <span>Facture détectée. Rapprochez-la manuellement de la commande correspondante dans le CRM.</span>
-                  </div>
-                )}
-
-                {!matchedCF && (
-                  <div className="flex justify-start">
-                    <Button variant="outline" onClick={reset}>Nouvelle analyse</Button>
                   </div>
                 )}
               </div>
