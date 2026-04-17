@@ -105,32 +105,64 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   /* ── drag & drop ── */
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false);
-    const f = e.dataTransfer.files?.[0];
-    if (!f) return;
 
-    if (f.type === 'application/pdf') {
-      setFichier(f);
-      setEmlPdfs([]);
-    } else if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
-      // Email → parser le contenu + les PDF en pièces jointes
+    const f = e.dataTransfer.files?.[0];
+    const name = f?.name.toLowerCase() ?? '';
+
+    // ── PDF ──────────────────────────────────────────────
+    if (f && (f.type === 'application/pdf' || name.endsWith('.pdf'))) {
+      setFichier(f); setEmlPdfs([]);
+      return;
+    }
+
+    // ── EML ──────────────────────────────────────────────
+    if (f && (name.endsWith('.eml') || f.type === 'message/rfc822' || f.type === 'text/plain')) {
       try {
         const eml = await parseEml(f);
         if (eml.texte) setTexte(eml.texte);
         if (eml.pdfBuffers.length > 0) {
           setEmlPdfs(eml.pdfBuffers);
-          // Mettre le premier PDF comme fichier principal
-          const first = eml.pdfBuffers[0];
-          const blob = new Blob([first.buffer], { type: 'application/pdf' });
-          setFichier(new File([blob], first.name, { type: 'application/pdf' }));
-          toast.success(`Email importé : ${eml.pdfBuffers.length} PDF trouvé${eml.pdfBuffers.length > 1 ? 's' : ''}`);
+          const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });
+          setFichier(new File([blob], eml.pdfBuffers[0].name, { type: 'application/pdf' }));
+          toast.success(`Email importé — ${eml.pdfBuffers.length} PDF trouvé${eml.pdfBuffers.length > 1 ? 's' : ''}`);
         } else {
-          toast.success('Email importé (texte uniquement)');
+          toast.success('Email importé (texte)');
         }
-      } catch {
-        toast.error('Impossible de lire ce fichier email');
-      }
-    } else {
-      toast.error('Formats acceptés : PDF ou email (.eml)');
+      } catch { toast.error('Impossible de lire ce fichier email'); }
+      return;
+    }
+
+    // ── MSG Outlook (binaire) → tenter lecture texte du drag ──
+    if (f && name.endsWith('.msg')) {
+      const txt = e.dataTransfer.getData('text/plain');
+      if (txt) { setTexte(txt); toast.success('Email Outlook importé (texte)'); }
+      else toast.info('Fichier .msg Outlook : enregistrez le mail en .eml (Fichier → Enregistrer sous) pour une analyse complète avec pièces jointes PDF');
+      return;
+    }
+
+    // ── Texte glissé directement (ex: sélection dans le mail) ──
+    const txtPlain = e.dataTransfer.getData('text/plain');
+    const txtHtml  = e.dataTransfer.getData('text/html');
+
+    if (txtPlain) {
+      setTexte(txtPlain);
+      toast.success('Texte importé');
+      return;
+    }
+    if (txtHtml) {
+      const div = document.createElement('div');
+      div.innerHTML = txtHtml;
+      const stripped = div.innerText || div.textContent || '';
+      if (stripped.trim()) { setTexte(stripped.trim()); toast.success('Email importé (texte)'); return; }
+    }
+
+    // ── Fichier inconnu → tenter lecture comme texte ──
+    if (f) {
+      try {
+        const raw = await f.text();
+        if (raw.trim()) { setTexte(raw.trim()); toast.success(`Fichier importé : ${f.name}`); }
+        else toast.error('Fichier non reconnu. Formats : PDF, .eml, ou texte');
+      } catch { toast.error('Fichier non reconnu. Formats : PDF, .eml, ou texte'); }
     }
   }, []);
   const handleDragOver = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(true); }, []);
