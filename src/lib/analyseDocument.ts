@@ -93,6 +93,12 @@ async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
   return pages.join('\n');
 }
 
+/** Tronque le texte à ~6000 caractères pour rester sous la limite TPM de Groq (free tier) */
+function tronquer(texte: string, maxChars = 6000): string {
+  if (texte.length <= maxChars) return texte;
+  return texte.slice(0, maxChars) + '\n[... texte tronqué ...]';
+}
+
 export async function analyserDocument(
   input:
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
@@ -103,10 +109,10 @@ export async function analyserDocument(
   if (input.type === 'pdf') {
     const textePDF = await extraireTextePDF(input.buffer);
     texte = input.texteSupplementaire
-      ? `=== EMAIL ===\n${input.texteSupplementaire}\n\n=== PDF ===\n${textePDF}`
-      : textePDF;
+      ? `=== EMAIL ===\n${tronquer(input.texteSupplementaire, 1500)}\n\n=== PDF ===\n${tronquer(textePDF, 5000)}`
+      : tronquer(textePDF, 6000);
   } else {
-    texte = input.texte;
+    texte = tronquer(input.texte, 6000);
   }
 
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
