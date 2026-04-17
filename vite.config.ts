@@ -25,4 +25,11 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // xlsx (SheetJS) référence process/Buffer de Node.js — les rendre disponibles dans le navigateur
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(mode),
+  },
+  optimizeDeps: {
+    include: ['xlsx'],
+  },
 }));

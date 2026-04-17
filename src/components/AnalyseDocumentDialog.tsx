@@ -184,9 +184,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (xlsxFiles.length > 0) {
       let xlTexte = '';
       for (const f of xlsxFiles) {
-        try { const xls = await parseExcel(f); if (xls.texte) xlTexte += (xlTexte ? '\n\n' : '') + xls.texte; } catch { /* ignore */ }
+        try {
+          const xls = await parseExcel(f);
+          console.log('[parseExcel]', f.name, '→ feuilles:', xls.feuilles, 'chars:', xls.texte.length);
+          if (xls.texte) xlTexte += (xlTexte ? '\n\n' : '') + xls.texte;
+        } catch (err) {
+          console.error('[parseExcel] erreur:', err);
+          toast.error(`Impossible de lire ${f.name} : ${err instanceof Error ? err.message : String(err)}`);
+        }
       }
-      if (xlTexte) { setTexte(xlTexte); setFichier(null); setEmlPdfs([]); lancerAnalyse(null, xlTexte, []); return; }
+      if (xlTexte) {
+        setTexte(xlTexte);
+        setFichier(null); setEmlPdfs([]);
+        lancerAnalyse(null, xlTexte, []);
+        return;
+      } else if (xlsxFiles.length > 0) {
+        toast.error('Le fichier Excel semble vide ou illisible');
+        return;
+      }
     }
     if (allPdfBuffers.length > 0) {
       if (emailTexte) setTexte(emailTexte);
@@ -198,6 +213,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     } else if (emailTexte) {
       setTexte(emailTexte);
       lancerAnalyse(null, emailTexte, []);
+    } else if (files.length > 0) {
+      toast.error('Format non reconnu — utilisez PDF, Excel (.xlsx), email (.eml/.msg)');
     }
   }, [lancerAnalyse]);
 

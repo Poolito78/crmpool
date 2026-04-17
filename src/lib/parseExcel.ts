@@ -28,8 +28,15 @@ function cellToStr(cell: unknown): string {
  */
 export async function parseExcel(file: File): Promise<ExcelContent> {
   const buffer = await file.arrayBuffer();
-  // SheetJS type:'array' attend un Uint8Array, pas un ArrayBuffer brut
-  const wb = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+  const u8 = new Uint8Array(buffer);
+
+  // Essayer avec cellDates (peut échouer sur certains xlsx), fallback sans
+  let wb: XLSX.WorkBook;
+  try {
+    wb = XLSX.read(u8, { type: 'array', cellDates: true });
+  } catch {
+    wb = XLSX.read(u8, { type: 'array' });
+  }
 
   const feuilles = wb.SheetNames;
   const blocs: string[] = [];
