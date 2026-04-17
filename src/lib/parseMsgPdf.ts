@@ -58,30 +58,54 @@ export async function extrairePDFsDeMsg(file: File): Promise<PdfExtrait[]> {
   return results;
 }
 
-/** Patterns de headers techniques à ignorer dans les .msg */
-const TECH_PREFIXES = [
-  'X-MS-', 'X-ms-', 'x-ms-', 'x-MS-',
-  'X-Exchange-', 'X-Originating', 'X-Forefront', 'X-Microsoft',
-  'ARC-', 'DKIM-', 'DMARC', 'SPF', 'Authentication-Results',
-  'Received:', 'Return-Path:', 'Message-ID:', 'MIME-Version:',
-  'Content-Type:', 'Content-Transfer-', 'Content-Disposition:',
-  'EntityExtraction', 'ItemProcessor', 'SafeLinks', 'originalclient',
-  'originalserver', 'ipaddress', 'ATPSafeLinks',
+/**
+ * Patterns de lignes techniques à supprimer de l'extraction .msg.
+ * Couvre : Exchange DN, flux CFBF, GUID, hex, headers MIME/DKIM, etc.
+ */
+const TECH_PATTERNS: RegExp[] = [
+  // Chemins Exchange DN  : /O=EXCHANGELABS/OU=.../CN=...
+  /\/O=|\/OU=|\/CN=RECIPIENTS/i,
+  // Identifiants Exchange internes
+  /EXCHANGELABS|FYDIBOHF23SPDLT/i,
+  // Noms de flux CFBF : __substg1.0_*, __properties, __recip*, __attach*, __nameid*
+  /__substg|__properties|__recip|__attach|__nameid|__mapi/i,
+  // GUID : 8-4-4-4-12 hex
+  /^[{(]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}[})]?$/i,
+  // Chaînes hex pures (≥16 chars)
+  /^[0-9A-Fa-f]{16,}$/,
+  // MAPI property tag (exactement 8 chiffres hex)
+  /^[0-9A-F]{8}$/,
+  // Headers X- Exchange/Microsoft
+  /^X-MS-|^X-ms-|^X-Exchange|^X-Microsoft|^X-Originating|^X-Forefront/,
+  // Headers MIME / email standards
+  /^ARC-|^DKIM-|^DMARC|^SPF |^Authentication-Results:|^Received:/,
+  /^Return-Path:|^Message-ID:|^MIME-Version:|^Content-Type:|^Content-Transfer-|^Content-Disposition:/,
+  // Mots-clés techniques Exchange
+  /EntityExtraction|ItemProcessor|SafeLinks|ATPSafeLinks|substg1/i,
+  // Chaînes base64 longues (>40 chars sans espace)
+  /^[A-Za-z0-9+/]{40,}={0,2}$/,
+  // Valeur technique : clé: hexlong
+  /^[A-Za-z0-9_-]{3,30}:\s+[a-f0-9@.\-]{20,}$/i,
+  // Adresses Exchange internes (format SMTP interne)
+  /^(imceaex-|imcea)/i,
 ];
 
 function isTechLine(line: string): boolean {
-  const trimmed = line.trim();
-  return TECH_PREFIXES.some(p => trimmed.startsWith(p)) ||
-    /^[A-Za-z0-9_-]+:\s+[a-f0-9@.\-]{20,}$/.test(trimmed); // valeur hexadécimale ou technique
+  const t = line.trim();
+  if (!t) return true;
+  return TECH_PATTERNS.some(p => p.test(t));
 }
 
-/** Tente d'extraire le corps texte brut d'un .msg (heuristique Unicode) */
+/**
+ * Tente d'extraire le corps texte utile d'un .msg (heuristique UTF-16-LE).
+ * Filtre agressivement toutes les métadonnées CFBF et routing Exchange.
+ */
 export async function extraireTexteDeMsg(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const bytes  = new Uint8Array(buffer);
   const chunks: string[] = [];
 
-  // Recherche de séquences UTF-16-LE lisibles (caractères ASCII étendu)
+  // Recherche de séquences UTF-16-LE lisibles (hi-byte = 0, lo-byte printable ASCII)
   let run = '';
   for (let i = 0; i < bytes.length - 1; i += 2) {
     const lo = bytes[i];
@@ -95,7 +119,6 @@ export async function extraireTexteDeMsg(file: File): Promise<string> {
   }
   if (run.length > 40) chunks.push(run);
 
-  // Filtrer les lignes techniques (headers Exchange, DKIM, ATP…)
   const filtered = chunks
     .join('\n')
     .split('\n')
@@ -103,6 +126,10 @@ export async function extraireTexteDeMsg(file: File): Promise<string> {
     .join('\n')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+
+  // Si le résultat ne contient pas de mots lisibles (trop de technique résiduel), retourner vide
+  const motsLisibles = (filtered.match(/[a-zA-ZÀ-ÿ]{4,}/g) || []).length;
+  if (motsLisibles < 5) return '';
 
   return filtered;
 }
