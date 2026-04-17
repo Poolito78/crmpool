@@ -325,7 +325,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange }: Props) {
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent className="w-[98vw] max-w-6xl max-h-[92vh] overflow-hidden flex flex-col p-6">
+        <DialogContent className="w-[98vw] sm:w-[95vw] sm:max-w-[95vw] max-h-[92vh] overflow-hidden flex flex-col p-5 [&>button]:z-20">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />

@@ -58,6 +58,23 @@ export async function extrairePDFsDeMsg(file: File): Promise<PdfExtrait[]> {
   return results;
 }
 
+/** Patterns de headers techniques à ignorer dans les .msg */
+const TECH_PREFIXES = [
+  'X-MS-', 'X-ms-', 'x-ms-', 'x-MS-',
+  'X-Exchange-', 'X-Originating', 'X-Forefront', 'X-Microsoft',
+  'ARC-', 'DKIM-', 'DMARC', 'SPF', 'Authentication-Results',
+  'Received:', 'Return-Path:', 'Message-ID:', 'MIME-Version:',
+  'Content-Type:', 'Content-Transfer-', 'Content-Disposition:',
+  'EntityExtraction', 'ItemProcessor', 'SafeLinks', 'originalclient',
+  'originalserver', 'ipaddress', 'ATPSafeLinks',
+];
+
+function isTechLine(line: string): boolean {
+  const trimmed = line.trim();
+  return TECH_PREFIXES.some(p => trimmed.startsWith(p)) ||
+    /^[A-Za-z0-9_-]+:\s+[a-f0-9@.\-]{20,}$/.test(trimmed); // valeur hexadécimale ou technique
+}
+
 /** Tente d'extraire le corps texte brut d'un .msg (heuristique Unicode) */
 export async function extraireTexteDeMsg(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
@@ -78,5 +95,14 @@ export async function extraireTexteDeMsg(file: File): Promise<string> {
   }
   if (run.length > 40) chunks.push(run);
 
-  return chunks.join('\n').trim();
+  // Filtrer les lignes techniques (headers Exchange, DKIM, ATP…)
+  const filtered = chunks
+    .join('\n')
+    .split('\n')
+    .filter(line => !isTechLine(line))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+
+  return filtered;
 }
