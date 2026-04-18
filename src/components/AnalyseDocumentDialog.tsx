@@ -418,6 +418,38 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     onOpenChange(false);
   }
 
+  function extraireTelephonesRegex(raw: string) {
+    // Décode QP basique pour avoir le texte lisible
+    const txt = raw.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    const phones: string[] = [];
+    // Numéros étiquetés (Tel:, Mob:, Fix:, etc.)
+    for (const m of txt.matchAll(/(?:t[eé]l?|phone|fixe?|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{5,18}\d)/gi))
+      phones.push(m[1].replace(/\s+/g, ' ').trim());
+    // Numéros standalone +33 ou 0X
+    for (const m of txt.matchAll(/(?<![.\d@])(\+33[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}|0[1-9](?:[\s.\-]?\d{2}){4})(?![.\d])/g))
+      phones.push(m[1].replace(/\s+/g, ' ').trim());
+    const unique = [...new Set(phones)];
+    let fixe = '', mobile = '';
+    for (const num of unique) {
+      const d = num.replace(/\D/g, '');
+      const isMobile = /^(06|07|336|337)/.test(d) || /^(6|7)/.test(d.replace(/^33/, ''));
+      if (isMobile && !mobile) mobile = num;
+      else if (!isMobile && !fixe) fixe = num;
+    }
+    return { fixe, mobile };
+  }
+
+  function extraireAdresseRegex(raw: string) {
+    const txt = raw.replace(/=\r?\n/g, '').replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+    const cpMatch = txt.match(/(\d{5})\s+([A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-Za-zÀ-ÿ\s\-]{2,40})/);
+    const addrMatch = txt.match(/(\d+[\s,]+(?:rue|avenue|av\.?|boulevard|bd\.?|chemin|place|impasse|allée|route|voie|cité|résidence)\s+[^\n\r,]{3,60})/i);
+    return {
+      adresse: addrMatch ? addrMatch[1].trim() : '',
+      codePostal: cpMatch ? cpMatch[1] : '',
+      ville: cpMatch ? cpMatch[2].trim() : '',
+    };
+  }
+
   async function handleExtractContact(type: 'client' | 'fournisseur') {
     if (!texte.trim()) { toast.error('Aucun texte à analyser'); return; }
     setContactSaveType(type);
@@ -441,12 +473,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         } catch { /* garder texte brut */ }
       }
 
+      // Extraction regex côté client sur le texte brut (avant tout décodage)
+      const regexPhones = extraireTelephonesRegex(texte);
+      const regexAdresse = extraireAdresseRegex(texte);
+
       const { data, error } = await supabase.functions.invoke('analyze-email', {
         body: { action: 'extract-contact', emailText, type },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
-      setContactToSave({ ...data, telephoneMobile: data.telephoneMobile || '' });
+
+      // Compléter les champs vides avec les résultats regex
+      const result = { ...data, telephoneMobile: data.telephoneMobile || '' };
+      if (!result.telephone && regexPhones.fixe) result.telephone = regexPhones.fixe;
+      if (!result.telephoneMobile && regexPhones.mobile) result.telephoneMobile = regexPhones.mobile;
+      if (!result.adresse && regexAdresse.adresse) result.adresse = regexAdresse.adresse;
+      if (!result.ville && regexAdresse.ville) result.ville = regexAdresse.ville;
+      if (!result.codePostal && regexAdresse.codePostal) result.codePostal = regexAdresse.codePostal;
+      setContactToSave(result);
     } catch (e: any) {
       toast.error(e.message || 'Erreur extraction contact');
     } finally {
