@@ -138,7 +138,7 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
 
 /** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */
 async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
   let lastError: Error | null = null;
 
   for (const model of models) {
@@ -155,9 +155,11 @@ async function analyserViaGemini(texte: string, geminiKey: string): Promise<Docu
       }
     );
 
-    if (response.status === 429) {
-      lastError = Object.assign(new Error('quota'), { quota: true });
-      console.warn(`Gemini ${model} quota dépassé — essai modèle suivant`);
+    if (response.status === 429 || response.status === 404) {
+      lastError = response.status === 429
+        ? Object.assign(new Error('quota'), { quota: true })
+        : new Error(`Gemini ${model} indisponible (404)`);
+      console.warn(`Gemini ${model} ${response.status} — essai modèle suivant`);
       continue;
     }
 
@@ -176,7 +178,7 @@ async function analyserViaGemini(texte: string, geminiKey: string): Promise<Docu
     return parsed;
   }
 
-  throw lastError ?? new Error('Erreur Gemini inconnue');
+  throw lastError ?? Object.assign(new Error('quota'), { quota: true });
 }
 
 export async function analyserDocument(
