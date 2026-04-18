@@ -982,8 +982,16 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
+                {/* ═══ Indicateur chargement extraction contact ═══ */}
+                {extractingContact && !isAutre && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                    Extraction des coordonnées en cours…
+                  </div>
+                )}
+
                 {/* ═══ Formulaire contact extrait ═══ */}
-                {isAutre && contactToSave && (
+                {contactToSave && (
                   <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Sparkles className="w-4 h-4 text-primary shrink-0" />
