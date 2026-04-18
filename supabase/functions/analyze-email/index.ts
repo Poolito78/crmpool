@@ -334,6 +334,9 @@ RÈGLES IMPORTANTES :
 
       // Filet de sécurité regex — appliqué sur le texte décodé (pas le MIME brut)
       const rawText = emailText;
+      console.log("DEBUG emailText (200 chars):", rawText.slice(0, 200));
+      console.log("DEBUG emailText end (200 chars):", rawText.slice(-200));
+      console.log("DEBUG safe before regex:", JSON.stringify(safe));
       if (!safe.telephone || !safe.telephoneMobile) {
         // Trouve tous les numéros de téléphone (formats FR et international)
         const phones = [...rawText.matchAll(/(?:tél?|tel|téléphone|phone|fixe?|fix|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{6,20}\d)/gi)]
