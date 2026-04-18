@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
@@ -526,7 +526,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   }
 
   /* ── correction manuelle du type ── */
-  function handleChangeType(newType: TypeDocument) {
+  function handleChangeType(value: string) {
+    if (value === 'creer_client') { handleExtractContact('client'); return; }
+    if (value === 'creer_fournisseur') { handleExtractContact('fournisseur'); return; }
+    const newType = value as TypeDocument;
     setResult(prev => prev ? { ...prev, typeDocument: newType } : prev);
     setMatchedCF(null);
     setShowCreerCF(false);
@@ -676,16 +679,29 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                         ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
                       {typeMeta.label}
                     </span>
-                    <Select value={result.typeDocument} onValueChange={v => handleChangeType(v as TypeDocument)}>
+                    <Select value={result.typeDocument} onValueChange={handleChangeType}>
                       <SelectTrigger className="h-7 text-xs w-auto gap-1 px-2.5 border-dashed text-muted-foreground hover:text-foreground">
                         <span>Corriger le type</span>
                       </SelectTrigger>
                       <SelectContent>
-                        {(Object.entries(TYPE_LABELS) as [TypeDocument, { label: string; color: string }][]).map(([key, meta]) => (
-                          <SelectItem key={key} value={key}>
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
-                          </SelectItem>
-                        ))}
+                        {(Object.entries(TYPE_LABELS) as [TypeDocument, { label: string; color: string }][])
+                          .filter(([key]) => key !== 'autre')
+                          .map(([key, meta]) => (
+                            <SelectItem key={key} value={key}>
+                              <span className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${meta.color}`}>{meta.label}</span>
+                            </SelectItem>
+                          ))}
+                        <SelectSeparator />
+                        <SelectItem value="creer_client">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-primary">
+                            <Users className="w-3.5 h-3.5" />Créer client
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="creer_fournisseur">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-info">
+                            <Truck className="w-3.5 h-3.5" />Créer fournisseur
+                          </span>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
