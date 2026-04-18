@@ -99,34 +99,41 @@ function tronquer(texte: string, maxChars = 6000): string {
   return texte.slice(0, maxChars) + '\n[... texte tronqué ...]';
 }
 
-/** Appel OpenRouter comme 3e fallback — API OpenAI-compatible, modèles gratuits */
+/** Appel OpenRouter — essaie plusieurs modèles gratuits en séquence */
 async function analyserViaOpenRouter(texte: string, openrouterKey: string): Promise<DocumentAnalysis> {
-  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openrouterKey}` },
-    body: JSON.stringify({
-      model: 'mistralai/mistral-7b-instruct:free',
-      temperature: 0,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: PROMPT },
-        { role: 'user', content: `Document :\n${texte}` },
-      ],
-    }),
-  });
-  if (response.status === 429 || response.status === 404) throw Object.assign(new Error('quota'), { quota: true });
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Erreur OpenRouter ${response.status} : ${err.slice(0, 200)}`);
+  const models = [
+    'google/gemma-2-9b-it:free',
+    'meta-llama/llama-3.2-3b-instruct:free',
+    'qwen/qwen-2.5-7b-instruct:free',
+  ];
+  for (const model of models) {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openrouterKey}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          max_tokens: 1024,
+          messages: [
+            { role: 'system', content: PROMPT },
+            { role: 'user', content: `Document :\n${texte}` },
+          ],
+        }),
+      });
+      if (response.status === 429 || response.status === 404) { console.warn(`OpenRouter ${model} indisponible`); continue; }
+      if (!response.ok) { console.warn(`OpenRouter ${model} erreur ${response.status}`); continue; }
+      const data = await response.json();
+      const text: string = data.choices?.[0]?.message?.content ?? '';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { console.warn(`OpenRouter ${model} : pas de JSON`); continue; }
+      const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+      if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+      if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+      return parsed;
+    } catch { console.warn(`OpenRouter ${model} exception`); }
   }
-  const data = await response.json();
-  const text: string = data.choices?.[0]?.message?.content ?? '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Réponse invalide (OpenRouter) : aucun JSON trouvé');
-  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-  return parsed;
+  throw Object.assign(new Error('quota'), { quota: true });
 }
 
 /** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */

@@ -124,28 +124,36 @@ async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey:
 
 /** Appel OpenRouter JSON mode — modèle gratuit, 3e fallback */
 async function callOpenRouterJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
-  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "mistralai/mistral-7b-instruct:free",
-      max_tokens: 1024,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-    }),
-  });
-  if (response.status === 429 || response.status === 404) throw Object.assign(new Error("quota"), { quota: true });
-  if (!response.ok) {
-    const t = await response.text();
-    throw new Error(`Erreur OpenRouter ${response.status} : ${t.slice(0, 200)}`);
+  const models = [
+    "google/gemma-2-9b-it:free",
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
+  ];
+  for (const model of models) {
+    try {
+      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          max_tokens: 1024,
+          temperature: 0,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: userMessage },
+          ],
+        }),
+      });
+      if (response.status === 429 || response.status === 404) { console.warn(`OpenRouter ${model} indisponible`); continue; }
+      if (!response.ok) { console.warn(`OpenRouter ${model} erreur ${response.status}`); continue; }
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content ?? '';
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { console.warn(`OpenRouter ${model} : pas de JSON`); continue; }
+      return JSON.parse(jsonMatch[0]);
+    } catch { console.warn(`OpenRouter ${model} exception`); }
   }
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content ?? '';
-  try { return JSON.parse(content); } catch { throw new Error("Réponse JSON invalide (OpenRouter)"); }
+  throw Object.assign(new Error("quota"), { quota: true });
 }
 
 /** Appel Groq JSON mode — 8b instant (500K TPD), fallback Gemini si 429 */
