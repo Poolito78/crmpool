@@ -5,32 +5,105 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Nettoie le texte d'un email : extrait d'abord les champs utiles (From/To/Subject),
- *  supprime les en-têtes techniques Exchange/SMTP, et tronque à maxChars. */
+// ── Décodeurs MIME ───────────────────────────────────────────────────────────
+
+/** Décode le contenu quoted-printable */
+function decodeQP(text: string): string {
+  return text
+    .replace(/=\r?\n/g, '')
+    .replace(/=([0-9A-Fa-f]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+}
+
+/** Décode le contenu base64 vers UTF-8 */
+function decodeB64(text: string): string {
+  try {
+    const b64 = text.replace(/\s/g, '');
+    const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
+  } catch {
+    return '';
+  }
+}
+
+/** Supprime les balises HTML et décode les entités courantes */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** Parse une partie MIME (headers\n\ncontent) et retourne le contenu décodé */
+function parsePart(part: string): { type: string; content: string } | null {
+  const sep = part.indexOf('\n\n');
+  if (sep === -1) return null;
+  const headers = part.slice(0, sep);
+  const raw = part.slice(sep + 2).replace(/[\r\n]+$/, '');
+  const typeMatch = headers.match(/content-type:\s*(text\/(?:plain|html))/i);
+  if (!typeMatch) return null;
+  const enc = (headers.match(/content-transfer-encoding:\s*(\S+)/i)?.[1] ?? '').toLowerCase();
+  const content = enc === 'base64' ? decodeB64(raw)
+    : enc === 'quoted-printable' ? decodeQP(raw)
+    : raw;
+  return { type: typeMatch[1].toLowerCase(), content };
+}
+
+/** Extrait et décode récursivement le corps lisible d'un email MIME */
+function extractMimeBody(text: string): string {
+  const bm = text.match(/boundary=["']?([^"'\s;>\r\n]+)["']?/i);
+  if (!bm) return '';
+  const esc = bm[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const parts = text.split(new RegExp(`--${esc}(?:--)?\\r?\\n?`));
+  let plain = '', html = '';
+  for (const part of parts) {
+    if (!part.trim()) continue;
+    // Partie multipart imbriquée
+    if (/content-type:\s*multipart\//i.test(part)) {
+      const sub = extractMimeBody(part);
+      if (sub) { plain = plain || sub; continue; }
+    }
+    const parsed = parsePart(part);
+    if (!parsed) continue;
+    if (parsed.type === 'text/plain' && !plain) plain = parsed.content;
+    else if (parsed.type === 'text/html' && !html) html = stripHtml(parsed.content);
+  }
+  return plain || html;
+}
+
+/** Prépare le texte d'un email pour l'IA :
+ *  1. Extrait les en-têtes utiles (From / Subject)
+ *  2. Décode le corps MIME si présent
+ *  3. Sinon, nettoie les en-têtes techniques
+ *  4. Tronque à maxChars */
 function prepareEmailText(text: string, maxChars = 4000): string {
   const lines = text.split('\n');
 
-  // 1. Extraire les champs utiles : From, To, Subject, Date
-  const usefulHeaders: string[] = [];
-  for (const line of lines) {
-    if (/^(from|de|to|à|subject|objet|date):\s+/i.test(line.trim())) {
-      usefulHeaders.push(line.trim());
-    }
+  // 1. En-têtes utiles
+  const useful = lines
+    .filter(l => /^(from|de|to|subject|objet|date):\s+/i.test(l.trim()))
+    .map(l => l.trim());
+
+  // 2. Décoder le corps MIME
+  let body = extractMimeBody(text);
+
+  // 3. Fallback : supprimer les en-têtes techniques ligne par ligne
+  if (!body) {
+    const techRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer|dkim-|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-|list-|delivered-to:|precedence:|boundary=|charset=)/i;
+    body = lines
+      .filter(l => !techRe.test(l.trim()))
+      .join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
 
-  // 2. Supprimer les en-têtes techniques
-  const techRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer-encoding:|dkim-signature:|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-topic:|thread-index:|list-|delivered-to:|precedence:|boundary=|charset=)/i;
-  const cleaned = lines
-    .filter(line => !techRe.test(line.trim()))
-    .join('\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-
-  // 3. Assembler : en-têtes utiles en premier, puis le corps nettoyé
-  const combined = (usefulHeaders.length ? usefulHeaders.join('\n') + '\n\n' : '') + cleaned;
-
+  const combined = (useful.length ? useful.join('\n') + '\n\n' : '') + body;
   if (combined.length <= maxChars) return combined;
-  // Garder début (expéditeur/objet) + fin (corps/signature)
   return combined.slice(0, 1800) + '\n[...]\n' + combined.slice(-(maxChars - 1900));
 }
 
