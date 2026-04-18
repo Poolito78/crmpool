@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt } from 'lucide-react';
+import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml } from '@/lib/parseEml';
@@ -17,6 +17,7 @@ import {
   generateId, calculerDateEcheance, formatDateISO,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
+import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 interface Props {
   open: boolean;
@@ -31,7 +32,7 @@ const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T'
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles }: Props) {
   const {
     commandesFournisseur, fournisseurs, produits, clients,
-    updateCommandesFournisseur, updateCommandesClient,
+    updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs,
   } = useCRM();
 
   /* ── état analyse ── */
@@ -43,6 +44,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
+
+  /* ── état import contact depuis email ── */
+  const [emailContactOpen, setEmailContactOpen] = useState(false);
+  const [emailContactType, setEmailContactType] = useState<'client' | 'fournisseur'>('client');
 
   /* ── état commande fournisseur ── */
   const [matchedCF, setMatchedCF] = useState<CommandeFournisseur | null>(null);
@@ -261,7 +266,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   function reset() {
     setTexte(''); setFichier(null); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
-    setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
+    setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false); setEmailContactOpen(false);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
     setCreerCFDateLivraison(''); setCreerCFNotes('');
     setCreerCCClientId(''); setCreerCCNumero(''); setCreerCCDate('');
@@ -354,8 +359,32 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const noMatchCF = result && isFournisseurDoc(result.typeDocument) && !matchedCF;
   const isCC = result && isClientDoc(result.typeDocument);
   const isFact = result && (result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client');
+  const isAutre = result && result.typeDocument === 'autre';
 
   const typeMeta = result ? TYPE_LABELS[result.typeDocument] : null;
+
+  function handleContactExtracted(contact: ExtractedContact) {
+    const now = new Date().toISOString();
+    const name = contact.societe || contact.nom || '—';
+    if (emailContactType === 'client') {
+      updateClients(prev => [{
+        id: generateId(), nom: contact.nom, email: contact.email, telephone: contact.telephone,
+        adresse: contact.adresse, ville: contact.ville, codePostal: contact.codePostal,
+        societe: contact.societe, notes: contact.notes, dateCreation: now, adressesLivraison: [],
+      }, ...prev]);
+      toast.success(`Client "${name}" créé`);
+    } else {
+      updateFournisseurs(prev => [{
+        id: generateId(), nom: contact.nom, email: contact.email, telephone: contact.telephone,
+        adresse: contact.adresse, ville: contact.ville, codePostal: contact.codePostal,
+        societe: contact.societe || contact.nom, notes: contact.notes, dateCreation: now,
+        francoPort: 0, coutTransport: 0, delaiReglement: '30j',
+      }, ...prev]);
+      toast.success(`Fournisseur "${name}" créé`);
+    }
+    setEmailContactOpen(false);
+    onOpenChange(false);
+  }
 
   /* ── correction manuelle du type ── */
   function handleChangeType(newType: TypeDocument) {
@@ -714,6 +743,40 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
+                {/* ═══ Autre document → import contact ═══ */}
+                {isAutre && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                        <Mail className="w-4 h-4 text-primary" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold">Importer le contact</p>
+                        <p className="text-[11px] text-muted-foreground">L'IA va extraire les coordonnées depuis ce texte</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1"
+                        size="sm"
+                        onClick={() => { setEmailContactType('client'); setEmailContactOpen(true); }}
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        Créer client
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        size="sm"
+                        onClick={() => { setEmailContactType('fournisseur'); setEmailContactOpen(true); }}
+                      >
+                        <Truck className="w-4 h-4 mr-2" />
+                        Créer fournisseur
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
                 </>)}
               </div>
             )}
@@ -732,6 +795,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           onConfirm={handleReception}
         />
       )}
+
+      <EmailToContactDialog
+        open={emailContactOpen}
+        onOpenChange={setEmailContactOpen}
+        type={emailContactType}
+        onExtracted={handleContactExtracted}
+        initialText={texte || undefined}
+      />
     </>
   );
 }
