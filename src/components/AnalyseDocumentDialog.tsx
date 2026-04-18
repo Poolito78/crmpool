@@ -443,7 +443,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       }
 
       const { data, error } = await supabase.functions.invoke('analyze-email', {
-        body: { action: 'extract-contact', emailText, type },
+        body: { action: 'extract-contact', emailText, rawMime: isMime ? texte : undefined, type },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
