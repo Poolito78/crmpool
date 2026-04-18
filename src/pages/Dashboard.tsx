@@ -1,22 +1,30 @@
 import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload } from 'lucide-react';
+import { calculerTotalDevis, formatMontant, calculerDateEcheance, generateId } from '@/lib/store';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
+import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
+import { toast } from 'sonner';
 
 export default function Dashboard() {
-  const { clients, produits, fournisseurs, devis, commandesFournisseur } = useCRM();
+  const { clients, produits, fournisseurs, devis, commandesFournisseur, updateClients, updateFournisseurs } = useCRM();
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const dragCounter = useRef(0); // compteur pour ignorer les dragenter/leave des enfants
 
+  // Email import states
+  const [emailImportOpen, setEmailImportOpen] = useState(false);
+  const [emailImportType, setEmailImportType] = useState<'client' | 'fournisseur'>('client');
+  const [droppedText, setDroppedText] = useState('');
+  const [typeChoiceVisible, setTypeChoiceVisible] = useState(false);
+
   const handlePageDragEnter = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     dragCounter.current++;
-    if (e.dataTransfer.types.some(t => t === 'Files')) setIsDragging(true);
+    if (e.dataTransfer.types.some(t => t === 'Files' || t === 'text/plain')) setIsDragging(true);
   }, []);
 
   const handlePageDragOver = useCallback((e: React.DragEvent) => {
@@ -36,8 +44,62 @@ export default function Dashboard() {
     if (files.length > 0) {
       setDroppedFiles(files);
       setAnalyseOpen(true);
+      return;
+    }
+    // Detect text drop (email body dragged from email client)
+    const text = e.dataTransfer.getData('text/plain');
+    if (text?.trim()) {
+      setDroppedText(text.trim());
+      setTypeChoiceVisible(true);
     }
   }, []);
+
+  function openEmailImport(type: 'client' | 'fournisseur') {
+    setEmailImportType(type);
+    setTypeChoiceVisible(false);
+    setEmailImportOpen(true);
+  }
+
+  function handleEmailExtracted(contact: ExtractedContact) {
+    const now = new Date().toISOString();
+    const name = contact.societe || contact.nom || '—';
+    if (emailImportType === 'client') {
+      const newClient = {
+        id: generateId(),
+        nom: contact.nom,
+        email: contact.email,
+        telephone: contact.telephone,
+        adresse: contact.adresse,
+        ville: contact.ville,
+        codePostal: contact.codePostal,
+        societe: contact.societe,
+        notes: contact.notes,
+        dateCreation: now,
+        adressesLivraison: [],
+      };
+      updateClients(prev => [newClient, ...prev]);
+      toast.success(`Client "${name}" créé avec succès`);
+    } else {
+      const newFournisseur = {
+        id: generateId(),
+        nom: contact.nom,
+        email: contact.email,
+        telephone: contact.telephone,
+        adresse: contact.adresse,
+        ville: contact.ville,
+        codePostal: contact.codePostal,
+        societe: contact.societe || contact.nom,
+        notes: contact.notes,
+        dateCreation: now,
+        francoPort: 0,
+        coutTransport: 0,
+        delaiReglement: '30j',
+      };
+      updateFournisseurs(prev => [newFournisseur, ...prev]);
+      toast.success(`Fournisseur "${name}" créé avec succès`);
+    }
+    setDroppedText('');
+  }
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
@@ -125,7 +187,35 @@ export default function Dashboard() {
               <Upload className="w-10 h-10 text-primary animate-bounce" />
             </div>
             <p className="text-2xl font-bold text-primary">Déposer pour analyser</p>
-            <p className="text-sm text-muted-foreground text-center">PDF · Excel · Email (.eml / .msg)</p>
+            <p className="text-sm text-muted-foreground text-center">PDF · Excel · Email (.eml / .msg) · Texte d'email</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Choix client/fournisseur après dépôt de texte ── */}
+      {typeChoiceVisible && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+          <div className="bg-card border border-border rounded-2xl p-8 shadow-2xl flex flex-col items-center gap-5 max-w-sm w-full mx-4">
+            <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+              <Mail className="w-7 h-7 text-primary" />
+            </div>
+            <div className="text-center">
+              <p className="font-heading font-semibold text-lg">Email détecté</p>
+              <p className="text-sm text-muted-foreground mt-1">Créer un nouveau contact depuis ce texte ?</p>
+            </div>
+            <div className="flex gap-3 w-full">
+              <Button className="flex-1" onClick={() => openEmailImport('client')}>
+                <Users className="w-4 h-4 mr-2" />
+                Client
+              </Button>
+              <Button variant="outline" className="flex-1" onClick={() => openEmailImport('fournisseur')}>
+                <Truck className="w-4 h-4 mr-2" />
+                Fournisseur
+              </Button>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => { setTypeChoiceVisible(false); setDroppedText(''); }}>
+              Annuler
+            </Button>
           </div>
         </div>
       )}
@@ -166,6 +256,37 @@ export default function Dashboard() {
         open={analyseOpen}
         onOpenChange={(v) => { setAnalyseOpen(v); if (!v) setDroppedFiles([]); }}
         initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
+      />
+
+      {/* Email import card */}
+      <div className="bg-card rounded-xl border border-border p-5 flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-11 h-11 rounded-xl bg-info/10 flex items-center justify-center shrink-0">
+            <Mail className="w-5 h-5 text-info" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-semibold text-sm">Importer depuis un email</p>
+            <p className="text-xs text-muted-foreground">Créer un client ou fournisseur depuis une signature — collez ou glissez un email</p>
+          </div>
+        </div>
+        <div className="flex gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => { setDroppedText(''); setEmailImportType('client'); setEmailImportOpen(true); }}>
+            <Users className="w-4 h-4 mr-2" />
+            Client
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { setDroppedText(''); setEmailImportType('fournisseur'); setEmailImportOpen(true); }}>
+            <Truck className="w-4 h-4 mr-2" />
+            Fournisseur
+          </Button>
+        </div>
+      </div>
+
+      <EmailToContactDialog
+        open={emailImportOpen}
+        onOpenChange={(v) => { setEmailImportOpen(v); if (!v) setDroppedText(''); }}
+        type={emailImportType}
+        onExtracted={handleEmailExtracted}
+        initialText={droppedText || undefined}
       />
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">

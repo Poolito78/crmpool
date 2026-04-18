@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,10 +25,15 @@ interface EmailToContactDialogProps {
   onOpenChange: (open: boolean) => void;
   type: 'client' | 'fournisseur';
   onExtracted: (contact: ExtractedContact) => void;
+  initialText?: string;
 }
 
-export default function EmailToContactDialog({ open, onOpenChange, type, onExtracted }: EmailToContactDialogProps) {
-  const [emailText, setEmailText] = useState('');
+export default function EmailToContactDialog({ open, onOpenChange, type, onExtracted, initialText }: EmailToContactDialogProps) {
+  const [emailText, setEmailText] = useState(initialText || '');
+
+  useEffect(() => {
+    if (open && initialText) setEmailText(initialText);
+  }, [open, initialText]);
   const [loading, setLoading] = useState(false);
   const [extracted, setExtracted] = useState<ExtractedContact | null>(null);
   const [dragging, setDragging] = useState(false);
