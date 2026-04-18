@@ -674,11 +674,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                 {/* ── En-tête : type + sélecteur correction ── */}
                 {typeMeta && (
                   <div className="flex items-center gap-3 flex-wrap">
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide ${typeMeta.color}`}>
-                      {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client'
-                        ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
-                      {typeMeta.label}
-                    </span>
+                    {result.typeDocument !== 'autre' && (
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold tracking-wide ${typeMeta.color}`}>
+                        {result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client'
+                          ? <Receipt className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+                        {typeMeta.label}
+                      </span>
+                    )}
                     <Select value={result.typeDocument} onValueChange={handleChangeType}>
                       <SelectTrigger className="h-7 text-xs w-auto gap-1 px-2.5 border-dashed text-muted-foreground hover:text-foreground">
                         <span>Corriger le type</span>
