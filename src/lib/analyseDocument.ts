@@ -102,9 +102,9 @@ function tronquer(texte: string, maxChars = 6000): string {
 /** Appel OpenRouter — essaie plusieurs modèles gratuits en séquence */
 async function analyserViaOpenRouter(texte: string, openrouterKey: string): Promise<DocumentAnalysis> {
   const models = [
-    'google/gemma-2-9b-it:free',
-    'meta-llama/llama-3.2-3b-instruct:free',
-    'qwen/qwen-2.5-7b-instruct:free',
+    'google/gemma-4-26b-a4b-it:free',
+    'openai/gpt-oss-20b:free',
+    'nvidia/nemotron-3-nano-30b-a3b:free',
   ];
   for (const model of models) {
     try {

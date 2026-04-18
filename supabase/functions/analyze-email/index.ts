@@ -125,9 +125,9 @@ async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey:
 /** Appel OpenRouter JSON mode — modèle gratuit, 3e fallback */
 async function callOpenRouterJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
   const models = [
-    "google/gemma-2-9b-it:free",
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "qwen/qwen-2.5-7b-instruct:free",
+    "google/gemma-4-26b-a4b-it:free",
+    "openai/gpt-oss-20b:free",
+    "nvidia/nemotron-3-nano-30b-a3b:free",
   ];
   for (const model of models) {
     try {
