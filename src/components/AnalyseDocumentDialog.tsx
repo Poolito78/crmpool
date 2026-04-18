@@ -457,6 +457,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         if (!result.ville && emlContact.ville) result.ville = emlContact.ville;
         if (!result.codePostal && emlContact.codePostal) result.codePostal = emlContact.codePostal;
       }
+      // Fallback société depuis le domaine email si manquant
+      if (!result.societe && result.email) {
+        const domainMatch = result.email.match(/@([^@.]+(?:\.[^@.]+)+)\s*$/);
+        if (domainMatch) {
+          const parts = domainMatch[1].split('.');
+          result.societe = parts.slice(0, -1).join('.');
+        }
+      }
       setContactToSave(result);
     } catch (e: any) {
       toast.error(e.message || 'Erreur extraction contact');
