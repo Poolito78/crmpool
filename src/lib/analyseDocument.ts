@@ -99,11 +99,40 @@ function tronquer(texte: string, maxChars = 6000): string {
   return texte.slice(0, maxChars) + '\n[... texte tronqué ...]';
 }
 
+/** Appel Gemini comme fallback — JSON natif, 1M tokens/jour gratuit */
+async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: PROMPT }] },
+        contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
+        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
+      }),
+    }
+  );
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Erreur API Gemini : ${response.status} — ${err}`);
+  }
+  const data = await response.json();
+  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Réponse invalide (Gemini) : aucun JSON trouvé');
+  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+  return parsed;
+}
+
 export async function analyserDocument(
   input:
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
     | { type: 'text'; texte: string },
-  apiKey: string
+  apiKey: string,
+  geminiKey?: string
 ): Promise<DocumentAnalysis> {
   let texte: string;
   if (input.type === 'pdf') {
@@ -115,36 +144,43 @@ export async function analyserDocument(
     texte = tronquer(input.texte, 6000);
   }
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      temperature: 0,
-      max_tokens: 1024,
-      messages: [
-        { role: 'system', content: PROMPT },
-        { role: 'user', content: `Document :\n${texte}` },
-      ],
-    }),
-  });
+  // 1. Essayer Groq llama-3.1-8b-instant (500K TPD)
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        temperature: 0,
+        max_tokens: 1024,
+        messages: [
+          { role: 'system', content: PROMPT },
+          { role: 'user', content: `Document :\n${texte}` },
+        ],
+      }),
+    });
 
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Erreur API Groq : ${response.status} — ${err}`);
+    if (response.status === 429) throw Object.assign(new Error('quota'), { quota: true });
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Erreur API Groq : ${response.status} — ${err}`);
+    }
+
+    const data = await response.json();
+    const text: string = data.choices?.[0]?.message?.content ?? '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Réponse invalide : aucun JSON trouvé');
+    const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+    if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+    if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+    return parsed;
+  } catch (err: any) {
+    if (!err.quota) throw err;
+    console.warn('Groq quota dépassé — basculement sur Gemini');
   }
 
-  const data = await response.json();
-  const text: string = data.choices?.[0]?.message?.content ?? '';
-
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Réponse invalide : aucun JSON trouvé');
-
-  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-  return parsed;
+  // 2. Fallback Gemini
+  if (!geminiKey) throw new Error('Quota Groq dépassé. Configurez VITE_GEMINI_API_KEY pour continuer.');
+  return analyserViaGemini(texte, geminiKey);
 }
