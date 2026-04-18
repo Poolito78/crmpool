@@ -155,18 +155,16 @@ export default function Dashboard() {
       </div>
 
       {/* Document analysis */}
-      <div className="bg-card rounded-xl border border-border p-5 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-            <ScanText className="w-5 h-5 text-primary" />
-          </div>
-          <div className="min-w-0">
-            <p className="font-semibold text-sm">Analyse de document</p>
-            <p className="text-xs text-muted-foreground">Commande · Devis · Facture · BL — importer un PDF ou coller un email</p>
-          </div>
+      <div className="bg-card rounded-xl border border-border px-4 py-3 flex items-center gap-4 w-fit">
+        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <ScanText className="w-4 h-4 text-primary" />
         </div>
-        <Button onClick={() => setAnalyseOpen(true)} className="shrink-0">
-          <ScanText className="w-4 h-4 mr-2" />
+        <div className="min-w-0">
+          <p className="font-semibold text-sm leading-tight">Analyse de document</p>
+          <p className="text-xs text-muted-foreground leading-tight hidden sm:block">Commande · Devis · Facture · BL</p>
+        </div>
+        <Button onClick={() => setAnalyseOpen(true)} size="sm" className="shrink-0">
+          <ScanText className="w-3.5 h-3.5 mr-1.5" />
           Analyser
         </Button>
       </div>
