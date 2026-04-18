@@ -47,6 +47,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
   /* ── état extraction contact inline ── */
   const [extractingContact, setExtractingContact] = useState(false);
+  const emlContactRef = useRef<EmlContent['contact'] | undefined>(undefined);
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
 
@@ -201,6 +202,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         const eml = await parseEml(f);
         if (eml.texte) emailTexte += (emailTexte ? '\n\n' : '') + eml.texte;
         allPdfBuffers.push(...eml.pdfBuffers);
+        if (eml.contact) emlContactRef.current = eml.contact;
       } catch { /* ignore */ }
     }
     for (const f of msgFiles) {
@@ -425,31 +427,15 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setContactToSave(null);
     try {
       // ── Décodage MIME côté client si le texte est un email brut ──────────
-      let emailText = texte;
-      let emlContact: EmlContent['contact'] | undefined;
-      const isMime = texte.includes('Content-Type:') && texte.includes('boundary=');
-      if (isMime) {
-        try {
-          const emlFile = new File([texte], 'email.eml', { type: 'message/rfc822' });
-          const parsed = await parseEml(emlFile);
-          emlContact = parsed.contact;
-          if (parsed.texte && parsed.texte.trim().length > 30) {
-            const fromLine = texte.match(/^From:\s*.+/mi)?.[0] ?? '';
-            const subjLine = texte.match(/^Subject:\s*.+/mi)?.[0] ?? '';
-            const prefix = [fromLine, subjLine].filter(Boolean).join('\n');
-            emailText = (prefix ? prefix + '\n\n' : '') + parsed.texte;
-          }
-        } catch { /* garder texte brut */ }
-      }
-
       const { data, error } = await supabase.functions.invoke('analyze-email', {
-        body: { action: 'extract-contact', emailText, rawMime: isMime ? texte : undefined, type },
+        body: { action: 'extract-contact', emailText: texte, type },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
 
-      // Compléter les champs vides avec les coordonnées extraites du HTML
+      // Compléter les champs vides avec les coordonnées extraites du HTML lors du chargement
       const result = { ...data, telephoneMobile: data.telephoneMobile || '' };
+      const emlContact = emlContactRef.current;
       if (emlContact) {
         if (!result.telephone && emlContact.telephone) result.telephone = emlContact.telephone;
         if (!result.telephoneMobile && emlContact.telephoneMobile) result.telephoneMobile = emlContact.telephoneMobile;
