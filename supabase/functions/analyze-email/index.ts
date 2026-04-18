@@ -107,13 +107,13 @@ function prepareEmailText(text: string, maxChars = 4000): string {
   return combined.slice(0, 1800) + '\n[...]\n' + combined.slice(-(maxChars - 1900));
 }
 
-/** Appel Groq avec function calling — modèle 70b pour tâches complexes */
+/** Appel Groq avec function calling — modèle 8b (500K TPD) */
 async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "llama-3.1-8b-instant",
       max_tokens: 1024,
       messages: [
         { role: "system", content: systemPrompt },
