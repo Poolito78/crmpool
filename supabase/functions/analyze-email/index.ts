@@ -100,7 +100,7 @@ function prepareEmailText(text: string, maxChars = 4000): string {
 /** Appel Gemini JSON mode — fallback si Groq quota dépassé */
 async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -114,7 +114,7 @@ async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey:
   if (!response.ok) {
     const t = await response.text();
     console.error("Gemini error:", response.status, t);
-    throw new Error("Erreur d'analyse AI (Gemini)");
+    throw new Error(`Erreur Gemini ${response.status} : ${t.slice(0, 200)}`);
   }
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';

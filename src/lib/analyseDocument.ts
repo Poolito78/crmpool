@@ -102,7 +102,7 @@ function tronquer(texte: string, maxChars = 6000): string {
 /** Appel Gemini comme fallback — JSON natif, 1M tokens/jour gratuit */
 async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -115,7 +115,7 @@ async function analyserViaGemini(texte: string, geminiKey: string): Promise<Docu
   );
   if (!response.ok) {
     const err = await response.text();
-    throw new Error(`Erreur API Gemini : ${response.status} — ${err}`);
+    throw new Error(`Erreur Gemini ${response.status} : ${err.slice(0, 200)}`);
   }
   const data = await response.json();
   const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
