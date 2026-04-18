@@ -129,7 +129,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
         analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey);
       } else if (texteCtx.trim()) {
-        analysis = await analyserDocument({ type: 'text', texte: texteCtx }, apiKey);
+        // Décoder le MIME côté client si c'est un email brut collé
+        let texteAnalyse = texteCtx;
+        const isMime = texteCtx.includes('Content-Type:') && texteCtx.includes('boundary=');
+        if (isMime) {
+          try {
+            const emlFile = new File([texteCtx], 'email.eml', { type: 'message/rfc822' });
+            const parsed = await parseEml(emlFile);
+            if (parsed.texte && parsed.texte.trim().length > 30) {
+              const fromLine = texteCtx.match(/^From:\s*.+/mi)?.[0] ?? '';
+              const subjLine = texteCtx.match(/^Subject:\s*.+/mi)?.[0] ?? '';
+              const prefix = [fromLine, subjLine].filter(Boolean).join('\n');
+              texteAnalyse = (prefix ? prefix + '\n\n' : '') + parsed.texte;
+            }
+          } catch { /* garder texte brut */ }
+        }
+        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey);
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
@@ -407,8 +422,25 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setExtractingContact(true);
     setContactToSave(null);
     try {
+      // ── Décodage MIME côté client si le texte est un email brut ──────────
+      let emailText = texte;
+      const isMime = texte.includes('Content-Type:') && texte.includes('boundary=');
+      if (isMime) {
+        try {
+          const emlFile = new File([texte], 'email.eml', { type: 'message/rfc822' });
+          const parsed = await parseEml(emlFile);
+          if (parsed.texte && parsed.texte.trim().length > 30) {
+            // Conserver From: / Subject: pour que l'IA trouve l'email expéditeur
+            const fromLine = texte.match(/^From:\s*.+/mi)?.[0] ?? '';
+            const subjLine = texte.match(/^Subject:\s*.+/mi)?.[0] ?? '';
+            const prefix = [fromLine, subjLine].filter(Boolean).join('\n');
+            emailText = (prefix ? prefix + '\n\n' : '') + parsed.texte;
+          }
+        } catch { /* garder texte brut */ }
+      }
+
       const { data, error } = await supabase.functions.invoke('analyze-email', {
-        body: { action: 'extract-contact', emailText: texte, type },
+        body: { action: 'extract-contact', emailText, type },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
