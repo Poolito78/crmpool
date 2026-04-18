@@ -128,7 +128,7 @@ async function callOpenRouterJson(systemPrompt: string, userMessage: string, api
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "meta-llama/llama-3.1-8b-instruct:free",
+      model: "mistralai/mistral-7b-instruct:free",
       max_tokens: 1024,
       temperature: 0,
       response_format: { type: "json_object" },
@@ -138,7 +138,7 @@ async function callOpenRouterJson(systemPrompt: string, userMessage: string, api
       ],
     }),
   });
-  if (response.status === 429) throw Object.assign(new Error("quota"), { quota: true });
+  if (response.status === 429 || response.status === 404) throw Object.assign(new Error("quota"), { quota: true });
   if (!response.ok) {
     const t = await response.text();
     throw new Error(`Erreur OpenRouter ${response.status} : ${t.slice(0, 200)}`);

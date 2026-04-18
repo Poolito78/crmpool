@@ -105,7 +105,7 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openrouterKey}` },
     body: JSON.stringify({
-      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      model: 'mistralai/mistral-7b-instruct:free',
       temperature: 0,
       max_tokens: 1024,
       messages: [
@@ -114,7 +114,7 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
       ],
     }),
   });
-  if (response.status === 429) throw Object.assign(new Error('quota'), { quota: true });
+  if (response.status === 429 || response.status === 404) throw Object.assign(new Error('quota'), { quota: true });
   if (!response.ok) {
     const err = await response.text();
     throw new Error(`Erreur OpenRouter ${response.status} : ${err.slice(0, 200)}`);
