@@ -49,6 +49,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* ── état extraction contact inline ── */
   const [extractingContact, setExtractingContact] = useState(false);
   const emlContactRef = useRef<EmlContent['contact'] | undefined>(undefined);
+  const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
 
@@ -151,6 +152,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       let analysis: DocumentAnalysis;
       if (pdfFile) {
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
+        if (texteCtx.trim()) analyseTexteRef.current = texteCtx;
         analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, geminiKey, openrouterKey);
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
@@ -169,6 +171,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
             }
           } catch { /* garder texte brut */ }
         }
+        analyseTexteRef.current = texteAnalyse;
         analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, geminiKey, openrouterKey);
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
@@ -487,14 +490,16 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   }
 
   async function handleExtractContact(type: 'client' | 'fournisseur') {
-    if (!texte.trim()) { toast.error('Aucun texte à analyser'); return; }
+    // Priorité : texte de la dernière analyse > texte collé > infos du résultat
+    const emailText = analyseTexteRef.current || texte ||
+      (result ? [result.nomPartenaire, result.notes].filter(Boolean).join('\n') : '');
+    if (!emailText.trim()) { toast.error('Aucun texte à analyser'); return; }
     setContactSaveType(type);
     setExtractingContact(true);
     setContactToSave(null);
     try {
-      // ── Décodage MIME côté client si le texte est un email brut ──────────
       const { data, error } = await supabase.functions.invoke('analyze-email', {
-        body: { action: 'extract-contact', emailText: texte, type },
+        body: { action: 'extract-contact', emailText, type },
       });
       if (error) throw new Error(error.message);
       if (data?.error) throw new Error(data.error);
