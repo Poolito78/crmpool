@@ -102,7 +102,11 @@ function tronquer(texte: string, maxChars = 6000): string {
 /** Appel OpenRouter — essaie plusieurs modèles gratuits en séquence */
 async function analyserViaOpenRouter(texte: string, openrouterKey: string): Promise<DocumentAnalysis> {
   const models = [
+    'meta-llama/llama-4-scout:free',
+    'meta-llama/llama-4-maverick:free',
+    'deepseek/deepseek-v3-0324:free',
     'google/gemma-4-26b-a4b-it:free',
+    'qwen/qwen3-30b-a3b:free',
     'openai/gpt-oss-20b:free',
     'nvidia/nemotron-3-nano-30b-a3b:free',
   ];
