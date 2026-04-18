@@ -65,7 +65,6 @@ function extractMimeBody(text: string): string {
   let plain = '', html = '';
   for (const part of parts) {
     if (!part.trim()) continue;
-    // Partie multipart imbriquée
     if (/content-type:\s*multipart\//i.test(part)) {
       const sub = extractMimeBody(part);
       if (sub) { plain = plain || sub; continue; }
@@ -78,89 +77,140 @@ function extractMimeBody(text: string): string {
   return plain || html;
 }
 
-/** Prépare le texte d'un email pour l'IA :
- *  1. Extrait les en-têtes utiles (From / Subject)
- *  2. Décode le corps MIME si présent
- *  3. Sinon, nettoie les en-têtes techniques
- *  4. Tronque à maxChars */
+/** Prépare le texte d'un email pour l'IA */
 function prepareEmailText(text: string, maxChars = 4000): string {
   const lines = text.split('\n');
-
-  // 1. En-têtes utiles
   const useful = lines
     .filter(l => /^(from|de|to|subject|objet|date):\s+/i.test(l.trim()))
     .map(l => l.trim());
-
-  // 2. Décoder le corps MIME
   let body = extractMimeBody(text);
-
-  // 3. Fallback : supprimer les en-têtes techniques ligne par ligne
   if (!body) {
     const techRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer|dkim-|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-|list-|delivered-to:|precedence:|boundary=|charset=)/i;
     body = lines
       .filter(l => !techRe.test(l.trim()))
       .join('\n').replace(/\n{3,}/g, '\n\n').trim();
   }
-
   const combined = (useful.length ? useful.join('\n') + '\n\n' : '') + body;
   if (combined.length <= maxChars) return combined;
   return combined.slice(0, 1800) + '\n[...]\n' + combined.slice(-(maxChars - 1900));
 }
 
-/** Appel Groq avec function calling — modèle 8b (500K TPD) */
-async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      max_tokens: 1024,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      tools: [{ type: "function", function: tool }],
-      tool_choice: { type: "function", function: { name: tool.name } },
-    }),
-  });
+// ── Fournisseurs AI ──────────────────────────────────────────────────────────
+
+/** Appel Gemini JSON mode — fallback si Groq quota dépassé */
+async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts: [{ text: userMessage }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0, maxOutputTokens: 1024 },
+      }),
+    }
+  );
   if (!response.ok) {
-    if (response.status === 429) throw new Error("Quota journalier atteint — réessayez demain ou dans quelques minutes.");
     const t = await response.text();
-    console.error("Groq API error:", response.status, t);
-    throw new Error("Erreur d'analyse AI");
+    console.error("Gemini error:", response.status, t);
+    throw new Error("Erreur d'analyse AI (Gemini)");
   }
   const data = await response.json();
-  const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-  if (!toolCall) throw new Error("Impossible d'extraire les données");
-  return JSON.parse(toolCall.function.arguments);
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+  try { return JSON.parse(text); } catch { throw new Error("Réponse JSON invalide (Gemini)"); }
 }
 
-/** Appel Groq JSON mode — modèle 8b rapide pour extraction de contact */
-async function callGroqJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
-      max_tokens: 512,
-      temperature: 0,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-    }),
-  });
-  if (!response.ok) {
-    if (response.status === 429) throw new Error("Quota journalier atteint — réessayez dans quelques minutes.");
-    const t = await response.text();
-    console.error("Groq 8b error:", response.status, t);
-    throw new Error("Erreur d'analyse AI");
+/** Appel Groq JSON mode — 8b instant (500K TPD), fallback Gemini si 429 */
+async function callAiJson(
+  systemPrompt: string,
+  userMessage: string,
+  groqKey: string,
+  geminiKey: string | null
+): Promise<{ result: any; provider: string }> {
+  // 1. Essayer Groq
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        max_tokens: 1024,
+        temperature: 0,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      }),
+    });
+    if (response.status === 429) throw Object.assign(new Error("quota"), { quota: true });
+    if (!response.ok) {
+      const t = await response.text();
+      console.error("Groq error:", response.status, t);
+      throw new Error("Erreur d'analyse AI");
+    }
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content ?? '';
+    return { result: JSON.parse(content), provider: "groq" };
+  } catch (err: any) {
+    if (!err.quota) throw err;
+    console.warn("Groq quota dépassé — basculement sur Gemini");
   }
-  const data = await response.json();
-  const content = data.choices?.[0]?.message?.content ?? '';
-  try { return JSON.parse(content); } catch { throw new Error("Réponse JSON invalide"); }
+
+  // 2. Fallback Gemini
+  if (!geminiKey) throw new Error("Quota Groq dépassé et GEMINI_API_KEY non configurée");
+  const result = await callGeminiJson(systemPrompt, userMessage, geminiKey);
+  return { result, provider: "gemini" };
 }
+
+/** Appel Groq function calling — fallback Gemini JSON si 429 */
+async function callAiTool(
+  systemPrompt: string,
+  userMessage: string,
+  tool: any,
+  groqKey: string,
+  geminiKey: string | null
+): Promise<{ result: any; provider: string }> {
+  // 1. Essayer Groq avec function calling
+  try {
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        max_tokens: 1024,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        tools: [{ type: "function", function: tool }],
+        tool_choice: { type: "function", function: { name: tool.name } },
+      }),
+    });
+    if (response.status === 429) throw Object.assign(new Error("quota"), { quota: true });
+    if (!response.ok) {
+      const t = await response.text();
+      console.error("Groq tool error:", response.status, t);
+      throw new Error("Erreur d'analyse AI");
+    }
+    const data = await response.json();
+    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
+    if (!toolCall) throw new Error("Impossible d'extraire les données");
+    return { result: JSON.parse(toolCall.function.arguments), provider: "groq" };
+  } catch (err: any) {
+    if (!err.quota) throw err;
+    console.warn("Groq quota dépassé — basculement sur Gemini");
+  }
+
+  // 2. Fallback Gemini : JSON mode avec description du schéma
+  if (!geminiKey) throw new Error("Quota Groq dépassé et GEMINI_API_KEY non configurée");
+  const schemaDesc = `\n\nRéponds UNIQUEMENT avec un objet JSON valide respectant ce schéma :\n${JSON.stringify(tool.parameters, null, 2)}`;
+  const result = await callGeminiJson(systemPrompt + schemaDesc, userMessage, geminiKey);
+  return { result, provider: "gemini" };
+}
+
+// ── Handler principal ────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
@@ -169,6 +219,7 @@ serve(async (req) => {
     const body = await req.json();
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? null;
 
     // ── Mode extraction de contact ──────────────────────────────────────────
     if (body.action === "extract-contact") {
@@ -191,8 +242,13 @@ Réponds UNIQUEMENT avec un objet JSON valide contenant ces champs (chaîne vide
 }
 IMPORTANT : l'adresse email est souvent dans "From: Nom <email@domaine.fr>" — extrait-la.`;
 
-      const result = await callGroqJson(systemPrompt, `Extrais les coordonnées du ${entityLabel} :\n\n${emailText}`, GROQ_API_KEY);
-      // Garantir que tous les champs requis sont présents
+      const { result, provider } = await callAiJson(
+        systemPrompt,
+        `Extrais les coordonnées du ${entityLabel} :\n\n${emailText}`,
+        GROQ_API_KEY,
+        GEMINI_API_KEY
+      );
+      console.log(`extract-contact via ${provider}`);
       const safe = { nom: '', societe: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', notes: '', ...result };
       return new Response(JSON.stringify(safe), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -200,7 +256,6 @@ IMPORTANT : l'adresse email est souvent dans "From: Nom <email@domaine.fr>" — 
     // ── Mode analyse devis ──────────────────────────────────────────────────
     const { emailText, clients, produits } = body;
 
-    // Pré-filtrer produits par mots-clés de l'email pour rester sous 6000 tokens (limite Groq)
     const emailLower = String(emailText).toLowerCase();
     const emailMots = emailLower.split(/[\s,;.!?()]+/).filter((w: string) => w.length >= 3);
 
@@ -265,12 +320,18 @@ ${produitsList}`;
       },
     };
 
-    const result = await callGroq(systemPrompt, `Analyse ce message et extrais le client et les produits demandés :\n\n${emailText}`, tool, GROQ_API_KEY);
+    const { result, provider } = await callAiTool(
+      systemPrompt,
+      `Analyse ce message et extrais le client et les produits demandés :\n\n${emailText}`,
+      tool,
+      GROQ_API_KEY,
+      GEMINI_API_KEY
+    );
+    console.log(`analyse-devis via ${provider}`);
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   } catch (e: any) {
     console.error("analyze-email error:", e);
-    // Retourner 200 avec { error } pour que le client voie le vrai message
     return new Response(JSON.stringify({ error: e.message || "Erreur inconnue" }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
