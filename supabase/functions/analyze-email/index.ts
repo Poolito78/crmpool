@@ -144,7 +144,7 @@ async function callOpenRouterJson(systemPrompt: string, userMessage: string, api
           ],
         }),
       });
-      if (response.status === 429 || response.status === 404) { console.warn(`OpenRouter ${model} indisponible`); continue; }
+      if (response.status === 429 || response.status === 404 || response.status === 503) { console.warn(`OpenRouter ${model} indisponible (${response.status})`); continue; }
       if (!response.ok) { console.warn(`OpenRouter ${model} erreur ${response.status}`); continue; }
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content ?? '';
@@ -334,12 +334,6 @@ RÈGLES IMPORTANTES :
 
       // Filet de sécurité regex — appliqué sur le texte COMPLET (pas tronqué par prepareEmailText)
       const rawText = String(body.emailText || '');
-      const idx33 = rawText.indexOf('+33');
-      const idx06 = rawText.search(/\b06\d/);
-      const idx76 = rawText.indexOf('76300');
-      console.log("DEBUG2 len:", rawText.length, "+33 at:", idx33, "06x at:", idx06, "76300 at:", idx76);
-      if (idx33>=0) console.log("DEBUG2 +33:", JSON.stringify(rawText.slice(Math.max(0,idx33-20),idx33+30)));
-      if (idx76>=0) console.log("DEBUG2 76300:", JSON.stringify(rawText.slice(Math.max(0,idx76-30),idx76+40)));
       if (!safe.telephone || !safe.telephoneMobile) {
         // Trouve tous les numéros de téléphone (formats FR et international)
         const phones = [...rawText.matchAll(/(?:tél?|tel|téléphone|phone|fixe?|fix|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{6,20}\d)/gi)]

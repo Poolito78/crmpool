@@ -99,12 +99,8 @@ function parserPartie(part: string, result: EmlContent) {
       .replace(/[ \t]{2,}/g, ' ')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-    // Utilise le HTML s'il est plus riche que le texte plain (signature Outlook dans HTML uniquement)
-    if (stripped && stripped.length > (result.texte?.length ?? 0) + 100) {
-      result.texte = stripped;
-    } else if (stripped && !result.texte) {
-      result.texte = stripped;
-    }
+    // HTML toujours préféré au texte plain — les signatures Outlook sont uniquement dans le HTML
+    if (stripped) result.texte = stripped;
   }
 }
 
