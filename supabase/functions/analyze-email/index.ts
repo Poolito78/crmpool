@@ -334,6 +334,12 @@ RÈGLES IMPORTANTES :
 
       // Filet de sécurité regex — appliqué sur le texte COMPLET (pas tronqué par prepareEmailText)
       const rawText = String(body.emailText || '');
+      // DEBUG: chercher "tel" dans le texte
+      const telIdx = rawText.search(/tel\s*[:.]/i);
+      console.log("DEBUG rawText length:", rawText.length, "tel idx:", telIdx);
+      if (telIdx >= 0) console.log("DEBUG around tel:", JSON.stringify(rawText.slice(Math.max(0,telIdx-10), telIdx+60)));
+      const addrIdx = rawText.search(/\d{5}\s+[A-Z]/);
+      if (addrIdx >= 0) console.log("DEBUG around cp:", JSON.stringify(rawText.slice(Math.max(0,addrIdx-30), addrIdx+50)));
       if (!safe.telephone || !safe.telephoneMobile) {
         // Trouve tous les numéros de téléphone (formats FR et international)
         const phones = [...rawText.matchAll(/(?:tél?|tel|téléphone|phone|fixe?|fix|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{6,20}\d)/gi)]
