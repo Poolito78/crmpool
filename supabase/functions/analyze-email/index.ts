@@ -5,21 +5,33 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-/** Nettoie le texte d'un email : supprime les en-têtes techniques Exchange/SMTP
- *  et tronque à maxChars pour rester sous la limite TPM de Groq. */
+/** Nettoie le texte d'un email : extrait d'abord les champs utiles (From/To/Subject),
+ *  supprime les en-têtes techniques Exchange/SMTP, et tronque à maxChars. */
 function prepareEmailText(text: string, maxChars = 4000): string {
-  const headerRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer-encoding:|dkim-signature:|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-topic:|thread-index:|list-|delivered-to:|precedence:)/i;
+  const lines = text.split('\n');
 
-  const cleaned = text
-    .split('\n')
-    .filter(line => !headerRe.test(line.trim()))
+  // 1. Extraire les champs utiles : From, To, Subject, Date
+  const usefulHeaders: string[] = [];
+  for (const line of lines) {
+    if (/^(from|de|to|à|subject|objet|date):\s+/i.test(line.trim())) {
+      usefulHeaders.push(line.trim());
+    }
+  }
+
+  // 2. Supprimer les en-têtes techniques
+  const techRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer-encoding:|dkim-signature:|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-topic:|thread-index:|list-|delivered-to:|precedence:|boundary=|charset=)/i;
+  const cleaned = lines
+    .filter(line => !techRe.test(line.trim()))
     .join('\n')
-    .replace(/\n{3,}/g, '\n\n') // réduire les lignes vides multiples
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 
-  if (cleaned.length <= maxChars) return cleaned;
+  // 3. Assembler : en-têtes utiles en premier, puis le corps nettoyé
+  const combined = (usefulHeaders.length ? usefulHeaders.join('\n') + '\n\n' : '') + cleaned;
+
+  if (combined.length <= maxChars) return combined;
   // Garder début (expéditeur/objet) + fin (corps/signature)
-  return cleaned.slice(0, 1500) + '\n[...]\n' + cleaned.slice(-(maxChars - 1600));
+  return combined.slice(0, 1800) + '\n[...]\n' + combined.slice(-(maxChars - 1900));
 }
 
 async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
@@ -72,15 +84,16 @@ serve(async (req) => {
 À partir du texte fourni, extrais les informations de contact d'un ${entityLabel}.
 RÈGLES :
 - Si une information n'est pas présente, retourne une chaîne vide ""
-- "nom" : prénom + nom du contact principal
-- "societe" : nom de l'entreprise
-- "email" : adresse email principale
+- "nom" : prénom + nom du contact principal (cherche dans la signature ET dans le champ "From:" / "De:")
+- "societe" : nom de l'entreprise (cherche dans la signature, le domaine email, et "From:" / "De:")
+- "email" : adresse email principale — cherche dans "From:", "De:", la signature, et toute adresse au format xxx@xxx.xxx dans le texte
 - "telephone" : numéro de téléphone fixe formaté (commence souvent par 01-05)
 - "telephoneMobile" : numéro de téléphone mobile/portable formaté (commence souvent par 06 ou 07), chaîne vide si absent
 - "adresse" : rue et numéro uniquement (sans ville ni code postal)
 - "ville" : uniquement la ville
 - "codePostal" : code postal 5 chiffres
-- "notes" : autres infos utiles (site web, fonction, etc.)`;
+- "notes" : autres infos utiles (site web, fonction, etc.)
+IMPORTANT : cherche l'email dans TOUT le texte, y compris les lignes "From: Nom <email@domaine.fr>"`;
 
       const tool = {
         name: "extract_contact_data",
