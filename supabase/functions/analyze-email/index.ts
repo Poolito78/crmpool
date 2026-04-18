@@ -5,6 +5,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+/** Nettoie le texte d'un email : supprime les en-têtes techniques Exchange/SMTP
+ *  et tronque à maxChars pour rester sous la limite TPM de Groq. */
+function prepareEmailText(text: string, maxChars = 4000): string {
+  const headerRe = /^(x-ms-|x-originating|x-google-|received:|mime-version:|content-type:|content-transfer-encoding:|dkim-signature:|arc-|authentication-results:|message-id:|in-reply-to:|references:|return-path:|thread-topic:|thread-index:|list-|delivered-to:|precedence:)/i;
+
+  const cleaned = text
+    .split('\n')
+    .filter(line => !headerRe.test(line.trim()))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n') // réduire les lignes vides multiples
+    .trim();
+
+  if (cleaned.length <= maxChars) return cleaned;
+  // Garder début (expéditeur/objet) + fin (corps/signature)
+  return cleaned.slice(0, 1500) + '\n[...]\n' + cleaned.slice(-(maxChars - 1600));
+}
+
 async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
@@ -47,7 +64,8 @@ serve(async (req) => {
 
     // ── Mode extraction de contact ──────────────────────────────────────────
     if (body.action === "extract-contact") {
-      const { emailText, type } = body;
+      const { type } = body;
+      const emailText = prepareEmailText(String(body.emailText || ''));
       const entityLabel = type === "fournisseur" ? "fournisseur" : "client";
 
       const systemPrompt = `Tu es un assistant spécialisé dans l'extraction d'informations de contact à partir d'emails ou de signatures d'emails.
@@ -161,8 +179,9 @@ ${produitsList}`;
 
   } catch (e: any) {
     console.error("analyze-email error:", e);
+    // Retourner 200 avec { error } pour que le client voie le vrai message
     return new Response(JSON.stringify({ error: e.message || "Erreur inconnue" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
 });
