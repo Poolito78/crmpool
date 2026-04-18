@@ -1,14 +1,14 @@
 import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload } from 'lucide-react';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { toast } from 'sonner';
 
 export default function Dashboard() {
-  const { clients, produits, fournisseurs, devis, commandesFournisseur } = useCRM();
+  const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -98,6 +98,27 @@ export default function Dashboard() {
   const totalEchu = echeancesEchues.reduce((s, e) => s + e.cf.totalTTC, 0);
   const totalEncours = echeancesFournisseurs.reduce((s, e) => s + e.cf.totalTTC, 0);
 
+  // ── Encours fin de mois ──────────────────────────────────────────────────
+  const finDuMois = new Date(currentYear, currentMonth + 1, 0, 23, 59, 59);
+
+  // Fournisseurs : commandes non payées avec échéance ≤ fin du mois
+  const encoursFournFDM = echeancesFournisseurs
+    .filter(e => e.cf.statut !== 'payee' && e.dateEch <= finDuMois);
+  const totalFournFDM = encoursFournFDM.reduce((s, e) => s + e.cf.totalTTC, 0);
+  const totalFournFDMEchu = encoursFournFDM.filter(e => e.dateEch < now).reduce((s, e) => s + e.cf.totalTTC, 0);
+
+  // Clients : commandes non livrées/annulées (ce qu'on doit facturer/encaisser)
+  const encoursClientFDM = commandesClient
+    .filter(cc => cc.statut === 'a_traiter' || cc.statut === 'en_cours' || cc.statut === 'expedie');
+  const totalClientFDM = encoursClientFDM.reduce((s, cc) => s + cc.totalTTC, 0);
+  // Parmi ceux dont la livraison prévue est ce mois-ci ou dépassée
+  const clientFDMCeMois = encoursClientFDM.filter(cc => {
+    if (!cc.dateLivraisonPrevue) return false;
+    const d = new Date(cc.dateLivraisonPrevue);
+    return d <= finDuMois;
+  });
+  const totalClientFDMCeMois = clientFDMCeMois.reduce((s, cc) => s + cc.totalTTC, 0);
+
   const stats = [
     { label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
     { label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
@@ -178,6 +199,51 @@ export default function Dashboard() {
         initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
         initialText={droppedText || undefined}
       />
+
+      {/* ── Encours fin de mois ── */}
+      {(totalFournFDM > 0 || totalClientFDM > 0) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Fournisseurs FDM */}
+          {totalFournFDM > 0 && (
+            <Link to="/commandes" className="bg-card rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
+                  <ArrowUpCircle className="w-4 h-4 text-destructive" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">À payer — FDM</p>
+                  <p className="text-[10px] text-muted-foreground">{new Date(currentYear, currentMonth + 1, 0).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold font-heading text-destructive">{formatMontant(totalFournFDM)}</p>
+              {totalFournFDMEchu > 0 && (
+                <p className="text-xs text-destructive/70 mt-1">dont {formatMontant(totalFournFDMEchu)} échus</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">{encoursFournFDM.length} commande{encoursFournFDM.length > 1 ? 's' : ''} fournisseur</p>
+            </Link>
+          )}
+
+          {/* Clients FDM */}
+          {totalClientFDM > 0 && (
+            <Link to="/commandes-client" className="bg-card rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
+                  <ArrowDownCircle className="w-4 h-4 text-success" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">À encaisser — FDM</p>
+                  <p className="text-[10px] text-muted-foreground">{new Date(currentYear, currentMonth + 1, 0).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}</p>
+                </div>
+              </div>
+              <p className="text-2xl font-bold font-heading text-success">{formatMontant(totalClientFDM)}</p>
+              {totalClientFDMCeMois > 0 && totalClientFDMCeMois < totalClientFDM && (
+                <p className="text-xs text-success/70 mt-1">dont {formatMontant(totalClientFDMCeMois)} ce mois</p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1">{encoursClientFDM.length} commande{encoursClientFDM.length > 1 ? 's' : ''} client</p>
+            </Link>
+          )}
+        </div>
+      )}
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}
