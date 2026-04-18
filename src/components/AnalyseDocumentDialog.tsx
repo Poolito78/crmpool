@@ -546,6 +546,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                     if (f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822') {
                       const eml = await parseEml(f);
                       if (eml.texte) setTexte(eml.texte);
+                      if (eml.contact) emlContactRef.current = eml.contact;
                       if (eml.pdfBuffers.length > 0) {
                         setEmlPdfs(eml.pdfBuffers);
                         const blob = new Blob([eml.pdfBuffers[0].buffer], { type: 'application/pdf' });

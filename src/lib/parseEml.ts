@@ -22,7 +22,6 @@ function base64ToString(b64: string): string {
   try {
     const clean = b64.replace(/\s/g, '');
     const binary = atob(clean);
-    // Tente décodage UTF-8
     try {
       const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
       return new TextDecoder('utf-8').decode(bytes);
@@ -43,10 +42,10 @@ function decoderContenu(contenu: string, encoding: string): string {
   return contenu;
 }
 
-function extraireHeaders(part: string): Record<string, string> {
+/** Extrait les headers MIME d'une section (gère CRLF et LF, et les headers repliés) */
+function extraireHeaders(headerSection: string): Record<string, string> {
   const headers: Record<string, string> = {};
-  const [headerSection] = part.split(/\r?\n\r?\n/);  // handles both LF and CRLF
-  const lines = headerSection.replace(/\r?\n[ \t]/g, ' ').split(/\r?\n/);
+  const lines = headerSection.replace(/\r\n|\r/g, '\n').replace(/\n[ \t]/g, ' ').split('\n');
   for (const line of lines) {
     const idx = line.indexOf(':');
     if (idx > 0) {
@@ -54,6 +53,25 @@ function extraireHeaders(part: string): Record<string, string> {
     }
   }
   return headers;
+}
+
+/** Sépare la section headers de la section body d'une partie MIME */
+function splitHeaderBody(part: string): { headerSection: string; body: string } | null {
+  // Cherche le séparateur headers/body : ligne vide (\r\n\r\n ou \n\n)
+  const crlfIdx = part.indexOf('\r\n\r\n');
+  const lfIdx   = part.indexOf('\n\n');
+  let sepIdx = -1;
+  let sepLen = 4;
+  if (crlfIdx !== -1 && (lfIdx === -1 || crlfIdx <= lfIdx)) {
+    sepIdx = crlfIdx; sepLen = 4;
+  } else if (lfIdx !== -1) {
+    sepIdx = lfIdx; sepLen = 2;
+  }
+  if (sepIdx === -1) return null;
+  return {
+    headerSection: part.slice(0, sepIdx),
+    body: part.slice(sepIdx + sepLen),
+  };
 }
 
 function stripHtml(html: string): string {
@@ -102,49 +120,53 @@ interface ParseState {
   pdfBuffers: { name: string; buffer: ArrayBuffer }[];
 }
 
-function parserPartie(part: string, state: ParseState) {
-  const headers = extraireHeaders(part);
+function parserPartie(part: string, state: ParseState, depth = 0) {
+  if (depth > 10) return;
+
+  const split = splitHeaderBody(part);
+  if (!split) return;
+
+  const { headerSection, body } = split;
+  const headers = extraireHeaders(headerSection);
   const contentType = headers['content-type'] || '';
   const encoding = headers['content-transfer-encoding'] || '7bit';
 
-  const boundaryMatch = contentType.match(/boundary=["']?([^"';\s]+)["']?/i);
+  // Multipart — cherche le boundary avec regex plus souple (espaces autour du =)
+  const boundaryMatch = contentType.match(/boundary\s*=\s*["']?([^"';\s\r\n]+)["']?/i);
   if (boundaryMatch) {
     const boundary = boundaryMatch[1];
-    const sepMatch = part.match(/\r?\n\r?\n/);
-    const bodyStart = sepMatch ? part.indexOf(sepMatch[0]) + sepMatch[0].length : 0;
-    const body = part.slice(bodyStart);
     const esc = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const parts = body.split(new RegExp(`--${esc}(?:--)?`));
+    // Découpe sur --boundary (avec ou sans CRLF)
+    const parts = body.split(new RegExp(`--${esc}(?:--)?[ \t]*(?:\r?\n|$)`));
     for (const sub of parts.slice(1)) {
-      if (sub.trim() && !sub.trim().startsWith('--')) parserPartie(sub.trim(), state);
+      const trimmed = sub.trim();
+      if (trimmed && !trimmed.startsWith('--')) parserPartie(trimmed, state, depth + 1);
     }
     return;
   }
 
-  const sepMatch2 = part.match(/\r?\n\r?\n/);
-  if (!sepMatch2) return;
-  const bodyStart = part.indexOf(sepMatch2[0]) + sepMatch2[0].length;
-  const rawBody = part.slice(bodyStart);
-
+  // Partie feuille PDF
   if (contentType.toLowerCase().includes('application/pdf')) {
-    const nameMatch = contentType.match(/name=["']?([^"';\s]+)["']?/i)
-      || (headers['content-disposition'] || '').match(/filename=["']?([^"';\s]+)["']?/i);
+    const nameMatch = contentType.match(/name\s*=\s*["']?([^"';\s\r\n]+)["']?/i)
+      || (headers['content-disposition'] || '').match(/filename\s*=\s*["']?([^"';\s\r\n]+)["']?/i);
     const name = nameMatch ? nameMatch[1] : 'document.pdf';
-    try { state.pdfBuffers.push({ name, buffer: base64ToArrayBuffer(rawBody) }); } catch { }
+    try { state.pdfBuffers.push({ name, buffer: base64ToArrayBuffer(body) }); } catch { }
     return;
   }
 
+  // Partie feuille HTML
+  if (contentType.toLowerCase().includes('text/html')) {
+    const decoded = decoderContenu(body, encoding);
+    const stripped = stripHtml(decoded);
+    if (stripped) state.html += (state.html ? '\n' : '') + stripped;
+    return;
+  }
+
+  // Partie feuille texte plain (ou sans content-type)
   if (contentType.toLowerCase().includes('text/plain') || contentType === '') {
-    const decoded = decoderContenu(rawBody, encoding);
+    const decoded = decoderContenu(body, encoding);
     if (decoded.trim()) state.plain += (state.plain ? '\n\n' : '') + decoded.trim();
     return;
-  }
-
-  if (contentType.toLowerCase().includes('text/html')) {
-    const decoded = decoderContenu(rawBody, encoding);
-    const stripped = stripHtml(decoded);
-    // Accumule tous les fragments HTML (pas seulement le premier)
-    if (stripped) state.html += (state.html ? '\n' : '') + stripped;
   }
 }
 
@@ -157,15 +179,15 @@ export async function parseEml(file: File): Promise<EmlContent> {
 
   parserPartie(raw, state);
 
-  // Extraire les coordonnées depuis le HTML (qui contient la signature Outlook)
-  const contact = state.html ? extraireContactDuTexte(state.html) : undefined;
+  // Contact : privilégie HTML (signature Outlook), fallback sur plain
+  const contactSrc = state.html || state.plain;
+  const contact = contactSrc ? extraireContactDuTexte(contactSrc) : undefined;
 
-  // Pour le texte envoyé à l'IA : plain text (plus propre pour analyse)
   const texte = subjectPrefix + (state.plain || state.html);
 
-  console.log('[parseEml] plain length:', state.plain.length, 'html length:', state.html.length);
-  console.log('[parseEml] html snippet:', state.html.slice(0, 300));
-  console.log('[parseEml] contact extracted:', contact);
+  console.warn('[parseEml] plain:', state.plain.length, 'html:', state.html.length, 'pdfs:', state.pdfBuffers.length);
+  console.warn('[parseEml] html[:200]:', state.html.slice(0, 200));
+  console.warn('[parseEml] contact:', contact);
 
   return {
     texte,
