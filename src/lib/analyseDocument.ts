@@ -99,6 +99,36 @@ function tronquer(texte: string, maxChars = 6000): string {
   return texte.slice(0, maxChars) + '\n[... texte tronqué ...]';
 }
 
+/** Appel OpenRouter comme 3e fallback — API OpenAI-compatible, modèles gratuits */
+async function analyserViaOpenRouter(texte: string, openrouterKey: string): Promise<DocumentAnalysis> {
+  const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${openrouterKey}` },
+    body: JSON.stringify({
+      model: 'meta-llama/llama-3.1-8b-instruct:free',
+      temperature: 0,
+      max_tokens: 1024,
+      messages: [
+        { role: 'system', content: PROMPT },
+        { role: 'user', content: `Document :\n${texte}` },
+      ],
+    }),
+  });
+  if (response.status === 429) throw Object.assign(new Error('quota'), { quota: true });
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Erreur OpenRouter ${response.status} : ${err.slice(0, 200)}`);
+  }
+  const data = await response.json();
+  const text: string = data.choices?.[0]?.message?.content ?? '';
+  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('Réponse invalide (OpenRouter) : aucun JSON trouvé');
+  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+  return parsed;
+}
+
 /** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */
 async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
   const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
@@ -147,7 +177,8 @@ export async function analyserDocument(
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
     | { type: 'text'; texte: string },
   apiKey: string,
-  geminiKey?: string
+  geminiKey?: string,
+  openrouterKey?: string
 ): Promise<DocumentAnalysis> {
   let texte: string;
   if (input.type === 'pdf') {
@@ -196,11 +227,24 @@ export async function analyserDocument(
   }
 
   // 2. Fallback Gemini
-  if (!geminiKey) throw new Error('Quota Groq dépassé. Configurez VITE_GEMINI_API_KEY pour continuer.');
-  try {
-    return await analyserViaGemini(texte, geminiKey);
-  } catch (err: any) {
-    if (err.quota) throw new Error('Quotas Groq et Gemini dépassés pour aujourd\'hui. Réessayez demain.');
-    throw err;
+  if (geminiKey) {
+    try {
+      return await analyserViaGemini(texte, geminiKey);
+    } catch (err: any) {
+      if (!err.quota) throw err;
+      console.warn('Gemini quota dépassé — basculement sur OpenRouter');
+    }
   }
+
+  // 3. Fallback OpenRouter
+  if (openrouterKey) {
+    try {
+      return await analyserViaOpenRouter(texte, openrouterKey);
+    } catch (err: any) {
+      if (!err.quota) throw err;
+      console.warn('OpenRouter quota dépassé');
+    }
+  }
+
+  throw new Error('Tous les fournisseurs AI sont temporairement indisponibles. Réessayez demain.');
 }

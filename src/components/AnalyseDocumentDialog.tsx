@@ -73,6 +73,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 
   /* ── helpers ── */
   const isFournisseurDoc = (t?: TypeDocument) =>
@@ -128,7 +129,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       let analysis: DocumentAnalysis;
       if (pdfFile) {
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
-        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, geminiKey);
+        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, geminiKey, openrouterKey);
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
         let texteAnalyse = texteCtx;
@@ -145,7 +146,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
             }
           } catch { /* garder texte brut */ }
         }
-        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, geminiKey);
+        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, geminiKey, openrouterKey);
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
       }

@@ -122,12 +122,39 @@ async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey:
   try { return JSON.parse(text); } catch { throw new Error("Réponse JSON invalide (Gemini)"); }
 }
 
+/** Appel OpenRouter JSON mode — modèle gratuit, 3e fallback */
+async function callOpenRouterJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
+  const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "meta-llama/llama-3.1-8b-instruct:free",
+      max_tokens: 1024,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  });
+  if (response.status === 429) throw Object.assign(new Error("quota"), { quota: true });
+  if (!response.ok) {
+    const t = await response.text();
+    throw new Error(`Erreur OpenRouter ${response.status} : ${t.slice(0, 200)}`);
+  }
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content ?? '';
+  try { return JSON.parse(content); } catch { throw new Error("Réponse JSON invalide (OpenRouter)"); }
+}
+
 /** Appel Groq JSON mode — 8b instant (500K TPD), fallback Gemini si 429 */
 async function callAiJson(
   systemPrompt: string,
   userMessage: string,
   groqKey: string,
-  geminiKey: string | null
+  geminiKey: string | null,
+  openrouterKey: string | null = null
 ): Promise<{ result: any; provider: string }> {
   // 1. Essayer Groq
   try {
@@ -160,23 +187,37 @@ async function callAiJson(
   }
 
   // 2. Fallback Gemini
-  if (!geminiKey) throw new Error("Analyses temporairement indisponibles (quota/min atteint). Réessayez dans 1 minute.");
-  try {
-    const result = await callGeminiJson(systemPrompt, userMessage, geminiKey);
-    return { result, provider: "gemini" };
-  } catch (err: any) {
-    if (err.quota) throw new Error("Analyses temporairement indisponibles (quota atteint). Réessayez dans 1 minute.");
-    throw err;
+  if (geminiKey) {
+    try {
+      const result = await callGeminiJson(systemPrompt, userMessage, geminiKey);
+      return { result, provider: "gemini" };
+    } catch (err: any) {
+      if (!err.quota) throw err;
+      console.warn("Gemini quota dépassé — basculement sur OpenRouter");
+    }
   }
+
+  // 3. Fallback OpenRouter
+  if (openrouterKey) {
+    try {
+      const result = await callOpenRouterJson(systemPrompt, userMessage, openrouterKey);
+      return { result, provider: "openrouter" };
+    } catch (err: any) {
+      if (!err.quota) throw err;
+    }
+  }
+
+  throw new Error("Tous les fournisseurs AI sont temporairement indisponibles. Réessayez demain.");
 }
 
-/** Appel Groq function calling — fallback Gemini JSON si 429 */
+/** Appel Groq function calling — fallback Gemini puis OpenRouter si 429 */
 async function callAiTool(
   systemPrompt: string,
   userMessage: string,
   tool: any,
   groqKey: string,
-  geminiKey: string | null
+  geminiKey: string | null,
+  openrouterKey: string | null = null
 ): Promise<{ result: any; provider: string }> {
   // 1. Essayer Groq avec function calling
   try {
@@ -209,16 +250,30 @@ async function callAiTool(
     console.warn("Groq quota dépassé — basculement sur Gemini");
   }
 
-  // 2. Fallback Gemini : JSON mode avec description du schéma
-  if (!geminiKey) throw new Error("Analyses temporairement indisponibles (quota/min atteint). Réessayez dans 1 minute.");
-  try {
-    const schemaDesc = `\n\nRéponds UNIQUEMENT avec un objet JSON valide respectant ce schéma :\n${JSON.stringify(tool.parameters, null, 2)}`;
-    const result = await callGeminiJson(systemPrompt + schemaDesc, userMessage, geminiKey);
-    return { result, provider: "gemini" };
-  } catch (err: any) {
-    if (err.quota) throw new Error("Analyses temporairement indisponibles (quota atteint). Réessayez dans 1 minute.");
-    throw err;
+  const schemaDesc = `\n\nRéponds UNIQUEMENT avec un objet JSON valide respectant ce schéma :\n${JSON.stringify(tool.parameters, null, 2)}`;
+
+  // 2. Fallback Gemini
+  if (geminiKey) {
+    try {
+      const result = await callGeminiJson(systemPrompt + schemaDesc, userMessage, geminiKey);
+      return { result, provider: "gemini" };
+    } catch (err: any) {
+      if (!err.quota) throw err;
+      console.warn("Gemini quota dépassé — basculement sur OpenRouter");
+    }
   }
+
+  // 3. Fallback OpenRouter
+  if (openrouterKey) {
+    try {
+      const result = await callOpenRouterJson(systemPrompt + schemaDesc, userMessage, openrouterKey);
+      return { result, provider: "openrouter" };
+    } catch (err: any) {
+      if (!err.quota) throw err;
+    }
+  }
+
+  throw new Error("Tous les fournisseurs AI sont temporairement indisponibles. Réessayez demain.");
 }
 
 // ── Handler principal ────────────────────────────────────────────────────────
@@ -231,6 +286,7 @@ serve(async (req) => {
     const GROQ_API_KEY = Deno.env.get("GROQ_API_KEY");
     if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
     const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? null;
+    const OPENROUTER_API_KEY = Deno.env.get("OPENROUTER_API_KEY") ?? null;
 
     // ── Mode extraction de contact ──────────────────────────────────────────
     if (body.action === "extract-contact") {
@@ -257,7 +313,8 @@ IMPORTANT : l'adresse email est souvent dans "From: Nom <email@domaine.fr>" — 
         systemPrompt,
         `Extrais les coordonnées du ${entityLabel} :\n\n${emailText}`,
         GROQ_API_KEY,
-        GEMINI_API_KEY
+        GEMINI_API_KEY,
+        OPENROUTER_API_KEY
       );
       console.log(`extract-contact via ${provider}`);
       const safe = { nom: '', societe: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', notes: '', ...result };
@@ -336,7 +393,8 @@ ${produitsList}`;
       `Analyse ce message et extrais le client et les produits demandés :\n\n${emailText}`,
       tool,
       GROQ_API_KEY,
-      GEMINI_API_KEY
+      GEMINI_API_KEY,
+      OPENROUTER_API_KEY
     );
     console.log(`analyse-devis via ${provider}`);
     return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
