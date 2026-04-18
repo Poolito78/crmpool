@@ -1,11 +1,12 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis } from '@/lib/store';
 import { exportMultiSheet } from '@/lib/exportExcel';
 import { supabase } from '@/integrations/supabase/client';
+import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 
 const navItems = [
   { label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
@@ -21,6 +22,7 @@ const navItems = [
 
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [analyseOpen, setAnalyseOpen] = useState(false);
   const location = useLocation();
   const { clients, produits, fournisseurs, devis } = useCRM();
 
@@ -63,6 +65,13 @@ export default function CRMLayout() {
               </Link>
             );
           })}
+          <button
+            onClick={() => setAnalyseOpen(true)}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
+          >
+            <ScanText className="w-5 h-5 shrink-0" />
+            Analyse de document
+          </button>
         </nav>
         <div className="px-3 pb-4 space-y-1">
           <button
@@ -118,6 +127,13 @@ export default function CRMLayout() {
               </Link>
             );
           })}
+          <button
+            onClick={() => { setAnalyseOpen(true); setSidebarOpen(false); }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors"
+          >
+            <ScanText className="w-5 h-5 shrink-0" />
+            Analyse de document
+          </button>
         </nav>
       </aside>
 
@@ -137,6 +153,8 @@ export default function CRMLayout() {
           <Outlet />
         </main>
       </div>
+
+      <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
 
       {/* Mobile bottom nav */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-30 flex justify-around py-2">
