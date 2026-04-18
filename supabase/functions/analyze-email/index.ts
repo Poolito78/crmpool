@@ -302,20 +302,25 @@ serve(async (req) => {
       const emailText = prepareEmailText(String(body.emailText || ''));
       const entityLabel = type === "fournisseur" ? "fournisseur" : "client";
 
-      const systemPrompt = `Tu es un assistant qui extrait les coordonnées d'un ${entityLabel} depuis un email ou une signature.
-Réponds UNIQUEMENT avec un objet JSON valide contenant ces champs (chaîne vide "" si absent) :
+      const systemPrompt = `Tu es un assistant spécialisé dans l'extraction de coordonnées depuis des emails et signatures.
+Analyse TOUT le texte fourni et extrais TOUTES les informations de contact disponibles.
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 {
-  "nom": "prénom nom du contact (cherche dans signature et champ From:)",
-  "societe": "nom de l'entreprise",
-  "email": "adresse email (cherche dans From:, De:, et partout au format xxx@xxx.xxx)",
-  "telephone": "téléphone fixe (01-05 en France)",
-  "telephoneMobile": "téléphone mobile (06-07 en France)",
-  "adresse": "rue et numéro uniquement",
-  "ville": "ville uniquement",
-  "codePostal": "code postal 5 chiffres",
-  "notes": "site web, fonction, autres infos"
+  "nom": "prénom et nom du contact (cherche dans signature, champ From:, De:)",
+  "societe": "nom de l'entreprise ou organisation",
+  "email": "adresse email (cherche partout : From:, De:, signature, format xxx@xxx.xxx)",
+  "telephone": "TOUT numéro de téléphone fixe trouvé (bureau, standard, fixe) — n'importe quel format",
+  "telephoneMobile": "TOUT numéro de téléphone mobile trouvé (portable, GSM, mobile) — n'importe quel format",
+  "adresse": "numéro et nom de rue",
+  "ville": "nom de la ville",
+  "codePostal": "code postal",
+  "notes": "site web, fonction, poste, autres informations utiles"
 }
-IMPORTANT : l'adresse email est souvent dans "From: Nom <email@domaine.fr>" — extrait-la.`;
+RÈGLES IMPORTANTES :
+- Cherche les numéros partout dans le texte : "Tél:", "Tel:", "Téléphone:", "Mobile:", "Port:", "Fix:", "+33", "0X XX XX XX XX", etc.
+- Cherche les adresses : numéro + rue, avenue, boulevard, chemin, place, impasse, etc.
+- Si un champ est absent du texte, mets "".
+- Ne génère AUCUN texte en dehors du JSON.`;
 
       const { result, provider } = await callAiJson(
         systemPrompt,
