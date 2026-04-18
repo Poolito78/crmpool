@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles } from 'lucide-react';
+import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
@@ -522,13 +523,20 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
-                {/* Textarea */}
-                <Textarea
-                  placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF, Excel (.xlsx) ou email'}
-                  value={texte}
-                  onChange={e => setTexte(e.target.value)}
-                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[80px]' : 'min-h-[140px]'}`}
-                />
+                {/* Textarea + bouton dictée */}
+                <div className="relative">
+                  <Textarea
+                    placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF, Excel (.xlsx) ou email\nou dicter vocalement →'}
+                    value={texte}
+                    onChange={e => setTexte(e.target.value)}
+                    className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[80px]' : 'min-h-[140px]'}`}
+                  />
+                  <div className="absolute top-0 right-0">
+                    <VoiceButton
+                      onTranscript={t => setTexte(prev => prev ? prev + ' ' + t : t)}
+                    />
+                  </div>
+                </div>
 
                 {/* Bouton parcourir PDF */}
                 <button
