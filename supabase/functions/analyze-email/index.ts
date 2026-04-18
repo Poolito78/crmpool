@@ -331,6 +331,36 @@ RÈGLES IMPORTANTES :
       );
       console.log(`extract-contact via ${provider}`);
       const safe = { nom: '', societe: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', notes: '', ...result };
+
+      // Filet de sécurité regex — complète les champs vides que l'IA a manqués
+      const rawText = String(body.emailText || '');
+      if (!safe.telephone || !safe.telephoneMobile) {
+        // Trouve tous les numéros de téléphone (formats FR et international)
+        const phones = [...rawText.matchAll(/(?:tél?|tel|téléphone|phone|fixe?|fix|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{6,20}\d)/gi)]
+          .map(m => m[1].replace(/\s+/g, ' ').trim());
+        // Aussi capturer les numéros standalone +33 ou 0X
+        const standalone = [...rawText.matchAll(/(?<![.\d])(\+33[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}|0[1-9](?:[\s.\-]?\d{2}){4})(?![\d])/g)]
+          .map(m => m[1].replace(/\s+/g, ' ').trim());
+        const allPhones = [...new Set([...phones, ...standalone])];
+        for (const num of allPhones) {
+          const digits = num.replace(/\D/g, '');
+          const isMobile = /^(06|07|336|337|\+336|\+337)/.test(digits) || /^(6|7)/.test(digits.replace(/^33/, ''));
+          if (isMobile && !safe.telephoneMobile) safe.telephoneMobile = num;
+          else if (!isMobile && !safe.telephone) safe.telephone = num;
+        }
+      }
+      if (!safe.adresse || !safe.ville || !safe.codePostal) {
+        // Cherche un code postal 5 chiffres + ville
+        const cpMatch = rawText.match(/(\d{5})\s+([A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-ZÀÂÄÉÈÊËÎÏÔÙÛÜA-Za-z\s\-]{2,40})/);
+        if (cpMatch) {
+          if (!safe.codePostal) safe.codePostal = cpMatch[1];
+          if (!safe.ville) safe.ville = cpMatch[2].trim();
+        }
+        // Cherche une adresse (numéro + type de voie)
+        const addrMatch = rawText.match(/(\d+\s+(?:rue|avenue|av\.|boulevard|bd\.?|chemin|place|impasse|allée|route|voie|cité|résidence)\s+[^\n,]{3,60})/i);
+        if (addrMatch && !safe.adresse) safe.adresse = addrMatch[1].trim();
+      }
+
       return new Response(JSON.stringify(safe), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
