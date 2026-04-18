@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -99,6 +99,7 @@ export default function Fournisseurs() {
       nom: contact.nom,
       email: contact.email,
       telephone: contact.telephone,
+      telephoneMobile: contact.telephoneMobile,
       adresse: contact.adresse,
       ville: contact.ville,
       codePostal: contact.codePostal,
@@ -112,7 +113,7 @@ export default function Fournisseurs() {
   }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
     setDialogOpen(true);
   }
 
@@ -370,7 +371,8 @@ export default function Fournisseurs() {
               { key: 'societe', label: 'Société *' },
               { key: 'nom', label: 'Nom contact *' },
               { key: 'email', label: 'Email', type: 'email' },
-              { key: 'telephone', label: 'Téléphone', type: 'tel' },
+              { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+              { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
               { key: 'adresse', label: 'Adresse' },
               { key: 'ville', label: 'Ville' },
               { key: 'codePostal', label: 'Code postal' },

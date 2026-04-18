@@ -14,6 +14,7 @@ export interface ExtractedContact {
   societe: string;
   email: string;
   telephone: string;
+  telephoneMobile: string;
   adresse: string;
   ville: string;
   codePostal: string;
@@ -165,7 +166,8 @@ export default function EmailToContactDialog({ open, onOpenChange, type, onExtra
                 { key: 'societe', label: 'Société' },
                 { key: 'nom', label: 'Nom du contact' },
                 { key: 'email', label: 'Email', type: 'email' },
-                { key: 'telephone', label: 'Téléphone', type: 'tel' },
+                { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+                { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
                 { key: 'adresse', label: 'Adresse' },
                 { key: 'ville', label: 'Ville' },
                 { key: 'codePostal', label: 'Code postal' },

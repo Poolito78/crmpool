@@ -16,7 +16,7 @@ import { exportToExcel } from '@/lib/exportExcel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
 };
 
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
@@ -133,6 +133,7 @@ export default function Clients() {
       nom: contact.nom,
       email: contact.email,
       telephone: contact.telephone,
+      telephoneMobile: contact.telephoneMobile,
       adresse: contact.adresse,
       ville: contact.ville,
       codePostal: contact.codePostal,
@@ -144,7 +145,7 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts: c.contacts || [] });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts: c.contacts || [] });
     setDialogOpen(true);
   }
 
@@ -607,7 +608,8 @@ export default function Clients() {
               { key: 'nom', label: 'Nom *', type: 'text' },
               { key: 'societe', label: 'Société', type: 'text' },
               { key: 'email', label: 'Email', type: 'email' },
-              { key: 'telephone', label: 'Téléphone', type: 'tel' },
+              { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+              { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
               { key: 'adresse', label: 'Adresse (facturation)', type: 'text' },
               { key: 'ville', label: 'Ville', type: 'text' },
               { key: 'codePostal', label: 'Code postal', type: 'text' },

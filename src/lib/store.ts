@@ -28,6 +28,7 @@ export interface Client {
   nom: string;
   email: string;
   telephone: string;
+  telephoneMobile?: string;
   adresse: string;
   ville: string;
   codePostal: string;
@@ -45,6 +46,7 @@ export interface Fournisseur {
   nom: string;
   email: string;
   telephone: string;
+  telephoneMobile?: string;
   adresse: string;
   ville: string;
   codePostal: string;
@@ -192,6 +194,7 @@ function dbToClient(r: any): Client {
     nom: r.nom,
     email: r.email,
     telephone: r.telephone,
+    telephoneMobile: r.telephone_mobile || undefined,
     adresse: r.adresse,
     ville: r.ville,
     codePostal: r.code_postal,
@@ -211,6 +214,7 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     nom: c.nom,
     email: c.email,
     telephone: c.telephone,
+    telephone_mobile: c.telephoneMobile || null,
     adresse: c.adresse,
     ville: c.ville,
     code_postal: c.codePostal,
@@ -229,6 +233,7 @@ function dbToFournisseur(r: any): Fournisseur {
     nom: r.nom,
     email: r.email,
     telephone: r.telephone,
+    telephoneMobile: r.telephone_mobile || undefined,
     adresse: r.adresse,
     ville: r.ville,
     codePostal: r.code_postal,
@@ -248,6 +253,7 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     nom: f.nom,
     email: f.email,
     telephone: f.telephone,
+    telephone_mobile: f.telephoneMobile || null,
     adresse: f.adresse,
     ville: f.ville,
     code_postal: f.codePostal,

@@ -57,7 +57,8 @@ RÈGLES :
 - "nom" : prénom + nom du contact principal
 - "societe" : nom de l'entreprise
 - "email" : adresse email principale
-- "telephone" : numéro de téléphone formaté
+- "telephone" : numéro de téléphone fixe formaté (commence souvent par 01-05)
+- "telephoneMobile" : numéro de téléphone mobile/portable formaté (commence souvent par 06 ou 07), chaîne vide si absent
 - "adresse" : rue et numéro uniquement (sans ville ni code postal)
 - "ville" : uniquement la ville
 - "codePostal" : code postal 5 chiffres
@@ -72,13 +73,14 @@ RÈGLES :
             nom: { type: "string" },
             societe: { type: "string" },
             email: { type: "string" },
-            telephone: { type: "string" },
+            telephone: { type: "string", description: "Numéro de téléphone fixe" },
+            telephoneMobile: { type: "string", description: "Numéro de téléphone mobile / portable" },
             adresse: { type: "string" },
             ville: { type: "string" },
             codePostal: { type: "string" },
             notes: { type: "string" },
           },
-          required: ["nom", "societe", "email", "telephone", "adresse", "ville", "codePostal", "notes"],
+          required: ["nom", "societe", "email", "telephone", "telephoneMobile", "adresse", "ville", "codePostal", "notes"],
         },
       };
 

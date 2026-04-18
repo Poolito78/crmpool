@@ -369,6 +369,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (emailContactType === 'client') {
       updateClients(prev => [{
         id: generateId(), nom: contact.nom, email: contact.email, telephone: contact.telephone,
+        telephoneMobile: contact.telephoneMobile || undefined,
         adresse: contact.adresse, ville: contact.ville, codePostal: contact.codePostal,
         societe: contact.societe, notes: contact.notes, dateCreation: now, adressesLivraison: [],
       }, ...prev]);
@@ -376,6 +377,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     } else {
       updateFournisseurs(prev => [{
         id: generateId(), nom: contact.nom, email: contact.email, telephone: contact.telephone,
+        telephoneMobile: contact.telephoneMobile || undefined,
         adresse: contact.adresse, ville: contact.ville, codePostal: contact.codePostal,
         societe: contact.societe || contact.nom, notes: contact.notes, dateCreation: now,
         francoPort: 0, coutTransport: 0, delaiReglement: '30j',
