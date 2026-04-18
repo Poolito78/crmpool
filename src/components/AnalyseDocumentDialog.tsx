@@ -139,6 +139,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           try {
             const emlFile = new File([texteCtx], 'email.eml', { type: 'message/rfc822' });
             const parsed = await parseEml(emlFile);
+            if (parsed.contact) emlContactRef.current = parsed.contact;
             if (parsed.texte && parsed.texte.trim().length > 30) {
               const fromLine = texteCtx.match(/^From:\s*.+/mi)?.[0] ?? '';
               const subjLine = texteCtx.match(/^Subject:\s*.+/mi)?.[0] ?? '';

@@ -171,7 +171,9 @@ function parserPartie(part: string, state: ParseState, depth = 0) {
 }
 
 export async function parseEml(file: File): Promise<EmlContent> {
+  console.warn('[parseEml] CALLED:', file.name, file.size);
   const raw = await file.text();
+  console.warn('[parseEml] raw length:', raw.length, '| starts with:', raw.slice(0, 80).replace(/\r\n/g, '↵'));
   const state: ParseState = { plain: '', html: '', pdfBuffers: [] };
 
   const subjectMatch = raw.match(/^Subject:\s*(.+)/mi);
