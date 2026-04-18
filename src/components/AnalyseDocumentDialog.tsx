@@ -17,19 +17,22 @@ import {
   generateId, calculerDateEcheance, formatDateISO,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
-import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
+import { supabase } from '@/integrations/supabase/client';
+import { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Fichiers pré-chargés depuis le drag-and-drop du tableau de bord */
   initialFiles?: File[];
+  /** Texte pré-chargé (email glissé-déposé) */
+  initialText?: string;
 }
 
 const today = () => new Date().toISOString().split('T')[0];
 const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T')[0];
 
-export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles }: Props) {
+export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
     commandesFournisseur, fournisseurs, produits, clients,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs,
@@ -42,12 +45,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
   const [dragging, setDragging] = useState(false);
   const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
+  /* ── état extraction contact inline ── */
+  const [extractingContact, setExtractingContact] = useState(false);
+  const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
+  const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
+
   const fileRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
-
-  /* ── état import contact depuis email ── */
-  const [emailContactOpen, setEmailContactOpen] = useState(false);
-  const [emailContactType, setEmailContactType] = useState<'client' | 'fournisseur'>('client');
 
   /* ── état commande fournisseur ── */
   const [matchedCF, setMatchedCF] = useState<CommandeFournisseur | null>(null);
@@ -152,6 +156,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!open || !initialFiles || initialFiles.length === 0) return;
     processFiles(initialFiles);
   }, [open, initialFiles]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ── traitement du texte pré-chargé depuis le dashboard ── */
+  useEffect(() => {
+    if (!open || !initialText || !initialText.trim()) return;
+    setTexte(initialText);
+    lancerAnalyse(null, initialText, []);
+  }, [open, initialText]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   /** Traitement commun fichiers (drop interne ou depuis dashboard) */
   const processFiles = useCallback(async (files: File[]) => {
@@ -266,7 +278,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   function reset() {
     setTexte(''); setFichier(null); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
-    setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false); setEmailContactOpen(false);
+    setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
+    setExtractingContact(false); setContactToSave(null);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
     setCreerCFDateLivraison(''); setCreerCFNotes('');
     setCreerCCClientId(''); setCreerCCNumero(''); setCreerCCDate('');
@@ -366,7 +379,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   function handleContactExtracted(contact: ExtractedContact) {
     const now = new Date().toISOString();
     const name = contact.societe || contact.nom || '—';
-    if (emailContactType === 'client') {
+    if (contactSaveType === 'client') {
       updateClients(prev => [{
         id: generateId(), nom: contact.nom, email: contact.email, telephone: contact.telephone,
         telephoneMobile: contact.telephoneMobile || undefined,
@@ -384,8 +397,27 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       }, ...prev]);
       toast.success(`Fournisseur "${name}" créé`);
     }
-    setEmailContactOpen(false);
+    setContactToSave(null);
     onOpenChange(false);
+  }
+
+  async function handleExtractContact(type: 'client' | 'fournisseur') {
+    if (!texte.trim()) { toast.error('Aucun texte à analyser'); return; }
+    setContactSaveType(type);
+    setExtractingContact(true);
+    setContactToSave(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('analyze-email', {
+        body: { action: 'extract-contact', emailText: texte, type },
+      });
+      if (error) throw new Error(error.message);
+      if (data?.error) throw new Error(data.error);
+      setContactToSave({ ...data, telephoneMobile: data.telephoneMobile || '' });
+    } catch (e: any) {
+      toast.error(e.message || 'Erreur extraction contact');
+    } finally {
+      setExtractingContact(false);
+    }
   }
 
   /* ── correction manuelle du type ── */
@@ -399,7 +431,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent className="w-[98vw] sm:w-[95vw] sm:max-w-[95vw] max-h-[92vh] overflow-hidden flex flex-col p-5 [&>button]:z-20">
+        <DialogContent className="max-w-2xl w-full max-h-[85vh] overflow-y-auto flex flex-col p-5 [&>button]:z-20">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
@@ -407,11 +439,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
             </DialogTitle>
           </DialogHeader>
 
-          {/* ── Layout 2 colonnes sur desktop ── */}
-          <div className="flex flex-col lg:flex-row gap-0 flex-1 min-h-0 pt-3">
+          {/* ── Layout colonne unique ── */}
+          <div className="flex flex-col gap-0 flex-1 min-h-0 pt-3">
 
-            {/* ══ COLONNE GAUCHE : zone unifiée PDF + texte ══ */}
-            <div className={`flex flex-col gap-3 shrink-0 ${result ? 'lg:w-[380px] lg:border-r lg:border-border lg:pr-6' : 'w-full max-w-2xl mx-auto'}`}>
+            {/* ══ Zone unifiée PDF + texte ══ */}
+            <div className="flex flex-col gap-3">
 
               {/* Zone combinée drag-and-drop + textarea */}
               <div
@@ -455,7 +487,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF, Excel (.xlsx) ou email'}
                   value={texte}
                   onChange={e => setTexte(e.target.value)}
-                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[120px]' : 'min-h-[200px]'}`}
+                  className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[80px]' : 'min-h-[140px]'}`}
                 />
 
                 {/* Bouton parcourir PDF */}
@@ -508,9 +540,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
               )}
             </div>
 
-            {/* ══ COLONNE DROITE : résultats / loading ══ */}
+            {/* ══ Résultats / loading ══ */}
             {(result || loading) && (
-              <div className="flex flex-col gap-4 flex-1 min-h-0 lg:pl-6 lg:overflow-y-auto mt-4 lg:mt-0">
+              <div className="flex flex-col gap-4 mt-4 border-t border-border pt-4">
 
                 {/* ── Skeleton pendant l'analyse ── */}
                 {loading && !result && (
@@ -745,8 +777,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
-                {/* ═══ Autre document → import contact ═══ */}
-                {isAutre && (
+                {/* ═══ Autre document → import contact inline ═══ */}
+                {isAutre && !contactToSave && (
                   <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
@@ -754,26 +786,67 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                       </div>
                       <div>
                         <p className="text-sm font-semibold">Importer le contact</p>
-                        <p className="text-[11px] text-muted-foreground">L'IA va extraire les coordonnées depuis ce texte</p>
+                        <p className="text-[11px] text-muted-foreground">L'IA extrait les coordonnées depuis le texte</p>
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        className="flex-1"
-                        size="sm"
-                        onClick={() => { setEmailContactType('client'); setEmailContactOpen(true); }}
-                      >
-                        <Users className="w-4 h-4 mr-2" />
+                      <Button className="flex-1" size="sm" disabled={extractingContact}
+                        onClick={() => handleExtractContact('client')}>
+                        {extractingContact && contactSaveType === 'client'
+                          ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          : <Users className="w-4 h-4 mr-2" />}
                         Créer client
                       </Button>
-                      <Button
-                        variant="outline"
-                        className="flex-1"
-                        size="sm"
-                        onClick={() => { setEmailContactType('fournisseur'); setEmailContactOpen(true); }}
-                      >
-                        <Truck className="w-4 h-4 mr-2" />
+                      <Button variant="outline" className="flex-1" size="sm" disabled={extractingContact}
+                        onClick={() => handleExtractContact('fournisseur')}>
+                        {extractingContact && contactSaveType === 'fournisseur'
+                          ? <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          : <Truck className="w-4 h-4 mr-2" />}
                         Créer fournisseur
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══ Formulaire contact extrait ═══ */}
+                {isAutre && contactToSave && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Sparkles className="w-4 h-4 text-primary shrink-0" />
+                      <p className="text-sm font-semibold text-primary">
+                        Coordonnées extraites — vérifiez et corrigez
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { key: 'societe', label: 'Société' },
+                        { key: 'nom', label: 'Nom contact' },
+                        { key: 'email', label: 'Email', type: 'email' },
+                        { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+                        { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
+                        { key: 'adresse', label: 'Adresse' },
+                        { key: 'ville', label: 'Ville' },
+                        { key: 'codePostal', label: 'Code postal' },
+                      ] as { key: keyof ExtractedContact; label: string; type?: string }[]).map(f => (
+                        <div key={f.key} className={f.key === 'adresse' || f.key === 'email' ? 'col-span-2' : ''}>
+                          <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</Label>
+                          <Input
+                            type={f.type || 'text'}
+                            className="h-8 text-xs"
+                            value={(contactToSave as any)[f.key] || ''}
+                            onChange={e => setContactToSave(prev => prev ? { ...prev, [f.key]: e.target.value } : prev)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <Button variant="outline" size="sm" onClick={() => setContactToSave(null)}>
+                        ← Retour
+                      </Button>
+                      <Button size="sm" className="flex-1"
+                        onClick={() => handleContactExtracted(contactToSave)}>
+                        <CheckCircle2 className="w-4 h-4 mr-2" />
+                        Créer le {contactSaveType}
                       </Button>
                     </div>
                   </div>
@@ -798,13 +871,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         />
       )}
 
-      <EmailToContactDialog
-        open={emailContactOpen}
-        onOpenChange={setEmailContactOpen}
-        type={emailContactType}
-        onExtracted={handleContactExtracted}
-        initialText={texte || undefined}
-      />
     </>
   );
 }
