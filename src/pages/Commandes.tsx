@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { type CommandeFournisseur, type LigneReception, formatMontant, formatDate } from '@/lib/store';
-import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail } from 'lucide-react';
+import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -20,6 +20,7 @@ const statutConfig: Record<string, { label: string; color: string; icon: typeof 
 };
 
 export default function Commandes() {
+  const navigate = useNavigate();
   const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis, produits } = useCRM();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -144,8 +145,16 @@ export default function Commandes() {
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {fourn?.societe || fourn?.nom || '—'} • {formatDate(cf.dateCreation)}
-                    {dv && <span> • Devis {dv.numero}</span>}
                   </p>
+                  {dv && (
+                    <button
+                      onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(dv.numero)}`); }}
+                      className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
+                    >
+                      <FileText className="w-3 h-3" />
+                      Devis {dv.numero}
+                    </button>
+                  )}
                   <p className="text-xs text-muted-foreground mt-1">
                     {lignes.length} produit{lignes.length > 1 ? 's' : ''} : {lignes.map(l => `${l.description} (×${l.quantite})`).join(', ')}
                   </p>

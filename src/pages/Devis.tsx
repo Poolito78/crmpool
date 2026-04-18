@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -414,6 +414,7 @@ export default function Devis() {
           const margeD = totalHTD - totalAchatD;
           const tauxMargeD = totalHTD > 0 ? (margeD / totalHTD) * 100 : 0;
           const coeffD = totalAchatD > 0 ? Math.round(totalHTD / totalAchatD * 100) / 100 : null;
+          const cfLies = commandesFournisseur.filter(cf => cf.devisId === d.id);
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -440,6 +441,30 @@ export default function Devis() {
                     {' • '}{formatDate(d.dateCreation)}
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
+                  {/* ── BC fournisseurs liés ── */}
+                  {d.statut === 'accepté' && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
+                      <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                      {cfLies.length === 0 ? (
+                        <button
+                          onClick={() => setCommandeDevis(d)}
+                          className="text-xs text-primary hover:underline font-medium"
+                        >
+                          + Créer BC fournisseur
+                        </button>
+                      ) : (
+                        cfLies.map(cf => (
+                          <button
+                            key={cf.id}
+                            onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)}
+                            className="text-xs px-2 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"
+                          >
+                            {cf.numero}
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   {totalAchatD > 0 && (
