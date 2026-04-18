@@ -332,8 +332,8 @@ RÈGLES IMPORTANTES :
       console.log(`extract-contact via ${provider}`);
       const safe = { nom: '', societe: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', notes: '', ...result };
 
-      // Filet de sécurité regex — complète les champs vides que l'IA a manqués
-      const rawText = String(body.emailText || '');
+      // Filet de sécurité regex — appliqué sur le texte décodé (pas le MIME brut)
+      const rawText = emailText;
       if (!safe.telephone || !safe.telephoneMobile) {
         // Trouve tous les numéros de téléphone (formats FR et international)
         const phones = [...rawText.matchAll(/(?:tél?|tel|téléphone|phone|fixe?|fix|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{6,20}\d)/gi)]
