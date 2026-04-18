@@ -107,13 +107,11 @@ function prepareEmailText(text: string, maxChars = 4000): string {
   return combined.slice(0, 1800) + '\n[...]\n' + combined.slice(-(maxChars - 1900));
 }
 
+/** Appel Groq avec function calling — modèle 70b pour tâches complexes */
 async function callGroq(systemPrompt: string, userMessage: string, tool: any, apiKey: string) {
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
-    headers: {
-      "Authorization": `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: "llama-3.3-70b-versatile",
       max_tokens: 1024,
@@ -125,18 +123,43 @@ async function callGroq(systemPrompt: string, userMessage: string, tool: any, ap
       tool_choice: { type: "function", function: { name: tool.name } },
     }),
   });
-
   if (!response.ok) {
-    if (response.status === 429) throw new Error("Trop de requêtes, réessayez dans quelques instants.");
+    if (response.status === 429) throw new Error("Quota journalier atteint — réessayez demain ou dans quelques minutes.");
     const t = await response.text();
     console.error("Groq API error:", response.status, t);
     throw new Error("Erreur d'analyse AI");
   }
-
   const data = await response.json();
   const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
   if (!toolCall) throw new Error("Impossible d'extraire les données");
   return JSON.parse(toolCall.function.arguments);
+}
+
+/** Appel Groq JSON mode — modèle 8b rapide pour extraction de contact */
+async function callGroqJson(systemPrompt: string, userMessage: string, apiKey: string): Promise<any> {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "llama-3.1-8b-instant",
+      max_tokens: 512,
+      temperature: 0,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userMessage },
+      ],
+    }),
+  });
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("Quota journalier atteint — réessayez dans quelques minutes.");
+    const t = await response.text();
+    console.error("Groq 8b error:", response.status, t);
+    throw new Error("Erreur d'analyse AI");
+  }
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content ?? '';
+  try { return JSON.parse(content); } catch { throw new Error("Réponse JSON invalide"); }
 }
 
 serve(async (req) => {
@@ -153,43 +176,25 @@ serve(async (req) => {
       const emailText = prepareEmailText(String(body.emailText || ''));
       const entityLabel = type === "fournisseur" ? "fournisseur" : "client";
 
-      const systemPrompt = `Tu es un assistant spécialisé dans l'extraction d'informations de contact à partir d'emails ou de signatures d'emails.
-À partir du texte fourni, extrais les informations de contact d'un ${entityLabel}.
-RÈGLES :
-- Si une information n'est pas présente, retourne une chaîne vide ""
-- "nom" : prénom + nom du contact principal (cherche dans la signature ET dans le champ "From:" / "De:")
-- "societe" : nom de l'entreprise (cherche dans la signature, le domaine email, et "From:" / "De:")
-- "email" : adresse email principale — cherche dans "From:", "De:", la signature, et toute adresse au format xxx@xxx.xxx dans le texte
-- "telephone" : numéro de téléphone fixe formaté (commence souvent par 01-05)
-- "telephoneMobile" : numéro de téléphone mobile/portable formaté (commence souvent par 06 ou 07), chaîne vide si absent
-- "adresse" : rue et numéro uniquement (sans ville ni code postal)
-- "ville" : uniquement la ville
-- "codePostal" : code postal 5 chiffres
-- "notes" : autres infos utiles (site web, fonction, etc.)
-IMPORTANT : cherche l'email dans TOUT le texte, y compris les lignes "From: Nom <email@domaine.fr>"`;
+      const systemPrompt = `Tu es un assistant qui extrait les coordonnées d'un ${entityLabel} depuis un email ou une signature.
+Réponds UNIQUEMENT avec un objet JSON valide contenant ces champs (chaîne vide "" si absent) :
+{
+  "nom": "prénom nom du contact (cherche dans signature et champ From:)",
+  "societe": "nom de l'entreprise",
+  "email": "adresse email (cherche dans From:, De:, et partout au format xxx@xxx.xxx)",
+  "telephone": "téléphone fixe (01-05 en France)",
+  "telephoneMobile": "téléphone mobile (06-07 en France)",
+  "adresse": "rue et numéro uniquement",
+  "ville": "ville uniquement",
+  "codePostal": "code postal 5 chiffres",
+  "notes": "site web, fonction, autres infos"
+}
+IMPORTANT : l'adresse email est souvent dans "From: Nom <email@domaine.fr>" — extrait-la.`;
 
-      const tool = {
-        name: "extract_contact_data",
-        description: `Extraire les coordonnées d'un ${entityLabel} depuis un email`,
-        parameters: {
-          type: "object",
-          properties: {
-            nom: { type: "string" },
-            societe: { type: "string" },
-            email: { type: "string" },
-            telephone: { type: "string", description: "Numéro de téléphone fixe" },
-            telephoneMobile: { type: "string", description: "Numéro de téléphone mobile / portable" },
-            adresse: { type: "string" },
-            ville: { type: "string" },
-            codePostal: { type: "string" },
-            notes: { type: "string" },
-          },
-          required: ["nom", "societe", "email", "telephone", "telephoneMobile", "adresse", "ville", "codePostal", "notes"],
-        },
-      };
-
-      const result = await callGroq(systemPrompt, `Extrais les coordonnées du ${entityLabel} depuis ce texte :\n\n${emailText}`, tool, GROQ_API_KEY);
-      return new Response(JSON.stringify(result), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const result = await callGroqJson(systemPrompt, `Extrais les coordonnées du ${entityLabel} :\n\n${emailText}`, GROQ_API_KEY);
+      // Garantir que tous les champs requis sont présents
+      const safe = { nom: '', societe: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', notes: '', ...result };
+      return new Response(JSON.stringify(safe), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // ── Mode analyse devis ──────────────────────────────────────────────────
