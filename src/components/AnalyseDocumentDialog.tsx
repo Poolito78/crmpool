@@ -14,7 +14,7 @@ import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
-  type CommandeFournisseur, type LigneReception, type CommandeClient,
+  type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   generateId, calculerDateEcheance, formatDateISO,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
@@ -35,8 +35,8 @@ const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T'
 
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
-    commandesFournisseur, fournisseurs, produits, clients,
-    updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs,
+    commandesFournisseur, fournisseurs, produits, clients, devis,
+    updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
   } = useCRM();
 
   /* ── état analyse ── */
@@ -65,13 +65,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [creerCFDateLivraison, setCreerCFDateLivraison] = useState('');
   const [creerCFNotes, setCreerCFNotes] = useState('');
 
-  /* ── état commande client / devis ── */
+  /* ── état commande client ── */
   const [showCreerCC, setShowCreerCC] = useState(false);
   const [creerCCClientId, setCreerCCClientId] = useState('');
   const [creerCCNumero, setCreerCCNumero] = useState('');
   const [creerCCDate, setCreerCCDate] = useState('');
   const [creerCCDateLivraison, setCreerCCDateLivraison] = useState('');
   const [creerCCNotes, setCreerCCNotes] = useState('');
+
+  /* ── état devis ── */
+  const [showCreerDevis, setShowCreerDevis] = useState(false);
+  const [creerDevisClientId, setCreerDevisClientId] = useState('');
+  const [creerDevisNumero, setCreerDevisNumero] = useState('');
+  const [creerDevisDate, setCreerDevisDate] = useState('');
+  const [creerDevisValidite, setCreerDevisValidite] = useState('');
+  const [creerDevisRefAffaire, setCreerDevisRefAffaire] = useState('');
+  const [creerDevisNotes, setCreerDevisNotes] = useState('');
 
   const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
@@ -100,11 +109,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
   }, [result, matchedCF]);
 
-  /* ── pré-remplissage formulaire CC ── */
+  /* ── pré-remplissage formulaire CC / Devis ── */
   useEffect(() => {
     if (!result || !isClientDoc(result.typeDocument)) return;
     const year = new Date().getFullYear();
-    const nextNum = String((commandesFournisseur.length + 1)).padStart(3, '0');
     const foundClient = result.nomPartenaire
       ? clients.find(c =>
           c.nom?.toLowerCase().includes(result.nomPartenaire!.toLowerCase()) ||
@@ -112,11 +120,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           result.nomPartenaire!.toLowerCase().includes(c.nom?.toLowerCase() ?? '') ||
           result.nomPartenaire!.toLowerCase().includes(c.societe?.toLowerCase() ?? ''))
       : undefined;
-    setCreerCCClientId(foundClient?.id ?? '');
-    setCreerCCNumero(result.numeroDocument || `CC-${year}-${nextNum}`);
-    setCreerCCDate(result.dateDocument || today());
-    setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
-    setCreerCCNotes(result.notes || result.referencePartenaire || '');
+
+    if (result.typeDocument === 'devis_client') {
+      const nextNum = String(devis.length + 1).padStart(3, '0');
+      setCreerDevisClientId(foundClient?.id ?? '');
+      setCreerDevisNumero(result.numeroDocument || `DV-${year}-${nextNum}`);
+      setCreerDevisDate(result.dateDocument || today());
+      setCreerDevisValidite(result.dateLivraisonPrevue || '');
+      setCreerDevisRefAffaire(result.referencePartenaire || '');
+      setCreerDevisNotes(result.notes || '');
+    } else {
+      const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
+      setCreerCCClientId(foundClient?.id ?? '');
+      setCreerCCNumero(result.numeroDocument || `CC-${year}-${nextNum}`);
+      setCreerCCDate(result.dateDocument || today());
+      setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
+      setCreerCCNotes(result.notes || result.referencePartenaire || '');
+    }
   }, [result]);
 
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
@@ -305,6 +325,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setCreerCFDateLivraison(''); setCreerCFNotes('');
     setCreerCCClientId(''); setCreerCCNumero(''); setCreerCCDate('');
     setCreerCCDateLivraison(''); setCreerCCNotes('');
+    setShowCreerDevis(false);
+    setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
+    setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisNotes('');
   }
 
   /* ── analyse manuelle (bouton) → délègue à lancerAnalyse avec le state courant ── */
@@ -375,6 +398,46 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     onOpenChange(false);
   }
 
+  /* ── créer devis depuis analyse ── */
+  function handleCreerDevis() {
+    if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
+    if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
+    if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
+    const lignes: LigneDevis[] = (result?.lignes ?? []).map(l => {
+      const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase()
+        || p.description?.toLowerCase().includes((l.description || '').toLowerCase().slice(0, 20)));
+      return {
+        id: generateId(),
+        produitId: p?.id,
+        description: l.description || p?.description || '',
+        quantite: l.quantite,
+        unite: p?.unite || 'u',
+        prixUnitaireHT: l.prixUnitaireHT ?? p?.prixVente ?? 0,
+        tva: l.tva ?? 20,
+        remise: 0,
+      };
+    });
+    const validite = creerDevisValidite || (() => {
+      const d = new Date(creerDevisDate);
+      d.setDate(d.getDate() + 30);
+      return d.toISOString().split('T')[0];
+    })();
+    const nouveauDevis: Devis = {
+      id: generateId(),
+      numero: creerDevisNumero.trim(),
+      clientId: creerDevisClientId,
+      dateCreation: creerDevisDate,
+      dateValidite: validite,
+      statut: 'brouillon',
+      lignes,
+      referenceAffaire: creerDevisRefAffaire || undefined,
+      notes: creerDevisNotes || result?.notes || undefined,
+    };
+    updateDevis(prev => [nouveauDevis, ...prev]);
+    toast.success(`Devis ${creerDevisNumero} créé`);
+    onOpenChange(false);
+  }
+
   /* ── quantités pré-remplies pour réception ── */
   function buildQuantitesRecues(): Record<string, number> {
     if (!matchedCF || !result) return {};
@@ -391,7 +454,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   const fournisseurMatch = matchedCF ? fournisseurs.find(f => f.id === matchedCF.fournisseurId) : undefined;
   const noMatchCF = result && isFournisseurDoc(result.typeDocument) && !matchedCF;
-  const isCC = result && isClientDoc(result.typeDocument);
+  const isDevisClient = result && result.typeDocument === 'devis_client';
+  const isCC = result && result.typeDocument === 'commande_client';
   const isFact = result && (result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client');
   const isAutre = result && result.typeDocument === 'autre';
 
@@ -776,6 +840,44 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
+                {/* ═══ ACTION : créer devis ═══ */}
+                {isDevisClient && (
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+                          <FileText className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold">Créer comme devis</p>
+                          <p className="text-[11px] text-muted-foreground">Enregistrer dans les devis clients</p>
+                        </div>
+                      </div>
+                      <button onClick={() => setShowCreerDevis(v => !v)} className="text-xs text-primary hover:underline shrink-0">{showCreerDevis ? 'Masquer' : 'Configurer'}</button>
+                    </div>
+                    {showCreerDevis && (
+                      <div className="space-y-2 pt-1">
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1"><Label className="text-xs">Client *</Label>
+                            <Select value={creerDevisClientId} onValueChange={setCreerDevisClientId}>
+                              <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                              <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1"><Label className="text-xs">N° devis *</Label><Input className="h-8 text-xs" value={creerDevisNumero} onChange={e => setCreerDevisNumero(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerDevisDate} onChange={e => setCreerDevisDate(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Validité</Label><Input className="h-8 text-xs" type="date" value={creerDevisValidite} onChange={e => setCreerDevisValidite(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Réf. affaire</Label><Input className="h-8 text-xs" value={creerDevisRefAffaire} onChange={e => setCreerDevisRefAffaire(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerDevisNotes} onChange={e => setCreerDevisNotes(e.target.value)} /></div>
+                        </div>
+                      </div>
+                    )}
+                    <Button onClick={() => showCreerDevis ? handleCreerDevis() : setShowCreerDevis(true)} className="w-full" size="sm">
+                      <PlusCircle className="w-4 h-4 mr-2" />{showCreerDevis ? 'Confirmer la création' : 'Créer le devis'}
+                    </Button>
+                  </div>
+                )}
+
                 {/* ═══ ACTION : commande client ═══ */}
                 {isCC && (
                   <div className="rounded-xl border border-success/30 bg-success/5 p-4 space-y-3">
@@ -785,7 +887,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <PlusCircle className="w-4 h-4 text-success" />
                         </div>
                         <div>
-                          <p className="text-sm font-semibold">{result.typeDocument === 'devis_client' ? 'Créer comme commande client' : 'Créer la commande client'}</p>
+                          <p className="text-sm font-semibold">Créer la commande client</p>
                           <p className="text-[11px] text-muted-foreground">Enregistrer dans les ventes</p>
                         </div>
                       </div>
