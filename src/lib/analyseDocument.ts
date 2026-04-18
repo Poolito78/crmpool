@@ -99,32 +99,47 @@ function tronquer(texte: string, maxChars = 6000): string {
   return texte.slice(0, maxChars) + '\n[... texte tronqué ...]';
 }
 
-/** Appel Gemini comme fallback — JSON natif, 1M tokens/jour gratuit */
+/** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */
 async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
-      }),
+  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  let lastError: Error | null = null;
+
+  for (const model of models) {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: PROMPT }] },
+          contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
+          generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
+        }),
+      }
+    );
+
+    if (response.status === 429) {
+      lastError = Object.assign(new Error('quota'), { quota: true });
+      console.warn(`Gemini ${model} quota dépassé — essai modèle suivant`);
+      continue;
     }
-  );
-  if (!response.ok) {
-    const err = await response.text();
-    throw new Error(`Erreur Gemini ${response.status} : ${err.slice(0, 200)}`);
+
+    if (!response.ok) {
+      const err = await response.text();
+      throw new Error(`Erreur Gemini ${response.status} : ${err.slice(0, 200)}`);
+    }
+
+    const data = await response.json();
+    const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Réponse invalide (Gemini) : aucun JSON trouvé');
+    const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
+    if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+    if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+    return parsed;
   }
-  const data = await response.json();
-  const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Réponse invalide (Gemini) : aucun JSON trouvé');
-  const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-  return parsed;
+
+  throw lastError ?? new Error('Erreur Gemini inconnue');
 }
 
 export async function analyserDocument(
@@ -182,5 +197,10 @@ export async function analyserDocument(
 
   // 2. Fallback Gemini
   if (!geminiKey) throw new Error('Quota Groq dépassé. Configurez VITE_GEMINI_API_KEY pour continuer.');
-  return analyserViaGemini(texte, geminiKey);
+  try {
+    return await analyserViaGemini(texte, geminiKey);
+  } catch (err: any) {
+    if (err.quota) throw new Error('Quotas Groq et Gemini dépassés pour aujourd\'hui. Réessayez demain.');
+    throw err;
+  }
 }

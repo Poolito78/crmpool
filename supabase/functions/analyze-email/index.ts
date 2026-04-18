@@ -111,6 +111,7 @@ async function callGeminiJson(systemPrompt: string, userMessage: string, apiKey:
       }),
     }
   );
+  if (response.status === 429) throw Object.assign(new Error("quota_gemini"), { quota: true });
   if (!response.ok) {
     const t = await response.text();
     console.error("Gemini error:", response.status, t);
@@ -159,9 +160,14 @@ async function callAiJson(
   }
 
   // 2. Fallback Gemini
-  if (!geminiKey) throw new Error("Quota Groq dépassé et GEMINI_API_KEY non configurée");
-  const result = await callGeminiJson(systemPrompt, userMessage, geminiKey);
-  return { result, provider: "gemini" };
+  if (!geminiKey) throw new Error("Analyses temporairement indisponibles (quota/min atteint). Réessayez dans 1 minute.");
+  try {
+    const result = await callGeminiJson(systemPrompt, userMessage, geminiKey);
+    return { result, provider: "gemini" };
+  } catch (err: any) {
+    if (err.quota) throw new Error("Analyses temporairement indisponibles (quota atteint). Réessayez dans 1 minute.");
+    throw err;
+  }
 }
 
 /** Appel Groq function calling — fallback Gemini JSON si 429 */
@@ -204,10 +210,15 @@ async function callAiTool(
   }
 
   // 2. Fallback Gemini : JSON mode avec description du schéma
-  if (!geminiKey) throw new Error("Quota Groq dépassé et GEMINI_API_KEY non configurée");
-  const schemaDesc = `\n\nRéponds UNIQUEMENT avec un objet JSON valide respectant ce schéma :\n${JSON.stringify(tool.parameters, null, 2)}`;
-  const result = await callGeminiJson(systemPrompt + schemaDesc, userMessage, geminiKey);
-  return { result, provider: "gemini" };
+  if (!geminiKey) throw new Error("Analyses temporairement indisponibles (quota/min atteint). Réessayez dans 1 minute.");
+  try {
+    const schemaDesc = `\n\nRéponds UNIQUEMENT avec un objet JSON valide respectant ce schéma :\n${JSON.stringify(tool.parameters, null, 2)}`;
+    const result = await callGeminiJson(systemPrompt + schemaDesc, userMessage, geminiKey);
+    return { result, provider: "gemini" };
+  } catch (err: any) {
+    if (err.quota) throw new Error("Analyses temporairement indisponibles (quota atteint). Réessayez dans 1 minute.");
+    throw err;
+  }
 }
 
 // ── Handler principal ────────────────────────────────────────────────────────
