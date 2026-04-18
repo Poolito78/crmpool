@@ -161,6 +161,10 @@ export async function parseEml(file: File): Promise<EmlContent> {
   // Pour le texte envoyé à l'IA : plain text (plus propre pour analyse)
   const texte = subjectPrefix + (state.plain || state.html);
 
+  console.log('[parseEml] plain length:', state.plain.length, 'html length:', state.html.length);
+  console.log('[parseEml] html snippet:', state.html.slice(0, 300));
+  console.log('[parseEml] contact extracted:', contact);
+
   return {
     texte,
     pdfBuffers: state.pdfBuffers,
