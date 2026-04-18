@@ -1111,7 +1111,11 @@ export default function Produits() {
               {composants.length > 0 && (
                 <div className="flex justify-between text-xs font-medium pt-1 border-t border-border">
                   <span className="text-muted-foreground">Prix achat calculé</span>
-                  <span>{formatMontant(composants.reduce((sum, c) => sum + prixComposant(c), 0))}</span>
+                  <span>{formatMontant(composants.reduce((sum, c) => {
+                    const p = produits.find(pr => pr.id === c.produitId);
+                    if (!p) return sum;
+                    return sum + (c.consommationPct != null ? p.prixAchat * c.consommationPct / 100 : p.prixAchat * c.quantite);
+                  }, 0))}</span>
                 </div>
               )}
             </div>
