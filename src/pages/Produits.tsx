@@ -865,11 +865,15 @@ export default function Produits() {
                 <p className="text-xs text-muted-foreground">Aucun composant — cliquez sur "Ajouter" pour créer un produit composé</p>
               )}
               {(() => {
+                function prixComposant(c: typeof composants[0]) {
+                  const p = produits.find(pr => pr.id === c.produitId);
+                  if (!p) return 0;
+                  // En mode % : coût = pct% du prix unitaire (ex: 28% d'un sac à 8,92€ = 2,50€)
+                  if (c.consommationPct != null) return p.prixAchat * c.consommationPct / 100;
+                  return p.prixAchat * c.quantite;
+                }
                 function recalcPrix(updated: typeof composants) {
-                  const total = updated.reduce((sum, c) => {
-                    const p = produits.find(pr => pr.id === c.produitId);
-                    return sum + (p ? p.prixAchat * c.quantite : 0);
-                  }, 0);
+                  const total = updated.reduce((sum, c) => sum + prixComposant(c), 0);
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
                 // Propage les modifications de quantité aux composants en mode %
@@ -1063,7 +1067,7 @@ export default function Produits() {
                         )}
 
                         <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">
-                          {compProd ? formatMontant(compProd.prixAchat * comp.quantite) : '—'}
+                          {compProd ? formatMontant(prixComposant(comp)) : '—'}
                         </span>
                         <button type="button"
                           onClick={() => {
@@ -1078,16 +1082,25 @@ export default function Produits() {
                           <Trash className="w-4 h-4" />
                         </button>
                       </div>
-                      {modePercent && (comp.baseQuantite || comp.baseComposantId) && (() => {
+                      {modePercent && comp.consommationPct != null && (() => {
                         const baseComp = comp.baseComposantId ? composants.find(c => c.produitId === comp.baseComposantId) : null;
                         const baseProd = comp.baseComposantId ? produits.find(p => p.id === comp.baseComposantId) : null;
                         const baseVal = baseComp ? baseComp.quantite : (comp.baseQuantite ?? 0);
-                        if (!baseVal) return null;
+                        const prix = compProd ? compProd.prixAchat * comp.consommationPct / 100 : 0;
                         return (
-                          <p className="text-xs text-muted-foreground pl-1">
-                            {comp.consommationPct}% × {baseVal}
-                            {baseProd && <span className="text-primary ml-1">({baseProd.reference})</span>}
-                            {' '}= <span className="font-medium text-foreground">{comp.quantite}</span>
+                          <p className="text-xs text-muted-foreground pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                            {baseVal > 0 && (
+                              <span>
+                                {comp.consommationPct}% × {baseVal}
+                                {baseProd && <span className="text-primary ml-1">({baseProd.reference})</span>}
+                                {' '}= <span className="font-medium text-foreground">{comp.quantite} kg</span>
+                              </span>
+                            )}
+                            {compProd && (
+                              <span>
+                                {comp.consommationPct}% × {formatMontant(compProd.prixAchat)} = <span className="font-medium text-foreground">{formatMontant(prix)}</span>
+                              </span>
+                            )}
                           </p>
                         );
                       })()}
@@ -1098,7 +1111,7 @@ export default function Produits() {
               {composants.length > 0 && (
                 <div className="flex justify-between text-xs font-medium pt-1 border-t border-border">
                   <span className="text-muted-foreground">Prix achat calculé</span>
-                  <span>{formatMontant(composants.reduce((sum, c) => { const p = produits.find(pr => pr.id === c.produitId); return sum + (p ? p.prixAchat * c.quantite : 0); }, 0))}</span>
+                  <span>{formatMontant(composants.reduce((sum, c) => sum + prixComposant(c), 0))}</span>
                 </div>
               )}
             </div>
