@@ -1,6 +1,13 @@
 export interface EmlContent {
   texte: string;
   pdfBuffers: { name: string; buffer: ArrayBuffer }[];
+  contact?: {
+    telephone: string;
+    telephoneMobile: string;
+    adresse: string;
+    ville: string;
+    codePostal: string;
+  };
 }
 
 function base64ToArrayBuffer(b64: string): ArrayBuffer {
@@ -11,11 +18,23 @@ function base64ToArrayBuffer(b64: string): ArrayBuffer {
   return buf.buffer;
 }
 
+function base64ToString(b64: string): string {
+  try {
+    const clean = b64.replace(/\s/g, '');
+    const binary = atob(clean);
+    // Tente décodage UTF-8
+    try {
+      const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+      return new TextDecoder('utf-8').decode(bytes);
+    } catch {
+      return binary;
+    }
+  } catch { return ''; }
+}
+
 function decoderContenu(contenu: string, encoding: string): string {
   const enc = encoding.toLowerCase().trim();
-  if (enc === 'base64') {
-    try { return atob(contenu.replace(/\s/g, '')); } catch { return ''; }
-  }
+  if (enc === 'base64') return base64ToString(contenu);
   if (enc === 'quoted-printable') {
     return contenu
       .replace(/=\r?\n/g, '')
@@ -53,12 +72,28 @@ function stripHtml(html: string): string {
     .trim();
 }
 
-/** Détecte si un texte contient des coordonnées de contact (tél, adresse) */
-function hasContactInfo(s: string): boolean {
-  return /(?:tel|tél|mobile|mob|fixe?)\s*[:.]/i.test(s)
-    || /\+33/.test(s)
-    || /\b0[67]\d{8}\b/.test(s)
-    || /\b\d{5}\s+[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ]/.test(s);
+function extraireContactDuTexte(txt: string) {
+  let fixe = '', mobile = '';
+  const phones: string[] = [];
+  for (const m of txt.matchAll(/(?:t[eé]l?|phone|fixe?|mobile|mob|port(?:able)?|gsm)\s*[:.]\s*([+\d][\d\s.\-/]{5,18}\d)/gi))
+    phones.push(m[1].replace(/\s+/g, ' ').trim());
+  for (const m of txt.matchAll(/(?<![.\d@])(\+33[\s.\-]?[1-9](?:[\s.\-]?\d{2}){4}|0[1-9](?:[\s.\-]?\d{2}){4})(?![.\d])/g))
+    phones.push(m[1].replace(/\s+/g, ' ').trim());
+  for (const num of [...new Set(phones)]) {
+    const d = num.replace(/\D/g, '');
+    const isMobile = /^(06|07|336|337)/.test(d) || /^(6|7)/.test(d.replace(/^33/, ''));
+    if (isMobile && !mobile) mobile = num;
+    else if (!isMobile && !fixe) fixe = num;
+  }
+  const cpMatch = txt.match(/(\d{5})\s+([A-ZÀÂÄÉÈÊËÎÏÔÙÛÜ][A-Za-zÀ-ÿ\s\-]{2,40})/);
+  const addrMatch = txt.match(/(\d+[\s,]+(?:rue|avenue|av\.?|boulevard|bd\.?|chemin|place|impasse|allée|route|voie|cité|résidence)\s+[^\n\r,]{3,60})/i);
+  return {
+    telephone: fixe,
+    telephoneMobile: mobile,
+    adresse: addrMatch ? addrMatch[1].trim() : '',
+    codePostal: cpMatch ? cpMatch[1] : '',
+    ville: cpMatch ? cpMatch[2].trim() : '',
+  };
 }
 
 interface ParseState {
@@ -106,7 +141,8 @@ function parserPartie(part: string, state: ParseState) {
   if (contentType.toLowerCase().includes('text/html')) {
     const decoded = decoderContenu(rawBody, encoding);
     const stripped = stripHtml(decoded);
-    if (stripped && !state.html) state.html = stripped;
+    // Accumule tous les fragments HTML (pas seulement le premier)
+    if (stripped) state.html += (state.html ? '\n' : '') + stripped;
   }
 }
 
@@ -119,16 +155,15 @@ export async function parseEml(file: File): Promise<EmlContent> {
 
   parserPartie(raw, state);
 
-  // Stratégie : texte plain pour l'analyse générale,
-  // mais si le plain n'a pas de coords de contact et le HTML oui → utiliser HTML
-  let texte: string;
-  if (state.plain && hasContactInfo(state.plain)) {
-    texte = subjectPrefix + state.plain;
-  } else if (state.html && hasContactInfo(state.html)) {
-    texte = subjectPrefix + state.html;
-  } else {
-    texte = subjectPrefix + (state.plain || state.html);
-  }
+  // Extraire les coordonnées depuis le HTML (qui contient la signature Outlook)
+  const contact = state.html ? extraireContactDuTexte(state.html) : undefined;
 
-  return { texte, pdfBuffers: state.pdfBuffers };
+  // Pour le texte envoyé à l'IA : plain text (plus propre pour analyse)
+  const texte = subjectPrefix + (state.plain || state.html);
+
+  return {
+    texte,
+    pdfBuffers: state.pdfBuffers,
+    contact: contact && (contact.telephone || contact.telephoneMobile || contact.adresse) ? contact : undefined,
+  };
 }
