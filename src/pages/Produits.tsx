@@ -259,11 +259,15 @@ export default function Produits() {
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-    // Recalcule les composants en % avec la formule corrigée avant sauvegarde
+    // Recalcule les composants en % avant sauvegarde
     const composantsRecalc = composantsValides.map(c => {
-      if (c.consommationPct != null && c.baseComposantId) {
-        const base = composantsValides.find(b => b.produitId === c.baseComposantId);
-        if (base) return { ...c, quantite: Math.round(base.quantite * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
+      if (c.consommationPct != null) {
+        let baseQty = c.baseQuantite ?? 0;
+        if (c.baseComposantId) {
+          const base = composantsValides.find(b => b.produitId === c.baseComposantId);
+          if (base) baseQty = base.quantite;
+        }
+        if (baseQty > 0) return { ...c, baseQuantite: baseQty, quantite: Math.round(baseQty * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
       }
       return c;
     });
@@ -875,9 +879,14 @@ export default function Produits() {
                 }
                 function propagatePct(updated: typeof composants) {
                   return updated.map(c => {
-                    if (c.consommationPct != null && c.baseComposantId) {
-                      const base = updated.find(b => b.produitId === c.baseComposantId);
-                      if (base) return { ...c, quantite: calcQtyPct(c.consommationPct, base) };
+                    if (c.consommationPct != null) {
+                      // Priorité : composant lié → sinon baseQuantite manuelle
+                      if (c.baseComposantId) {
+                        const base = updated.find(b => b.produitId === c.baseComposantId);
+                        if (base) return { ...c, baseQuantite: base.quantite, quantite: calcQtyPct(c.consommationPct, base) };
+                      } else if (c.baseQuantite != null && c.baseQuantite > 0) {
+                        return { ...c, quantite: Math.round(c.baseQuantite * c.consommationPct / 100 * 10000) / 10000 || 0.0001 };
+                      }
                     }
                     return c;
                   });
@@ -895,7 +904,7 @@ export default function Produits() {
                   const basesDisponibles = composants.filter((c, i) => i !== idx && c.produitId);
 
                   return (
-                    <div key={idx} className="space-y-1">
+                    <div key={comp.produitId || `new-${idx}`} className="space-y-1">
                       <div className="flex flex-wrap sm:flex-nowrap items-start gap-2">
                         {/* Combobox produit */}
                         <div className="flex-1 min-w-0 relative">
@@ -912,7 +921,16 @@ export default function Produits() {
                                 setComposants(updated);
                               }
                             }}
-                            onFocus={() => setComposantOpenIdx(idx)}
+                            onFocus={() => {
+                              setComposantOpenIdx(idx);
+                              // Efface le texte "ref — desc" pour permettre une nouvelle recherche
+                              if (comp.produitId) {
+                                const searches = [...composantSearches];
+                                searches[idx] = '';
+                                setComposantSearches(searches);
+                              }
+                            }}
+                            onBlur={() => setTimeout(() => setComposantOpenIdx(null), 200)}
                             placeholder="Rechercher un produit…"
                             className="text-sm"
                           />
@@ -931,7 +949,7 @@ export default function Produits() {
                                     updated[idx] = { ...updated[idx], produitId: p.id };
                                     setComposants(updated);
                                     const searches = [...composantSearches];
-                                    searches[idx] = `${p.reference} — ${p.description}`;
+                                    searches[idx] = '';
                                     setComposantSearches(searches);
                                     setComposantOpenIdx(null);
                                     recalcPrix(updated);
@@ -947,14 +965,17 @@ export default function Produits() {
 
                         {/* Quantité fixe ou calculée en % */}
                         {modePercent ? (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0 flex-wrap">
+                            {/* Pourcentage */}
                             <Input
                               type="number" min={0.01} max={100} step={0.1}
-                              value={comp.consommationPct}
+                              value={comp.consommationPct ?? ''}
                               onChange={e => {
                                 const pct = parseFloat(e.target.value) || 0;
-                                const base = composants.find(c => c.produitId === comp.baseComposantId);
-                                const newQty = base ? calcQtyPct(pct, base) : comp.quantite;
+                                const baseQty = comp.baseComposantId
+                                  ? (composants.find(c => c.produitId === comp.baseComposantId)?.quantite ?? comp.baseQuantite ?? 0)
+                                  : (comp.baseQuantite ?? 0);
+                                const newQty = baseQty > 0 ? Math.round(baseQty * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
                                 const updated = [...composants];
                                 updated[idx] = { ...updated[idx], consommationPct: pct, quantite: newQty };
                                 setComposants(updated);
@@ -963,31 +984,53 @@ export default function Produits() {
                               className="w-16 text-sm"
                               placeholder="%"
                             />
-                            <span className="text-xs text-muted-foreground">%</span>
-                            <select
-                              value={comp.baseComposantId || ''}
+                            <span className="text-xs text-muted-foreground">% ×</span>
+                            {/* Base : saisie manuelle */}
+                            <Input
+                              type="number" min={0.001} step={0.001}
+                              value={comp.baseQuantite ?? ''}
                               onChange={e => {
-                                const baseId = e.target.value;
-                                const base = composants.find(c => c.produitId === baseId);
-                                const newQty = base && comp.consommationPct ? calcQtyPct(comp.consommationPct, base) : comp.quantite;
+                                const baseQty = parseFloat(e.target.value) || 0;
+                                const pct = comp.consommationPct ?? 0;
+                                const newQty = baseQty > 0 && pct > 0 ? Math.round(baseQty * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
                                 const updated = [...composants];
-                                updated[idx] = { ...updated[idx], baseComposantId: baseId, quantite: newQty };
+                                updated[idx] = { ...updated[idx], baseQuantite: baseQty, baseComposantId: '', quantite: newQty };
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[110px]"
-                            >
-                              <option value="">de…</option>
-                              {basesDisponibles.map(c => {
-                                const p = produits.find(pr => pr.id === c.produitId);
-                                return p ? <option key={c.produitId} value={c.produitId}>{p.reference}</option> : null;
-                              })}
-                            </select>
+                              className="w-20 text-sm"
+                              placeholder="base"
+                            />
+                            {/* Lier à un autre composant (optionnel) */}
+                            {basesDisponibles.length > 0 && (
+                              <select
+                                value={comp.baseComposantId || ''}
+                                onChange={e => {
+                                  const baseId = e.target.value;
+                                  const base = baseId ? composants.find(c => c.produitId === baseId) : undefined;
+                                  const baseQty = base ? base.quantite : (comp.baseQuantite ?? 0);
+                                  const pct = comp.consommationPct ?? 0;
+                                  const newQty = baseQty > 0 && pct > 0 ? Math.round(baseQty * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                  const updated = [...composants];
+                                  updated[idx] = { ...updated[idx], baseComposantId: baseId, baseQuantite: baseQty, quantite: newQty };
+                                  setComposants(updated);
+                                  recalcPrix(updated);
+                                }}
+                                className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[110px]"
+                                title="Lier à un autre composant (synchronise la base automatiquement)"
+                              >
+                                <option value="">lier…</option>
+                                {basesDisponibles.map(c => {
+                                  const p = produits.find(pr => pr.id === c.produitId);
+                                  return p ? <option key={c.produitId} value={c.produitId}>{p.reference}</option> : null;
+                                })}
+                              </select>
+                            )}
                             <span className="text-xs text-muted-foreground shrink-0">= {comp.quantite}</span>
                             <button type="button" title="Repasser en quantité fixe"
                               onClick={() => {
                                 const updated = [...composants];
-                                updated[idx] = { ...updated[idx], consommationPct: undefined, baseComposantId: undefined };
+                                updated[idx] = { ...updated[idx], consommationPct: undefined, baseComposantId: undefined, baseQuantite: undefined };
                                 setComposants(updated);
                               }}
                               className="text-xs text-muted-foreground hover:text-destructive"
@@ -999,7 +1042,7 @@ export default function Produits() {
                               type="number" min={0.01} step={0.01}
                               value={comp.quantite}
                               onChange={e => {
-                                const updated = propagatePct([...composants]);
+                                const updated = [...composants];
                                 updated[idx] = { ...updated[idx], quantite: parseFloat(e.target.value) || 1 };
                                 const propagated = propagatePct(updated);
                                 setComposants(propagated);
@@ -1035,15 +1078,16 @@ export default function Produits() {
                           <Trash className="w-4 h-4" />
                         </button>
                       </div>
-                      {modePercent && comp.baseComposantId && (() => {
-                        const baseComp = composants.find(c => c.produitId === comp.baseComposantId);
-                        const baseProd = produits.find(p => p.id === comp.baseComposantId);
-                        if (!baseComp || !baseProd) return null;
-                        const poidsBase = baseProd.poids ?? 1;
-                        const masseBase = baseComp.quantite * poidsBase;
+                      {modePercent && (comp.baseQuantite || comp.baseComposantId) && (() => {
+                        const baseComp = comp.baseComposantId ? composants.find(c => c.produitId === comp.baseComposantId) : null;
+                        const baseProd = comp.baseComposantId ? produits.find(p => p.id === comp.baseComposantId) : null;
+                        const baseVal = baseComp ? baseComp.quantite : (comp.baseQuantite ?? 0);
+                        if (!baseVal) return null;
                         return (
                           <p className="text-xs text-muted-foreground pl-1">
-                            {comp.consommationPct}% × {baseComp.quantite} × {poidsBase} kg ({baseProd.reference}) = <span className="font-medium text-foreground">{comp.quantite} kg</span>
+                            {comp.consommationPct}% × {baseVal}
+                            {baseProd && <span className="text-primary ml-1">({baseProd.reference})</span>}
+                            {' '}= <span className="font-medium text-foreground">{comp.quantite}</span>
                           </p>
                         );
                       })()}

@@ -61,8 +61,9 @@ export interface Fournisseur {
 export interface ComposantProduit {
   produitId: string;
   quantite: number;
-  consommationPct?: number;   // si défini : quantite = baseComposant.quantite × consommationPct / 100
-  baseComposantId?: string;   // produitId du composant de référence pour le calcul en %
+  consommationPct?: number;   // si défini : quantite = baseQuantite × consommationPct / 100
+  baseComposantId?: string;   // (optionnel) produitId d'un autre composant — synchronise baseQuantite automatiquement
+  baseQuantite?: number;      // valeur de base pour le calcul % (saisie manuelle ou issue de baseComposantId)
 }
 
 export interface Produit {

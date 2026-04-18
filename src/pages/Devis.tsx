@@ -26,7 +26,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient } = useCRM();
+  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -991,6 +991,13 @@ export default function Devis() {
         produitFournisseurs={produitFournisseurs}
         onSaveCommandes={(commandes) => {
           updateCommandesFournisseur(prev => [...prev, ...commandes]);
+        }}
+        onPriseStock={(items) => {
+          updateProduits(prev => prev.map(p => {
+            const item = items.find(i => i.produitId === p.id);
+            if (!item) return p;
+            return { ...p, stock: Math.max(0, (p.stock ?? 0) - item.quantite) };
+          }));
         }}
       />
 
