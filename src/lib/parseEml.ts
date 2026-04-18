@@ -89,15 +89,22 @@ function parserPartie(part: string, result: EmlContent) {
     const decoded = decoderContenu(rawBody, encoding);
     const stripped = decoded.replace(/<style[\s\S]*?<\/style>/gi, '')
       .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(?:p|div|tr|li|td)>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/g, ' ')
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
-      .replace(/\s{2,}/g, ' ')
+      .replace(/[ \t]{2,}/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
       .trim();
-    // N'utilise le HTML que si pas de texte plain
-    if (stripped && !result.texte) result.texte = stripped;
+    // Utilise le HTML s'il est plus riche que le texte plain (signature Outlook dans HTML uniquement)
+    if (stripped && stripped.length > (result.texte?.length ?? 0) + 100) {
+      result.texte = stripped;
+    } else if (stripped && !result.texte) {
+      result.texte = stripped;
+    }
   }
 }
 
