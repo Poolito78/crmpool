@@ -45,7 +45,7 @@ function decoderContenu(contenu: string, encoding: string): string {
 
 function extraireHeaders(part: string): Record<string, string> {
   const headers: Record<string, string> = {};
-  const [headerSection] = part.split(/\r?\n\r?\n/);
+  const [headerSection] = part.split(/\r?\n\r?\n/);  // handles both LF and CRLF
   const lines = headerSection.replace(/\r?\n[ \t]/g, ' ').split(/\r?\n/);
   for (const line of lines) {
     const idx = line.indexOf(':');
@@ -110,7 +110,8 @@ function parserPartie(part: string, state: ParseState) {
   const boundaryMatch = contentType.match(/boundary=["']?([^"';\s]+)["']?/i);
   if (boundaryMatch) {
     const boundary = boundaryMatch[1];
-    const bodyStart = part.indexOf('\n\n') + 2;
+    const sepMatch = part.match(/\r?\n\r?\n/);
+    const bodyStart = sepMatch ? part.indexOf(sepMatch[0]) + sepMatch[0].length : 0;
     const body = part.slice(bodyStart);
     const esc = boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const parts = body.split(new RegExp(`--${esc}(?:--)?`));
@@ -120,9 +121,10 @@ function parserPartie(part: string, state: ParseState) {
     return;
   }
 
-  const bodyStart = part.indexOf('\n\n');
-  if (bodyStart === -1) return;
-  const rawBody = part.slice(bodyStart + 2);
+  const sepMatch2 = part.match(/\r?\n\r?\n/);
+  if (!sepMatch2) return;
+  const bodyStart = part.indexOf(sepMatch2[0]) + sepMatch2[0].length;
+  const rawBody = part.slice(bodyStart);
 
   if (contentType.toLowerCase().includes('application/pdf')) {
     const nameMatch = contentType.match(/name=["']?([^"';\s]+)["']?/i)
