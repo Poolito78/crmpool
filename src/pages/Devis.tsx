@@ -61,6 +61,7 @@ export default function Devis() {
   const [dateCreation, setDateCreation] = useState(new Date().toISOString().split('T')[0]);
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
+  const [dateEnvoi, setDateEnvoi] = useState('');
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
@@ -102,6 +103,8 @@ export default function Devis() {
     setClientId(d.clientId);
     setDateCreation(d.dateCreation);
     setDateValidite(d.dateValidite);
+    setStatut(d.statut);
+    setDateEnvoi(d.dateEnvoi || '');
     setReferenceAffaire(d.referenceAffaire || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
@@ -119,6 +122,7 @@ export default function Devis() {
     setDateCreation(new Date().toISOString().split('T')[0]);
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
+    setDateEnvoi('');
     setReferenceAffaire('');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
@@ -238,7 +242,7 @@ export default function Devis() {
     let savedId = editingId;
     if (editingId) {
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       } : d));
       if (!silent) toast.success('Devis modifié');
     } else {
@@ -246,7 +250,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
-        dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) toast.success('Devis créé');
@@ -266,12 +270,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if (clientId && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+          ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Recalcul auto des quantités en mode surface
   useEffect(() => {
@@ -574,7 +578,14 @@ export default function Devis() {
               </div>
               <div>
                 <Label>Statut</Label>
-                <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => setStatut(e.target.value as any)}>
+                <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => {
+                  const val = e.target.value as DevisType['statut'];
+                  setStatut(val);
+                  // Auto-remplir la date d'envoi si on passe en "envoyé" et qu'elle est vide
+                  if (val === 'envoyé' && !dateEnvoi) {
+                    setDateEnvoi(new Date().toISOString().split('T')[0]);
+                  }
+                }}>
                   <option value="brouillon">Brouillon</option>
                   <option value="envoyé">Envoyé</option>
                   <option value="accepté">Accepté</option>
@@ -582,6 +593,12 @@ export default function Devis() {
                   <option value="expiré">Expiré</option>
                 </select>
               </div>
+              {(statut === 'envoyé' || statut === 'accepté' || statut === 'refusé') && (
+                <div>
+                  <Label>Date d'envoi</Label>
+                  <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} />
+                </div>
+              )}
             </div>
             {/* Adresse de livraison */}
             {(() => {

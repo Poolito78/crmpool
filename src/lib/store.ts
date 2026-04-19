@@ -177,6 +177,7 @@ export interface Devis {
   dateCreation: string;
   dateValidite: string;
   statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
+  dateEnvoi?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
   notes?: string;
@@ -327,6 +328,7 @@ function dbToDevis(r: any): Devis {
     dateCreation: r.date_creation?.split('T')[0] || '',
     dateValidite: r.date_validite?.split('T')[0] || '',
     statut: r.statut as Devis['statut'],
+    dateEnvoi: r.date_envoi?.split('T')[0] || undefined,
     lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
     referenceAffaire: r.reference_affaire || undefined,
     notes: r.notes || undefined,
@@ -348,6 +350,7 @@ function devisToDb(d: Devis, userId: string) {
     date_creation: d.dateCreation,
     date_validite: d.dateValidite || null,
     statut: d.statut,
+    date_envoi: d.dateEnvoi || null,
     lignes: d.lignes as any,
     reference_affaire: d.referenceAffaire || null,
     notes: d.notes || null,
