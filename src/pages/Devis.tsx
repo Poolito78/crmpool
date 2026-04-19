@@ -588,12 +588,7 @@ export default function Devis() {
               <div>
                 <Label>Statut</Label>
                 <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => {
-                  const val = e.target.value as DevisType['statut'];
-                  setStatut(val);
-                  // Auto-remplir la date d'envoi si on passe en "envoyé" et qu'elle est vide
-                  if (val === 'envoyé' && !dateEnvoi) {
-                    setDateEnvoi(new Date().toISOString().split('T')[0]);
-                  }
+                  setStatut(e.target.value as DevisType['statut']);
                 }}>
                   <option value="brouillon">Brouillon</option>
                   <option value="envoyé">Envoyé</option>

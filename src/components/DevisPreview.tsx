@@ -190,22 +190,36 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div></div>
-          <div className="bg-muted/30 rounded-lg p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Informations</p>
-            <div className="space-y-1">
-              <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(devis.dateCreation)}</span></div>
-              <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(devis.dateValidite)}</span></div>
-              {devis.dateEnvoi && <div className="flex justify-between"><span className="text-muted-foreground">Envoyé le :</span><span>{formatDate(devis.dateEnvoi)}</span></div>}
-              <div className="flex justify-between"><span className="text-muted-foreground">Statut :</span><span className="font-medium capitalize">{devis.statut}</span></div>
-              {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
-              {devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
-                <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
-              )}
+        {(() => {
+          // Date de référence : dateEnvoi si disponible, sinon dateCreation
+          const refDate = devis.dateEnvoi || devis.dateCreation;
+          // Validité : décalée de la même durée par rapport à la date de référence
+          const displayValidite = (() => {
+            if (devis.dateEnvoi && devis.dateCreation && devis.dateValidite) {
+              const durationMs = new Date(devis.dateValidite).getTime() - new Date(devis.dateCreation).getTime();
+              if (durationMs > 0) {
+                return new Date(new Date(devis.dateEnvoi).getTime() + durationMs).toISOString().split('T')[0];
+              }
+            }
+            return devis.dateValidite;
+          })();
+          return (
+            <div className="grid grid-cols-2 gap-8 mb-8">
+              <div></div>
+              <div className="bg-muted/30 rounded-lg p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Informations</p>
+                <div className="space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
+                  {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
+                  {devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
+                    <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {devis.notes && (
           <div className="mb-6">
