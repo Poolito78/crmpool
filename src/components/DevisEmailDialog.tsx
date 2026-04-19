@@ -15,7 +15,7 @@ interface Props {
   devis: Devis | null;
   client?: Client;
   produits?: Produit[];
-  onSent: () => void;
+  onSent: (dateEnvoi: string) => void;
   pdfContainerRef?: React.RefObject<HTMLDivElement | null>;
 }
 
@@ -23,6 +23,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [dateEnvoi, setDateEnvoi] = useState(new Date().toISOString().split('T')[0]);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
@@ -39,6 +40,8 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       pdfBase64Ref.current = null;
       return;
     }
+    // Toujours mettre à jour la date d'envoi à aujourd'hui à chaque ouverture (renvoi inclus)
+    setDateEnvoi(new Date().toISOString().split('T')[0]);
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
     setTo(client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
@@ -130,7 +133,7 @@ François MOUHOT
         description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
         duration: 6000,
       });
-      onSent();
+      onSent(dateEnvoi);
       onOpenChange(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -138,7 +141,7 @@ François MOUHOT
       toast.error(`Envoi échoué — ouverture Outlook (${msg})`, { duration: 8000 });
       const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
       window.open(mailto, '_blank');
-      onSent();
+      onSent(dateEnvoi);
       onOpenChange(false);
     } finally {
       setSending(false);
@@ -167,6 +170,13 @@ François MOUHOT
           <div>
             <Label>Objet</Label>
             <Input value={subject} onChange={e => setSubject(e.target.value)} />
+          </div>
+          <div>
+            <Label className="flex items-center gap-2">
+              Date d'envoi
+              <span className="text-xs font-normal text-muted-foreground">(modifiable — sera enregistrée sur le devis)</span>
+            </Label>
+            <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} className="w-48" />
           </div>
           <div>
             <Label>Corps du message</Label>

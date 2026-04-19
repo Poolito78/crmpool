@@ -990,10 +990,12 @@ export default function Devis() {
         client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
         produits={produits}
         pdfContainerRef={pdfContainerRef}
-        onSent={() => {
+        onSent={(dateEnvoi) => {
           if (emailDevis) {
-            updateDevis(prev => prev.map(d => d.id === emailDevis.id ? { ...d, statut: 'envoyé' } : d));
-            toast.success('Devis envoyé — statut mis à jour');
+            updateDevis(prev => prev.map(d =>
+              d.id === emailDevis.id ? { ...d, statut: 'envoyé', dateEnvoi } : d
+            ));
+            toast.success('Devis envoyé — statut et date d\'envoi mis à jour');
           }
         }}
       />
