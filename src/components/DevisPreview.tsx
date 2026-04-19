@@ -95,40 +95,46 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
 
   return (
-    <div className="bg-card">
-      {/* Print / Edit buttons — masqués pour la génération PDF */}
+    <div className="flex flex-col min-h-0">
+      {/* Barre de contrôles — masquée pour la génération PDF */}
       {!hideControls && (
-        <div className="flex justify-end gap-2 p-4 print:hidden items-center flex-wrap">
-          <div className="flex items-center gap-4 mr-auto flex-wrap">
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+        <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
+          <div className="flex items-center gap-4 flex-wrap flex-1">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants }); }} className="rounded" />
-              Afficher m²/consommation
+              m²/conso
             </label>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants }); }} className="rounded" />
-              Afficher remise
+              Remise
             </label>
-            <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer">
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked }); }} className="rounded" />
-              Afficher composants
+              Composants
             </label>
           </div>
-          {onEdit && (
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Pencil className="w-4 h-4 mr-2" /> Modifier
+          <div className="flex items-center gap-2">
+            {onEdit && (
+              <Button variant="outline" size="sm" onClick={onEdit}>
+                <Pencil className="w-3.5 h-3.5 mr-1.5" /> Modifier
+              </Button>
+            )}
+            <Button size="sm" onClick={handlePrint} disabled={printing}>
+              {printing
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Génération…</>
+                : <><Printer className="w-3.5 h-3.5 mr-1.5" /> PDF</>
+              }
             </Button>
-          )}
-          <Button variant="outline" size="sm" onClick={handlePrint} disabled={printing}>
-            {printing
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Génération…</>
-              : <><Printer className="w-4 h-4 mr-2" /> Enregistrer PDF</>
-            }
-          </Button>
+          </div>
         </div>
       )}
 
-      {/* Devis document */}
-      <div className="px-8 pb-8 print:px-0 max-w-[800px] mx-auto text-sm" id="devis-print" ref={printAreaRef}>
+      {/* Zone de défilement du document */}
+      <div className="overflow-auto bg-muted/40 print:bg-transparent p-4 md:p-8 flex-1">
+      {/* Devis document — effet page A4 */}
+      <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
+           style={{ width: '100%', maxWidth: '794px' }}>
+      <div className="px-10 py-10 text-sm" id="devis-print" ref={printAreaRef}>
         {/* Header */}
         <div className="flex justify-between items-start mb-8">
           <div>
@@ -191,6 +197,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <div className="space-y-1">
               <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(devis.dateCreation)}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(devis.dateValidite)}</span></div>
+              {devis.dateEnvoi && <div className="flex justify-between"><span className="text-muted-foreground">Envoyé le :</span><span>{formatDate(devis.dateEnvoi)}</span></div>}
               <div className="flex justify-between"><span className="text-muted-foreground">Statut :</span><span className="font-medium capitalize">{devis.statut}</span></div>
               {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
               {devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
@@ -526,7 +533,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <div className="h-20"></div>
           </div>
         </div>
-      </div>
+      </div>{/* fin printAreaRef */}
+      </div>{/* fin page A4 */}
+      </div>{/* fin zone défilement */}
     </div>
   );
 }
