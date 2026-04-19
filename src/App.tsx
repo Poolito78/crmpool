@@ -15,6 +15,7 @@ import Commandes from "@/pages/Commandes";
 import CommandesClient from "@/pages/CommandesClient";
 import Devis from "@/pages/Devis";
 import CalculateurUPS from "@/pages/CalculateurUPS";
+import GED from "@/pages/GED";
 import Auth from "@/pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -53,6 +54,7 @@ function AppRoutes() {
           <Route path="/commandes" element={<Commandes />} />
           <Route path="/commandes-client" element={<CommandesClient />} />
           <Route path="/calculateur-ups" element={<CalculateurUPS />} />
+          <Route path="/ged" element={<GED />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />

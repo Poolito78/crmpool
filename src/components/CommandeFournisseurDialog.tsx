@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
 import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId } from '@/lib/store';
 import { toast } from 'sonner';
+import { logHistorique } from '@/lib/historique';
 
 interface LigneCommande {
   produit: Produit;
@@ -179,6 +180,10 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
     if (commandes.length > 0) {
       onSaveCommandes(commandes);
       toast.success(`${commandes.length} commande(s) fournisseur créée(s)`);
+      commandes.forEach(cf => {
+        const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
+        logHistorique({ entiteType: 'commande_fournisseur', entiteId: cf.id, entiteNumero: cf.numero, action: 'creation', details: { fournisseur: fourn?.societe ?? fourn?.nom, montant: `${cf.totalTTC.toFixed(2)} €`, nbProduits: cf.lignes.length, devis: devis?.numero } });
+      });
     }
 
     onOpenChange(false);

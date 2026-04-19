@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { exportToExcel } from '@/lib/exportExcel';
+import { logHistorique } from '@/lib/historique';
 import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
@@ -241,10 +242,14 @@ export default function Devis() {
 
     let savedId = editingId;
     if (editingId) {
+      const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
         ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       } : d));
-      if (!silent) toast.success('Devis modifié');
+      if (!silent) {
+        toast.success('Devis modifié');
+        logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
+      }
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       savedId = generateId();
@@ -253,7 +258,10 @@ export default function Devis() {
         dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       };
       updateDevis(prev => [...prev, newDevis]);
-      if (!silent) toast.success('Devis créé');
+      if (!silent) {
+        toast.success('Devis créé');
+        logHistorique({ entiteType: 'devis', entiteId: savedId!, entiteNumero: numero, action: 'creation', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
+      }
     }
     if (!silent) {
       setDialogOpen(false);
@@ -317,6 +325,7 @@ export default function Devis() {
     const d = devis.find(dv => dv.id === id);
     updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
     toast.success('Statut mis à jour');
+    logHistorique({ entiteType: 'devis', entiteId: id, entiteNumero: d?.numero ?? id, action: 'statut', details: { ancienStatut: d?.statut, nouveauStatut: newStatut } });
     if (newStatut === 'accepté' && d) {
       const devisData = { ...d, statut: newStatut as DevisType['statut'] };
 
@@ -996,6 +1005,7 @@ export default function Devis() {
               d.id === emailDevis.id ? { ...d, statut: 'envoyé', dateEnvoi } : d
             ));
             toast.success('Devis envoyé — statut et date d\'envoi mis à jour');
+            logHistorique({ entiteType: 'devis', entiteId: emailDevis.id, entiteNumero: emailDevis.numero, action: 'envoi_email', details: { destinataire: clients.find(c => c.id === emailDevis.clientId)?.email, dateEnvoi, client: clients.find(c => c.id === emailDevis.clientId)?.nom } });
           }
         }}
       />

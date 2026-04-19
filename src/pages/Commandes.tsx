@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import { logHistorique } from '@/lib/historique';
 import CommandeFournisseurEditDialog from '@/components/CommandeFournisseurEditDialog';
 import CommandeFournisseurPreviewDialog from '@/components/CommandeFournisseurPreviewDialog';
 import CommandeEmailDialog from '@/components/CommandeEmailDialog';
@@ -43,12 +44,13 @@ export default function Commandes() {
     .sort((a, b) => new Date(b.dateCreation).getTime() - new Date(a.dateCreation).getTime());
 
   function updateStatut(id: string, statut: CommandeFournisseur['statut']) {
+    const cf = commandesFournisseur.find(c => c.id === id);
     if (statut === 'recue') {
-      const cf = commandesFournisseur.find(c => c.id === id);
       if (cf) { setReceptionCommande(cf); return; }
     }
-    updateCommandesFournisseur(prev => prev.map(cf => cf.id === id ? { ...cf, statut } : cf));
+    updateCommandesFournisseur(prev => prev.map(c => c.id === id ? { ...c, statut } : c));
     toast.success('Statut mis à jour');
+    logHistorique({ entiteType: 'commande_fournisseur', entiteId: id, entiteNumero: cf?.numero ?? id, action: 'statut', details: { ancienStatut: cf?.statut, nouveauStatut: statut, fournisseur: fournisseurs.find(f => f.id === cf?.fournisseurId)?.societe } });
   }
 
   function handleReception(data: { dateReception: string; dateLivraisonClientPrevue: string; dateEcheance: string; lignesRecues: LigneReception[] }) {
@@ -58,13 +60,16 @@ export default function Commandes() {
         ? { ...cf, statut: 'recue' as const, ...data }
         : cf
     ));
+    logHistorique({ entiteType: 'commande_fournisseur', entiteId: receptionCommande.id, entiteNumero: receptionCommande.numero, action: 'reception', details: { dateReception: data.dateReception, dateLivraisonClientPrevue: data.dateLivraisonClientPrevue, dateEcheance: data.dateEcheance, fournisseur: fournisseurs.find(f => f.id === receptionCommande.fournisseurId)?.societe } });
     setReceptionCommande(null);
     toast.success('Réception enregistrée');
   }
 
   function handleDelete() {
     if (!deleteId) return;
-    updateCommandesFournisseur(prev => prev.filter(cf => cf.id !== deleteId));
+    const cf = commandesFournisseur.find(c => c.id === deleteId);
+    updateCommandesFournisseur(prev => prev.filter(c => c.id !== deleteId));
+    logHistorique({ entiteType: 'commande_fournisseur', entiteId: deleteId, entiteNumero: cf?.numero ?? deleteId, action: 'suppression' });
     setDeleteId(null);
     toast.success('Commande supprimée');
   }
