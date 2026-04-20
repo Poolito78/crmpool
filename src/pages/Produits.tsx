@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2 } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,23 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
+
+const COLUMNS = [
+  { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
+  { key: 'description',  label: 'Description',      align: 'left'  as const },
+  { key: 'categorie',    label: 'Catégorie',        align: 'left'  as const },
+  { key: 'fournisseur',  label: 'Fournisseur',      align: 'left'  as const },
+  { key: 'prixAchat',    label: 'P. Achat',         align: 'right' as const },
+  { key: 'coefficient',  label: 'Coeff.',           align: 'right' as const },
+  { key: 'prixRevendeur',label: 'P. Revend.',       align: 'right' as const },
+  { key: 'prixHT',       label: 'P. Public HT',    align: 'right' as const },
+  { key: 'poids',        label: 'Poids (kg)',       align: 'right' as const },
+  { key: 'consommation', label: 'Conso. (kg/m²)',   align: 'right' as const },
+  { key: 'tva',          label: 'TVA %',            align: 'right' as const },
+  { key: 'stock',        label: 'Stock',            align: 'right' as const },
+] as const;
+type ColKey = typeof COLUMNS[number]['key'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock'];
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
@@ -50,6 +67,17 @@ export default function Produits() {
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [showFilters, setShowFilters] = useState(false);
+  const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
+    try {
+      const s = localStorage.getItem('produits_visible_cols');
+      if (s) return new Set(JSON.parse(s) as ColKey[]);
+    } catch {}
+    return new Set(DEFAULT_VISIBLE_COLS);
+  });
+  const [colChooserOpen, setColChooserOpen] = useState(false);
+  const colChooserRef = useRef<HTMLDivElement>(null);
+  const [sortCol, setSortCol] = useState<ColKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
   const [form, setForm] = useState(emptyProduit);
@@ -70,6 +98,32 @@ export default function Produits() {
   const [composantPickerOpen, setComposantPickerOpen] = useState(false);
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [showPrixPublic, setShowPrixPublic] = useState(false);
+
+  // Persist visible columns
+  useEffect(() => {
+    localStorage.setItem('produits_visible_cols', JSON.stringify([...visibleCols]));
+    // Clear filters for hidden columns
+    setColumnFilters(prev => {
+      const next = { ...prev };
+      (Object.keys(next) as ColKey[]).forEach(k => { if (!visibleCols.has(k)) delete next[k]; });
+      return next;
+    });
+  }, [visibleCols]);
+
+  // Close column chooser on outside click
+  useEffect(() => {
+    if (!colChooserOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (colChooserRef.current && !colChooserRef.current.contains(e.target as Node)) setColChooserOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [colChooserOpen]);
+
+  function handleSort(key: ColKey) {
+    if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(key); setSortDir('asc'); }
+  }
 
   // Auto-open product from query param (e.g. from devis)
   useEffect(() => {
@@ -162,27 +216,54 @@ export default function Produits() {
       if (!val) continue;
       const v = val.toLowerCase();
       switch (key) {
-        case 'reference': if (!p.reference?.toLowerCase().includes(v)) return false; break;
-        case 'description': if (!p.description?.toLowerCase().includes(v)) return false; break;
-        case 'categorie': if (!p.categorie?.toLowerCase().includes(v)) return false; break;
-        case 'prixAchat': if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
-        case 'coefficient': if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
-        case 'prixHT': if (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v)) return false; break;
-        case 'prixRevendeur': if (!formatMontant(p.prixRevendeur).toLowerCase().includes(v) && !String(p.prixRevendeur).includes(v)) return false; break;
-        case 'stock': if (!String(p.stock).includes(v)) return false; break;
+        case 'reference':    if (!p.reference?.toLowerCase().includes(v)) return false; break;
+        case 'description':  if (!p.description?.toLowerCase().includes(v)) return false; break;
+        case 'categorie':    if (!p.categorie?.toLowerCase().includes(v)) return false; break;
+        case 'fournisseur': { const f = fournisseurs.find(f => f.id === p.fournisseurId); if (!((f?.societe || f?.nom || '').toLowerCase().includes(v))) return false; break; }
+        case 'prixAchat':    if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
+        case 'coefficient':  if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
+        case 'prixHT':       if (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v)) return false; break;
+        case 'prixRevendeur':if (!formatMontant(p.prixRevendeur).toLowerCase().includes(v) && !String(p.prixRevendeur).includes(v)) return false; break;
+        case 'poids':        if (!String(p.poids || 0).includes(v)) return false; break;
+        case 'consommation': if (!String(p.consommation || 0).includes(v)) return false; break;
+        case 'tva':          if (!String(p.tva).includes(v)) return false; break;
+        case 'stock':        if (!String(p.stock).includes(v)) return false; break;
       }
     }
     return true;
   });
+
+  const sortedFiltered = useMemo(() => {
+    if (!sortCol) return filtered;
+    return [...filtered].sort((a, b) => {
+      let av: string | number = 0, bv: string | number = 0;
+      switch (sortCol) {
+        case 'reference':    av = a.reference || ''; bv = b.reference || ''; break;
+        case 'description':  av = a.description || ''; bv = b.description || ''; break;
+        case 'categorie':    av = a.categorie || ''; bv = b.categorie || ''; break;
+        case 'fournisseur': { const fa = fournisseurs.find(f => f.id === a.fournisseurId); const fb = fournisseurs.find(f => f.id === b.fournisseurId); av = fa?.societe || fa?.nom || ''; bv = fb?.societe || fb?.nom || ''; break; }
+        case 'prixAchat':    av = a.prixAchat; bv = b.prixAchat; break;
+        case 'coefficient':  av = a.coefficient; bv = b.coefficient; break;
+        case 'prixRevendeur':av = a.prixRevendeur; bv = b.prixRevendeur; break;
+        case 'prixHT':       av = a.prixHT; bv = b.prixHT; break;
+        case 'poids':        av = a.poids || 0; bv = b.poids || 0; break;
+        case 'consommation': av = a.consommation || 0; bv = b.consommation || 0; break;
+        case 'tva':          av = a.tva; bv = b.tva; break;
+        case 'stock':        av = a.stock; bv = b.stock; break;
+      }
+      if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
+      return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
+    });
+  }, [filtered, sortCol, sortDir, fournisseurs]);
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
     next.has(id) ? next.delete(id) : next.add(id);
     return next;
   });
-  
+
   const toggleAll = () => {
-    setSelected(prev => prev.size === filtered.length ? new Set() : new Set(filtered.map(p => p.id)));
+    setSelected(prev => prev.size === sortedFiltered.length ? new Set() : new Set(sortedFiltered.map(p => p.id)));
   };
   
   function confirmDelete(id?: string) {
@@ -589,6 +670,38 @@ export default function Produits() {
           <Button variant={showFilters ? "secondary" : "outline"} size="sm" onClick={() => { setShowFilters(!showFilters); if (showFilters) setColumnFilters({}); }}>
             <Filter className="w-4 h-4 mr-2" /> Filtres
           </Button>
+          {/* Sélecteur de colonnes */}
+          <div className="relative" ref={colChooserRef}>
+            <Button variant="outline" size="sm" onClick={() => setColChooserOpen(v => !v)}>
+              <Columns2 className="w-4 h-4 mr-2" /> Colonnes
+            </Button>
+            {colChooserOpen && (
+              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[190px]">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
+                {COLUMNS.map(col => (
+                  <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={visibleCols.has(col.key)}
+                      onChange={() => setVisibleCols(prev => {
+                        const next = new Set(prev);
+                        next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                        return next;
+                      })}
+                      className="rounded border-input accent-primary"
+                    />
+                    {col.label}
+                  </label>
+                ))}
+                <button
+                  className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
+                  onClick={() => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS))}
+                >
+                  Réinitialiser
+                </button>
+              </div>
+            )}
+          </div>
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
           <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
@@ -600,30 +713,32 @@ export default function Produits() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-3 py-3 w-8"><input type="checkbox" checked={filtered.length > 0 && selected.size === filtered.length} onChange={toggleAll} className="rounded border-input" /></th>
-                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Réf.</th>
-                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Description</th>
-                <th className="text-left px-3 py-3 font-medium text-muted-foreground">Catégorie</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Achat</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Coeff.</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Revend.</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">P. Public HT</th>
-                <th className="text-right px-3 py-3 font-medium text-muted-foreground">Stock</th>
+                <th className="px-3 py-3 w-8">
+                  <input type="checkbox" checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length} onChange={toggleAll} className="rounded border-input" />
+                </th>
+                {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                  const isSorted = sortCol === col.key;
+                  const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                  return (
+                    <th
+                      key={col.key}
+                      className={`px-3 py-3 font-medium text-muted-foreground select-none cursor-pointer hover:text-foreground whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      onClick={() => handleSort(col.key)}
+                    >
+                      <div className={`flex items-center gap-1 ${col.align === 'right' ? 'justify-end' : ''}`}>
+                        {col.align === 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                        <span>{col.label}</span>
+                        {col.align === 'left' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                      </div>
+                    </th>
+                  );
+                })}
                 <th className="px-3 py-3"></th>
               </tr>
               {showFilters && (
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-3 py-1"></th>
-                  {[
-                    { key: 'reference', align: 'left' },
-                    { key: 'description', align: 'left' },
-                    { key: 'categorie', align: 'left' },
-                    { key: 'prixAchat', align: 'right' },
-                    { key: 'coefficient', align: 'right' },
-                    { key: 'prixRevendeur', align: 'right' },
-                    { key: 'prixHT', align: 'right' },
-                    { key: 'stock', align: 'right' },
-                  ].map(col => (
+                  {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => (
                     <th key={col.key} className="px-3 py-1">
                       <Input
                         placeholder="Filtrer..."
@@ -644,35 +759,35 @@ export default function Produits() {
               )}
             </thead>
             <tbody>
-              {filtered.map(p => {
-                const marge = calcMargeBrute(p.prixHT, p.prixAchat);
-                const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+              {sortedFiltered.map(p => {
                 const pfs = produitFournisseurs.filter(pf => pf.produitId === p.id);
                 const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
                 const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
+                const fourn = fournisseurs.find(f => f.id === p.fournisseurId);
+                const isCompose = !!(p.composants && p.composants.length > 0);
+                const renderCell = (key: ColKey) => {
+                  switch (key) {
+                    case 'reference':    return <td className="px-3 py-3 font-mono text-xs">{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
+                    case 'description':  return <td className="px-3 py-3 font-medium">{p.description}</td>;
+                    case 'categorie':    return <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>;
+                    case 'fournisseur':  return <td className="px-3 py-3 text-muted-foreground">{fourn?.societe || fourn?.nom || '—'}</td>;
+                    case 'prixAchat':    return <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>;
+                    case 'coefficient':  return <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
+                    case 'prixRevendeur':return <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixRevendeur)}<span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span></td>;
+                    case 'prixHT':       return <td className="px-3 py-3 text-right text-muted-foreground">{formatMontant(p.prixHT)}<span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span></td>;
+                    case 'poids':        return <td className="px-3 py-3 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
+                    case 'consommation': return <td className="px-3 py-3 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
+                    case 'tva':          return <td className="px-3 py-3 text-right">{p.tva}%</td>;
+                    case 'stock':        return <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
+                    default:             return <td />;
+                  }
+                };
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
                     <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
-                    <td className="px-3 py-3 font-mono text-xs">{p.reference}{p.composants && p.composants.length > 0 && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>
-                    <td className="px-3 py-3 font-medium">{p.description}</td>
-                    <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>
-                    <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>
-                    <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>
-                    <td className="px-3 py-3 text-right font-semibold">
-                      {formatMontant(p.prixRevendeur)}
-                      <span className="block text-xs text-muted-foreground">
-                        {formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right text-muted-foreground">
-                      {formatMontant(p.prixHT)}
-                      <span className="block text-xs text-muted-foreground">
-                        {formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)
-                      </span>
-                    </td>
-                    <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}
-                      {pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}
-                    </td>
+                    {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => (
+                      <Fragment key={col.key}>{renderCell(col.key)}</Fragment>
+                    ))}
                     <td className="px-3 py-3">
                       <div className="flex gap-1 justify-end">
                         <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
@@ -691,7 +806,7 @@ export default function Produits() {
 
       {/* Mobile cards */}
       <div className="md:hidden space-y-3">
-        {filtered.map(p => {
+        {sortedFiltered.map(p => {
           const marge = calcMargeBrute(p.prixHT, p.prixAchat);
           const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
           return (
