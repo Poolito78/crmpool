@@ -33,6 +33,8 @@ export default function Devis() {
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterClient, setFilterClient] = useState<string>('tous');
+  const [filterContact, setFilterContact] = useState<string>('tous');
+  const [filterProduit, setFilterProduit] = useState<string>('tous');
   const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
@@ -85,6 +87,8 @@ export default function Devis() {
     if (!matchSearch) return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
+    if (filterContact !== 'tous' && d.contactId !== filterContact) return false;
+    if (filterProduit !== 'tous' && !d.lignes.some(l => l.produitId === filterProduit)) return false;
     if (filterPeriode !== 'tous') {
       const now = new Date();
       const dateD = new Date(d.dateCreation);
@@ -100,6 +104,25 @@ export default function Devis() {
   });
 
   const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
+
+  // Contacts uniques présents dans les devis
+  const uniqueContacts = devis
+    .filter(d => d.contactId)
+    .reduce<{ id: string; label: string }[]>((acc, d) => {
+      if (acc.some(x => x.id === d.contactId)) return acc;
+      const client = clients.find(c => c.id === d.clientId);
+      const ct = (client?.contacts || []).find(c => c.id === d.contactId);
+      if (ct) {
+        const label = [ct.prenom, ct.nom].filter(Boolean).join(' ') + (ct.fonction ? ` · ${ct.fonction}` : '');
+        acc.push({ id: d.contactId!, label: `${client?.societe || client?.nom || ''} — ${label}` });
+      }
+      return acc;
+    }, []);
+
+  // Produits uniques présents dans les lignes de devis
+  const uniqueProduitsFiltres = [...new Set(devis.flatMap(d => d.lignes.map(l => l.produitId).filter(Boolean)))]
+    .map(id => produits.find(p => p.id === id))
+    .filter(Boolean) as typeof produits;
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
@@ -399,9 +422,23 @@ export default function Devis() {
             <option value="refusé">Refusé</option>
             <option value="expiré">Expiré</option>
           </select>
-          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+          <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact('tous'); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Tous les clients</option>
             {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
+          </select>
+          {uniqueContacts.length > 0 && (
+            <select value={filterContact} onChange={e => setFilterContact(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+              <option value="tous">Tous les contacts</option>
+              {uniqueContacts.map(ct => (
+                <option key={ct.id} value={ct.id}>{ct.label}</option>
+              ))}
+            </select>
+          )}
+          <select value={filterProduit} onChange={e => setFilterProduit(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="tous">Tous les produits</option>
+            {uniqueProduitsFiltres.map(p => (
+              <option key={p.id} value={p.id}>{p.reference}{p.description ? ` — ${p.description}` : ''}</option>
+            ))}
           </select>
           <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Toutes les périodes</option>
@@ -409,8 +446,8 @@ export default function Devis() {
             <option value="trimestre">Ce trimestre</option>
             <option value="annee">Cette année</option>
           </select>
-          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterPeriode !== 'tous') && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== 'tous' || filterProduit !== 'tous' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact('tous'); setFilterProduit('tous'); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
             </Button>
           )}
