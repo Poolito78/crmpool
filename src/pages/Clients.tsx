@@ -477,9 +477,7 @@ export default function Clients() {
                       {c.estRevendeur && <Badge variant="secondary" className="mt-0.5 text-[10px] px-1.5 py-0">Revendeur</Badge>}
                     </td>
                     <td className="px-4 py-3">
-                      {contacts.length === 0 ? (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      ) : (
+                      {contacts.length > 0 ? (
                         <div className="space-y-0.5">
                           {contacts.slice(0, 2).map((ct, i) => (
                             <div key={ct.id} className="text-xs">
@@ -491,6 +489,14 @@ export default function Clients() {
                           ))}
                           {contacts.length > 2 && <span className="text-xs text-muted-foreground">+{contacts.length - 2} autre{contacts.length - 2 > 1 ? 's' : ''}</span>}
                         </div>
+                      ) : (c.nom || c.email || c.telephone) ? (
+                        <div className="text-xs space-y-0.5">
+                          {c.nom && <p className="font-medium">{c.nom}</p>}
+                          {c.email && <p className="text-muted-foreground">{c.email}</p>}
+                          {c.telephone && <p className="text-muted-foreground">{c.telephone}</p>}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground text-xs">
@@ -582,7 +588,7 @@ export default function Clients() {
                 <button onClick={e => { e.stopPropagation(); confirmRemove(c.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-            {(c.contacts || []).length > 0 && (
+            {(c.contacts || []).length > 0 ? (
               <div className="mt-2 space-y-1">
                 {(c.contacts || []).slice(0, 2).map((ct, i) => (
                   <div key={ct.id} className="text-xs border-l-2 border-border pl-2 space-y-0.5">
@@ -596,7 +602,13 @@ export default function Clients() {
                 ))}
                 {(c.contacts || []).length > 2 && <p className="text-xs text-muted-foreground pl-2">+{(c.contacts || []).length - 2} autre{(c.contacts || []).length > 3 ? 's' : ''}</p>}
               </div>
-            )}
+            ) : (c.nom || c.email || c.telephone) ? (
+              <div className="mt-2 text-xs border-l-2 border-border pl-2 space-y-0.5">
+                {c.nom && <p className="font-medium text-foreground">{c.nom}</p>}
+                {c.email && <p className="text-muted-foreground">{c.email}</p>}
+                {(c.telephone || c.telephoneMobile) && <p className="text-muted-foreground">{c.telephone || c.telephoneMobile}</p>}
+              </div>
+            ) : null}
             {(c.adressesLivraison?.length || 0) > 0 && (
               <div className="mt-3">
                 <button
