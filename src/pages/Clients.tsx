@@ -19,6 +19,16 @@ const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
 };
 
+// Dérive le nom/email/tel du client depuis le premier contact (contact principal)
+function deriveFromContacts(form: Omit<Client, 'id' | 'dateCreation'>) {
+  const primary = (form.contacts || [])[0];
+  return {
+    nom: primary ? [primary.prenom, primary.nom].filter(Boolean).join(' ') : (form.societe || form.nom),
+    email: primary?.email || form.email || '',
+    telephone: primary?.telephone || form.telephone || '',
+  };
+}
+
 const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
   libelle: '', adresse: '', ville: '', codePostal: '', contact: '', telephone: '', parDefaut: false, type: 'livraison'
 };
@@ -108,7 +118,12 @@ export default function Clients() {
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
-      if (search && ![c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
+      if (search) {
+        const s = search.toLowerCase();
+        const inBase = [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(s));
+        const inContacts = (c.contacts || []).some(ct => [ct.nom, ct.prenom, ct.email, ct.telephone, ct.fonction].some(v => v?.toLowerCase().includes(s)));
+        if (!inBase && !inContacts) return false;
+      }
       if (filterVille && c.ville !== filterVille) return false;
       if (filterDepartement && !c.codePostal?.startsWith(filterDepartement)) return false;
       if (filterSociete && c.societe !== filterSociete) return false;
@@ -150,12 +165,14 @@ export default function Clients() {
   }
 
   function save() {
-    if (!form.nom.trim()) { toast.error('Le nom est requis'); return; }
+    if (!form.societe?.trim()) { toast.error('La société est requise'); return; }
+    const derived = deriveFromContacts(form);
+    const toSave = { ...form, ...derived };
     if (editingClient) {
-      updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...form } : c));
+      updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...toSave } : c));
       toast.success('Client modifié');
     } else {
-      updateClients(prev => [...prev, { ...form, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
+      updateClients(prev => [...prev, { ...toSave, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
       toast.success('Client ajouté');
     }
     setDialogOpen(false);
@@ -167,8 +184,9 @@ export default function Clients() {
     if (!editingClient || !dialogOpen) return;
     clearTimeout(autoSaveClientRef.current);
     autoSaveClientRef.current = setTimeout(() => {
-      if (form.nom.trim()) {
-        updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...form } : c));
+      if (form.societe?.trim()) {
+        const derived = deriveFromContacts(form);
+        updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...form, ...derived } : c));
       }
     }, 500);
     return () => clearTimeout(autoSaveClientRef.current);
@@ -400,107 +418,113 @@ export default function Clients() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Nom</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Société</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contacts</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses liv.</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Devis</th>
               <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => (
-              <>
-                <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
-                  <td className="px-4 py-3 font-medium">
-                    {c.nom}
-                    {c.estRevendeur && <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0">Revendeur</Badge>}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.societe || '—'}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.telephone}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{c.ville}</td>
-                  <td className="px-4 py-3">
-                    {(c.adressesLivraison?.length || 0) > 0 ? (
-                      <button
-                        onClick={() => setExpandedClient(expandedClient === c.id ? null : c.id)}
-                        className="flex items-center gap-1 text-primary hover:underline text-xs"
-                      >
-                        <MapPin className="w-3 h-3" />
-                        {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
-                        {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                      </button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    {(() => {
-                      const clientDevis = devis.filter(d => d.clientId === c.id);
-                      if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-                      return (
-                        <button
-                          onClick={() => navigate(`/devis?search=${encodeURIComponent(c.nom)}`)}
-                          className="flex items-center gap-1 text-primary hover:underline text-xs"
-                        >
-                          <FileText className="w-3 h-3" />
-                          {clientDevis.length} devis
-                        </button>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    {(() => {
-                      const encours = encoursDuParClient[c.id];
-                      const montantDu = encours?.montant || 0;
-                      const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
-                      const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
-                      if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
-                      return (
-                        <div>
-                          <span className="font-medium text-xs">{formatMontant(montantDu)}</span>
-                          {montantDepasse > 0 && (
-                            <div className="text-xs text-destructive font-medium">
-                              {formatMontant(montantDepasse)} échu
+            {filtered.map(c => {
+              const contacts = c.contacts || [];
+              const primary = contacts[0];
+              return (
+                <>
+                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
+                    <td className="px-4 py-3">
+                      <p className="font-semibold">{c.societe || c.nom}</p>
+                      {c.adresse && <p className="text-xs text-muted-foreground">{c.adresse}</p>}
+                      {c.estRevendeur && <Badge variant="secondary" className="mt-0.5 text-[10px] px-1.5 py-0">Revendeur</Badge>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {contacts.length === 0 ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : (
+                        <div className="space-y-0.5">
+                          {contacts.slice(0, 2).map((ct, i) => (
+                            <div key={ct.id} className="text-xs">
+                              <span className="font-medium">{[ct.prenom, ct.nom].filter(Boolean).join(' ')}</span>
+                              {ct.fonction && <span className="text-muted-foreground"> · {ct.fonction}</span>}
+                              {i === 0 && ct.email && <span className="text-muted-foreground block">{ct.email}</span>}
+                              {i === 0 && (ct.telephone || ct.telephoneMobile) && <span className="text-muted-foreground block">{ct.telephone || ct.telephoneMobile}</span>}
                             </div>
-                          )}
+                          ))}
+                          {contacts.length > 2 && <span className="text-xs text-muted-foreground">+{contacts.length - 2} autre{contacts.length - 2 > 1 ? 's' : ''}</span>}
                         </div>
-                      );
-                    })()}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1 justify-end">
-                      <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                      <button onClick={e => { e.stopPropagation(); confirmRemove(c.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
-                    </div>
-                  </td>
-                </tr>
-                {expandedClient === c.id && c.adressesLivraison?.length > 0 && (
-                  <tr key={`${c.id}-addr`}>
-                    <td colSpan={9} className="px-4 py-2 bg-muted/20">
-                      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                        {c.adressesLivraison.map(a => (
-                          <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{a.libelle}</span>
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
-                              {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
-                            </div>
-                            <p className="text-muted-foreground">{a.adresse}</p>
-                            <p className="text-muted-foreground">{a.codePostal} {a.ville}</p>
-                            {a.contact && <p className="text-muted-foreground">Contact: {a.contact}</p>}
-                            {a.telephone && <p className="text-muted-foreground">Tél: {a.telephone}</p>}
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs">
+                      {c.ville && <p>{c.ville}</p>}
+                      {c.codePostal && <p className="text-muted-foreground/70">{c.codePostal}</p>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(c.adressesLivraison?.length || 0) > 0 ? (
+                        <button onClick={e => { e.stopPropagation(); setExpandedClient(expandedClient === c.id ? null : c.id); }} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                          <MapPin className="w-3 h-3" />
+                          {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
+                          {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                        </button>
+                      ) : <span className="text-xs text-muted-foreground">—</span>}
+                    </td>
+                    <td className="px-4 py-3">
+                      {(() => {
+                        const clientDevis = devis.filter(d => d.clientId === c.id);
+                        if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                        return (
+                          <button onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(c.societe || c.nom)}`); }} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                            <FileText className="w-3 h-3" />{clientDevis.length} devis
+                          </button>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {(() => {
+                        const encours = encoursDuParClient[c.id];
+                        const montantDu = encours?.montant || 0;
+                        const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
+                        const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
+                        if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
+                        return (
+                          <div>
+                            <span className="font-medium text-xs">{formatMontant(montantDu)}</span>
+                            {montantDepasse > 0 && <div className="text-xs text-destructive font-medium">{formatMontant(montantDepasse)} échu</div>}
                           </div>
-                        ))}
+                        );
+                      })()}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1 justify-end">
+                        <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={e => { e.stopPropagation(); confirmRemove(c.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
-                )}
-              </>
-            ))}
+                  {expandedClient === c.id && (c.adressesLivraison?.length || 0) > 0 && (
+                    <tr key={`${c.id}-addr`}>
+                      <td colSpan={7} className="px-4 py-2 bg-muted/20">
+                        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {c.adressesLivraison.map(a => (
+                            <div key={a.id} className="bg-card rounded-lg border border-border p-3 text-xs space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{a.libelle}</span>
+                                <Badge variant="outline" className="text-[10px] px-1.5 py-0">{a.type === 'facturation' ? 'Facturation' : 'Livraison'}</Badge>
+                                {a.parDefaut && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Par défaut</Badge>}
+                              </div>
+                              <p className="text-muted-foreground">{a.adresse}</p>
+                              <p className="text-muted-foreground">{a.codePostal} {a.ville}</p>
+                              {a.contact && <p className="text-muted-foreground">Contact : {a.contact}</p>}
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </>
+              );
+            })}
           </tbody>
         </table>
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun client trouvé</p>}
@@ -512,29 +536,28 @@ export default function Clients() {
           <div key={c.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={() => openEdit(c)}>
             <div className="flex justify-between items-start">
               <div>
-                <p className="font-medium">{c.nom}</p>
-                {c.societe && <p className="text-sm text-muted-foreground">{c.societe}</p>}
+                <p className="font-semibold">{c.societe || c.nom}</p>
+                {c.ville && <p className="text-xs text-muted-foreground">{c.codePostal} {c.ville}</p>}
+                {c.estRevendeur && <Badge variant="secondary" className="mt-0.5 text-[10px] px-1.5 py-0">Revendeur</Badge>}
               </div>
               <div className="flex gap-1">
-                <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
+                <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                 <button onClick={e => { e.stopPropagation(); confirmRemove(c.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
             </div>
-            <div className="mt-2 text-sm text-muted-foreground space-y-0.5">
-              <p>{c.email}</p>
-              <p>{c.telephone}</p>
-              <p>{c.ville}</p>
-            </div>
             {(c.contacts || []).length > 0 && (
               <div className="mt-2 space-y-1">
-                {(c.contacts || []).map(ct => (
-                  <div key={ct.id} className="text-xs text-muted-foreground flex items-center gap-2 border-l-2 border-border pl-2">
-                    <span className="font-medium text-foreground">{ct.nom}</span>
-                    {ct.fonction && <span className="text-muted-foreground">· {ct.fonction}</span>}
-                    {ct.email && <span>{ct.email}</span>}
-                    {ct.telephone && <span>{ct.telephone}</span>}
+                {(c.contacts || []).slice(0, 2).map((ct, i) => (
+                  <div key={ct.id} className="text-xs border-l-2 border-border pl-2 space-y-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground">{[ct.prenom, ct.nom].filter(Boolean).join(' ')}</span>
+                      {ct.fonction && <span className="text-muted-foreground">· {ct.fonction}</span>}
+                    </div>
+                    {i === 0 && ct.email && <p className="text-muted-foreground">{ct.email}</p>}
+                    {i === 0 && (ct.telephone || ct.telephoneMobile) && <p className="text-muted-foreground">{ct.telephone || ct.telephoneMobile}</p>}
                   </div>
                 ))}
+                {(c.contacts || []).length > 2 && <p className="text-xs text-muted-foreground pl-2">+{(c.contacts || []).length - 2} autre{(c.contacts || []).length > 3 ? 's' : ''}</p>}
               </div>
             )}
             {(c.adressesLivraison?.length || 0) > 0 && (
@@ -604,61 +627,38 @@ export default function Clients() {
             </Button>
           )}
           <div className="grid gap-4 py-2">
-            {[
-              { key: 'nom', label: 'Nom *', type: 'text' },
-              { key: 'societe', label: 'Société', type: 'text' },
-              { key: 'email', label: 'Email', type: 'email' },
-              { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
-              { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
-              { key: 'adresse', label: 'Adresse (facturation)', type: 'text' },
-              { key: 'ville', label: 'Ville', type: 'text' },
-              { key: 'codePostal', label: 'Code postal', type: 'text' },
-            ].map(f => (
-              <div key={f.key}>
-                <Label>{f.label}</Label>
-                <Input
-                  type={f.type}
-                  value={(form as any)[f.key]}
-                  onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))}
-                />
-              </div>
-            ))}
-            {/* Contacts supplémentaires */}
-            <div className="border-t border-border pt-4 space-y-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-semibold">Contacts supplémentaires</Label>
-                <Button type="button" variant="outline" size="sm" onClick={() => setForm(prev => ({ ...prev, contacts: [...(prev.contacts || []), { id: generateId(), nom: '', email: '', telephone: '', fonction: '' }] }))}>
-                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Ajouter
-                </Button>
-              </div>
-              {(form.contacts || []).map((ct, idx) => (
-                <div key={ct.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-muted-foreground font-medium">Contact {idx + 1}</span>
-                    <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    <div>
-                      <Label className="text-xs">Nom *</Label>
-                      <Input className="h-8 text-sm" value={ct.nom} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, nom: e.target.value } : c) }))} placeholder="Prénom Nom" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Fonction</Label>
-                      <Input className="h-8 text-sm" value={ct.fonction || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, fonction: e.target.value } : c) }))} placeholder="Ex: Directeur" />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Email</Label>
-                      <Input className="h-8 text-sm" type="email" value={ct.email || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, email: e.target.value } : c) }))} />
-                    </div>
-                    <div>
-                      <Label className="text-xs">Téléphone</Label>
-                      <Input className="h-8 text-sm" type="tel" value={ct.telephone || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, telephone: e.target.value } : c) }))} />
-                    </div>
-                  </div>
-                </div>
-              ))}
+            {/* Société — identifiant principal */}
+            <div>
+              <Label>Société *</Label>
+              <Input
+                type="text"
+                value={form.societe}
+                onChange={e => setForm(prev => ({ ...prev, societe: e.target.value }))}
+                placeholder="Nom de la société"
+                autoFocus
+              />
             </div>
 
+            {/* Adresse de facturation */}
+            <div className="border-t border-border pt-3 space-y-2">
+              <Label className="text-sm font-semibold text-muted-foreground">Adresse de facturation</Label>
+              <div>
+                <Label className="text-xs">Adresse</Label>
+                <Input type="text" value={form.adresse} onChange={e => setForm(prev => ({ ...prev, adresse: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label className="text-xs">Ville</Label>
+                  <Input type="text" value={form.ville} onChange={e => setForm(prev => ({ ...prev, ville: e.target.value }))} />
+                </div>
+                <div>
+                  <Label className="text-xs">Code postal</Label>
+                  <Input type="text" value={form.codePostal} onChange={e => setForm(prev => ({ ...prev, codePostal: e.target.value }))} />
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
             <div>
               <Label>Notes</Label>
               <textarea
@@ -725,6 +725,55 @@ export default function Clients() {
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Contacts */}
+            <div className="border-t border-border pt-4 space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold flex items-center gap-2"><UserPlus className="w-4 h-4" /> Contacts</Label>
+                <Button type="button" variant="outline" size="sm" onClick={() => setForm(prev => ({ ...prev, contacts: [...(prev.contacts || []), { id: generateId(), nom: '', prenom: '', email: '', telephone: '', telephoneMobile: '', fonction: '' }] }))}>
+                  <UserPlus className="w-3.5 h-3.5 mr-1" /> Ajouter
+                </Button>
+              </div>
+              {(form.contacts || []).length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-2">Aucun contact — cliquez sur Ajouter</p>
+              )}
+              {(form.contacts || []).map((ct, idx) => (
+                <div key={ct.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-semibold text-muted-foreground">
+                      {idx === 0 ? 'Contact principal' : `Contact ${idx + 1}`}
+                    </span>
+                    <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <Label className="text-xs">Prénom</Label>
+                      <Input className="h-8 text-sm" value={ct.prenom || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, prenom: e.target.value } : c) }))} placeholder="Prénom" />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Nom</Label>
+                      <Input className="h-8 text-sm" value={ct.nom} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, nom: e.target.value } : c) }))} placeholder="Nom" />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Fonction</Label>
+                      <Input className="h-8 text-sm" value={ct.fonction || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, fonction: e.target.value } : c) }))} placeholder="Ex: Directeur, Acheteur..." />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Email</Label>
+                      <Input className="h-8 text-sm" type="email" value={ct.email || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, email: e.target.value } : c) }))} />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Tél. fixe</Label>
+                      <Input className="h-8 text-sm" type="tel" value={ct.telephone || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, telephone: e.target.value } : c) }))} />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Tél. mobile</Label>
+                      <Input className="h-8 text-sm" type="tel" value={ct.telephoneMobile || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, telephoneMobile: e.target.value } : c) }))} />
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
 
             <div className="border-t border-border pt-4">

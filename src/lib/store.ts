@@ -18,8 +18,10 @@ export interface AdresseLivraison {
 export interface Contact {
   id: string;
   nom: string;
+  prenom?: string;
   email?: string;
   telephone?: string;
+  telephoneMobile?: string;
   fonction?: string;
 }
 
@@ -206,6 +208,7 @@ function dbToClient(r: any): Client {
     adressesLivraison: (r.adresses_livraison as any[]) || [],
     estRevendeur: r.est_revendeur || false,
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
+    contacts: (r.contacts as Contact[]) || [],
   };
 }
 
@@ -226,6 +229,7 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     adresses_livraison: c.adressesLivraison,
     est_revendeur: c.estRevendeur || false,
     remises_par_categorie: c.remisesParCategorie || {},
+    contacts: c.contacts || [],
   };
 }
 
