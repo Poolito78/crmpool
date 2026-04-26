@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -109,6 +109,13 @@ export default function Clients() {
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  function toggleSort(col: typeof sortCol) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
 
   const villes = useMemo(() => Array.from(new Set(clients.map(c => c.ville).filter(Boolean))).sort(), [clients]);
   const departements = useMemo(() => Array.from(new Set(clients.map(c => c.codePostal?.substring(0, 2)).filter(Boolean))).sort(), [clients]);
@@ -134,6 +141,22 @@ export default function Clients() {
       return true;
     });
   }, [clients, search, filterVille, filterDepartement, filterSociete, filterRevendeur, filterHasAdresse]);
+
+  const sortedFiltered = useMemo(() => {
+    if (!sortCol) return filtered;
+    return [...filtered].sort((a, b) => {
+      let va: string | number = '';
+      let vb: string | number = '';
+      if (sortCol === 'societe') { va = (a.societe || a.nom).toLowerCase(); vb = (b.societe || b.nom).toLowerCase(); }
+      else if (sortCol === 'ville') { va = (a.ville || '').toLowerCase(); vb = (b.ville || '').toLowerCase(); }
+      else if (sortCol === 'adresses') { va = a.adressesLivraison?.length || 0; vb = b.adressesLivraison?.length || 0; }
+      else if (sortCol === 'devis') { va = devis.filter(d => d.clientId === a.id).length; vb = devis.filter(d => d.clientId === b.id).length; }
+      else if (sortCol === 'encours') { va = encoursDuParClient[a.id]?.montant || 0; vb = encoursDuParClient[b.id]?.montant || 0; }
+      if (va < vb) return sortDir === 'asc' ? -1 : 1;
+      if (va > vb) return sortDir === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [filtered, sortCol, sortDir, devis, encoursDuParClient]);
 
   function openNew() {
     setEditingClient(null);
@@ -418,17 +441,31 @@ export default function Clients() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Société</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contacts</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Adresses liv.</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Devis</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours dû</th>
+              {([
+                { col: 'societe', label: 'Société', align: 'left' },
+                { col: null, label: 'Contacts', align: 'left' },
+                { col: 'ville', label: 'Ville', align: 'left' },
+                { col: 'adresses', label: 'Adresses liv.', align: 'left' },
+                { col: 'devis', label: 'Devis', align: 'left' },
+                { col: 'encours', label: 'Encours dû', align: 'right' },
+              ] as const).map(({ col, label, align }) => (
+                <th key={label} className={`px-4 py-3 font-medium text-muted-foreground text-${align}${col ? ' cursor-pointer select-none hover:text-foreground' : ''}`}
+                  onClick={col ? () => toggleSort(col) : undefined}>
+                  <span className="inline-flex items-center gap-1">
+                    {label}
+                    {col && (
+                      sortCol === col
+                        ? (sortDir === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-primary" />)
+                        : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />
+                    )}
+                  </span>
+                </th>
+              ))}
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(c => {
+            {sortedFiltered.map(c => {
               const contacts = c.contacts || [];
               const primary = contacts[0];
               return (
