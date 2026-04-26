@@ -175,6 +175,7 @@ export interface Devis {
   id: string;
   numero: string;
   clientId: string;
+  contactId?: string;
   adresseLivraisonId?: string;
   dateCreation: string;
   dateValidite: string;
@@ -328,6 +329,7 @@ function dbToDevis(r: any): Devis {
     id: r.id,
     numero: r.numero,
     clientId: r.client_id || '',
+    contactId: r.contact_id || undefined,
     adresseLivraisonId: r.adresse_livraison_id || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
     dateValidite: r.date_validite?.split('T')[0] || '',
@@ -350,6 +352,7 @@ function devisToDb(d: Devis, userId: string) {
     user_id: userId,
     numero: d.numero,
     client_id: d.clientId || null,
+    contact_id: d.contactId || null,
     adresse_livraison_id: d.adresseLivraisonId || null,
     date_creation: d.dateCreation,
     date_validite: d.dateValidite || null,

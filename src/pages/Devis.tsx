@@ -59,6 +59,7 @@ export default function Devis() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
+  const [contactId, setContactId] = useState('');
   const [dateCreation, setDateCreation] = useState(new Date().toISOString().split('T')[0]);
   const [dateValidite, setDateValidite] = useState('');
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
@@ -102,6 +103,7 @@ export default function Devis() {
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
+    setContactId(d.contactId || '');
     setDateCreation(d.dateCreation);
     setDateValidite(d.dateValidite);
     setStatut(d.statut);
@@ -120,6 +122,7 @@ export default function Devis() {
   function openNew() {
     setEditingId(null);
     setClientId('');
+    setContactId('');
     setDateCreation(new Date().toISOString().split('T')[0]);
     setDateValidite(new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0]);
     setStatut('brouillon');
@@ -244,7 +247,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -254,7 +257,7 @@ export default function Devis() {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
+        id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
         dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       };
       updateDevis(prev => [...prev, newDevis]);
@@ -547,18 +550,56 @@ export default function Devis() {
                 <ClientCombobox
                   clients={clients}
                   value={clientId}
-                  onSelect={setClientId}
+                  onSelect={(id) => { setClientId(id); setContactId(''); }}
                 />
                 {(() => {
                   const selectedClient = clients.find(c => c.id === clientId);
                   if (!selectedClient) return null;
+                  const contacts = selectedClient.contacts || [];
+                  // Contact sélectionné (ou fallback legacy)
+                  const selectedContact = contacts.find(ct => ct.id === contactId);
+                  const displayEmail = selectedContact?.email || selectedClient.email;
+                  const displayTel = selectedContact?.telephone || selectedContact?.telephoneMobile || selectedClient.telephone;
                   return (
-                    <div className="mt-2 bg-muted/30 rounded-lg border border-border p-3 text-xs space-y-1">
-                      {selectedClient.societe && <p className="font-medium text-sm">{selectedClient.societe}</p>}
-                      <p className="text-muted-foreground">{selectedClient.adresse}</p>
-                      <p className="text-muted-foreground">{selectedClient.codePostal} {selectedClient.ville}</p>
-                      {selectedClient.email && <p className="text-muted-foreground">{selectedClient.email}</p>}
-                      {selectedClient.telephone && <p className="text-muted-foreground">{selectedClient.telephone}</p>}
+                    <div className="mt-2 bg-muted/30 rounded-lg border border-border p-3 text-xs space-y-2">
+                      <div className="space-y-0.5">
+                        <p className="font-semibold text-sm">{selectedClient.societe || selectedClient.nom}</p>
+                        <p className="text-muted-foreground">{selectedClient.adresse}</p>
+                        <p className="text-muted-foreground">{selectedClient.codePostal} {selectedClient.ville}</p>
+                      </div>
+                      {/* Sélecteur de contact */}
+                      {contacts.length > 0 && (
+                        <div>
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">Contact</label>
+                          <select
+                            value={contactId}
+                            onChange={e => setContactId(e.target.value)}
+                            className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
+                          >
+                            <option value="">— Aucun contact spécifique —</option>
+                            {contacts.map(ct => (
+                              <option key={ct.id} value={ct.id}>
+                                {[ct.prenom, ct.nom].filter(Boolean).join(' ')}
+                                {ct.fonction ? ` · ${ct.fonction}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {selectedContact && (
+                            <div className="mt-1 text-muted-foreground space-y-0.5">
+                              {selectedContact.email && <p>{selectedContact.email}</p>}
+                              {(selectedContact.telephone || selectedContact.telephoneMobile) && (
+                                <p>{selectedContact.telephone || selectedContact.telephoneMobile}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      {!selectedContact && (displayEmail || displayTel) && (
+                        <div className="text-muted-foreground space-y-0.5">
+                          {displayEmail && <p>{displayEmail}</p>}
+                          {displayTel && <p>{displayTel}</p>}
+                        </div>
+                      )}
                       {selectedClient.adressesLivraison?.length > 0 && (
                         <div className="border-t border-border pt-2 mt-2 space-y-1">
                           <p className="font-medium text-muted-foreground">Adresses :</p>

@@ -22,17 +22,19 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
   const filtered = useMemo(() => {
     if (!query) return clients;
     const q = query.toLowerCase();
-    return clients.filter(c =>
-      c.nom.toLowerCase().includes(q) ||
-      c.societe?.toLowerCase().includes(q) ||
-      c.email?.toLowerCase().includes(q)
-    );
+    return clients.filter(c => {
+      if ((c.societe || c.nom).toLowerCase().includes(q)) return true;
+      if (c.email?.toLowerCase().includes(q)) return true;
+      if (c.ville?.toLowerCase().includes(q)) return true;
+      if ((c.contacts || []).some(ct =>
+        [ct.nom, ct.prenom, ct.email, ct.fonction].some(v => v?.toLowerCase().includes(q))
+      )) return true;
+      return false;
+    });
   }, [clients, query]);
 
-  // Reset highlight when filtered list changes
   useEffect(() => { setHighlightIndex(0); }, [filtered]);
 
-  // Scroll highlighted item into view
   useEffect(() => {
     if (open && listRef.current) {
       const item = listRef.current.children[highlightIndex] as HTMLElement;
@@ -40,7 +42,6 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
     }
   }, [highlightIndex, open]);
 
-  // Close on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -53,40 +54,17 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (!open) {
-      if (e.key === 'ArrowDown' || e.key === 'Enter') {
-        e.preventDefault();
-        setOpen(true);
-      }
+      if (e.key === 'ArrowDown' || e.key === 'Enter') { e.preventDefault(); setOpen(true); }
       return;
     }
-
-    const totalItems = filtered.length;
-
     switch (e.key) {
-      case 'ArrowDown':
-        e.preventDefault();
-        setHighlightIndex(prev => (prev + 1) % totalItems);
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        setHighlightIndex(prev => (prev - 1 + totalItems) % totalItems);
-        break;
+      case 'ArrowDown': e.preventDefault(); setHighlightIndex(prev => (prev + 1) % filtered.length); break;
+      case 'ArrowUp': e.preventDefault(); setHighlightIndex(prev => (prev - 1 + filtered.length) % filtered.length); break;
       case 'Enter':
         e.preventDefault();
-        if (filtered.length > 0) {
-          const c = filtered[highlightIndex];
-          if (c) {
-            onSelect(c.id);
-            setOpen(false);
-            setQuery('');
-          }
-        }
+        if (filtered[highlightIndex]) { onSelect(filtered[highlightIndex].id); setOpen(false); setQuery(''); }
         break;
-      case 'Escape':
-        e.preventDefault();
-        setOpen(false);
-        setQuery('');
-        break;
+      case 'Escape': e.preventDefault(); setOpen(false); setQuery(''); break;
     }
   }
 
@@ -96,6 +74,10 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
     setQuery('');
   }
 
+  const displayLabel = selected
+    ? (selected.societe || selected.nom)
+    : '— Sélectionner une société —';
+
   return (
     <div ref={containerRef} className="relative">
       <button
@@ -104,7 +86,7 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
         className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
       >
         <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-          {selected ? `${selected.nom}${selected.societe ? ` (${selected.societe})` : ''}` : '— Sélectionner un client —'}
+          {displayLabel}
         </span>
         <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
@@ -119,34 +101,49 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
               value={query}
               onChange={e => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Rechercher un client..."
+              placeholder="Rechercher société, contact..."
               className="flex-1 bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
               autoFocus
             />
           </div>
-          <div ref={listRef} className="max-h-48 overflow-y-auto p-1">
-            {filtered.map((c, i) => (
-              <button
-                key={c.id}
-                type="button"
-                className={cn(
-                  'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors',
-                  highlightIndex === i ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
-                )}
-                onMouseEnter={() => setHighlightIndex(i)}
-                onClick={() => selectItem(c.id)}
-              >
-                <Check className={cn('h-3.5 w-3.5 shrink-0', value === c.id ? 'opacity-100' : 'opacity-0')} />
-                <span className="truncate flex-1 text-left">
-                  <span className="font-medium">{c.nom}</span>
-                  {c.societe && <span className="text-muted-foreground"> ({c.societe})</span>}
-                  {c.email && <span className="text-xs text-muted-foreground/70 ml-1">{c.email}</span>}
-                </span>
-              </button>
-            ))}
-
+          <div ref={listRef} className="max-h-56 overflow-y-auto p-1">
+            {filtered.map((c, i) => {
+              const contacts = c.contacts || [];
+              const primaryContact = contacts[0];
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={cn(
+                    'flex w-full items-start gap-2 rounded-sm px-2 py-2 text-sm cursor-pointer transition-colors text-left',
+                    highlightIndex === i ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
+                  )}
+                  onMouseEnter={() => setHighlightIndex(i)}
+                  onClick={() => selectItem(c.id)}
+                >
+                  <Check className={cn('h-3.5 w-3.5 mt-0.5 shrink-0', value === c.id ? 'opacity-100' : 'opacity-0')} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{c.societe || c.nom}</p>
+                    {primaryContact ? (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[primaryContact.prenom, primaryContact.nom].filter(Boolean).join(' ')}
+                        {primaryContact.fonction && ` · ${primaryContact.fonction}`}
+                        {primaryContact.email && ` · ${primaryContact.email}`}
+                      </p>
+                    ) : (c.email || c.ville) ? (
+                      <p className="text-xs text-muted-foreground truncate">
+                        {[c.email, c.ville].filter(Boolean).join(' · ')}
+                      </p>
+                    ) : null}
+                    {contacts.length > 1 && (
+                      <p className="text-xs text-muted-foreground/60">{contacts.length} contacts</p>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
             {filtered.length === 0 && (
-              <p className="py-3 text-center text-xs text-muted-foreground">Aucun client trouvé</p>
+              <p className="py-3 text-center text-xs text-muted-foreground">Aucune société trouvée</p>
             )}
           </div>
         </div>
