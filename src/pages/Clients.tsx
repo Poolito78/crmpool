@@ -183,7 +183,12 @@ export default function Clients() {
 
   function openEdit(c: Client) {
     setEditingClient(c);
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts: c.contacts || [] });
+    // Migration automatique : si pas de contacts[] mais des champs legacy (nom/email/tel), créer le contact principal
+    let contacts = c.contacts && c.contacts.length > 0 ? c.contacts : [];
+    if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
+      contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
+    }
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts });
     setDialogOpen(true);
   }
 
