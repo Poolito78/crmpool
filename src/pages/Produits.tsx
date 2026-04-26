@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -98,6 +98,7 @@ export default function Produits() {
   const [composantPickerOpen, setComposantPickerOpen] = useState(false);
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [showPrixPublic, setShowPrixPublic] = useState(false);
+  const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
 
   // Persist visible columns
   useEffect(() => {
@@ -291,7 +292,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setEditingStack([]); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -324,6 +325,27 @@ export default function Produits() {
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
     setDialogOpen(true);
+  }
+
+  function openComposant(compProd: import('@/lib/store').Produit) {
+    if (!editing) return;
+    // Sauvegarde immédiate avant navigation
+    const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
+    updateProduits(prev => prev.map(p => p.id === editing.id
+      ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined }
+      : p
+    ));
+    setEditingStack(prev => [...prev, editing]);
+    openEdit(compProd);
+  }
+
+  function goBack() {
+    const parent = editingStack[editingStack.length - 1];
+    if (!parent) return;
+    setEditingStack(prev => prev.slice(0, -1));
+    // Relit depuis le store (inclut les dernières modifications)
+    const fresh = produits.find(p => p.id === parent.id) || parent;
+    openEdit(fresh);
   }
 
   function updateFormPrix(updates: Partial<typeof form>) {
@@ -864,9 +886,31 @@ export default function Produits() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) setEditingStack([]); }}>
         <DialogContent className="w-full max-w-[98vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau produit'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <div className="flex items-center gap-2 min-w-0">
+              {editingStack.length > 0 && (
+                <button
+                  type="button"
+                  onClick={goBack}
+                  className="p-1.5 rounded-md hover:bg-muted shrink-0 text-muted-foreground hover:text-foreground"
+                  title="Retour au produit parent"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+              )}
+              <DialogTitle className="truncate flex items-center gap-1.5 min-w-0">
+                {editingStack.map((p, i) => (
+                  <span key={p.id} className="text-muted-foreground font-normal text-sm flex items-center gap-1.5 shrink-0">
+                    <span className="max-w-[120px] truncate">{p.reference}</span>
+                    <span>›</span>
+                  </span>
+                ))}
+                <span className="truncate">{editing ? `${editing.reference} — ${editing.description}` : 'Nouveau produit'}</span>
+              </DialogTitle>
+            </div>
+          </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
@@ -1054,7 +1098,17 @@ export default function Produits() {
                             className="text-sm"
                           />
                           {compProd && !isOpen && (
-                            <p className="text-xs text-primary mt-0.5 truncate">{compProd.reference} — {compProd.description}</p>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              <p className="text-xs text-primary truncate">{compProd.reference} — {compProd.description}</p>
+                              <button
+                                type="button"
+                                onClick={() => openComposant(compProd)}
+                                className="p-0.5 rounded hover:bg-primary/10 text-primary/50 hover:text-primary shrink-0 transition-colors"
+                                title={`Ouvrir la fiche de ${compProd.reference}`}
+                              >
+                                <ExternalLink className="w-3 h-3" />
+                              </button>
+                            </div>
                           )}
                           {isOpen && (
                             <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-popover border border-border rounded-md shadow-lg max-h-48 overflow-y-auto">
