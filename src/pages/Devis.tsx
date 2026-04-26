@@ -431,6 +431,12 @@ export default function Devis() {
           const tauxMargeD = totalHTD > 0 ? (margeD / totalHTD) * 100 : 0;
           const coeffD = totalAchatD > 0 ? Math.round(totalHTD / totalAchatD * 100) / 100 : null;
           const cfLies = commandesFournisseur.filter(cf => cf.devisId === d.id);
+          const devisContact = d.contactId && client
+            ? (client.contacts || []).find(ct => ct.id === d.contactId)
+            : null;
+          const contactLabel = devisContact
+            ? [devisContact.prenom, devisContact.nom].filter(Boolean).join(' ') + (devisContact.fonction ? ` · ${devisContact.fonction}` : '')
+            : null;
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -447,13 +453,14 @@ export default function Devis() {
                   <p className="text-sm text-muted-foreground">
                     {client ? (
                       <button
-                        onClick={() => navigate(`/clients?search=${encodeURIComponent(client.nom)}`)}
+                        onClick={() => navigate(`/clients?search=${encodeURIComponent(client.societe || client.nom)}`)}
                         className="text-primary hover:underline inline-flex items-center gap-1"
                       >
                         <User className="w-3 h-3" />
-                        {client.nom}{client.societe ? ` — ${client.societe}` : ''}
+                        {client.societe || client.nom}
                       </button>
                     ) : '—'}
+                    {contactLabel && <span className="text-muted-foreground"> · {contactLabel}</span>}
                     {' • '}{formatDate(d.dateCreation)}
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
