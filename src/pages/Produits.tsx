@@ -219,7 +219,7 @@ export default function Produits() {
         case 'reference':    if (!p.reference?.toLowerCase().includes(v)) return false; break;
         case 'description':  if (!p.description?.toLowerCase().includes(v)) return false; break;
         case 'categorie':    if (!p.categorie?.toLowerCase().includes(v)) return false; break;
-        case 'fournisseur': { const f = fournisseurs.find(f => f.id === p.fournisseurId); if (!((f?.societe || f?.nom || '').toLowerCase().includes(v))) return false; break; }
+        case 'fournisseur': { const pfsF = produitFournisseurs.filter(pf => pf.produitId === p.id); const names = pfsF.map(pf => fournisseurs.find(f => f.id === pf.fournisseurId)?.societe || '').join(' '); if (!names.toLowerCase().includes(v)) return false; break; }
         case 'prixAchat':    if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
         case 'coefficient':  if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
         case 'prixHT':       if (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v)) return false; break;
@@ -241,7 +241,7 @@ export default function Produits() {
         case 'reference':    av = a.reference || ''; bv = b.reference || ''; break;
         case 'description':  av = a.description || ''; bv = b.description || ''; break;
         case 'categorie':    av = a.categorie || ''; bv = b.categorie || ''; break;
-        case 'fournisseur': { const fa = fournisseurs.find(f => f.id === a.fournisseurId); const fb = fournisseurs.find(f => f.id === b.fournisseurId); av = fa?.societe || fa?.nom || ''; bv = fb?.societe || fb?.nom || ''; break; }
+        case 'fournisseur': { const pA = calculerFournisseurPrioritaire(a.id, 1, produitFournisseurs, fournisseurs); const pB = calculerFournisseurPrioritaire(b.id, 1, produitFournisseurs, fournisseurs); av = (pA ? fournisseurs.find(f => f.id === pA.fournisseurId)?.societe || '' : ''); bv = (pB ? fournisseurs.find(f => f.id === pB.fournisseurId)?.societe || '' : ''); break; }
         case 'prixAchat':    av = a.prixAchat; bv = b.prixAchat; break;
         case 'coefficient':  av = a.coefficient; bv = b.coefficient; break;
         case 'prixRevendeur':av = a.prixRevendeur; bv = b.prixRevendeur; break;
@@ -254,7 +254,7 @@ export default function Produits() {
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
-  }, [filtered, sortCol, sortDir, fournisseurs]);
+  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs]);
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -763,14 +763,14 @@ export default function Produits() {
                 const pfs = produitFournisseurs.filter(pf => pf.produitId === p.id);
                 const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
                 const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
-                const fourn = fournisseurs.find(f => f.id === p.fournisseurId);
                 const isCompose = !!(p.composants && p.composants.length > 0);
+                const prioFournObj = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId) : null;
                 const renderCell = (key: ColKey) => {
                   switch (key) {
                     case 'reference':    return <td className="px-3 py-3 font-mono text-xs">{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
                     case 'description':  return <td className="px-3 py-3 font-medium">{p.description}</td>;
                     case 'categorie':    return <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>;
-                    case 'fournisseur':  return <td className="px-3 py-3 text-muted-foreground">{fourn?.societe || fourn?.nom || '—'}</td>;
+                    case 'fournisseur':  return <td className="px-3 py-3 text-muted-foreground">{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
                     case 'prixAchat':    return <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>;
                     case 'coefficient':  return <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
                     case 'prixRevendeur':return <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixRevendeur)}<span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span></td>;
