@@ -555,31 +555,37 @@ export default function Devis() {
                 {(() => {
                   const selectedClient = clients.find(c => c.id === clientId);
                   if (!selectedClient) return null;
-                  const contacts = selectedClient.contacts || [];
-                  // Contact sélectionné (ou fallback legacy)
-                  const selectedContact = contacts.find(ct => ct.id === contactId);
+                  // Contacts : nouveau format contacts[] + fallback legacy nom/email/tel
+                  const storedContacts = selectedClient.contacts || [];
+                  const allContacts = storedContacts.length > 0 ? storedContacts : (
+                    (selectedClient.nom || selectedClient.email || selectedClient.telephone)
+                      ? [{ id: '__legacy__', nom: selectedClient.nom || '', prenom: '', email: selectedClient.email || '', telephone: selectedClient.telephone || '', telephoneMobile: selectedClient.telephoneMobile || '', fonction: '' }]
+                      : []
+                  );
+                  const selectedContact = allContacts.find(ct => ct.id === contactId) ?? (allContacts.length === 1 ? allContacts[0] : undefined);
+                  const effectiveContactId = selectedContact?.id || '';
                   const displayEmail = selectedContact?.email || selectedClient.email;
                   const displayTel = selectedContact?.telephone || selectedContact?.telephoneMobile || selectedClient.telephone;
                   return (
                     <div className="mt-2 bg-muted/30 rounded-lg border border-border p-3 text-xs space-y-2">
                       <div className="space-y-0.5">
                         <p className="font-semibold text-sm">{selectedClient.societe || selectedClient.nom}</p>
-                        <p className="text-muted-foreground">{selectedClient.adresse}</p>
-                        <p className="text-muted-foreground">{selectedClient.codePostal} {selectedClient.ville}</p>
+                        {selectedClient.adresse && <p className="text-muted-foreground">{selectedClient.adresse}</p>}
+                        {(selectedClient.codePostal || selectedClient.ville) && <p className="text-muted-foreground">{selectedClient.codePostal} {selectedClient.ville}</p>}
                       </div>
-                      {/* Sélecteur de contact */}
-                      {contacts.length > 0 && (
+                      {/* Sélecteur de contact — toujours visible si au moins 1 contact */}
+                      {allContacts.length > 0 && (
                         <div>
                           <label className="text-xs font-medium text-muted-foreground block mb-1">Contact</label>
                           <select
-                            value={contactId}
-                            onChange={e => setContactId(e.target.value)}
+                            value={effectiveContactId}
+                            onChange={e => setContactId(e.target.value === '__legacy__' ? '' : e.target.value)}
                             className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
                           >
-                            <option value="">— Aucun contact spécifique —</option>
-                            {contacts.map(ct => (
+                            {allContacts.length > 1 && <option value="">— Sélectionner un contact —</option>}
+                            {allContacts.map(ct => (
                               <option key={ct.id} value={ct.id}>
-                                {[ct.prenom, ct.nom].filter(Boolean).join(' ')}
+                                {[ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email || 'Contact principal'}
                                 {ct.fonction ? ` · ${ct.fonction}` : ''}
                               </option>
                             ))}
