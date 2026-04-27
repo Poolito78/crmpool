@@ -34,7 +34,7 @@ export default function Devis() {
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterClient, setFilterClient] = useState<string>('tous');
   const [filterContact, setFilterContact] = useState<string>('tous');
-  const [filterProduit, setFilterProduit] = useState<string>('tous');
+  const [filterProduit, setFilterProduit] = useState<string>('');
   const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
@@ -88,7 +88,15 @@ export default function Devis() {
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterContact !== 'tous' && d.contactId !== filterContact) return false;
-    if (filterProduit !== 'tous' && !d.lignes.some(l => l.produitId === filterProduit)) return false;
+    if (filterProduit.trim()) {
+      const fp = filterProduit.trim().toLowerCase();
+      const inLignes = d.lignes.some(l => {
+        if (l.description?.toLowerCase().includes(fp)) return true;
+        const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+        return p && (p.reference.toLowerCase().includes(fp) || p.description.toLowerCase().includes(fp));
+      });
+      if (!inLignes) return false;
+    }
     if (filterPeriode !== 'tous') {
       const now = new Date();
       const dateD = new Date(d.dateCreation);
@@ -119,10 +127,6 @@ export default function Devis() {
       return acc;
     }, []);
 
-  // Produits uniques présents dans les lignes de devis
-  const uniqueProduitsFiltres = [...new Set(devis.flatMap(d => d.lignes.map(l => l.produitId).filter(Boolean)))]
-    .map(id => produits.find(p => p.id === id))
-    .filter(Boolean) as typeof produits;
 
   function populateForm(d: DevisType) {
     setClientId(d.clientId);
@@ -434,20 +438,27 @@ export default function Devis() {
               ))}
             </select>
           )}
-          <select value={filterProduit} onChange={e => setFilterProduit(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-            <option value="tous">Tous les produits</option>
-            {uniqueProduitsFiltres.map(p => (
-              <option key={p.id} value={p.id}>{p.reference}{p.description ? ` — ${p.description}` : ''}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={filterProduit}
+              onChange={e => setFilterProduit(e.target.value)}
+              placeholder="Filtrer par produit..."
+              className="text-sm rounded-md border border-input bg-background pl-8 pr-3 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            {filterProduit && (
+              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
+            )}
+          </div>
           <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Toutes les périodes</option>
             <option value="mois">Ce mois</option>
             <option value="trimestre">Ce trimestre</option>
             <option value="annee">Cette année</option>
           </select>
-          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== 'tous' || filterProduit !== 'tous' || filterPeriode !== 'tous') && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact('tous'); setFilterProduit('tous'); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
             </Button>
           )}

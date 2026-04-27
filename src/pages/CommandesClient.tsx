@@ -18,6 +18,7 @@ export default function CommandesClient() {
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur } = useCRM();
   const [search, setSearch] = useState('');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
+  const [filterProduit, setFilterProduit] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -192,6 +193,15 @@ export default function CommandesClient() {
   const filtered = commandesClient
     .filter(c => {
       if (filterStatut !== 'tous' && c.statut !== filterStatut) return false;
+      if (filterProduit.trim()) {
+        const fp = filterProduit.trim().toLowerCase();
+        const inLignes = c.lignes.some(l => {
+          if (l.description?.toLowerCase().includes(fp)) return true;
+          const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+          return p && (p.reference.toLowerCase().includes(fp) || p.description.toLowerCase().includes(fp));
+        });
+        if (!inLignes) return false;
+      }
       if (!search) return true;
       const s = search.toLowerCase();
       const client = clients.find(cl => cl.id === c.clientId);
@@ -205,9 +215,24 @@ export default function CommandesClient() {
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="relative w-full sm:w-80">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+        <div className="flex flex-wrap gap-2 flex-1">
+          <div className="relative w-full sm:w-72">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          </div>
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={filterProduit}
+              onChange={e => setFilterProduit(e.target.value)}
+              placeholder="Filtrer par produit..."
+              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-2 w-52 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            {filterProduit && (
+              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
+            )}
+          </div>
         </div>
         <div className="flex gap-2 shrink-0">
           <Button onClick={openNew} size="sm"><Plus className="w-4 h-4 mr-1" />Nouvelle commande</Button>
