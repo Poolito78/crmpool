@@ -27,9 +27,10 @@ const COLUMNS = [
   { key: 'consommation', label: 'Conso. (kg/m²)',   align: 'right' as const },
   { key: 'tva',          label: 'TVA %',            align: 'right' as const },
   { key: 'stock',        label: 'Stock',            align: 'right' as const },
+  { key: 'qteVendue',   label: 'Qté vendue',       align: 'right' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
@@ -61,7 +62,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -70,7 +71,12 @@ export default function Produits() {
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
     try {
       const s = localStorage.getItem('produits_visible_cols');
-      if (s) return new Set(JSON.parse(s) as ColKey[]);
+      if (s) {
+        const saved = new Set(JSON.parse(s) as ColKey[]);
+        // Ajoute les nouvelles colonnes par défaut qui n'étaient pas encore sauvegardées
+        DEFAULT_VISIBLE_COLS.forEach(k => saved.add(k));
+        return saved;
+      }
     } catch {}
     return new Set(DEFAULT_VISIBLE_COLS);
   });
@@ -209,6 +215,17 @@ export default function Produits() {
     return safe;
   }, [produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Quantité totale commandée par produit (somme des lignes de toutes les commandes clients)
+  const qteVendueParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cc of commandesClient) {
+      for (const l of cc.lignes) {
+        if (l.produitId) map[l.produitId] = (map[l.produitId] || 0) + (l.quantite || 0);
+      }
+    }
+    return map;
+  }, [commandesClient]);
+
   const filtered = safeProduits.filter(p => {
     // Global search
     if (search && ![p.description, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
@@ -229,6 +246,7 @@ export default function Produits() {
         case 'consommation': if (!String(p.consommation || 0).includes(v)) return false; break;
         case 'tva':          if (!String(p.tva).includes(v)) return false; break;
         case 'stock':        if (!String(p.stock).includes(v)) return false; break;
+        case 'qteVendue':    if (!String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
       }
     }
     return true;
@@ -251,11 +269,12 @@ export default function Produits() {
         case 'consommation': av = a.consommation || 0; bv = b.consommation || 0; break;
         case 'tva':          av = a.tva; bv = b.tva; break;
         case 'stock':        av = a.stock; bv = b.stock; break;
+        case 'qteVendue':    av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
-  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs]);
+  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit]);
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -801,6 +820,7 @@ export default function Produits() {
                     case 'consommation': return <td className="px-3 py-3 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
                     case 'tva':          return <td className="px-3 py-3 text-right">{p.tva}%</td>;
                     case 'stock':        return <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
+                    case 'qteVendue':    return <td className="px-3 py-3 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     default:             return <td />;
                   }
                 };
