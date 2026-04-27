@@ -89,6 +89,7 @@ export default function Clients() {
   const [filterVille, setFilterVille] = useState('');
   const [filterDepartement, setFilterDepartement] = useState('');
   const [filterSociete, setFilterSociete] = useState('');
+  const [filterContact, setFilterContact] = useState('');
   const [filterRevendeur, setFilterRevendeur] = useState<'' | 'oui' | 'non'>('');
   const [filterHasAdresse, setFilterHasAdresse] = useState<'' | 'oui' | 'non'>('');
   const [showFilters, setShowFilters] = useState(false);
@@ -121,7 +122,7 @@ export default function Clients() {
   const departements = useMemo(() => Array.from(new Set(clients.map(c => c.codePostal?.substring(0, 2)).filter(Boolean))).sort(), [clients]);
   const societes = useMemo(() => Array.from(new Set(clients.map(c => c.societe).filter(Boolean))).sort() as string[], [clients]);
 
-  const activeFilterCount = (filterVille ? 1 : 0) + (filterDepartement ? 1 : 0) + (filterSociete ? 1 : 0) + (filterRevendeur ? 1 : 0) + (filterHasAdresse ? 1 : 0);
+  const activeFilterCount = (filterVille ? 1 : 0) + (filterDepartement ? 1 : 0) + (filterSociete ? 1 : 0) + (filterContact ? 1 : 0) + (filterRevendeur ? 1 : 0) + (filterHasAdresse ? 1 : 0);
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
@@ -134,6 +135,14 @@ export default function Clients() {
       if (filterVille && c.ville !== filterVille) return false;
       if (filterDepartement && !c.codePostal?.startsWith(filterDepartement)) return false;
       if (filterSociete && c.societe !== filterSociete) return false;
+      if (filterContact.trim()) {
+        const fc = filterContact.trim().toLowerCase();
+        const inContacts = (c.contacts || []).some(ct =>
+          [ct.nom, ct.prenom, ct.email, ct.telephone, ct.telephoneMobile, ct.fonction].some(v => v?.toLowerCase().includes(fc))
+        );
+        const inLegacy = [c.nom, c.email, c.telephone].some(v => v?.toLowerCase().includes(fc));
+        if (!inContacts && !inLegacy) return false;
+      }
       if (filterRevendeur === 'oui' && !c.estRevendeur) return false;
       if (filterRevendeur === 'non' && c.estRevendeur) return false;
       if (filterHasAdresse === 'oui' && (!c.adressesLivraison || c.adressesLivraison.length === 0)) return false;
@@ -418,6 +427,22 @@ export default function Clients() {
             </select>
           </div>
           <div className="flex items-center gap-2">
+            <Label className="text-xs text-muted-foreground whitespace-nowrap">Contact :</Label>
+            <div className="relative">
+              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={filterContact}
+                onChange={e => setFilterContact(e.target.value)}
+                placeholder="Nom, email, tél..."
+                className="text-sm rounded border border-input bg-background pl-6 pr-6 py-1.5 w-44 focus:outline-none focus:ring-1 focus:ring-ring"
+              />
+              {filterContact && (
+                <button onClick={() => setFilterContact('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
             <Label className="text-xs text-muted-foreground whitespace-nowrap">Revendeur :</Label>
             <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}>
               <option value="">Tous</option>
@@ -434,7 +459,7 @@ export default function Clients() {
             </select>
           </div>
           {activeFilterCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterDepartement(''); setFilterSociete(''); setFilterRevendeur(''); setFilterHasAdresse(''); }}>
+            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterDepartement(''); setFilterSociete(''); setFilterContact(''); setFilterRevendeur(''); setFilterHasAdresse(''); }}>
               Réinitialiser
             </Button>
           )}

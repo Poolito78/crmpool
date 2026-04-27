@@ -33,7 +33,7 @@ export default function Devis() {
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterClient, setFilterClient] = useState<string>('tous');
-  const [filterContact, setFilterContact] = useState<string>('tous');
+  const [filterContact, setFilterContact] = useState<string>('');
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -87,7 +87,15 @@ export default function Devis() {
     if (!matchSearch) return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
-    if (filterContact !== 'tous' && d.contactId !== filterContact) return false;
+    if (filterContact.trim()) {
+      const fc = filterContact.trim().toLowerCase();
+      const client = clients.find(c => c.id === d.clientId);
+      const ct = d.contactId ? (client?.contacts || []).find(c => c.id === d.contactId) : null;
+      const inContact = ct
+        ? [ct.nom, ct.prenom, ct.email, ct.telephone, ct.fonction].some(v => v?.toLowerCase().includes(fc))
+        : [client?.nom, client?.email].some(v => v?.toLowerCase().includes(fc));
+      if (!inContact) return false;
+    }
     if (filterProduit.trim()) {
       const fp = filterProduit.trim().toLowerCase();
       const inLignes = d.lignes.some(l => {
@@ -113,19 +121,6 @@ export default function Devis() {
 
   const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
 
-  // Contacts uniques présents dans les devis
-  const uniqueContacts = devis
-    .filter(d => d.contactId)
-    .reduce<{ id: string; label: string }[]>((acc, d) => {
-      if (acc.some(x => x.id === d.contactId)) return acc;
-      const client = clients.find(c => c.id === d.clientId);
-      const ct = (client?.contacts || []).find(c => c.id === d.contactId);
-      if (ct) {
-        const label = [ct.prenom, ct.nom].filter(Boolean).join(' ') + (ct.fonction ? ` · ${ct.fonction}` : '');
-        acc.push({ id: d.contactId!, label: `${client?.societe || client?.nom || ''} — ${label}` });
-      }
-      return acc;
-    }, []);
 
 
   function populateForm(d: DevisType) {
@@ -426,18 +421,23 @@ export default function Devis() {
             <option value="refusé">Refusé</option>
             <option value="expiré">Expiré</option>
           </select>
-          <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact('tous'); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+          <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact(''); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Tous les clients</option>
             {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
           </select>
-          {uniqueContacts.length > 0 && (
-            <select value={filterContact} onChange={e => setFilterContact(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-              <option value="tous">Tous les contacts</option>
-              {uniqueContacts.map(ct => (
-                <option key={ct.id} value={ct.id}>{ct.label}</option>
-              ))}
-            </select>
-          )}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={filterContact}
+              onChange={e => setFilterContact(e.target.value)}
+              placeholder="Filtrer par contact..."
+              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            {filterContact && (
+              <button onClick={() => setFilterContact('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
+            )}
+          </div>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -457,8 +457,8 @@ export default function Devis() {
             <option value="trimestre">Ce trimestre</option>
             <option value="annee">Cette année</option>
           </select>
-          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== '' || filterProduit !== '' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact(''); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
             </Button>
           )}
