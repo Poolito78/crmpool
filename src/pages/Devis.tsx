@@ -85,7 +85,7 @@ export default function Devis() {
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
-    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
     if (!matchSearch) return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
@@ -525,6 +525,11 @@ export default function Devis() {
                     {d.referenceAffaire && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
                         {d.referenceAffaire}
+                      </span>
+                    )}
+                    {d.systeme && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
+                        {d.systeme}
                       </span>
                     )}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
