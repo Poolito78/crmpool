@@ -443,7 +443,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
-                            <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKgComp != null ? formatMontant(prixKgComp) : ''})</td>
+                            <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
                           </>
                         );
@@ -462,7 +462,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{condKg ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
-                            <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKg != null ? formatMontant(prixKg) : ''})</td>
+                            <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
                           </>
                         );
@@ -486,7 +486,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <td className="py-1 px-1 text-right font-semibold text-primary">{unitesComp ?? ''}</td>
                           <td className="py-1 px-1 text-right">{condKgComp ?? ''}</td>
                           <td className="py-1 px-1 text-right text-foreground">{formatMontant(prixUnite)}</td>
-                          <td className="py-1 px-1 text-right">({prixKg != null ? formatMontant(prixKg) : ''})</td>
+                          <td className="py-1 px-1 text-right">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
                           <td className="py-1 px-1 text-right font-semibold text-foreground">{formatMontant(totalHTComp)}</td>
                         </tr>
                       ) : null
