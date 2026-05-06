@@ -76,7 +76,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
     try {
       const fileName = `Devis_${devis.numero}.pdf`;
-      const res = await savePdfFromElement(printAreaRef.current, fileName);
+      const res = await savePdfFromElement(printAreaRef.current, fileName, { devisNumero: devis.numero });
       window.open(res.blobUrl, '_blank');
       setTimeout(() => URL.revokeObjectURL(res.blobUrl), 60000);
       if (res.ok) {

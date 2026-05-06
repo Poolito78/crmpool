@@ -88,7 +88,10 @@ export async function writeFileToFolder(
 
 // ─── Génération PDF depuis un élément DOM ─────────────────────────────────────
 
-export async function generatePdfFromElement(element: HTMLElement): Promise<string> {
+export async function generatePdfFromElement(
+  element: HTMLElement,
+  opts?: { devisNumero?: string },
+): Promise<string> {
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
@@ -99,6 +102,8 @@ export async function generatePdfFromElement(element: HTMLElement): Promise<stri
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
   const imgH = (canvas.height * pw) / canvas.width;
+  const totalPages = Math.ceil(imgH / ph);
+
   let yOffset = 0, page = 0;
   while (yOffset < imgH) {
     if (page > 0) pdf.addPage();
@@ -109,6 +114,20 @@ export async function generatePdfFromElement(element: HTMLElement): Promise<stri
     tmp.width = canvas.width; tmp.height = srcH;
     tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
     pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
+
+    if (totalPages > 1) {
+      pdf.setFontSize(8);
+      pdf.setTextColor(120, 120, 120);
+
+      // Numéro de devis en haut à droite (pages suivantes uniquement)
+      if (page > 0 && opts?.devisNumero) {
+        pdf.text(opts.devisNumero, pw - 8, 8, { align: 'right' });
+      }
+
+      // Numérotation en bas au centre
+      pdf.text(`Page ${page + 1} / ${totalPages}`, pw / 2, ph - 5, { align: 'center' });
+    }
+
     yOffset += ph; page++;
   }
   return pdf.output('datauristring').split(',')[1];
@@ -119,8 +138,9 @@ export async function generatePdfFromElement(element: HTMLElement): Promise<stri
 export async function savePdfFromElement(
   element: HTMLElement,
   fileName: string,
+  opts?: { devisNumero?: string },
 ): Promise<{ ok: boolean; folderName?: string; blobUrl: string }> {
-  const base64 = await generatePdfFromElement(element);
+  const base64 = await generatePdfFromElement(element, opts);
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
   const blob = new Blob([bytes], { type: 'application/pdf' });
   const blobUrl = URL.createObjectURL(blob);
