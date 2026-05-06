@@ -89,23 +89,24 @@ export async function writeFileToFolder(
 // ─── Génération PDF depuis un élément DOM ─────────────────────────────────────
 
 export async function generatePdfFromElement(element: HTMLElement): Promise<string> {
-  // Forcer la largeur A4 (794px) pour une capture propre, quelle que soit la taille du dialog
-  const prevWidth = element.style.width;
-  const prevMaxWidth = element.style.maxWidth;
-  element.style.width = '794px';
-  element.style.maxWidth = '794px';
-  await new Promise(r => setTimeout(r, 60));
+  // Clone dans un conteneur offscreen fixé à 794px pour une capture A4 propre
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;width:794px;background:white;z-index:-1;';
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.width = '794px';
+  clone.style.maxWidth = '794px';
+  wrapper.appendChild(clone);
+  document.body.appendChild(wrapper);
+  await new Promise(r => setTimeout(r, 80));
 
-  const canvas = await html2canvas(element, {
+  const canvas = await html2canvas(clone, {
     scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
-    windowWidth: 794,
   });
 
-  element.style.width = prevWidth;
-  element.style.maxWidth = prevMaxWidth;
+  document.body.removeChild(wrapper);
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
