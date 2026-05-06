@@ -68,6 +68,7 @@ export default function Devis() {
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
   const [dateEnvoi, setDateEnvoi] = useState('');
   const [referenceAffaire, setReferenceAffaire] = useState('');
+  const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
@@ -148,6 +149,7 @@ export default function Devis() {
     setStatut(d.statut);
     setDateEnvoi(d.dateEnvoi || '');
     setReferenceAffaire(d.referenceAffaire || '');
+    setSysteme(d.systeme || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
@@ -167,6 +169,7 @@ export default function Devis() {
     setStatut('brouillon');
     setDateEnvoi('');
     setReferenceAffaire('');
+    setSysteme('');
     setNotes('');
     setConditions('Paiement à 30 jours à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
@@ -286,7 +289,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -297,7 +300,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -760,6 +763,10 @@ export default function Devis() {
               <Label>Référence affaire</Label>
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
             </div>
+            <div>
+              <Label>Système</Label>
+              <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
+            </div>
 
             {/* Mode de calcul */}
             <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
@@ -1075,7 +1082,7 @@ export default function Devis() {
                 id: editingId || 'preview',
                 numero: existing?.numero || 'APERÇU',
                 clientId, adresseLivraisonId: adresseLivraisonId || undefined,
-                dateCreation, dateValidite, statut, lignes, referenceAffaire, notes, conditions,
+                dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
                 fraisPortHT, fraisPortTVA, modeCalcul,
                 surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
               };

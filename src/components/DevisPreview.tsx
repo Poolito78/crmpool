@@ -240,6 +240,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
                   {devis.referenceAffaire && <div className="flex justify-between gap-2"><span className="text-muted-foreground whitespace-nowrap">Réf. affaire :</span><span className="font-medium text-right">{devis.referenceAffaire}</span></div>}
+                  {devis.systeme && <div className="flex justify-between gap-2"><span className="text-muted-foreground whitespace-nowrap">Système :</span><span className="font-medium text-right">{devis.systeme}</span></div>}
                   {(devis.surfaceGlobaleM2 || 0) > 0 && (
                     <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
                   )}

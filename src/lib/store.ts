@@ -184,6 +184,7 @@ export interface Devis {
   dateEnvoi?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
+  systeme?: string;
   notes?: string;
   conditions?: string;
   fraisPortHT?: number;
@@ -338,6 +339,7 @@ function dbToDevis(r: any): Devis {
     dateEnvoi: r.date_envoi?.split('T')[0] || undefined,
     lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
     referenceAffaire: r.reference_affaire || undefined,
+    systeme: r.systeme || undefined,
     notes: r.notes || undefined,
     conditions: r.conditions || undefined,
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
@@ -361,6 +363,7 @@ function devisToDb(d: Devis, userId: string) {
     date_envoi: d.dateEnvoi || null,
     lignes: d.lignes as any,
     reference_affaire: d.referenceAffaire || null,
+    systeme: d.systeme || null,
     notes: d.notes || null,
     conditions: d.conditions || null,
     frais_port_ht: d.fraisPortHT ?? 0,
