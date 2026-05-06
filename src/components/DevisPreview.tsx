@@ -34,9 +34,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   function getSurfaceLigne(ligneId: string): number {
     if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
-    if (surfaceGlobale > 0) return surfaceGlobale;
     const ligne = devis.lignes.find(l => l.id === ligneId);
-    return ligne?.surfaceM2 || 0;
+    if (ligne?.surfaceM2 && ligne.surfaceM2 > 0) return ligne.surfaceM2;
+    return surfaceGlobale;
   }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
@@ -321,30 +321,42 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           // ── Totaux ligne récapitulatif ──
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
+            const surfLigne = getSurfaceLigne(l.id);
             if (isComposite) {
-              if (conso > 0) sumConsoKgM2 += conso;
-              // Total KG conditionné = Math.ceil(conso estimée / poids) × poids (cohérent avec la ligne)
-              const poidsParentRecap = prod?.poids || 0;
-              const totalKgConsoRecap = conso > 0 && surfaceGlobale > 0 ? surfaceGlobale * conso : 0;
-              if (poidsParentRecap > 0 && totalKgConsoRecap > 0) {
-                const unitesRecap = Math.ceil(totalKgConsoRecap / poidsParentRecap);
-                sumCondKg += Math.round(unitesRecap * poidsParentRecap * 10) / 10;
+              if (conso > 0) {
+                sumConsoKgM2 += conso;
+                const poidsParentRecap = prod?.poids || 0;
+                const surf = surfaceGlobale > 0 ? surfaceGlobale : surfLigne;
+                const totalKgRecap = surf > 0 ? surf * conso : 0;
+                if (poidsParentRecap > 0 && totalKgRecap > 0) {
+                  const unitesRecap = Math.ceil(totalKgRecap / poidsParentRecap);
+                  sumCondKg += Math.round(unitesRecap * poidsParentRecap * 10) / 10;
+                  sumTotalKg += Math.round(totalKgRecap * 100) / 100;
+                }
               }
               for (const { totalKgComp, prixKg } of compDatas) {
-                // coût conso = total KG estimé × prix/kg
                 if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
               }
             } else if (conso > 0) {
               sumConsoKgM2 += conso;
               const poidsP = prod?.poids || null;
-              const prixKgP = poidsP && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - l.remise / 100) / poidsP : null;
-              const totalKgP = surfaceGlobale > 0 ? surfaceGlobale * conso : null;
-              if (totalKgP != null && prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
+              const surf = surfaceGlobale > 0 ? surfaceGlobale : surfLigne;
+              const totalKgP = surf > 0 ? surf * conso : null;
+              if (totalKgP != null) {
+                sumTotalKg += Math.round(totalKgP * 100) / 100;
+                if (poidsP) {
+                  sumCondKg += Math.ceil(totalKgP / poidsP) * poidsP;
+                }
+                const prixKgP = poidsP && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - l.remise / 100) / poidsP : null;
+                if (prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
+              }
             }
           }
-          sumTotalKg = surfaceGlobale > 0 ? Math.round(surfaceGlobale * sumConsoKgM2 * 100) / 100 : 0;
-          const coutChantierM2 = surfaceGlobale > 0 && sumCoutConsoHT > 0
-            ? Math.round(sumCoutConsoHT / surfaceGlobale * 100) / 100 : null;
+          sumTotalKg = Math.round(sumTotalKg * 100) / 100;
+          sumCondKg = Math.round(sumCondKg * 10) / 10;
+          const refSurface = surfaceGlobale > 0 ? surfaceGlobale : null;
+          const coutChantierM2 = refSurface && sumCoutConsoHT > 0
+            ? Math.round(sumCoutConsoHT / refSurface * 100) / 100 : null;
 
           return (
             <table className="w-full mb-6 text-xs border-collapse">
@@ -547,11 +559,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         {/* Totals */}
         <div className="flex justify-between items-end mb-5">
           <div className="text-sm text-muted-foreground space-y-1">
-            {poidsTotal > 0 && (
-              <div>
-                <span className="font-semibold text-foreground">Poids total :</span> {poidsTotal % 1 === 0 ? poidsTotal : poidsTotal.toFixed(2)} kg
-              </div>
-            )}
             {showConso && (() => {
               // Coût/m² = somme des (conso_i × prix_net_i / poids_i) — indépendant de la surface
               let coutM2 = 0;
