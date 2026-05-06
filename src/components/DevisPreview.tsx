@@ -326,8 +326,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               if (conso > 0) {
                 sumConsoKgM2 += conso;
                 const poidsParentRecap = prod?.poids || 0;
-                const surf = surfaceGlobale > 0 ? surfaceGlobale : surfLigne;
-                const totalKgRecap = surf > 0 ? surf * conso : 0;
+                const totalKgRecap = surfLigne > 0 ? surfLigne * conso : 0;
                 if (poidsParentRecap > 0 && totalKgRecap > 0) {
                   const unitesRecap = Math.ceil(totalKgRecap / poidsParentRecap);
                   sumCondKg += Math.round(unitesRecap * poidsParentRecap * 10) / 10;
@@ -340,8 +339,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             } else if (conso > 0) {
               sumConsoKgM2 += conso;
               const poidsP = prod?.poids || null;
-              const surf = surfaceGlobale > 0 ? surfaceGlobale : surfLigne;
-              const totalKgP = surf > 0 ? surf * conso : null;
+              const totalKgP = surfLigne > 0 ? surfLigne * conso : null;
               if (totalKgP != null) {
                 sumTotalKg += Math.round(totalKgP * 100) / 100;
                 if (poidsP) {
