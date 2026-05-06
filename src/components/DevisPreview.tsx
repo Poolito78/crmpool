@@ -77,10 +77,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     try {
       const fileName = `Devis_${devis.numero}.pdf`;
       const res = await savePdfFromElement(printAreaRef.current, fileName);
+      window.open(res.blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(res.blobUrl), 60000);
       if (res.ok) {
         toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
       } else {
-        toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
+        toast.success('PDF généré', { description: fileName, duration: 4000 });
       }
     } catch (err) {
       console.error(err);

@@ -119,17 +119,17 @@ export async function generatePdfFromElement(element: HTMLElement): Promise<stri
 export async function savePdfFromElement(
   element: HTMLElement,
   fileName: string,
-): Promise<{ ok: boolean; folderName?: string }> {
+): Promise<{ ok: boolean; folderName?: string; blobUrl: string }> {
   const base64 = await generatePdfFromElement(element);
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  const blob = new Blob([bytes], { type: 'application/pdf' });
+  const blobUrl = URL.createObjectURL(blob);
 
   const res = await writeFileToFolder(fileName, bytes);
-  if (res.ok) return res;
+  if (res.ok) return { ...res, blobUrl };
 
   // Fallback : téléchargement classique
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
   const a = document.createElement('a');
-  a.href = url; a.download = fileName; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-  return { ok: false };
+  a.href = blobUrl; a.download = fileName; a.click();
+  return { ok: false, blobUrl };
 }
