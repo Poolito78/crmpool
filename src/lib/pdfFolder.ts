@@ -103,37 +103,42 @@ export async function generatePdfFromElement(
   const ph = pdf.internal.pageSize.getHeight();
   const imgH = (canvas.height * pw) / canvas.width;
 
-  // Zone réservée en bas pour le pied de page (hors de la tranche de contenu)
+  // Zone réservée en bas pour le pied de page
   const footerH = 10;
   const contentH = ph - footerH;
-  const totalPages = Math.ceil(imgH / contentH);
 
-  let yOffset = 0, page = 0;
-  while (yOffset < imgH) {
-    if (page > 0) pdf.addPage();
-    const srcY = (yOffset / imgH) * canvas.height;
-    const availH = Math.min(contentH, imgH - yOffset);
-    const srcH = (availH / imgH) * canvas.height;
-    const tmp = document.createElement('canvas');
-    tmp.width = canvas.width; tmp.height = Math.round(srcH);
-    tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-    pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, availH);
+  // Si le dépassement est inférieur à 40 mm, on réduit pour tenir sur une page
+  const overflow = imgH - contentH;
+  const forceSinglePage = overflow > 0 && overflow < 40;
 
-    // Pied de page dans la zone réservée (espace blanc sous le contenu)
-    pdf.setFontSize(8);
-    pdf.setTextColor(150, 150, 150);
+  if (forceSinglePage) {
+    // Réduction proportionnelle : image centrée, hauteur = contentH
+    const scale = contentH / imgH;
+    const scaledW = pw * scale;
+    const x = (pw - scaledW) / 2;
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', x, 0, scaledW, contentH);
+  } else {
+    const totalPages = Math.ceil(imgH / contentH);
+    let yOffset = 0, page = 0;
+    while (yOffset < imgH) {
+      if (page > 0) pdf.addPage();
+      const srcY = (yOffset / imgH) * canvas.height;
+      const availH = Math.min(contentH, imgH - yOffset);
+      const srcH = (availH / imgH) * canvas.height;
+      const tmp = document.createElement('canvas');
+      tmp.width = canvas.width; tmp.height = Math.round(srcH);
+      tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
+      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, availH);
 
-    // Numéro de page centré
-    if (totalPages > 1) {
+      pdf.setFontSize(8);
+      pdf.setTextColor(150, 150, 150);
       pdf.text(`Page ${page + 1} / ${totalPages}`, pw / 2, ph - 4, { align: 'center' });
-    }
+      if (page > 0 && opts?.devisNumero) {
+        pdf.text(opts.devisNumero, pw - 8, ph - 4, { align: 'right' });
+      }
 
-    // Numéro de devis à droite (toutes les pages sauf la 1re qui l'affiche déjà)
-    if (page > 0 && opts?.devisNumero) {
-      pdf.text(opts.devisNumero, pw - 8, ph - 4, { align: 'right' });
+      yOffset += contentH; page++;
     }
-
-    yOffset += contentH; page++;
   }
   return pdf.output('datauristring').split(',')[1];
 }
