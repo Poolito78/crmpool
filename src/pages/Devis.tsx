@@ -873,13 +873,27 @@ export default function Devis() {
                         })()}
                       </div>
                     )}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                        <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
                        <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
+                       <div>
+                         <Label className="text-xs">Prix HT</Label>
+                         <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
+                       </div>
                        <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
                        <div>
                          <Label className="text-xs">Prix remisé</Label>
-                         <Input value={formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))} readOnly className="h-8 text-sm bg-muted/50" />
+                         <Input
+                           type="number" step="0.01"
+                           value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''}
+                           onChange={e => {
+                             const net = parseFloat(e.target.value) || 0;
+                             const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net;
+                             updateLigne(l.id, 'prixUnitaireHT', ht);
+                           }}
+                           className="h-8 text-sm"
+                           placeholder="0,00"
+                         />
                        </div>
                     </div>
                     {(() => {
