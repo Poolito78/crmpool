@@ -89,12 +89,23 @@ export async function writeFileToFolder(
 // ─── Génération PDF depuis un élément DOM ─────────────────────────────────────
 
 export async function generatePdfFromElement(element: HTMLElement): Promise<string> {
+  // Forcer la largeur A4 (794px) pour une capture propre, quelle que soit la taille du dialog
+  const prevWidth = element.style.width;
+  const prevMaxWidth = element.style.maxWidth;
+  element.style.width = '794px';
+  element.style.maxWidth = '794px';
+  await new Promise(r => setTimeout(r, 60));
+
   const canvas = await html2canvas(element, {
     scale: 2,
     useCORS: true,
     logging: false,
     backgroundColor: '#ffffff',
+    windowWidth: 794,
   });
+
+  element.style.width = prevWidth;
+  element.style.maxWidth = prevMaxWidth;
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
