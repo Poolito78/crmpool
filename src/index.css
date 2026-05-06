@@ -109,3 +109,22 @@
     @apply bg-card rounded-xl border border-border/50 p-5 shadow-sm transition-all duration-200 hover:shadow-md hover:-translate-y-0.5;
   }
 }
+
+@media print {
+  body > * { display: none !important; }
+  #devis-print,
+  #devis-print * { display: revert !important; }
+  #devis-print {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    padding: 10mm !important;
+    margin: 0 !important;
+    background: white !important;
+    color: black !important;
+    font-size: 10pt !important;
+    box-shadow: none !important;
+  }
+  @page { margin: 10mm; size: A4 portrait; }
+}
