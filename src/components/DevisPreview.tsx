@@ -391,10 +391,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {allLines.map(({ l, prod, conso, t, compDatas, isComposite }) => (
                   <Fragment key={l.id}>
                     {/* Ligne produit principal */}
-                    <tr className="border-b border-border/60">
+                    <tr className={l.note ? '' : 'border-b border-border/60'}>
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        {l.note && <p className="text-xs text-muted-foreground font-normal mt-0.5 italic">{l.note}</p>}
                         {(hideControls || pdfMode) ? (
                           <span className="ml-2 text-xs text-muted-foreground">
                             {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
@@ -477,6 +476,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         </tr>
                       ) : null
                     )}
+                    {/* Note de ligne — colspan toute la table */}
+                    {l.note && (
+                      <tr className="border-b border-border/60">
+                        <td colSpan={9} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
+                      </tr>
+                    )}
                   </Fragment>
                 ))}
               </tbody>
@@ -508,7 +513,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <td className="py-2">
                         {l.description}
                         {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
-                        {l.note && <p className="text-xs text-muted-foreground mt-0.5 italic">{l.note}</p>}
                       </td>
                       <td className="py-2 text-right">{l.quantite || '—'}</td>
                       <td className="py-2 text-center">{l.unite || '—'}</td>
@@ -529,6 +533,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         </tr>
                       );
                     })}
+                    {/* Note de ligne — colspan toute la table */}
+                    {l.note && (
+                      <tr className="border-b border-border/60">
+                        <td colSpan={showRemise ? 7 : 5} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
+                      </tr>
+                    )}
                   </Fragment>
                 );
               })}
