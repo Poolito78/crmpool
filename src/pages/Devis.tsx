@@ -44,7 +44,7 @@ export default function Devis() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [previewOptions, setPreviewOptions] = useState({ showConso: false, showRemise: false, showComposants: false });
+  const [previewOptions, setPreviewOptions] = useState({ showConso: false, showRemise: false, showComposants: false, showKgRecap: true });
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
@@ -1078,7 +1078,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-[98vw] md:max-w-[960px] max-h-[95vh] overflow-y-auto p-0 bg-muted/30">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} />
           </DialogContent>
         </Dialog>
       )}

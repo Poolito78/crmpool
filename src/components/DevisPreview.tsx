@@ -15,14 +15,16 @@ interface Props {
   initialShowConso?: boolean;
   initialShowRemise?: boolean;
   initialShowComposants?: boolean;
-  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean }) => void;
+  initialShowKgRecap?: boolean;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean }) => void;
   onPrint?: () => void;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, onOptionsChange, onPrint }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, onOptionsChange, onPrint }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
+  const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -102,28 +104,34 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants }); }} className="rounded" />
+              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap }); }} className="rounded" />
               m²/conso
             </label>
             {showConso && (
-              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                Surface :
-                <input
-                  type="number" min={0} step={1}
-                  value={surfaceGlobale || ''}
-                  onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
-                  placeholder="m²"
-                  className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
-                />
-                m²
-              </label>
+              <>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  Surface :
+                  <input
+                    type="number" min={0} step={1}
+                    value={surfaceGlobale || ''}
+                    onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
+                    placeholder="m²"
+                    className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
+                  />
+                  m²
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked }); }} className="rounded" />
+                  Récap. KG
+                </label>
+              </>
             )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants }); }} className="rounded" />
+              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap }); }} className="rounded" />
               Remise
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked }); }} className="rounded" />
+              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap }); }} className="rounded" />
               Composants
             </label>
           </div>
@@ -366,6 +374,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               </thead>
               <tbody>
                 {/* Ligne récapitulatif surface + totaux */}
+                {showKgRecap && (
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td />
                   <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(3) : '—'}</td>
@@ -376,6 +385,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {coutChantierM2 != null ? `Coût chantier : ${coutChantierM2.toFixed(2)} €/m²` : ''}
                   </td>
                 </tr>
+                )}
 
                 {/* Lignes produits */}
                 {allLines.map(({ l, prod, conso, t, compDatas, isComposite }) => (
