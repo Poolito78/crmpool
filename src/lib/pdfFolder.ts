@@ -107,9 +107,9 @@ export async function generatePdfFromElement(
   const footerH = 10;
   const contentH = ph - footerH;
 
-  // Si le dépassement est inférieur à 40 mm, on réduit pour tenir sur une page
+  // Si le dépassement est inférieur à 100 mm, on réduit pour tenir sur une page
   const overflow = imgH - contentH;
-  const forceSinglePage = overflow > 0 && overflow < 40;
+  const forceSinglePage = overflow > 0 && overflow < 100;
 
   if (forceSinglePage) {
     // Réduction proportionnelle : image centrée, hauteur = contentH
