@@ -557,39 +557,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         {/* Totals */}
         <div className="flex justify-between items-end mb-5">
           <div className="text-sm text-muted-foreground space-y-1">
-            {showConso && (() => {
-              // Coût/m² = somme des (conso_i × prix_net_i / poids_i) — indépendant de la surface
-              let coutM2 = 0;
-              for (const l of lignesEffectives) {
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                const conso = l.consommation || prod?.consommation || 0;
-                if (conso <= 0) continue;
-                const isComposite = !!(prod?.composants?.length);
-                if (isComposite) {
-                  const poidsParent = prod!.poids || 0;
-                  for (const comp of prod!.composants!) {
-                    const compProd = produits.find(p => p.id === comp.produitId);
-                    if (!compProd?.poids) continue;
-                    const consoComp = poidsParent > 0
-                      ? comp.quantite * compProd.poids / poidsParent * conso
-                      : comp.quantite;
-                    const prixKg = (compProd.prixRevendeur || compProd.prixHT || 0) / compProd.poids;
-                    coutM2 += consoComp * prixKg;
-                  }
-                } else {
-                  const poids = prod?.poids || null;
-                  const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
-                  if (poids) coutM2 += conso * prixNet / poids;
-                }
-              }
-              coutM2 = Math.round(coutM2 * 100) / 100;
-              return coutM2 > 0 ? (
-                <div>
-                  <span className="font-semibold text-foreground">Coût chantier :</span>
-                  <span className="font-semibold text-[#CC0000] ml-1">{coutM2.toFixed(2)} €/m²</span>
-                </div>
-              ) : null;
-            })()}
           </div>
           <div className="w-64 space-y-1 ml-auto">
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
