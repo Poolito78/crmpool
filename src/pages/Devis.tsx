@@ -860,17 +860,18 @@ export default function Devis() {
                         </div>
                         {(() => {
                           const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                          const consoValue = l.consommation || p?.consommation || 0;
+                          const consoValue = l.consommation ?? p?.consommation ?? '';
                           return (
                             <>
                               <div>
                                 <Label className="text-xs">Conso. (kg/m²)</Label>
-                                <Input type="number" step="0.01" value={consoValue || ''} onChange={e => {
-                                  const conso = parseFloat(e.target.value) || 0;
+                                <Input type="number" step="0.01" value={consoValue} onChange={e => {
+                                  const raw = e.target.value;
+                                  const conso = raw === '' ? undefined : parseFloat(raw);
                                   const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = p && p.poids && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso || undefined, quantite } : li));
-                                }} className="h-8 text-sm" placeholder={p?.consommation ? String(p.consommation) : '—'} />
+                                  const quantite = p && p.poids && conso != null && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
+                                }} className="h-8 text-sm" placeholder={p?.consommation != null ? String(p.consommation) : ''} />
                               </div>
                               <div>
                                 <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
