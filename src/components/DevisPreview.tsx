@@ -402,9 +402,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? '—'}</td>
-                            <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
+                            <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : '—'}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKgComp != null ? formatMontant(prixKgComp) : '—'})</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{formatMontant(t.totalHT)}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : '—'}</td>
                           </>
                         );
                       })() : (() => {
@@ -421,9 +421,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{poidsC ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? '—'}</td>
                             <td className="py-1.5 px-1 text-right">{condKg ?? '—'}</td>
-                            <td className="py-1.5 px-1 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
+                            <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : '—'}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">({prixKg != null ? formatMontant(prixKg) : '—'})</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{formatMontant(t.totalHT)}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : '—'}</td>
                           </>
                         );
                       })()}
@@ -471,10 +471,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               </tr>
             </thead>
             <tbody>
-              {lignesEffectives.map(l => {
+              {lignesEffectives.filter(l => l.description || l.prixUnitaireHT > 0).map(l => {
                 const t = calculerTotalLigne(l);
                 const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                 const composants = prod?.composants;
+                const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
                 return (
                   <Fragment key={l.id}>
                     <tr className="border-b border-border">
@@ -482,12 +483,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {l.description}
                         {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
                       </td>
-                      <td className="py-2 text-right">{l.quantite}</td>
+                      <td className="py-2 text-right">{l.quantite || '—'}</td>
                       <td className="py-2 text-center">{l.unite || '—'}</td>
-                      {showRemise && <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT)}</td>}
+                      {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : '—'}</td>}
                       {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : '—'}</td>}
-                      <td className="py-2 text-right">{formatMontant(l.prixUnitaireHT * (1 - l.remise / 100))}</td>
-                      <td className="py-2 text-right font-medium">{formatMontant(t.totalHT)}</td>
+                      <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : '—'}</td>
+                      <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : '—'}</td>
                     </tr>
                     {showComposants && composants && composants.length > 0 && composants.map(comp => {
                       const compProd = produits.find(p => p.id === comp.produitId);
