@@ -107,6 +107,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants }); }} className="rounded" />
               m²/conso
             </label>
+            {showConso && (
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                Surface :
+                <input
+                  type="number" min={0} step={1}
+                  value={surfaceGlobale || ''}
+                  onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
+                  placeholder="m²"
+                  className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
+                />
+                m²
+              </label>
+            )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants }); }} className="rounded" />
               Remise
@@ -215,7 +228,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
                   {devis.referenceAffaire && <div className="flex justify-between"><span className="text-muted-foreground">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>}
-                  {devis.surfaceGlobaleM2 && devis.surfaceGlobaleM2 > 0 && (
+                  {(devis.surfaceGlobaleM2 || 0) > 0 && (
                     <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
                   )}
                 </div>
