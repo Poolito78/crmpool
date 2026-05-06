@@ -71,11 +71,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   async function handlePrint() {
     if (!printAreaRef.current) return;
     setPrinting(true);
-
-    // 1. Passer en mode PDF (remplace les inputs par du texte brut)
     setPdfMode(true);
-
-    // 2. Attendre que React re-rende sans les inputs
     await new Promise(resolve => setTimeout(resolve, 80));
 
     try {
@@ -86,15 +82,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       } else {
         toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
       }
-      if (onPrint) onPrint();
     } catch (err) {
       console.error(err);
       toast.error('Erreur lors de la génération du PDF');
     } finally {
-      // 3. Restaurer l'affichage normal
       setPdfMode(false);
       setPrinting(false);
     }
+
+    // Déclenche la fenêtre impression dans tous les cas (succès ou erreur PDF)
+    if (onPrint) onPrint();
   }
 
   return (
