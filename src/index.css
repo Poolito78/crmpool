@@ -113,8 +113,7 @@
 @media print {
   @page { margin: 10mm; size: A4 portrait; }
   body { visibility: hidden; }
-  /* Libère les conteneurs qui pourraient rogner le contenu */
-  body * { overflow: visible !important; max-height: none !important; }
-  #devis-print { visibility: visible; position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; }
-  #devis-print * { visibility: visible; }
+  /* Le portail est injecté directement dans <body> avant impression */
+  #devis-print-portal { visibility: visible; position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; }
+  #devis-print-portal * { visibility: visible; }
 }

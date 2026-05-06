@@ -90,7 +90,18 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       setPrinting(false);
     }
 
-    // Déclenche la fenêtre impression dans tous les cas (succès ou erreur PDF)
+    // Portail d'impression : clone au niveau du <body> pour contourner overflow:hidden
+    // et le transform:translate du dialog Radix UI
+    if (printAreaRef.current) {
+      const portal = document.createElement('div');
+      portal.id = 'devis-print-portal';
+      portal.appendChild(printAreaRef.current.cloneNode(true));
+      document.body.appendChild(portal);
+      window.addEventListener('afterprint', () => {
+        if (portal.parentNode) portal.parentNode.removeChild(portal);
+      }, { once: true });
+    }
+
     if (onPrint) onPrint();
   }
 
