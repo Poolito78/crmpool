@@ -31,7 +31,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
 
   function getSurfaceLigne(ligneId: string): number {
-    return surfacesParLigne[ligneId] ?? surfaceGlobale;
+    if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
+    if (surfaceGlobale > 0) return surfaceGlobale;
+    const ligne = devis.lignes.find(l => l.id === ligneId);
+    return ligne?.surfaceM2 || 0;
   }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
@@ -409,7 +412,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         );
                       })() : (() => {
                         // Produit simple avec conso
-                        const kg = conso > 0 && surfaceGlobale > 0 ? Math.round(surfaceGlobale * conso * 1000) / 1000 : null;
+                        const surfaceLigne = getSurfaceLigne(l.id);
+                        const kg = conso > 0 && surfaceLigne > 0 ? Math.round(surfaceLigne * conso * 1000) / 1000 : null;
                         const poidsC = prod?.poids || null;
                         const unites = kg != null && poidsC ? Math.ceil(kg / poidsC) : null;
                         const condKg = unites != null && poidsC ? unites * poidsC : null;
