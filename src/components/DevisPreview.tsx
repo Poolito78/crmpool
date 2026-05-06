@@ -43,7 +43,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
-    setSurfacesParLigne({}); // réinitialise les overrides → toutes les lignes utilisent val
+    // Ne pas réinitialiser surfacesParLigne : les lignes avec surface individuelle gardent leur valeur
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
