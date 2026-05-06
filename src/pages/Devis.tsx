@@ -835,6 +835,10 @@ export default function Devis() {
                         <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                       </div>
                     </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
+                      <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
+                    </div>
                     {modeCalcul === 'surface' && (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
                         <div>

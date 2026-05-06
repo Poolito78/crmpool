@@ -169,6 +169,7 @@ export interface LigneDevis {
   remise: number;
   surfaceM2?: number;
   consommation?: number;
+  note?: string;
 }
 
 export interface Devis {
