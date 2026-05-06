@@ -1,8 +1,9 @@
 import { useState, useRef, Fragment } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer, Pencil } from 'lucide-react';
+import { Printer, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import logoIsofloor from '@/assets/logo-isofloor.png';
+import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 
 interface Props {
@@ -23,6 +24,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [printing, setPrinting] = useState(false);
+  const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
@@ -66,23 +68,27 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     return sum + (prod?.poids || 0) * l.quantite;
   }, 0);
 
-  function handlePrint() {
+  async function handlePrint() {
     if (!printAreaRef.current) return;
     setPrinting(true);
+    setPdfMode(true);
+    await new Promise(resolve => setTimeout(resolve, 80));
 
-    // Portail d'impression : clone au niveau du <body> pour contourner overflow:hidden
-    // et le transform:translate du dialog Radix UI
-    const portal = document.createElement('div');
-    portal.id = 'devis-print-portal';
-    const clone = printAreaRef.current.cloneNode(true) as HTMLElement;
-    // Supprimer les inputs de saisie (surface m²) du clone imprimé
-    clone.querySelectorAll('input').forEach(el => el.closest('span')?.remove());
-    portal.appendChild(clone);
-    document.body.appendChild(portal);
-    window.addEventListener('afterprint', () => {
-      if (portal.parentNode) portal.parentNode.removeChild(portal);
+    try {
+      const fileName = `Devis_${devis.numero}.pdf`;
+      const res = await savePdfFromElement(printAreaRef.current, fileName);
+      if (res.ok) {
+        toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
+      } else {
+        toast.success('PDF téléchargé', { description: fileName, duration: 6000 });
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Erreur lors de la génération du PDF');
+    } finally {
+      setPdfMode(false);
       setPrinting(false);
-    }, { once: true });
+    }
 
     if (onPrint) onPrint();
   }
@@ -376,7 +382,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        {hideControls ? (
+                        {(hideControls || pdfMode) ? (
                           <span className="ml-2 text-xs text-muted-foreground">
                             {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
                           </span>
