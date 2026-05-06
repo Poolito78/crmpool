@@ -552,8 +552,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <span className="font-semibold text-foreground">Poids total :</span> {poidsTotal % 1 === 0 ? poidsTotal : poidsTotal.toFixed(2)} kg
               </div>
             )}
-            {showConso && surfaceGlobale > 0 && (() => {
-              let sumCout = 0;
+            {showConso && (() => {
+              // Coût/m² = somme des (conso_i × prix_net_i / poids_i) — indépendant de la surface
+              let coutM2 = 0;
               for (const l of lignesEffectives) {
                 const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                 const conso = l.consommation || prod?.consommation || 0;
@@ -568,19 +569,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       ? comp.quantite * compProd.poids / poidsParent * conso
                       : comp.quantite;
                     const prixKg = (compProd.prixRevendeur || compProd.prixHT || 0) / compProd.poids;
-                    sumCout += consoComp * prixKg;
+                    coutM2 += consoComp * prixKg;
                   }
                 } else {
                   const poids = prod?.poids || null;
                   const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
-                  if (poids) sumCout += conso * prixNet / poids;
+                  if (poids) coutM2 += conso * prixNet / poids;
                 }
               }
-              const val = sumCout > 0 ? Math.round(sumCout * 100) / 100 : null;
-              return val ? (
+              coutM2 = Math.round(coutM2 * 100) / 100;
+              return coutM2 > 0 ? (
                 <div>
                   <span className="font-semibold text-foreground">Coût chantier :</span>
-                  <span className="font-semibold text-[#CC0000] ml-1">{val.toFixed(2)} €/m²</span>
+                  <span className="font-semibold text-[#CC0000] ml-1">{coutM2.toFixed(2)} €/m²</span>
                 </div>
               ) : null;
             })()}
