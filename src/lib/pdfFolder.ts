@@ -112,11 +112,8 @@ export async function generatePdfFromElement(
   const forceSinglePage = overflow > 0 && overflow < 100;
 
   if (forceSinglePage) {
-    // Réduction proportionnelle : image centrée, hauteur = contentH
-    const scale = contentH / imgH;
-    const scaledW = pw * scale;
-    const x = (pw - scaledW) / 2;
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', x, 0, scaledW, contentH);
+    // Pleine largeur, légère compression verticale pour tenir sur une page
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH);
   } else {
     const totalPages = Math.ceil(imgH / contentH);
     let yOffset = 0, page = 0;
