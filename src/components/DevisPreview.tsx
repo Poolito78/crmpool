@@ -148,9 +148,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       {/* Devis document — effet page A4 */}
       <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
            style={{ width: '100%', maxWidth: '794px' }}>
-      <div className="px-10 py-10 text-sm" id="devis-print" ref={printAreaRef}>
+      <div className="px-10 py-7 text-sm" id="devis-print" ref={printAreaRef}>
         {/* Header */}
-        <div className="flex justify-between items-start mb-8">
+        <div className="flex justify-between items-start mb-5">
           <div>
             <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
             <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
@@ -165,7 +165,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         </div>
 
         {/* Info grid */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-2 gap-5 mb-4">
           <div className="bg-muted/30 rounded-lg p-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
             <p className="font-semibold">{client?.nom || '—'}</p>
@@ -218,9 +218,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             return devis.dateValidite;
           })();
           return (
-            <div className="grid grid-cols-2 gap-8 mb-8">
+            <div className="grid grid-cols-2 gap-5 mb-5">
               <div></div>
-              <div className="bg-muted/30 rounded-lg p-4">
+              <div className="bg-muted/30 rounded-lg p-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Informations</p>
                 <div className="space-y-1">
                   <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
@@ -236,7 +236,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         })()}
 
         {devis.notes && (
-          <div className="mb-6">
+          <div className="mb-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Objet</p>
             <p>{devis.notes}</p>
           </div>
@@ -525,7 +525,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         )}
 
         {/* Totals */}
-        <div className="flex justify-between items-end mb-8">
+        <div className="flex justify-between items-end mb-5">
           {poidsTotal > 0 && (
             <div className="text-sm text-muted-foreground">
               <span className="font-semibold text-foreground">Poids total :</span> {poidsTotal % 1 === 0 ? poidsTotal : poidsTotal.toFixed(2)} kg
@@ -552,15 +552,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           </div>
         )}
 
-        <div className="mt-8 grid grid-cols-2 gap-8">
-          <div className="border-t border-border pt-4">
+        <div className="mt-5 grid grid-cols-2 gap-6">
+          <div className="border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">Signature du client</p>
             <p className="text-xs text-muted-foreground mt-1">Bon pour accord, date et signature</p>
-            <div className="h-20"></div>
+            <div className="h-14"></div>
           </div>
-          <div className="border-t border-border pt-4">
+          <div className="border-t border-border pt-3">
             <p className="text-xs text-muted-foreground">Cachet de l'entreprise</p>
-            <div className="h-20"></div>
+            <div className="h-14"></div>
           </div>
         </div>
       </div>{/* fin printAreaRef */}
