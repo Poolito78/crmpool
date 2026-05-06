@@ -577,7 +577,7 @@ export default function Devis() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
-        <DialogContent className="sm:max-w-3xl sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent className="sm:w-[90vw] sm:max-w-5xl sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
