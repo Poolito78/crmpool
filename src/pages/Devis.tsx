@@ -36,6 +36,7 @@ export default function Devis() {
   const [filterContact, setFilterContact] = useState<string>('');
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [filterPeriode, setFilterPeriode] = useState<string>('tous');
+  const [sortBy, setSortBy] = useState<string>('date_desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -117,6 +118,22 @@ export default function Devis() {
       if (filterPeriode === 'annee' && dateD.getFullYear() !== now.getFullYear()) return false;
     }
     return true;
+  });
+
+  const sorted = [...filtered].sort((a, b) => {
+    const clientA = clients.find(c => c.id === a.clientId);
+    const clientB = clients.find(c => c.id === b.clientId);
+    switch (sortBy) {
+      case 'date_asc':  return a.dateCreation.localeCompare(b.dateCreation);
+      case 'date_desc': return b.dateCreation.localeCompare(a.dateCreation);
+      case 'total_asc':  return calculerTotalDevis(a.lignes, a.fraisPortHT || 0, a.fraisPortTVA ?? 20).totalHT - calculerTotalDevis(b.lignes, b.fraisPortHT || 0, b.fraisPortTVA ?? 20).totalHT;
+      case 'total_desc': return calculerTotalDevis(b.lignes, b.fraisPortHT || 0, b.fraisPortTVA ?? 20).totalHT - calculerTotalDevis(a.lignes, a.fraisPortHT || 0, a.fraisPortTVA ?? 20).totalHT;
+      case 'numero_asc':  return a.numero.localeCompare(b.numero);
+      case 'numero_desc': return b.numero.localeCompare(a.numero);
+      case 'client_asc':  return (clientA?.societe || clientA?.nom || '').localeCompare(clientB?.societe || clientB?.nom || '');
+      case 'client_desc': return (clientB?.societe || clientB?.nom || '').localeCompare(clientA?.societe || clientA?.nom || '');
+      default: return 0;
+    }
   });
 
   const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
@@ -457,6 +474,16 @@ export default function Devis() {
             <option value="trimestre">Ce trimestre</option>
             <option value="annee">Cette année</option>
           </select>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+            <option value="date_desc">Date ↓</option>
+            <option value="date_asc">Date ↑</option>
+            <option value="total_desc">Montant ↓</option>
+            <option value="total_asc">Montant ↑</option>
+            <option value="numero_desc">Numéro ↓</option>
+            <option value="numero_asc">Numéro ↑</option>
+            <option value="client_asc">Client A→Z</option>
+            <option value="client_desc">Client Z→A</option>
+          </select>
           {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== '' || filterProduit !== '' || filterPeriode !== 'tous') && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact(''); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
@@ -467,7 +494,7 @@ export default function Devis() {
 
       {/* List */}
       <div className="space-y-3">
-        {filtered.map(d => {
+        {sorted.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           const totalAchatD = d.lignes.reduce((acc, l) => {
@@ -572,7 +599,7 @@ export default function Devis() {
             </div>
           );
         })}
-        {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
+        {sorted.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
       </div>
 
       {/* Create/Edit Dialog */}
