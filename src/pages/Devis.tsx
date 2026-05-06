@@ -577,9 +577,9 @@ export default function Devis() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
-        <DialogContent className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden">
-          <DialogHeader><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2">
+        <DialogContent className="sm:max-w-3xl sm:max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0"><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
+          <div className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <div className="flex items-center justify-between">
@@ -1023,7 +1023,7 @@ export default function Devis() {
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
           </div>
-          <div className="flex justify-between gap-2">
+          <div className="flex justify-between gap-2 shrink-0 pt-3 border-t border-border">
             <Button variant="outline" onClick={() => {
               const existing = editingId ? devis.find(d => d.id === editingId) : null;
               const preview: DevisType = {
