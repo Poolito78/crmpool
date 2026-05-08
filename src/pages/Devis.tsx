@@ -1064,6 +1064,7 @@ export default function Devis() {
               const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
               const margeTotal = totalHTLignes - totalAchat;
               const tauxMarque = totalHTLignes > 0 ? (margeTotal / totalHTLignes) * 100 : 0;
+              const coeffTotal = totalAchat > 0 ? totalHTLignes / totalAchat : null;
               return (
                 <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
                   <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(totalHTLignes)}</span></div>
@@ -1083,7 +1084,7 @@ export default function Devis() {
                   <div className="flex justify-between text-muted-foreground">
                     <span>Marge totale</span>
                     <span className={`font-medium ${margeTotal < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%)
+                      {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%{coeffTotal !== null ? ` · coeff ${coeffTotal.toFixed(2)}` : ''})
                     </span>
                   </div>
                 </div>
