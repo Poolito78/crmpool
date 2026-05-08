@@ -1021,6 +1021,35 @@ export default function Produits() {
               <div><Label>Poids (kg)</Label><Input type="number" step="0.01" value={form.poids || ''} onChange={e => setForm(p => ({ ...p, poids: parseFloat(e.target.value) || 0 }))} /></div>
               <div><Label>Conso. (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
             </div>
+            {form.poids > 0 && (() => {
+              const paKg = form.prixAchat / form.poids;
+              const revendKg = form.prixRevendeur / form.poids;
+              const coutM2 = form.consommation ? form.prixAchat / form.poids * form.consommation : null;
+              const revendM2 = form.consommation ? form.prixRevendeur / form.poids * form.consommation : null;
+              return (
+                <div className="flex flex-wrap gap-2 text-xs bg-muted/40 rounded-md px-3 py-2">
+                  <span className="text-muted-foreground">Prix/kg :</span>
+                  <span className="font-medium">Achat <span className="text-foreground">{formatMontant(paKg)}/kg</span></span>
+                  <span className="text-muted-foreground">·</span>
+                  <span className="font-medium">Revend. <span className="text-foreground">{formatMontant(revendKg)}/kg</span></span>
+                  {showPrixPublic && form.prixHT > 0 && (
+                    <>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="font-medium">Public <span className="text-foreground">{formatMontant(form.prixHT / form.poids)}/kg</span></span>
+                    </>
+                  )}
+                  {coutM2 !== null && (
+                    <>
+                      <span className="text-muted-foreground">—</span>
+                      <span className="text-muted-foreground">Coût/m² :</span>
+                      <span className="font-medium">Achat <span className="text-foreground">{formatMontant(coutM2)}/m²</span></span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="font-medium">Revend. <span className="text-foreground">{formatMontant(revendM2!)}/m²</span></span>
+                    </>
+                  )}
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
               <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
