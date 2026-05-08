@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -17,6 +17,7 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog from '@/components/DevisEmailDialog';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
+import AiCalculatorDialog from '@/components/AiCalculatorDialog';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -48,6 +49,7 @@ export default function Devis() {
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
+  const [aiCalc, setAiCalc] = useState<{ ligneId: string; field: 'surfaceM2' | 'consommation' | 'quantite'; label: string; current?: number } | null>(null);
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
@@ -856,12 +858,19 @@ export default function Devis() {
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 bg-accent/30 rounded-md p-2">
                         <div>
                           <Label className="text-xs">Surface (m²)</Label>
-                          <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
-                            const surface = parseFloat(e.target.value) || 0;
-                            const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                            const quantite = p && (l.consommation || p.consommation) && p.poids ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
-                            setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
-                          }} className="h-8 text-sm" />
+                          <div className="flex gap-1">
+                            <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                              const surface = parseFloat(e.target.value) || 0;
+                              const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                              const quantite = p && (l.consommation || p.consommation) && p.poids ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
+                              setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                            }} className="h-8 text-sm" />
+                            <button type="button" title="Calculer avec l'IA"
+                              onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })}
+                              className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary">
+                              <Bot className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
                         {(() => {
                           const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
@@ -870,13 +879,20 @@ export default function Devis() {
                             <>
                               <div>
                                 <Label className="text-xs">Conso. (kg/m²)</Label>
-                                <Input type="number" step="0.01" value={consoValue} onChange={e => {
-                                  const raw = e.target.value;
-                                  const conso = raw === '' ? undefined : parseFloat(raw);
-                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = p && p.poids && conso != null && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
-                                }} className="h-8 text-sm" placeholder={p?.consommation != null ? String(p.consommation) : ''} />
+                                <div className="flex gap-1">
+                                  <Input type="number" step="0.01" value={consoValue} onChange={e => {
+                                    const raw = e.target.value;
+                                    const conso = raw === '' ? undefined : parseFloat(raw);
+                                    const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                    const quantite = p && p.poids && conso != null && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
+                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
+                                  }} className="h-8 text-sm" placeholder={p?.consommation != null ? String(p.consommation) : ''} />
+                                  <button type="button" title="Calculer avec l'IA"
+                                    onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })}
+                                    className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary">
+                                    <Bot className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
                               </div>
                               <div>
                                 <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
@@ -1218,6 +1234,32 @@ export default function Devis() {
           if (d) openEdit(d);
         }}
       />
+
+      {aiCalc && (
+        <AiCalculatorDialog
+          open={!!aiCalc}
+          onOpenChange={(open) => { if (!open) setAiCalc(null); }}
+          cellLabel={aiCalc.label}
+          currentValue={aiCalc.current}
+          onInsert={(value) => {
+            const { ligneId, field } = aiCalc;
+            if (field === 'surfaceM2') {
+              const p = lignes.find(li => li.id === ligneId)?.produitId
+                ? produits.find(pr => pr.id === lignes.find(li => li.id === ligneId)?.produitId) : null;
+              setLignes(prev => prev.map(li => {
+                if (li.id !== ligneId) return li;
+                const quantite = p && (li.consommation || p.consommation) && p.poids
+                  ? Math.round(value * (li.consommation || p.consommation!) / p.poids * 100) / 100
+                  : li.quantite;
+                return { ...li, surfaceM2: value, quantite };
+              }));
+            } else {
+              setLignes(prev => prev.map(li => li.id === ligneId ? { ...li, [field]: value } : li));
+            }
+            setAiCalc(null);
+          }}
+        />
+      )}
     </div>
   );
 }
