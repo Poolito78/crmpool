@@ -5,10 +5,16 @@ import { Input } from '@/components/ui/input';
 import { Loader2, Send, Check, Bot, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
+interface MultiValue {
+  label: string;
+  value: number;
+}
+
 interface Message {
   role: 'user' | 'assistant';
   content: string;
   value?: number | null;
+  values?: MultiValue[];
 }
 
 interface Props {
@@ -54,8 +60,8 @@ export default function AiCalculatorDialog({ open, onOpenChange, cellLabel, curr
         body: { message: text, history },
       });
       if (error) throw error;
-      const { value, explanation } = data as { value: number | null; explanation: string };
-      const assistantMsg: Message = { role: 'assistant', content: explanation, value };
+      const { value, values, explanation } = data as { value: number | null; values?: MultiValue[]; explanation: string };
+      const assistantMsg: Message = { role: 'assistant', content: explanation, value, values };
       setMessages(prev => [...prev, assistantMsg]);
       if (value != null) setLastValue(value);
     } catch (e: any) {
@@ -87,7 +93,8 @@ export default function AiCalculatorDialog({ open, onOpenChange, cellLabel, curr
           {messages.length === 0 && (
             <p className="text-xs text-muted-foreground text-center py-4">
               Décrivez ce que vous voulez calculer.<br />
-              <span className="italic">Ex : "pièce 5×4 m + couloir 2×8 m"</span>
+              <span className="italic">Ex : "pièce 5×4 m + couloir 2×8 m"</span><br />
+              <span className="italic">Ex : "ratio A+2,5B=3,2 kg/m²"</span>
             </p>
           )}
           {messages.map((m, i) => (
@@ -95,6 +102,7 @@ export default function AiCalculatorDialog({ open, onOpenChange, cellLabel, curr
               {m.role === 'assistant' && <Bot className="w-4 h-4 text-primary mt-0.5 shrink-0" />}
               <div className={`max-w-[85%] rounded-xl px-3 py-2 text-sm ${m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
                 <p>{m.content}</p>
+                {/* Single value */}
                 {m.role === 'assistant' && m.value != null && (
                   <button
                     onClick={() => handleInsert(m.value!)}
@@ -103,6 +111,21 @@ export default function AiCalculatorDialog({ open, onOpenChange, cellLabel, curr
                     <Check className="w-3 h-3" />
                     Insérer {m.value}
                   </button>
+                )}
+                {/* Multiple values */}
+                {m.role === 'assistant' && m.values && m.values.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {m.values.map((v, j) => (
+                      <button
+                        key={j}
+                        onClick={() => handleInsert(v.value)}
+                        className="flex items-center gap-1 text-xs font-semibold text-primary bg-primary/10 hover:bg-primary/20 rounded px-2 py-1"
+                      >
+                        <Check className="w-3 h-3" />
+                        {v.label} = {v.value}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
               {m.role === 'user' && <User className="w-4 h-4 text-muted-foreground mt-0.5 shrink-0" />}
@@ -126,7 +149,7 @@ export default function AiCalculatorDialog({ open, onOpenChange, cellLabel, curr
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-            placeholder="Ex : 3 pièces de 12 m² et un couloir 2×5 m"
+            placeholder="Ex : ratio A+2,5B=3,2 kg/m²"
             className="h-9 text-sm"
             disabled={loading}
           />
