@@ -696,7 +696,7 @@ export default function Clients() {
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
@@ -725,7 +725,7 @@ export default function Clients() {
                 <Label className="text-xs">Adresse</Label>
                 <Input type="text" value={form.adresse} onChange={e => setForm(prev => ({ ...prev, adresse: e.target.value }))} />
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Ville</Label>
                   <Input type="text" value={form.ville} onChange={e => setForm(prev => ({ ...prev, ville: e.target.value }))} />
@@ -776,7 +776,7 @@ export default function Clients() {
                 <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
                   <p className="text-xs text-muted-foreground">Remise par catégorie de produit (%) — modifiable individuellement :</p>
                   {categories.length > 0 ? (
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {categories.map(cat => (
                         <div key={cat} className="flex items-center gap-2">
                           <Label className="text-xs min-w-[100px] truncate" title={cat}>{cat}</Label>
@@ -825,7 +825,7 @@ export default function Clients() {
                     </span>
                     <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs">Prénom</Label>
                       <Input className="h-8 text-sm" value={ct.prenom || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, prenom: e.target.value } : c) }))} placeholder="Prénom" />
@@ -905,7 +905,7 @@ export default function Clients() {
                       <label htmlFor="copieFacturation" className="text-xs text-muted-foreground">Identique à l'adresse de facturation</label>
                     </div>
                   )}
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div className="col-span-2">
                       <Label className="text-xs">Libellé *</Label>
                       <Input placeholder="Ex: Entrepôt, Chantier A..." value={adresseForm.libelle} onChange={e => setAdresseForm(p => ({ ...p, libelle: e.target.value }))} />
