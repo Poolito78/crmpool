@@ -955,7 +955,7 @@ export default function Produits() {
               </div>
 
               {/* Tarif Revendeur */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
                   {composants.length > 0
@@ -967,12 +967,10 @@ export default function Produits() {
                   <Label className="text-xs">Coefficient</Label>
                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
                 </div>
-                <div className="col-span-2 sm:col-span-1">
+                <div>
                   <Label className="text-xs">Prix Revendeur HT</Label>
                   <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label className="text-xs">Marge brute revend.</Label>
                   <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted" />
