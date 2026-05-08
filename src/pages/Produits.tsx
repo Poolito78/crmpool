@@ -907,7 +907,7 @@ export default function Produits() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) setEditingStack([]); }}>
-        <DialogContent className="w-full max-w-[98vw] sm:max-w-xl md:max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] overflow-y-auto" style={{ width: '90vw', maxWidth: '90vw' }}>
           <DialogHeader>
             <div className="flex items-center gap-2 min-w-0">
               {editingStack.length > 0 && (
