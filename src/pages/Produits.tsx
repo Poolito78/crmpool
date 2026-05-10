@@ -691,28 +691,31 @@ export default function Produits() {
           <span className="text-sm text-muted-foreground">Vous consultez la fiche produit depuis l'édition d'un devis</span>
         </div>
       )}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="relative w-full sm:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
-        <div className="flex gap-2 shrink-0">
+        <div className="flex flex-wrap gap-2">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           {selected.size > 0 && (
             <Button variant="destructive" size="sm" onClick={removeSelected}>
-              <Trash2 className="w-4 h-4 mr-2" /> Supprimer {selected.size} sélectionné(s)
+              <Trash2 className="w-4 h-4 sm:mr-2" />
+              <span className="hidden sm:inline">Supprimer {selected.size} sélectionné(s)</span>
+              <span className="sm:hidden">{selected.size}</span>
             </Button>
           )}
           {produits.length > 0 && selected.size === 0 && (
-            <Button variant="destructive" size="sm" onClick={() => { toggleAll(); }}>
+            <Button variant="destructive" size="sm" className="hidden sm:inline-flex" onClick={() => { toggleAll(); }}>
               <Trash2 className="w-4 h-4 mr-2" /> Tout sélectionner
             </Button>
           )}
           <Button variant={showFilters ? "secondary" : "outline"} size="sm" onClick={() => { setShowFilters(!showFilters); if (showFilters) setColumnFilters({}); }}>
-            <Filter className="w-4 h-4 mr-2" /> Filtres
+            <Filter className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Filtres</span>
           </Button>
-          {/* Sélecteur de colonnes */}
-          <div className="relative" ref={colChooserRef}>
+          {/* Sélecteur de colonnes — masqué sur mobile */}
+          <div className="relative hidden sm:block" ref={colChooserRef}>
             <Button variant="outline" size="sm" onClick={() => setColChooserOpen(v => !v)}>
               <Columns2 className="w-4 h-4 mr-2" /> Colonnes
             </Button>
@@ -743,9 +746,17 @@ export default function Produits() {
               </div>
             )}
           </div>
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
-          <Button variant="outline" onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau produit</Button>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => fileInputRef.current?.click()}>
+            <Upload className="w-4 h-4 mr-2" /> Importer
+          </Button>
+          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}>
+            <Download className="w-4 h-4 mr-2" /> Exporter
+          </Button>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="w-4 h-4 sm:mr-2" />
+            <span className="hidden sm:inline">Nouveau produit</span>
+            <span className="sm:hidden">Nouveau</span>
+          </Button>
         </div>
       </div>
 
@@ -847,39 +858,45 @@ export default function Produits() {
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
+      <div className="md:hidden space-y-2">
+        {sortedFiltered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucun produit</p>}
         {sortedFiltered.map(p => {
-          const marge = calcMargeBrute(p.prixHT, p.prixAchat);
-          const tauxMarge = calcTauxMarge(p.prixHT, p.prixAchat);
+          const isCompose = !!(p.composants && p.composants.length > 0);
+          const margeRevend = calcMargeBrute(p.prixRevendeur, p.prixAchat);
+          const tauxMarque = calcTauxMarque(p.prixRevendeur, p.prixAchat);
           return (
-            <div key={p.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
-              <div className="flex justify-between items-start">
-                <div className="flex items-start gap-2">
-                  <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-1" />
-                  <div>
-                    <p className="font-medium">{p.description}{p.composants && p.composants.length > 0 && <span className="ml-2 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Composé</span>}</p>
-                    <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
-                  </div>
+            <div key={p.id} className="bg-card rounded-xl border border-border cursor-pointer active:bg-muted/50" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
+              {/* Header row */}
+              <div className="flex items-start gap-2 px-3 pt-3 pb-2">
+                <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input mt-0.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm leading-tight">
+                    {p.description}
+                    {isCompose && <span className="ml-1.5 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full align-middle">Composé</span>}
+                  </p>
+                  <p className="text-xs text-muted-foreground font-mono mt-0.5">{p.reference}{p.categorie ? <span className="font-sans ml-2 text-muted-foreground/70">{p.categorie}</span> : ''}</p>
                 </div>
-                <div className="flex gap-1">
-                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => duplicate(p)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
-                  <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                <div className="flex gap-0.5 shrink-0">
+                  <button onClick={() => openEdit(p)} className="p-2 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
+                  <button onClick={() => remove(p.id)} className="p-2 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
-              <div className="mt-2 grid grid-cols-2 gap-1 text-sm">
-                <span className="text-muted-foreground">P. Achat:</span>
-                <span className="text-right">{formatMontant(p.prixAchat)}</span>
-                <span className="text-muted-foreground">Coeff × {p.coefficient.toFixed(2)}</span>
-                <span className="text-right font-semibold">{formatMontant(p.prixHT)}</span>
-                <span className="text-muted-foreground">Marge brute:</span>
-                <span className={`text-right ${marge > 0 ? 'text-emerald-600' : 'text-destructive'}`}>{formatMontant(marge)} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}% marge)</span>
-                <span className="text-muted-foreground">P. Revendeur:</span>
-                <span className="text-right">{formatMontant(p.prixRevendeur)} <span className="text-xs">(coeff pub. {calcCoeffPublic(p.prixHT, p.prixAchat).toFixed(2)} · {calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}% marge)</span></span>
-              </div>
-              <div className="mt-2 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">{p.categorie || '—'}</span>
-                <span className={p.stock <= p.stockMin ? 'text-warning font-medium' : 'text-muted-foreground'}>Stock: {p.stock}</span>
+              {/* Prix row */}
+              <div className="grid grid-cols-3 divide-x divide-border border-t border-border text-xs">
+                <div className="px-3 py-2">
+                  <p className="text-muted-foreground mb-0.5">P. Achat</p>
+                  <p className="font-semibold text-sm">{formatMontant(p.prixAchat)}</p>
+                </div>
+                <div className="px-3 py-2">
+                  <p className="text-muted-foreground mb-0.5">Revendeur × {p.coefficient.toFixed(2)}</p>
+                  <p className="font-semibold text-sm text-primary">{formatMontant(p.prixRevendeur)}</p>
+                  <p className="text-muted-foreground">{formatMontant(margeRevend)} · {tauxMarque.toFixed(0)}%</p>
+                </div>
+                <div className="px-3 py-2">
+                  <p className="text-muted-foreground mb-0.5">Stock</p>
+                  <p className={`font-semibold text-sm ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}</p>
+                  {p.stockMin > 0 && <p className="text-muted-foreground">min {p.stockMin}</p>}
+                </div>
               </div>
             </div>
           );
@@ -907,7 +924,7 @@ export default function Produits() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) setEditingStack([]); }}>
-        <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] overflow-y-auto" style={{ width: '90vw', maxWidth: '90vw' }}>
+        <DialogContent className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-2 min-w-0">
               {editingStack.length > 0 && (
@@ -955,7 +972,7 @@ export default function Produits() {
               </div>
 
               {/* Tarif Revendeur */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
                 <div>
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
                   {composants.length > 0
@@ -1397,14 +1414,14 @@ export default function Produits() {
               )
             )}
 
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
+            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+              <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDialogOpen(false)}>Annuler</Button>
               {fromDevis && editing && (
-                <Button variant="secondary" onClick={() => save(true)}>
+                <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save(true)}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
                 </Button>
               )}
-              <Button onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
+              <Button className="w-full sm:w-auto" onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
           </div>
         </DialogContent>
