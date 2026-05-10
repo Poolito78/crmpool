@@ -696,7 +696,7 @@ export default function Clients() {
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
-        <DialogContent className="w-[90vw] max-w-[90vw] max-h-[90vh] overflow-y-auto" style={{ width: '90vw', maxWidth: '90vw' }}>
+        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
