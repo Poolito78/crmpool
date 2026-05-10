@@ -854,7 +854,7 @@ export default function Devis() {
                       <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
                       <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
                     </div>
-                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2' : 'grid-cols-2 sm:grid-cols-5'}`}>
+                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2' : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-5'}`}>
                       {modeCalcul === 'surface' && (() => {
                         const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
                         const consoValue = l.consommation ?? p?.consommation ?? '';
@@ -900,6 +900,26 @@ export default function Devis() {
                         );
                       })()}
                       <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
+                      {modeCalcul !== 'surface' && (() => {
+                        const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+                        const consoVal = l.consommation ?? p?.consommation;
+                        if (consoVal == null && !l.produitId) return null;
+                        return (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Conso. (kg/m²)</Label>
+                            <Input
+                              type="number" step="0.01"
+                              value={consoVal ?? ''}
+                              onChange={e => {
+                                const v = e.target.value === '' ? undefined : parseFloat(e.target.value);
+                                setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li));
+                              }}
+                              className="h-8 text-sm"
+                              placeholder={p?.consommation != null ? String(p.consommation) : '—'}
+                            />
+                          </div>
+                        );
+                      })()}
                       <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
                       <div>
                         <Label className="text-xs">Prix HT</Label>
