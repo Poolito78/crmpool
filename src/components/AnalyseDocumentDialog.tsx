@@ -544,7 +544,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent className="max-w-2xl w-full max-h-[85vh] overflow-y-auto flex flex-col p-5 [&>button]:z-20">
+        <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[85vh] overflow-y-auto flex flex-col p-4 sm:p-5 [&>button]:z-20">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
@@ -598,10 +598,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                 {/* Textarea + bouton dictée */}
                 <div className="relative">
                   <Textarea
-                    placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller le texte : email, commande, devis, facture…\n\nou glisser-déposer un PDF, Excel (.xlsx) ou email\nou dicter vocalement →'}
+                    placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller texte, email, commande…\nou glisser un PDF / Excel / .eml\nou dicter →'}
                     value={texte}
                     onChange={e => setTexte(e.target.value)}
-                    className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[80px]' : 'min-h-[140px]'}`}
+                    className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[60px]' : 'min-h-[100px] sm:min-h-[140px]'}`}
                   />
                   <div className="absolute top-0 right-0">
                     <VoiceButton
@@ -733,17 +733,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ── Strip montants (si présents) ── */}
                 {(result.totalHT != null || result.totalTTC != null) && (
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3">
                     {result.totalHT != null && (
-                      <div className="rounded-lg bg-muted/50 border border-border px-4 py-3">
+                      <div className="rounded-lg bg-muted/50 border border-border px-3 py-2.5 sm:px-4 sm:py-3">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-semibold mb-0.5">Total HT</p>
-                        <p className="text-lg font-bold tabular-nums">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                        <p className="text-base sm:text-lg font-bold tabular-nums">{result.totalHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
                       </div>
                     )}
                     {result.totalTTC != null && (
-                      <div className="rounded-lg bg-primary/8 border border-primary/20 px-4 py-3">
+                      <div className="rounded-lg bg-primary/8 border border-primary/20 px-3 py-2.5 sm:px-4 sm:py-3">
                         <p className="text-[10px] text-primary/70 uppercase tracking-widest font-semibold mb-0.5">Total TTC</p>
-                        <p className="text-lg font-bold text-primary tabular-nums">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
+                        <p className="text-base sm:text-lg font-bold text-primary tabular-nums">{result.totalTTC.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' })}</p>
                       </div>
                     )}
                   </div>
@@ -754,7 +754,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   <div className="bg-muted/40 px-4 py-2 border-b border-border">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Informations extraites</p>
                   </div>
-                  <div className="grid grid-cols-2 xl:grid-cols-3 gap-px bg-border">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-border">
                     {([
                       result.numeroDocument  && ['N° document',   result.numeroDocument],
                       result.nomPartenaire   && [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client', result.nomPartenaire],
@@ -787,10 +787,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                       <table className="w-full text-xs">
                         <thead className="bg-muted/20">
                           <tr>
-                            <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">Réf.</th>
                             <th className="text-left px-3 py-2 font-semibold text-muted-foreground text-[11px]">Description</th>
-                            <th className="text-center px-3 py-2 font-semibold text-muted-foreground text-[11px]">Qté</th>
-                            <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">P.U. HT</th>
+                            <th className="text-center px-2 py-2 font-semibold text-muted-foreground text-[11px]">Qté</th>
+                            <th className="hidden sm:table-cell text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">P.U. HT</th>
                             <th className="text-right px-3 py-2 font-semibold text-muted-foreground text-[11px] whitespace-nowrap">Total HT</th>
                           </tr>
                         </thead>
@@ -799,11 +798,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                             const total = l.prixUnitaireHT != null ? l.prixUnitaireHT * l.quantite : null;
                             return (
                               <tr key={i} className="hover:bg-muted/20 transition-colors">
-                                <td className="px-3 py-2.5 font-mono text-[11px] text-muted-foreground whitespace-nowrap">{l.reference || '—'}</td>
-                                <td className="px-3 py-2.5 max-w-[240px]">{l.description || '—'}</td>
-                                <td className="px-3 py-2.5 text-center font-bold text-sm">{l.quantite}</td>
-                                <td className="px-3 py-2.5 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
-                                <td className="px-3 py-2.5 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                                <td className="px-3 py-2 max-w-[180px] sm:max-w-[240px]">
+                                  {l.reference && <span className="block font-mono text-[10px] text-muted-foreground">{l.reference}</span>}
+                                  {l.description || '—'}
+                                </td>
+                                <td className="px-2 py-2 text-center font-bold text-sm">{l.quantite}</td>
+                                <td className="hidden sm:table-cell px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                                <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
                               </tr>
                             );
                           })}
@@ -828,7 +829,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ═══ ACTION : créer commande fournisseur ═══ */}
                 {noMatchCF && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
@@ -865,7 +866,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ═══ ACTION : créer devis ═══ */}
                 {isDevisClient && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
@@ -903,7 +904,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ═══ ACTION : commande client ═══ */}
                 {isCC && (
-                  <div className="rounded-xl border border-success/30 bg-success/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-success/30 bg-success/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <div className="w-7 h-7 rounded-lg bg-success/15 flex items-center justify-center shrink-0">
@@ -953,7 +954,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ═══ Autre document → import contact inline ═══ */}
                 {isAutre && !contactToSave && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center gap-2">
                       <div className="w-7 h-7 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
                         <Mail className="w-4 h-4 text-primary" />
@@ -992,7 +993,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ═══ Formulaire contact extrait ═══ */}
                 {contactToSave && (
-                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                  <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Sparkles className="w-4 h-4 text-primary shrink-0" />
                       <p className="text-sm font-semibold text-primary">
