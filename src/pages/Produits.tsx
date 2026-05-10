@@ -924,7 +924,7 @@ export default function Produits() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={open => { setDialogOpen(open); if (!open) setEditingStack([]); }}>
-        <DialogContent className="max-sm:!fixed max-sm:!inset-0 max-sm:!top-0 max-sm:!bottom-0 max-sm:!left-0 max-sm:!right-0 max-sm:!h-dvh max-sm:!max-h-dvh max-sm:!w-screen max-sm:!max-w-full max-sm:!rounded-none max-sm:!translate-x-0 max-sm:!translate-y-0 sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
+        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <div className="flex items-center gap-2 min-w-0">
               {editingStack.length > 0 && (
