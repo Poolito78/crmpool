@@ -49,18 +49,22 @@ const DialogContent = React.forwardRef<
     mobileFullscreen && isMobile
       ? {
           position: 'fixed',
-          inset: 0,
           top: 0,
           right: 0,
           bottom: 0,
           left: 0,
-          width: '100vw',
-          maxWidth: '100vw',
-          height: '100dvh',
-          maxHeight: '100dvh',
+          width: '100%',
+          maxWidth: '100%',
+          /* Pas de height explicite : top+bottom suffisent.
+             Quand le clavier s'ouvre, le navigateur ajuste bottom
+             automatiquement pour rester au-dessus du clavier. */
+          height: 'auto',
+          maxHeight: 'none',
           borderRadius: 0,
           transform: 'none',
           overflowY: 'auto',
+          /* Assure que le contenu scrollé remonte bien sous le clavier */
+          WebkitOverflowScrolling: 'touch',
         }
       : undefined;
 
