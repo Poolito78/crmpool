@@ -615,7 +615,7 @@ export default function Devis() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
-        <DialogContent className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? 'Modifier le devis' : 'Nouveau devis'}</DialogTitle></DialogHeader>
           <div className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -854,7 +854,7 @@ export default function Devis() {
                       <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
                       <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
                     </div>
-                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2' : 'grid-cols-2 sm:grid-cols-5'}`}>
+                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2' : 'grid-cols-2 sm:grid-cols-5'}`}>
                       {modeCalcul === 'surface' && (() => {
                         const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
                         const consoValue = l.consommation ?? p?.consommation ?? '';
@@ -929,21 +929,17 @@ export default function Devis() {
                       const coeff = prod && prod.prixAchat > 0 ? prixNetHT / prod.prixAchat : null;
                       const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                       return (
-                        <div className="flex items-center justify-between text-xs text-muted-foreground flex-wrap gap-x-3">
-                          <div className="flex items-center gap-3">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground gap-0.5 sm:gap-x-3">
+                          <div className="flex items-center gap-2 flex-wrap">
                             {tauxMarque !== null ? (
-                              <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400'}>
+                              <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
                                 Marge: {tauxMarque.toFixed(1)}%
                               </span>
                             ) : null}
-                            {coeff !== null && (
-                              <span>Coeff: {coeff.toFixed(2)}</span>
-                            )}
-                            {prixKg !== null && (
-                              <span>{formatMontant(prixKg)}/kg</span>
-                            )}
+                            {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
+                            {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
                           </div>
-                          <span>Total HT: {formatMontant(t.totalHT)}</span>
+                          <span className="font-medium text-foreground">Total HT: {formatMontant(t.totalHT)}</span>
                         </div>
                       );
                     })()}
@@ -1094,8 +1090,8 @@ export default function Devis() {
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
           </div>
-          <div className="flex justify-between gap-2 shrink-0 pt-3 border-t border-border">
-            <Button variant="outline" onClick={() => {
+          <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
+            <Button variant="outline" size="sm" onClick={() => {
               const existing = editingId ? devis.find(d => d.id === editingId) : null;
               const preview: DevisType = {
                 id: editingId || 'preview',
@@ -1108,11 +1104,15 @@ export default function Devis() {
               setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
               setPreviewDevis(preview);
             }}>
-              <Eye className="w-4 h-4 mr-2" /> Aperçu
+              <Eye className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Aperçu</span>
             </Button>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button onClick={() => save()}><FileText className="w-4 h-4 mr-2" /> {editingId ? 'Enregistrer' : 'Créer le devis'}</Button>
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button size="sm" onClick={() => save()}>
+                <FileText className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
+                <span className="sm:hidden">{editingId ? 'Enregistrer' : 'Créer'}</span>
+              </Button>
             </div>
           </div>
         </DialogContent>
