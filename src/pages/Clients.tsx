@@ -956,7 +956,7 @@ export default function Clients() {
               )}
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
           </div>

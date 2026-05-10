@@ -1414,7 +1414,7 @@ export default function Produits() {
               )
             )}
 
-            <div className="flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-1">
+            <div className="sticky bottom-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDialogOpen(false)}>Annuler</Button>
               {fromDevis && editing && (
                 <Button variant="secondary" className="w-full sm:w-auto" onClick={() => save(true)}>
