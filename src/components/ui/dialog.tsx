@@ -46,8 +46,8 @@ const DialogContent = React.forwardRef<
         "sm:left-[50%] sm:top-[50%] sm:translate-x-[-50%] sm:translate-y-[-50%] sm:rounded-lg sm:p-6 sm:zoom-out-95 data-[state=open]:sm:zoom-in-95 data-[state=closed]:sm:slide-out-to-left-1/2 data-[state=closed]:sm:slide-out-to-top-[48%] data-[state=open]:sm:slide-in-from-left-1/2 data-[state=open]:sm:slide-in-from-top-[48%]",
         // Mobile (<sm)
         mobileFullscreen
-          // Plein écran mobile
-          ? "max-sm:inset-0 max-sm:top-0 max-sm:bottom-0 max-sm:left-0 max-sm:right-0 max-sm:h-dvh max-sm:max-h-dvh max-sm:rounded-none max-sm:p-4 data-[state=open]:max-sm:slide-in-from-bottom data-[state=closed]:max-sm:slide-out-to-bottom"
+          // Plein écran mobile — !important pour écraser tout positionnement Radix
+          ? "max-sm:!fixed max-sm:!inset-0 max-sm:!top-0 max-sm:!right-0 max-sm:!bottom-0 max-sm:!left-0 max-sm:!w-screen max-sm:!h-screen max-sm:!max-h-screen max-sm:!max-w-none max-sm:!rounded-none max-sm:!translate-x-0 max-sm:!translate-y-0 max-sm:p-4 max-sm:overflow-y-auto"
           // Bottom sheet par défaut
           : "max-sm:inset-x-0 max-sm:bottom-0 max-sm:top-auto max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-t-2xl max-sm:rounded-b-none max-sm:p-4 max-sm:max-h-[92dvh] data-[state=open]:max-sm:slide-in-from-bottom data-[state=closed]:max-sm:slide-out-to-bottom",
         className,
