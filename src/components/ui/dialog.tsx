@@ -36,6 +36,9 @@ const DialogContent = React.forwardRef<
   DialogContentProps
 >(({ className, children, mobileFullscreen, style, ...props }, ref) => {
   const [isMobile, setIsMobile] = React.useState(false);
+  // Visual Viewport height — mis à jour quand le clavier s'ouvre/ferme
+  const [vvHeight, setVvHeight] = React.useState<number | null>(null);
+  const [vvOffsetTop, setVvOffsetTop] = React.useState<number>(0);
 
   React.useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -45,25 +48,38 @@ const DialogContent = React.forwardRef<
     return () => mq.removeEventListener('change', handler);
   }, []);
 
+  React.useEffect(() => {
+    if (!mobileFullscreen) return;
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => {
+      setVvHeight(vv.height);
+      setVvOffsetTop(vv.offsetTop ?? 0);
+    };
+    update();
+    vv.addEventListener('resize', update);
+    vv.addEventListener('scroll', update);
+    return () => {
+      vv.removeEventListener('resize', update);
+      vv.removeEventListener('scroll', update);
+    };
+  }, [mobileFullscreen]);
+
   const fullscreenStyle: React.CSSProperties | undefined =
     mobileFullscreen && isMobile
       ? {
           position: 'fixed',
-          top: 0,
-          right: 0,
-          bottom: 0,
+          top: vvOffsetTop,
           left: 0,
+          right: 0,
           width: '100%',
           maxWidth: '100%',
-          /* Pas de height explicite : top+bottom suffisent.
-             Quand le clavier s'ouvre, le navigateur ajuste bottom
-             automatiquement pour rester au-dessus du clavier. */
-          height: 'auto',
-          maxHeight: 'none',
+          // Hauteur exacte du viewport visible (sans le clavier)
+          height: vvHeight ? `${vvHeight}px` : '100dvh',
+          maxHeight: vvHeight ? `${vvHeight}px` : '100dvh',
           borderRadius: 0,
           transform: 'none',
           overflowY: 'auto',
-          /* Assure que le contenu scrollé remonte bien sous le clavier */
           WebkitOverflowScrolling: 'touch',
         }
       : undefined;
