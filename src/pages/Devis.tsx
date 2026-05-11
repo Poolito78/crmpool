@@ -19,6 +19,7 @@ import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import AiCalculatorDialog from '@/components/AiCalculatorDialog';
 import DevisChatter from '@/components/DevisChatter';
+import { supabase } from '@/integrations/supabase/client';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -197,11 +198,12 @@ export default function Devis() {
     setDialogOpen(true);
   }
 
-  function duplicate(d: DevisType) {
+  async function duplicate(d: DevisType) {
     const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const newId = generateId();
     const newDevis: DevisType = {
       ...d,
-      id: generateId(),
+      id: newId,
       numero,
       dateCreation: new Date().toISOString().split('T')[0],
       dateValidite: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
@@ -209,7 +211,53 @@ export default function Devis() {
       lignes: d.lignes.map(l => ({ ...l, id: generateId() })),
     };
     updateDevis(prev => [...prev, newDevis]);
-    toast.success('Devis dupliqué');
+
+    // Copier les pièces jointes (notes + fichiers)
+    const { data: pjs } = await supabase
+      .from('devis_pieces_jointes')
+      .select('*')
+      .eq('devis_id', d.id)
+      .order('date', { ascending: true });
+
+    if (pjs && pjs.length > 0) {
+      const newPjs: any[] = [];
+      for (const pj of pjs) {
+        const newPjId = generateId();
+        if (pj.type === 'fichier' && pj.fichier_url) {
+          // Extraire le chemin dans le bucket depuis l'URL
+          const pathMatch = (pj.fichier_url as string).match(/\/devis-pj\/([^?]+)/);
+          if (pathMatch) {
+            const oldPath = decodeURIComponent(pathMatch[1]);
+            // Nouveau chemin : remplacer l'ancien devisId par le nouveau
+            const newPath = oldPath.replace(d.id, newId);
+            const { error: copyErr } = await supabase.storage
+              .from('devis-pj')
+              .copy(oldPath, newPath);
+            if (!copyErr) {
+              // Construire la nouvelle URL publique
+              const { data: { publicUrl } } = supabase.storage
+                .from('devis-pj')
+                .getPublicUrl(newPath);
+              newPjs.push({
+                ...pj,
+                id: newPjId,
+                devis_id: newId,
+                fichier_url: publicUrl,
+              });
+            }
+          }
+        } else {
+          // Note : copier directement
+          newPjs.push({ ...pj, id: newPjId, devis_id: newId });
+        }
+      }
+      if (newPjs.length > 0) {
+        await supabase.from('devis_pieces_jointes').insert(newPjs);
+      }
+      toast.success(`Devis dupliqué avec ${newPjs.length} pièce${newPjs.length > 1 ? 's jointes' : ' jointe'}`);
+    } else {
+      toast.success('Devis dupliqué');
+    }
   }
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);
