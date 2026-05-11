@@ -696,16 +696,17 @@ export default function Clients() {
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
-        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
+          <div className="flex-1 min-h-0 overflow-y-auto">
           {!editingClient && (
-            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
+            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground mb-3" onClick={() => setEmailDialogOpen(true)}>
               <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
             </Button>
           )}
-          <div className="grid gap-4 py-2">
+          <div className="grid gap-3 py-1">
             {/* Société — identifiant principal */}
             <div>
               <Label>Société *</Label>
@@ -723,26 +724,26 @@ export default function Clients() {
               <Label className="text-sm font-semibold text-muted-foreground">Adresse de facturation</Label>
               <div>
                 <Label className="text-xs">Adresse</Label>
-                <Input type="text" value={form.adresse} onChange={e => setForm(prev => ({ ...prev, adresse: e.target.value }))} />
+                <Input type="text" value={form.adresse} onChange={e => setForm(prev => ({ ...prev, adresse: e.target.value }))} className="h-8 text-sm" />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label className="text-xs">Ville</Label>
-                  <Input type="text" value={form.ville} onChange={e => setForm(prev => ({ ...prev, ville: e.target.value }))} />
+                  <Input type="text" value={form.ville} onChange={e => setForm(prev => ({ ...prev, ville: e.target.value }))} className="h-8 text-sm" />
                 </div>
                 <div>
                   <Label className="text-xs">Code postal</Label>
-                  <Input type="text" value={form.codePostal} onChange={e => setForm(prev => ({ ...prev, codePostal: e.target.value }))} />
+                  <Input type="text" value={form.codePostal} onChange={e => setForm(prev => ({ ...prev, codePostal: e.target.value }))} className="h-8 text-sm" />
                 </div>
               </div>
             </div>
 
             {/* Notes */}
             <div>
-              <Label>Notes</Label>
+              <Label className="text-xs">Notes</Label>
               <textarea
                 className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                rows={3}
+                rows={2}
                 value={form.notes}
                 onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
               />
@@ -825,7 +826,7 @@ export default function Clients() {
                     </span>
                     <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="grid grid-cols-2 gap-2">
                     <div>
                       <Label className="text-xs">Prénom</Label>
                       <Input className="h-8 text-sm" value={ct.prenom || ''} onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, prenom: e.target.value } : c) }))} placeholder="Prénom" />
@@ -956,7 +957,8 @@ export default function Clients() {
               )}
             </div>
           </div>
-          <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
+          </div>{/* end scrollable area */}
+          <div className="shrink-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
           </div>
