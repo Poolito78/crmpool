@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -18,6 +18,7 @@ import DevisEmailDialog from '@/components/DevisEmailDialog';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import AiCalculatorDialog from '@/components/AiCalculatorDialog';
+import DevisChatter from '@/components/DevisChatter';
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -49,6 +50,7 @@ export default function Devis() {
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
+  const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [aiCalc, setAiCalc] = useState<{ ligneId: string; field: 'surfaceM2' | 'consommation' | 'quantite'; label: string; current?: number } | null>(null);
 
   // Auto-open devis editor when returning from product page
@@ -603,6 +605,7 @@ export default function Devis() {
                     <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
                     <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
+                    <button onClick={() => setChatterDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Notes & fichiers"><MessageSquare className="w-4 h-4" /></button>
                     <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                   </div>
                 </div>
@@ -1250,6 +1253,15 @@ export default function Devis() {
           if (d) openEdit(d);
         }}
       />
+
+      {chatterDevis && (
+        <DevisChatter
+          open={!!chatterDevis}
+          onOpenChange={(open) => { if (!open) setChatterDevis(null); }}
+          devisId={chatterDevis.id}
+          devisNumero={chatterDevis.numero}
+        />
+      )}
 
       {aiCalc && (
         <AiCalculatorDialog
