@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, body, pdfBase64, fileName } = await req.json();
+    const { to, subject, body, pdfBase64, fileName, extraAttachments } = await req.json();
 
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
     const FROM_EMAIL = Deno.env.get('RESEND_FROM_EMAIL') || 'onboarding@resend.dev';
@@ -23,6 +23,10 @@ serve(async (req) => {
       );
     }
 
+    const attachments: Array<{ filename: string; content: string }> = [];
+    if (pdfBase64 && fileName) attachments.push({ filename: fileName, content: pdfBase64 });
+    if (Array.isArray(extraAttachments)) attachments.push(...extraAttachments);
+
     const payload: Record<string, unknown> = {
       from: FROM_EMAIL,
       to: [to],
@@ -30,13 +34,8 @@ serve(async (req) => {
       text: body,
     };
 
-    if (pdfBase64 && fileName) {
-      payload.attachments = [
-        {
-          filename: fileName,
-          content: pdfBase64,
-        },
-      ];
+    if (attachments.length > 0) {
+      payload.attachments = attachments;
     }
 
     const res = await fetch('https://api.resend.com/emails', {

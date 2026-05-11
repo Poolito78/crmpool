@@ -3,11 +3,45 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
+
+interface PjFichier {
+  id: string;
+  fichierNom: string;
+  fichierUrl: string;
+  fichierMime?: string;
+  fichierTaille?: number;
+}
+
+function formatTaille(bytes?: number) {
+  if (!bytes) return '';
+  if (bytes < 1024) return `${bytes} o`;
+  if (bytes < 1048576) return `${(bytes / 1024).toFixed(1)} Ko`;
+  return `${(bytes / 1048576).toFixed(1)} Mo`;
+}
+
+function IconPj({ mime }: { mime?: string }) {
+  if (!mime) return <File className="w-4 h-4 text-muted-foreground" />;
+  if (mime.startsWith('image/')) return <FileImage className="w-4 h-4 text-blue-500" />;
+  if (mime.includes('pdf')) return <FileText className="w-4 h-4 text-red-500" />;
+  if (mime.includes('sheet') || mime.includes('excel') || mime.includes('csv')) return <FileSpreadsheet className="w-4 h-4 text-green-600" />;
+  return <File className="w-4 h-4 text-muted-foreground" />;
+}
+
+async function fetchFileAsBase64(signedUrl: string): Promise<string> {
+  const res = await fetch(signedUrl);
+  const blob = await res.blob();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve((reader.result as string).split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
+}
 
 interface Props {
   open: boolean;
@@ -28,11 +62,36 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [sending, setSending] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
   const [savedFolder, setSavedFolder] = useState<string | null>(null);
+  const [pjFichiers, setPjFichiers] = useState<PjFichier[]>([]);
+  const [selectedPjIds, setSelectedPjIds] = useState<Set<string>>(new Set());
   const pdfBase64Ref = useRef<string | null>(null);
 
   useEffect(() => {
     getStoredDirHandle().then(h => setSavedFolder(h?.name ?? null));
   }, []);
+
+  // Charger les pièces jointes du chatter pour ce devis
+  useEffect(() => {
+    if (!devis || !open) { setPjFichiers([]); setSelectedPjIds(new Set()); return; }
+    supabase
+      .from('devis_pieces_jointes')
+      .select('id, fichier_nom, fichier_url, fichier_mime, fichier_taille')
+      .eq('devis_id', devis.id)
+      .eq('type', 'fichier')
+      .order('date', { ascending: true })
+      .then(({ data }) => {
+        const fichiers: PjFichier[] = (data ?? []).map(r => ({
+          id: r.id,
+          fichierNom: r.fichier_nom ?? 'Fichier',
+          fichierUrl: r.fichier_url ?? '',
+          fichierMime: r.fichier_mime ?? undefined,
+          fichierTaille: r.fichier_taille ?? undefined,
+        }));
+        setPjFichiers(fichiers);
+        // Tout sélectionner par défaut
+        setSelectedPjIds(new Set(fichiers.map(f => f.id)));
+      });
+  }, [devis, open]);
 
   useEffect(() => {
     if (!devis || !open) {
@@ -113,7 +172,23 @@ François MOUHOT
       }
     }
 
-    // 2. Envoyer via Resend (edge function) avec PDF en pièce jointe
+    // 2. Préparer les PJs sélectionnées (URL signée fraîche + base64)
+    const extraAttachments: Array<{ filename: string; content: string }> = [];
+    const pjsToSend = pjFichiers.filter(f => selectedPjIds.has(f.id));
+    for (const pj of pjsToSend) {
+      try {
+        const pathMatch = pj.fichierUrl.match(/\/devis-pj\/([^?]+)/);
+        if (!pathMatch) continue;
+        const { data: signed } = await supabase.storage
+          .from('devis-pj')
+          .createSignedUrl(decodeURIComponent(pathMatch[1]), 120);
+        if (!signed?.signedUrl) continue;
+        const b64 = await fetchFileAsBase64(signed.signedUrl);
+        extraAttachments.push({ filename: pj.fichierNom, content: b64 });
+      } catch { /* ignorer si échec sur un fichier */ }
+    }
+
+    // 3. Envoyer via Resend (edge function) avec PDF + PJs en pièces jointes
     try {
       const { data, error } = await supabase.functions.invoke('send-devis-email', {
         body: {
@@ -122,6 +197,7 @@ François MOUHOT
           body,
           pdfBase64: pdfBase64Ref.current,
           fileName: pdfFileName,
+          extraAttachments,
         },
       });
 
@@ -186,6 +262,40 @@ François MOUHOT
               onChange={e => setBody(e.target.value)}
             />
           </div>
+
+          {/* ── Pièces jointes du chatter ── */}
+          {pjFichiers.length > 0 && (
+            <div className="rounded-md border px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Paperclip className="w-4 h-4 text-muted-foreground" />
+                Pièces jointes à inclure
+                <span className="text-xs font-normal text-muted-foreground">({selectedPjIds.size}/{pjFichiers.length} sélectionnée{selectedPjIds.size > 1 ? 's' : ''})</span>
+              </div>
+              <div className="space-y-1">
+                {pjFichiers.map(pj => (
+                  <label key={pj.id} className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={selectedPjIds.has(pj.id)}
+                      onChange={e => {
+                        setSelectedPjIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(pj.id); else next.delete(pj.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <IconPj mime={pj.fichierMime} />
+                    <span className="text-sm flex-1 truncate">{pj.fichierNom}</span>
+                    {pj.fichierTaille != null && (
+                      <span className="text-xs text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Statut PDF + dossier */}
           <div className="rounded-md border px-3 py-2 space-y-2 text-sm">
