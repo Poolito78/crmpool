@@ -359,63 +359,67 @@ export default function Fournisseurs() {
       </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editing ? 'Modifier' : 'Nouveau fournisseur'}</DialogTitle></DialogHeader>
-          {!editing && (
-            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
-              <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
-            </Button>
-          )}
-          <div className="grid gap-4 py-2">
-            {[
-              { key: 'societe', label: 'Société *' },
-              { key: 'nom', label: 'Nom contact *' },
-              { key: 'email', label: 'Email', type: 'email' },
-              { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
-              { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
-              { key: 'adresse', label: 'Adresse' },
-              { key: 'ville', label: 'Ville' },
-              { key: 'codePostal', label: 'Code postal' },
-            ].map(f => (
-              <div key={f.key}>
-                <Label>{f.label}</Label>
-                <Input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
-              </div>
-            ))}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Conditions de livraison</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">Franco de port (€)</Label>
-                  <Input type="number" step="0.01" value={form.francoPort} onChange={e => setForm(prev => ({ ...prev, francoPort: parseFloat(e.target.value) || 0 }))} />
+        <DialogContent mobileFullscreen className="sm:max-w-lg sm:max-h-[90vh] flex flex-col overflow-y-auto">
+          <DialogHeader className="shrink-0">
+            <DialogTitle>{editing ? 'Modifier' : 'Nouveau fournisseur'}</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            {!editing && (
+              <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground mb-3" onClick={() => setEmailDialogOpen(true)}>
+                <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
+              </Button>
+            )}
+            <div className="grid gap-4 py-2">
+              {[
+                { key: 'societe', label: 'Société *' },
+                { key: 'nom', label: 'Nom contact *' },
+                { key: 'email', label: 'Email', type: 'email' },
+                { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+                { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
+                { key: 'adresse', label: 'Adresse' },
+                { key: 'ville', label: 'Ville' },
+                { key: 'codePostal', label: 'Code postal' },
+              ].map(f => (
+                <div key={f.key}>
+                  <Label>{f.label}</Label>
+                  <Input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
                 </div>
-                <div>
-                  <Label className="text-xs">Coût transport (€)</Label>
-                  <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
+              ))}
+              <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+                <p className="text-sm font-semibold text-foreground">Conditions de livraison</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs">Franco de port (€)</Label>
+                    <Input type="number" step="0.01" value={form.francoPort} onChange={e => setForm(prev => ({ ...prev, francoPort: parseFloat(e.target.value) || 0 }))} />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Coût transport (€)</Label>
+                    <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
+                  </div>
                 </div>
               </div>
-            </div>
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
-              <div>
-                <Label className="text-xs">Délai de règlement</Label>
-                <select
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                  value={form.delaiReglement}
-                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
-                >
-                  <option value="Comptant">Comptant</option>
-                  <option value="30j net">30j net</option>
-                  <option value="30j FDM">30j FDM</option>
-                  <option value="45j net">45j net</option>
-                  <option value="45j FDM">45j FDM</option>
-                  <option value="60j net">60j net</option>
-                  <option value="60j FDM">60j FDM</option>
-                </select>
+              <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+                <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
+                <div>
+                  <Label className="text-xs">Délai de règlement</Label>
+                  <select
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    value={form.delaiReglement}
+                    onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                  >
+                    <option value="Comptant">Comptant</option>
+                    <option value="30j net">30j net</option>
+                    <option value="30j FDM">30j FDM</option>
+                    <option value="45j net">45j net</option>
+                    <option value="45j FDM">45j FDM</option>
+                    <option value="60j net">60j net</option>
+                    <option value="60j FDM">60j FDM</option>
+                  </select>
+                </div>
               </div>
             </div>
           </div>
-          <div className="flex justify-end gap-2">
+          <div className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
           </div>
@@ -430,7 +434,7 @@ export default function Fournisseurs() {
       />
 
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[90vh] flex flex-col overflow-y-auto">
           <DialogHeader><DialogTitle>Aperçu de l'import</DialogTitle></DialogHeader>
           {importPreview && (
             <>
@@ -525,7 +529,7 @@ export default function Fournisseurs() {
               {importPreview.length > 10 && <p className="text-xs text-muted-foreground">... et {importPreview.length - 10} autres lignes</p>}
             </>
           )}
-          <div className="flex justify-end gap-2">
+          <div className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2">
             <Button variant="outline" onClick={() => { setImportDialogOpen(false); setImportPreview(null); }}>Annuler</Button>
             <Button onClick={importFournisseursAction}>
               {importMode === 'update' ? `Mettre à jour` : `Importer ${importPreview?.length || 0} fournisseur(s)`}
