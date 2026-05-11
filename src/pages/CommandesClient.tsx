@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis } from '@/lib/store';
 import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays, Mail } from 'lucide-react';
@@ -15,8 +16,10 @@ import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
 export default function CommandesClient() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur } = useCRM();
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -290,9 +293,34 @@ export default function CommandesClient() {
               const client = clients.find(c => c.id === cmd.clientId);
               const statutInfo = STATUTS_COMMANDE_CLIENT[cmd.statut];
               const isOverdue = cmd.dateEcheance && new Date(cmd.dateEcheance) < new Date() && cmd.statut === 'facture';
+              const dvLie = cmd.devisId ? devis.find(d => d.id === cmd.devisId) : undefined;
+              const cfLies = cmd.devisId ? commandesFournisseur.filter(cf => cf.devisId === cmd.devisId) : [];
               return (
                 <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="py-3 px-4 font-mono text-xs">{cmd.numero}</td>
+                  <td className="py-3 px-4">
+                    <div className="font-mono text-xs">{cmd.numero}</div>
+                    {(dvLie || cfLies.length > 0) && (
+                      <div className="flex items-center gap-1 flex-wrap mt-1">
+                        {dvLie && (
+                          <button
+                            onClick={() => navigate(`/devis?search=${encodeURIComponent(dvLie.numero)}`)}
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
+                          >
+                            <FileText className="w-2.5 h-2.5" />{dvLie.numero}
+                          </button>
+                        )}
+                        {cfLies.map(cf => (
+                          <button
+                            key={cf.id}
+                            onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)}
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"
+                          >
+                            <ShoppingCart className="w-2.5 h-2.5" />{cf.numero}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </td>
                   <td className="py-3 px-4">
                     <div className="font-medium">{client?.nom || '—'}</div>
                     {client?.societe && <div className="text-xs text-muted-foreground">{client.societe}</div>}

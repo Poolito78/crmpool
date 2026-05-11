@@ -22,7 +22,7 @@ const statutConfig: Record<string, { label: string; color: string; icon: typeof 
 
 export default function Commandes() {
   const navigate = useNavigate();
-  const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis, produits } = useCRM();
+  const { commandesFournisseur, updateCommandesFournisseur, fournisseurs, devis, produits, commandesClient } = useCRM();
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
@@ -137,6 +137,7 @@ export default function Commandes() {
         {filtered.map(cf => {
           const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
           const dv = devis.find(d => d.id === cf.devisId);
+          const ccLies = cf.devisId ? commandesClient.filter(cc => cc.devisId === cf.devisId) : [];
           const config = statutConfig[cf.statut] || statutConfig.en_attente;
           const lignes = Array.isArray(cf.lignes) ? cf.lignes : [];
 
@@ -151,14 +152,28 @@ export default function Commandes() {
                   <p className="text-sm text-muted-foreground">
                     {fourn?.societe || fourn?.nom || '—'} • {formatDate(cf.dateCreation)}
                   </p>
-                  {dv && (
-                    <button
-                      onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(dv.numero)}`); }}
-                      className="mt-1 inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
-                    >
-                      <FileText className="w-3 h-3" />
-                      Devis {dv.numero}
-                    </button>
+                  {(dv || ccLies.length > 0) && (
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      {dv && (
+                        <button
+                          onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(dv.numero)}`); }}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
+                        >
+                          <FileText className="w-3 h-3" />
+                          {dv.numero}
+                        </button>
+                      )}
+                      {ccLies.map(cc => (
+                        <button
+                          key={cc.id}
+                          onClick={e => { e.stopPropagation(); navigate(`/commandes-client?search=${encodeURIComponent(cc.numero)}`); }}
+                          className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"
+                        >
+                          <ShoppingCart className="w-3 h-3" />
+                          {cc.numero}
+                        </button>
+                      ))}
+                    </div>
                   )}
                   <p className="text-xs text-muted-foreground mt-1">
                     {lignes.length} produit{lignes.length > 1 ? 's' : ''} : {lignes.map(l => `${l.description} (×${l.quantite})`).join(', ')}

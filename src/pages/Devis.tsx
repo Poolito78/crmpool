@@ -515,6 +515,7 @@ export default function Devis() {
           const tauxMargeD = totalHTD > 0 ? (margeD / totalHTD) * 100 : 0;
           const coeffD = totalAchatD > 0 ? Math.round(totalHTD / totalAchatD * 100) / 100 : null;
           const cfLies = commandesFournisseur.filter(cf => cf.devisId === d.id);
+          const ccLies = commandesClient.filter(cc => cc.devisId === d.id);
           const devisContact = d.contactId && client
             ? (client.contacts || []).find(ct => ct.id === d.contactId)
             : null;
@@ -553,11 +554,11 @@ export default function Devis() {
                     {' • '}{formatDate(d.dateCreation)}
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
-                  {/* ── BC fournisseurs liés ── */}
-                  {d.statut === 'accepté' && (
+                  {/* ── Documents liés ── */}
+                  {(cfLies.length > 0 || ccLies.length > 0 || d.statut === 'accepté') && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                       <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                      {cfLies.length === 0 ? (
+                      {d.statut === 'accepté' && cfLies.length === 0 ? (
                         <button
                           onClick={() => setCommandeDevis(d)}
                           className="text-xs text-primary hover:underline font-medium"
@@ -575,6 +576,15 @@ export default function Devis() {
                           </button>
                         ))
                       )}
+                      {ccLies.map(cc => (
+                        <button
+                          key={cc.id}
+                          onClick={() => navigate(`/commandes-client?search=${encodeURIComponent(cc.numero)}`)}
+                          className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
+                        >
+                          <ShoppingCart className="w-3 h-3 inline mr-1" />{cc.numero}
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
