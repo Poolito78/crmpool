@@ -33,6 +33,7 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   devisId: string;
   devisNumero: string;
+  initialMode?: 'note' | 'fichier' | null;
 }
 
 /* ── Helpers ── */
@@ -75,7 +76,7 @@ const actionLabel: Record<string, { label: string; icon: typeof Clock; color: st
 };
 
 /* ── Composant principal ── */
-export default function DevisChatter({ open, onOpenChange, devisId, devisNumero }: Props) {
+export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode }: Props) {
   const [pjs, setPjs] = useState<PieceJointe[]>([]);
   const [hist, setHist] = useState<HistoriqueEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -118,7 +119,20 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
     }
   }, [devisId]);
 
-  useEffect(() => { if (open) load(); }, [open, load]);
+  useEffect(() => {
+    if (open) {
+      load();
+      // Pré-sélectionner le mode si demandé depuis l'extérieur
+      if (initialMode) {
+        setMode(initialMode);
+        if (initialMode === 'fichier') {
+          setTimeout(() => fileRef.current?.click(), 100);
+        }
+      } else {
+        setMode(null);
+      }
+    }
+  }, [open, load, initialMode]);
 
   /* ── Timeline fusionnée ── */
   const timeline: EntreeTimeline[] = [

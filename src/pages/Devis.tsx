@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -51,6 +51,7 @@ export default function Devis() {
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
+  const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [aiCalc, setAiCalc] = useState<{ ligneId: string; field: 'surfaceM2' | 'consommation' | 'quantite'; label: string; current?: number } | null>(null);
 
   // Auto-open devis editor when returning from product page
@@ -1112,6 +1113,23 @@ export default function Devis() {
 
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
+
+            {/* ── Notes & fichiers joints (chatter) ── */}
+            {editingId && (
+              <div className="border-t border-border/50 pt-3">
+                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Notes & pièces jointes</p>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs"
+                    onClick={() => { const d = devis.find(dv => dv.id === editingId); if (d) { setChatterMode('note'); setChatterDevis(d); } }}>
+                    <StickyNote className="w-3.5 h-3.5" /> Note
+                  </Button>
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs"
+                    onClick={() => { const d = devis.find(dv => dv.id === editingId); if (d) { setChatterMode('fichier'); setChatterDevis(d); } }}>
+                    <Paperclip className="w-3.5 h-3.5" /> Joindre un fichier
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
           <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
             <Button variant="outline" size="sm" onClick={() => {
@@ -1257,9 +1275,10 @@ export default function Devis() {
       {chatterDevis && (
         <DevisChatter
           open={!!chatterDevis}
-          onOpenChange={(open) => { if (!open) setChatterDevis(null); }}
+          onOpenChange={(open) => { if (!open) { setChatterDevis(null); setChatterMode(null); } }}
           devisId={chatterDevis.id}
           devisNumero={chatterDevis.numero}
+          initialMode={chatterMode}
         />
       )}
 
