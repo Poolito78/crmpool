@@ -41,11 +41,15 @@ const DialogContent = React.forwardRef<
   const [vvOffsetTop, setVvOffsetTop] = React.useState<number>(0);
 
   React.useEffect(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    setIsMobile(mq.matches);
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mq.addEventListener('change', handler);
-    return () => mq.removeEventListener('change', handler);
+    // Portrait mobile (< 640px) OU paysage mobile (hauteur < 500px et largeur < 1024px)
+    const check = () => {
+      const w = window.innerWidth;
+      const h = window.innerHeight;
+      setIsMobile(w < 640 || (h < 500 && w < 1024));
+    };
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
   }, []);
 
   React.useEffect(() => {
@@ -69,15 +73,18 @@ const DialogContent = React.forwardRef<
     mobileFullscreen && isMobile
       ? {
           position: 'fixed',
+          // Écrase sm:left-[50%] / sm:translate-x-[-50%] et variantes paysage
           top: vvOffsetTop,
           left: 0,
           right: 0,
+          bottom: 0,
           width: '100%',
           maxWidth: '100%',
           // Hauteur exacte du viewport visible (sans le clavier)
           height: vvHeight ? `${vvHeight}px` : '100dvh',
           maxHeight: vvHeight ? `${vvHeight}px` : '100dvh',
           borderRadius: 0,
+          // Neutralise transform: translate(-50%, -50%) du centrage desktop
           transform: 'none',
           overflowY: 'auto',
           WebkitOverflowScrolling: 'touch',
