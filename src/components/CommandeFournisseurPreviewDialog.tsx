@@ -18,7 +18,7 @@ export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, c
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent mobileFullscreen className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" /> Commande {commande.numero}
@@ -93,7 +93,7 @@ export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, c
           )}
         </div>
 
-        <DialogFooter className="flex-col sm:flex-row gap-2 print:hidden">
+        <DialogFooter className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 flex-col sm:flex-row gap-2 print:hidden shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Fermer</Button>
           {onEdit && (
             <Button variant="outline" onClick={onEdit}>

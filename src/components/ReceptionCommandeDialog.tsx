@@ -93,15 +93,15 @@ export default function ReceptionCommandeDialog({ open, onOpenChange, commande, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[90vh] overflow-y-auto flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Package className="w-5 h-5 text-primary" />
             Réception de commande {commande.numero}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 pt-2">
+        <div className="space-y-5 pt-2 flex-1 min-h-0 overflow-y-auto pb-2">
           {/* Dates */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="space-y-1.5">
@@ -143,38 +143,31 @@ export default function ReceptionCommandeDialog({ open, onOpenChange, commande, 
               <table className="w-full text-sm">
                 <thead className="bg-muted/50">
                   <tr>
-                    <th className="text-left px-3 py-2 font-medium text-muted-foreground">Référence</th>
                     <th className="text-left px-3 py-2 font-medium text-muted-foreground">Description</th>
-                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Commandé</th>
-                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Reçu</th>
-                    <th className="text-center px-3 py-2 font-medium text-muted-foreground">Écart</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Cmd</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground">Reçu</th>
+                    <th className="text-center px-2 py-2 font-medium text-muted-foreground hidden sm:table-cell">Écart</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {lignesAvecEcart.map(ligne => (
                     <tr key={ligne.produitId} className="hover:bg-muted/20">
-                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{ligne.reference}</td>
-                      <td className="px-3 py-2">{ligne.description}</td>
-                      <td className="px-3 py-2 text-center">{ligne.quantiteCommandee}</td>
-                      <td className="px-3 py-2 text-center">
+                      <td className="px-3 py-2">
+                        {ligne.reference && <span className="block font-mono text-[10px] text-muted-foreground">{ligne.reference}</span>}
+                        {ligne.description}
+                      </td>
+                      <td className="px-2 py-2 text-center">{ligne.quantiteCommandee}</td>
+                      <td className="px-2 py-2 text-center">
                         <Input
                           type="number"
                           min={0}
                           value={ligne.quantiteRecue}
                           onChange={e => updateQuantiteRecue(ligne.produitId, Number(e.target.value))}
-                          className="w-20 mx-auto text-center h-7 text-sm"
+                          className="w-16 mx-auto text-center h-7 text-sm"
                         />
                       </td>
-                      <td className="px-3 py-2 text-center">
-                        <span
-                          className={
-                            ligne.ecart < 0
-                              ? 'font-semibold text-destructive'
-                              : ligne.ecart > 0
-                              ? 'font-semibold text-warning'
-                              : 'text-success'
-                          }
-                        >
+                      <td className="px-2 py-2 text-center hidden sm:table-cell">
+                        <span className={ligne.ecart < 0 ? 'font-semibold text-destructive' : ligne.ecart > 0 ? 'font-semibold text-warning' : 'text-success'}>
                           {ligne.ecart > 0 ? '+' : ''}{ligne.ecart}
                         </span>
                       </td>
@@ -198,15 +191,12 @@ export default function ReceptionCommandeDialog({ open, onOpenChange, commande, 
             </div>
           )}
 
-          {/* Actions */}
-          <div className="flex justify-end gap-2 pt-1">
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Annuler
-            </Button>
-            <Button onClick={handleConfirm}>
-              Confirmer la réception
-            </Button>
-          </div>
+        </div>
+
+        {/* Footer sticky */}
+        <div className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          <Button onClick={handleConfirm}>Confirmer la réception</Button>
         </div>
       </DialogContent>
     </Dialog>

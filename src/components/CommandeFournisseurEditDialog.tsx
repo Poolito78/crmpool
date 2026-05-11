@@ -97,14 +97,14 @@ export default function CommandeFournisseurEditDialog({ open, onOpenChange, comm
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent mobileFullscreen className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto flex flex-col">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Pencil className="w-5 h-5" /> Modifier — {commande.numero}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 flex-1 min-h-0 overflow-y-auto pb-2">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <div>
               <Label>Numéro</Label>
@@ -193,6 +193,10 @@ export default function CommandeFournisseurEditDialog({ open, onOpenChange, comm
             <textarea value={notes} onChange={e => setNotes(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[60px]" />
           </div>
 
+        </div>
+
+        {/* Footer sticky */}
+        <div className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0">
           <Button onClick={handleSave} className="w-full">Enregistrer les modifications</Button>
         </div>
       </DialogContent>
