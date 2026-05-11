@@ -144,13 +144,30 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
     load();
   }
 
+  /* ── Garantir que le bucket existe ── */
+  async function ensureBucket() {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const exists = buckets?.some(b => b.id === 'devis-pj');
+    if (!exists) {
+      const { error } = await supabase.storage.createBucket('devis-pj', {
+        public: false,
+        fileSizeLimit: 52428800, // 50 Mo
+      });
+      if (error && !error.message.includes('already exists')) {
+        throw new Error(`Impossible de créer le bucket : ${error.message}`);
+      }
+    }
+  }
+
   /* ── Upload fichier ── */
   async function handleUpload(file: File) {
     const uid = userId.current;
     if (!uid) return;
     setUploading(true);
     try {
-      const ext = file.name.split('.').pop() ?? '';
+      // Créer le bucket si absent (1ère utilisation)
+      await ensureBucket();
+
       const path = `${uid}/${devisId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
       const { error: upErr } = await supabase.storage
@@ -159,9 +176,11 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
 
       if (upErr) throw new Error(upErr.message);
 
-      const { data: { publicUrl } } = supabase.storage.from('devis-pj').getPublicUrl(path);
-      // Pour bucket privé, utiliser createSignedUrl à la place
-      const url = publicUrl || path;
+      // URL signée valable 10 ans (bucket privé)
+      const { data: signedData } = await supabase.storage
+        .from('devis-pj')
+        .createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      const url = signedData?.signedUrl ?? path;
 
       const { error: dbErr } = await supabase.from('devis_pieces_jointes').insert({
         user_id: uid,
@@ -187,10 +206,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
   /* ── Supprimer pièce jointe ── */
   async function handleDelete(pj: PieceJointe) {
     if (pj.type === 'fichier' && pj.fichierUrl) {
-      // Extraire le path depuis l'URL
-      const pathMatch = pj.fichierUrl.match(/devis-pj\/(.+)$/);
+      const pathMatch = pj.fichierUrl.match(/\/devis-pj\/([^?]+)/);
       if (pathMatch) {
-        await supabase.storage.from('devis-pj').remove([pathMatch[1]]);
+        await supabase.storage.from('devis-pj').remove([decodeURIComponent(pathMatch[1])]);
       }
     }
     await supabase.from('devis_pieces_jointes').delete().eq('id', pj.id);
@@ -198,16 +216,15 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
     toast.success('Supprimé');
   }
 
-  /* ── Download signé ── */
+  /* ── Download signé (URL fraîche 60s) ── */
   async function handleDownload(pj: PieceJointe) {
     if (!pj.fichierUrl) return;
-    const pathMatch = pj.fichierUrl.match(/devis-pj\/(.+)$/);
+    // Extraire le path depuis l'URL stockée (signée ou publique)
+    const pathMatch = pj.fichierUrl.match(/\/devis-pj\/([^?]+)/);
     if (pathMatch) {
-      const { data } = await supabase.storage.from('devis-pj').createSignedUrl(pathMatch[1], 60);
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank');
-        return;
-      }
+      const storagePath = decodeURIComponent(pathMatch[1]);
+      const { data } = await supabase.storage.from('devis-pj').createSignedUrl(storagePath, 60);
+      if (data?.signedUrl) { window.open(data.signedUrl, '_blank'); return; }
     }
     window.open(pj.fichierUrl, '_blank');
   }
