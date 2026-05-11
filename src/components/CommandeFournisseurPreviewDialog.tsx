@@ -18,7 +18,7 @@ export default function CommandeFournisseurPreviewDialog({ open, onOpenChange, c
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileFullscreen className="sm:max-w-3xl sm:max-h-[90vh] overflow-y-auto flex flex-col">
+      <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[92vh] overflow-y-auto flex flex-col">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText className="w-5 h-5" /> Commande {commande.numero}
