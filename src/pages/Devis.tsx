@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,7 +30,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient } = useCRM();
+  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -196,6 +196,34 @@ export default function Devis() {
     setEditingId(d.id);
     populateForm(d);
     setDialogOpen(true);
+  }
+
+  function createProforma(d: DevisType) {
+    const year = new Date().getFullYear();
+    const prefix = `PRO-${year}`;
+    const n = facturesClient.filter(f => f.numero.startsWith(prefix)).length + 1;
+    const numero = `${prefix}-${String(n).padStart(3, '0')}`;
+    const client = clients.find(c => c.id === d.clientId);
+    const total = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
+    const proforma: FactureClient = {
+      id: generateId(),
+      numero,
+      clientId: d.clientId,
+      devisId: d.id,
+      dateCreation: new Date().toISOString().split('T')[0],
+      statut: 'brouillon',
+      lignes: d.lignes,
+      totalHT: total.totalHT,
+      totalTVA: total.totalTVA,
+      totalTTC: total.totalTTC,
+      fraisPortHT: d.fraisPortHT || 0,
+      referenceAffaire: d.referenceAffaire,
+      estProforma: true,
+    };
+    updateFacturesClient(prev => [...prev, proforma]);
+    toast.success(`Proforma ${numero} créée`, {
+      action: { label: 'Voir', onClick: () => navigate('/factures-client?search=' + encodeURIComponent(numero)) },
+    });
   }
 
   async function duplicate(d: DevisType) {
@@ -604,7 +632,7 @@ export default function Devis() {
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                   {/* ── Documents liés ── */}
-                  {(cfLies.length > 0 || ccLies.length > 0 || facLies.length > 0 || d.statut === 'accepté') && (
+                  {(cfLies.length > 0 || ccLies.length > 0 || facLies.length > 0 || d.statut === 'accepté' || d.statut === 'envoyé') && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                       <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       {d.statut === 'accepté' && cfLies.length === 0 ? (
@@ -638,11 +666,19 @@ export default function Devis() {
                         <button
                           key={f.id}
                           onClick={() => navigate(`/factures-client?search=${encodeURIComponent(f.numero)}`)}
-                          className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"
+                          className={`text-xs px-2 py-0.5 rounded-full font-medium transition-colors ${f.estProforma ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 hover:bg-amber-200' : 'bg-primary/10 text-primary hover:bg-primary/20'}`}
                         >
                           <Receipt className="w-3 h-3 inline mr-1" />{f.numero}
                         </button>
                       ))}
+                      {(d.statut === 'envoyé' || d.statut === 'accepté') && facLies.filter(f => f.estProforma).length === 0 && (
+                        <button
+                          onClick={() => createProforma(d)}
+                          className="text-xs text-amber-600 hover:underline font-medium"
+                        >
+                          + Proforma
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

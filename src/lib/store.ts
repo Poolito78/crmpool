@@ -169,6 +169,7 @@ export interface FactureClient {
   fraisPortHT: number;
   referenceAffaire?: string;
   notes?: string;
+  estProforma?: boolean;
 }
 
 export const STATUTS_FACTURE_CLIENT: Record<StatutFactureClient, { label: string; color: string }> = {
@@ -565,6 +566,7 @@ function dbToFactureClient(r: any): FactureClient {
     fraisPortHT: Number(r.frais_port_ht) || 0,
     referenceAffaire: r.reference_affaire || undefined,
     notes: r.notes || undefined,
+    estProforma: r.est_proforma ?? false,
   };
 }
 
@@ -587,6 +589,7 @@ function factureClientToDb(f: FactureClient, userId: string) {
     frais_port_ht: f.fraisPortHT,
     reference_affaire: f.referenceAffaire || null,
     notes: f.notes || null,
+    est_proforma: f.estProforma ?? false,
   };
 }
 
