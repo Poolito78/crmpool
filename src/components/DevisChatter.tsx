@@ -83,8 +83,10 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const userId = useRef<string | null>(null);
+  const dragCounter = useRef(0);
 
   /* ── Chargement données ── */
   const load = useCallback(async () => {
@@ -239,6 +241,26 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     if (url) window.open(url, '_blank');
   }
 
+  /* ── Drag & Drop handlers ── */
+  function handleDragEnter(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current++;
+    if (Array.from(e.dataTransfer.items).some(i => i.kind === 'file')) setIsDragOver(true);
+  }
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current--;
+    if (dragCounter.current === 0) setIsDragOver(false);
+  }
+  function handleDragOver(e: React.DragEvent) { e.preventDefault(); }
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragOver(false);
+    const files = Array.from(e.dataTransfer.files);
+    files.forEach(f => handleUpload(f));
+  }
+
   const nbPj = pjs.length;
 
   return (
@@ -255,6 +277,23 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             )}
           </DialogTitle>
         </DialogHeader>
+
+        {/* ── Zone drag & drop globale ── */}
+        <div
+          className="flex flex-col flex-1 min-h-0 relative"
+          onDragEnter={handleDragEnter}
+          onDragLeave={handleDragLeave}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+        >
+          {/* Overlay drop */}
+          {isDragOver && (
+            <div className="absolute inset-0 z-50 flex flex-col items-center justify-center rounded-xl bg-primary/10 border-2 border-dashed border-primary pointer-events-none">
+              <Paperclip className="w-10 h-10 text-primary mb-3" />
+              <p className="text-sm font-semibold text-primary">Déposer le fichier ici</p>
+              <p className="text-xs text-primary/70 mt-1">PDF, images, documents…</p>
+            </div>
+          )}
 
         {/* ── Zone de saisie ── */}
         <div className="shrink-0 border border-border rounded-xl p-3 space-y-2 bg-muted/20">
@@ -322,7 +361,8 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
           {!loading && timeline.length === 0 && (
             <div className="text-center py-10 text-muted-foreground text-sm">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
-              Aucune note ni fichier joint
+              <p>Aucune note ni fichier joint</p>
+              <p className="text-xs mt-1 opacity-60">Glissez un fichier ici pour l'ajouter</p>
             </div>
           )}
 
@@ -397,6 +437,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             );
           })}
         </div>
+        </div>{/* fin zone drag & drop */}
       </DialogContent>
     </Dialog>
   );
