@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -30,7 +30,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient } = useCRM();
+  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -564,6 +564,7 @@ export default function Devis() {
           const coeffD = totalAchatD > 0 ? Math.round(totalHTD / totalAchatD * 100) / 100 : null;
           const cfLies = commandesFournisseur.filter(cf => cf.devisId === d.id);
           const ccLies = commandesClient.filter(cc => cc.devisId === d.id);
+          const facLies = facturesClient.filter(f => f.devisId === d.id);
           const devisContact = d.contactId && client
             ? (client.contacts || []).find(ct => ct.id === d.contactId)
             : null;
@@ -603,7 +604,7 @@ export default function Devis() {
                   </p>
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                   {/* ── Documents liés ── */}
-                  {(cfLies.length > 0 || ccLies.length > 0 || d.statut === 'accepté') && (
+                  {(cfLies.length > 0 || ccLies.length > 0 || facLies.length > 0 || d.statut === 'accepté') && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
                       <Package className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                       {d.statut === 'accepté' && cfLies.length === 0 ? (
@@ -631,6 +632,15 @@ export default function Devis() {
                           className="text-xs px-2 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
                         >
                           <ShoppingCart className="w-3 h-3 inline mr-1" />{cc.numero}
+                        </button>
+                      ))}
+                      {facLies.map(f => (
+                        <button
+                          key={f.id}
+                          onClick={() => navigate(`/factures-client?search=${encodeURIComponent(f.numero)}`)}
+                          className="text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"
+                        >
+                          <Receipt className="w-3 h-3 inline mr-1" />{f.numero}
                         </button>
                       ))}
                     </div>

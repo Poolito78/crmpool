@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { type CommandeFournisseur, type LigneReception, formatMontant, formatDate } from '@/lib/store';
-import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail, FileText } from 'lucide-react';
+import { ShoppingCart, CheckCircle, Clock, Package, Trash2, Search, Pencil, Eye, Mail, FileText, Receipt } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -221,6 +221,9 @@ export default function Commandes() {
                     </button>
                     <button onClick={() => openEmail(cf)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email">
                       <Mail className="w-4 h-4 text-muted-foreground" />
+                    </button>
+                    <button onClick={() => navigate(`/factures-fournisseur?cf=${cf.id}`)} className="p-1.5 rounded-md hover:bg-muted" title="Saisir facture fournisseur">
+                      <Receipt className="w-4 h-4 text-muted-foreground" />
                     </button>
                     <button onClick={() => setDeleteId(cf.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer">
                       <Trash2 className="w-4 h-4" />

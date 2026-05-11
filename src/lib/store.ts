@@ -149,6 +149,61 @@ export interface CommandeClient {
   dateEcheance?: string;
 }
 
+// ── Facture Client ──────────────────────────────────────────────────────────
+export type StatutFactureClient = 'brouillon' | 'envoyée' | 'payée' | 'annulée';
+
+export interface FactureClient {
+  id: string;
+  numero: string;
+  clientId: string;
+  commandeClientId?: string;
+  devisId?: string;
+  dateCreation: string;
+  dateEcheance?: string;
+  datePaiement?: string;
+  statut: StatutFactureClient;
+  lignes: LigneDevis[];
+  totalHT: number;
+  totalTVA: number;
+  totalTTC: number;
+  fraisPortHT: number;
+  referenceAffaire?: string;
+  notes?: string;
+}
+
+export const STATUTS_FACTURE_CLIENT: Record<StatutFactureClient, { label: string; color: string }> = {
+  brouillon: { label: 'Brouillon', color: 'bg-muted text-muted-foreground' },
+  envoyée:   { label: 'Envoyée',   color: 'bg-info/10 text-info' },
+  payée:     { label: 'Payée',     color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  annulée:   { label: 'Annulée',   color: 'bg-destructive/10 text-destructive' },
+};
+
+// ── Facture Fournisseur ─────────────────────────────────────────────────────
+export type StatutFactureFournisseur = 'reçue' | 'validée' | 'payée' | 'contestée';
+
+export interface FactureFournisseur {
+  id: string;
+  numero: string;
+  numeroFacture: string;
+  fournisseurId: string;
+  commandeFournisseurId?: string;
+  dateReception: string;
+  dateEcheance?: string;
+  datePaiement?: string;
+  statut: StatutFactureFournisseur;
+  montantHT: number;
+  montantTVA: number;
+  montantTTC: number;
+  notes?: string;
+}
+
+export const STATUTS_FACTURE_FOURNISSEUR: Record<StatutFactureFournisseur, { label: string; color: string }> = {
+  reçue:      { label: 'Reçue',      color: 'bg-warning/10 text-warning' },
+  validée:    { label: 'Validée',    color: 'bg-info/10 text-info' },
+  payée:      { label: 'Payée',      color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  contestée:  { label: 'Contestée',  color: 'bg-destructive/10 text-destructive' },
+};
+
 export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: string; color: string }> = {
   a_traiter: { label: 'À traiter', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   accuse_envoye: { label: 'AR envoyé', color: 'bg-info/10 text-info' },
@@ -490,6 +545,90 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
   };
 }
 
+// ---- FactureClient mapping ----
+
+function dbToFactureClient(r: any): FactureClient {
+  return {
+    id: r.id,
+    numero: r.numero,
+    clientId: r.client_id,
+    commandeClientId: r.commande_client_id || undefined,
+    devisId: r.devis_id || undefined,
+    dateCreation: r.date_creation?.split('T')[0] || '',
+    dateEcheance: r.date_echeance?.split('T')[0] || undefined,
+    datePaiement: r.date_paiement?.split('T')[0] || undefined,
+    statut: r.statut as StatutFactureClient,
+    lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
+    totalHT: Number(r.total_ht) || 0,
+    totalTVA: Number(r.total_tva) || 0,
+    totalTTC: Number(r.total_ttc) || 0,
+    fraisPortHT: Number(r.frais_port_ht) || 0,
+    referenceAffaire: r.reference_affaire || undefined,
+    notes: r.notes || undefined,
+  };
+}
+
+function factureClientToDb(f: FactureClient, userId: string) {
+  return {
+    id: f.id,
+    user_id: userId,
+    numero: f.numero,
+    client_id: f.clientId,
+    commande_client_id: f.commandeClientId || null,
+    devis_id: f.devisId || null,
+    date_creation: f.dateCreation,
+    date_echeance: f.dateEcheance || null,
+    date_paiement: f.datePaiement || null,
+    statut: f.statut,
+    lignes: f.lignes as any,
+    total_ht: f.totalHT,
+    total_tva: f.totalTVA,
+    total_ttc: f.totalTTC,
+    frais_port_ht: f.fraisPortHT,
+    reference_affaire: f.referenceAffaire || null,
+    notes: f.notes || null,
+  };
+}
+
+// ---- FactureFournisseur mapping ----
+
+function dbToFactureFournisseur(r: any): FactureFournisseur {
+  return {
+    id: r.id,
+    numero: r.numero,
+    numeroFacture: r.numero_facture || '',
+    fournisseurId: r.fournisseur_id,
+    commandeFournisseurId: r.commande_fournisseur_id || undefined,
+    dateReception: r.date_reception?.split('T')[0] || '',
+    dateEcheance: r.date_echeance?.split('T')[0] || undefined,
+    datePaiement: r.date_paiement?.split('T')[0] || undefined,
+    statut: r.statut as StatutFactureFournisseur,
+    montantHT: Number(r.montant_ht) || 0,
+    montantTVA: Number(r.montant_tva) || 0,
+    montantTTC: Number(r.montant_ttc) || 0,
+    notes: r.notes || undefined,
+  };
+}
+
+function factureFournisseurToDb(f: FactureFournisseur, userId: string) {
+  return {
+    id: f.id,
+    user_id: userId,
+    numero: f.numero,
+    numero_facture: f.numeroFacture,
+    fournisseur_id: f.fournisseurId,
+    commande_fournisseur_id: f.commandeFournisseurId || null,
+    date_reception: f.dateReception,
+    date_echeance: f.dateEcheance || null,
+    date_paiement: f.datePaiement || null,
+    statut: f.statut,
+    montant_ht: f.montantHT,
+    montant_tva: f.montantTVA,
+    montant_ttc: f.montantTTC,
+    notes: f.notes || null,
+  };
+}
+
 // ---- Sync helpers ----
 
 function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
@@ -509,6 +648,8 @@ export function useStore() {
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
   const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
   const [commandesClient, setCommandesClient] = useState<CommandeClient[]>([]);
+  const [facturesClient, setFacturesClient] = useState<FactureClient[]>([]);
+  const [facturesFournisseur, setFacturesFournisseur] = useState<FactureFournisseur[]>([]);
   const [loading, setLoading] = useState(true);
   const userIdRef = useRef<string | null>(null);
 
@@ -518,7 +659,7 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes] = await Promise.all([
+      const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes, fcRes, ffRes] = await Promise.all([
         supabase.from('clients').select('*'),
         supabase.from('fournisseurs').select('*'),
         supabase.from('produits').select('*'),
@@ -526,6 +667,8 @@ export function useStore() {
         supabase.from('produit_fournisseurs').select('*'),
         supabase.from('commandes_fournisseur').select('*'),
         supabase.from('commandes_client').select('*'),
+        supabase.from('factures_client').select('*'),
+        supabase.from('factures_fournisseur').select('*'),
       ]);
 
       if (cRes.data) setClients(cRes.data.map(dbToClient));
@@ -535,6 +678,8 @@ export function useStore() {
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
       if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
       if (ccRes.data) setCommandesClient(ccRes.data.map(dbToCommandeClient));
+      if (fcRes.data) setFacturesClient(fcRes.data.map(dbToFactureClient));
+      if (ffRes.data) setFacturesFournisseur(ffRes.data.map(dbToFactureFournisseur));
       setLoading(false);
     }
     load();
@@ -652,7 +797,39 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, loading };
+  const updateFacturesClient = useCallback((fn: (prev: FactureClient[]) => FactureClient[]) => {
+    setFacturesClient(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('factures_client').insert(added.map(f => factureClientToDb(f, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(f => supabase.from('factures_client').update(factureClientToDb(f, userId) as any).eq('id', f.id).then());
+        }
+        if (removed.length) supabase.from('factures_client').delete().in('id', removed.map(f => f.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  const updateFacturesFournisseur = useCallback((fn: (prev: FactureFournisseur[]) => FactureFournisseur[]) => {
+    setFacturesFournisseur(prev => {
+      const next = fn(prev);
+      const userId = userIdRef.current;
+      if (userId) {
+        const { added, removed, updated } = diffArrays(prev, next);
+        if (added.length) supabase.from('factures_fournisseur').insert(added.map(f => factureFournisseurToDb(f, userId)) as any).then();
+        if (updated.length) {
+          updated.forEach(f => supabase.from('factures_fournisseur').update(factureFournisseurToDb(f, userId) as any).eq('id', f.id).then());
+        }
+        if (removed.length) supabase.from('factures_fournisseur').delete().in('id', removed.map(f => f.id)).then();
+      }
+      return next;
+    });
+  }, []);
+
+  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 export function generateId() {

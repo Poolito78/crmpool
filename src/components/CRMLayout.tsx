@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -17,6 +17,8 @@ const navItems = [
   { label: 'Commandes Client', icon: ClipboardList, path: '/commandes-client' },
   { label: 'Fournisseurs', icon: Truck, path: '/fournisseurs' },
   { label: 'Cmd Fournisseur', icon: ShoppingCart, path: '/commandes' },
+  { label: 'Factures Client', icon: Receipt, path: '/factures-client' },
+  { label: 'Factures Fourn.', icon: Receipt, path: '/factures-fournisseur' },
   { label: 'Calcul Transport', icon: Calculator, path: '/calculateur-ups' },
   { label: 'Historique GED', icon: History, path: '/ged' },
 ];

@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, CalendarDays, Mail } from 'lucide-react';
+import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,7 +18,7 @@ const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[
 export default function CommandesClient() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur } = useCRM();
+  const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, facturesClient, updateFacturesClient } = useCRM();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
@@ -185,10 +185,37 @@ export default function CommandesClient() {
       toast.error('Sélectionnez au moins un produit à facturer');
       return;
     }
+    // Marquer la commande comme facturée
     updateCommandesClient(prev => prev.map(c => c.id === factureCommande.id ? {
       ...c, statut: 'facture' as StatutCommandeClient,
     } : c));
-    toast.success(`Commande ${factureCommande.numero} marquée comme facturée (${factureLignesSelectees.length} produit(s))`);
+
+    // Créer une FactureClient liée
+    const year = new Date().getFullYear();
+    const nFac = facturesClient.filter(f => f.numero.startsWith(`FAC-${year}`)).length + 1;
+    const lignesFacturees = factureCommande.lignes.filter(l => factureLignesSelectees.includes(l.id));
+    const total = calculerTotalDevis(lignesFacturees, factureCommande.fraisPortHT, 20);
+    const newFacture: FactureClient = {
+      id: generateId(),
+      numero: `FAC-${year}-${String(nFac).padStart(3, '0')}`,
+      clientId: factureCommande.clientId,
+      commandeClientId: factureCommande.id,
+      devisId: factureCommande.devisId,
+      dateCreation: new Date().toISOString().split('T')[0],
+      statut: 'brouillon',
+      lignes: lignesFacturees,
+      totalHT: total.totalHT,
+      totalTVA: total.totalTVA,
+      totalTTC: total.totalTTC,
+      fraisPortHT: factureCommande.fraisPortHT,
+      referenceAffaire: factureCommande.referenceAffaire,
+    };
+    updateFacturesClient(prev => [...prev, newFacture]);
+
+    toast.success(`Facture ${newFacture.numero} créée`, {
+      description: `Commande ${factureCommande.numero} — ${factureLignesSelectees.length} produit(s)`,
+      action: { label: 'Voir factures', onClick: () => navigate('/factures-client') },
+    });
     setFactureDialogOpen(false);
     setFactureCommande(null);
   }
@@ -295,11 +322,12 @@ export default function CommandesClient() {
               const isOverdue = cmd.dateEcheance && new Date(cmd.dateEcheance) < new Date() && cmd.statut === 'facture';
               const dvLie = cmd.devisId ? devis.find(d => d.id === cmd.devisId) : undefined;
               const cfLies = cmd.devisId ? commandesFournisseur.filter(cf => cf.devisId === cmd.devisId) : [];
+              const facLies = facturesClient.filter(f => f.commandeClientId === cmd.id || (cmd.devisId && f.devisId === cmd.devisId));
               return (
                 <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                   <td className="py-3 px-4">
                     <div className="font-mono text-xs">{cmd.numero}</div>
-                    {(dvLie || cfLies.length > 0) && (
+                    {(dvLie || cfLies.length > 0 || facLies.length > 0) && (
                       <div className="flex items-center gap-1 flex-wrap mt-1">
                         {dvLie && (
                           <button
@@ -316,6 +344,15 @@ export default function CommandesClient() {
                             className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"
                           >
                             <ShoppingCart className="w-2.5 h-2.5" />{cf.numero}
+                          </button>
+                        ))}
+                        {facLies.map(fac => (
+                          <button
+                            key={fac.id}
+                            onClick={() => navigate(`/factures-client?search=${encodeURIComponent(fac.numero)}`)}
+                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"
+                          >
+                            <Receipt className="w-2.5 h-2.5" />{fac.numero}
                           </button>
                         ))}
                       </div>
