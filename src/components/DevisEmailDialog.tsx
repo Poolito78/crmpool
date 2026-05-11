@@ -78,6 +78,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       .select('id, fichier_nom, fichier_url, fichier_mime, fichier_taille')
       .eq('devis_id', devis.id)
       .eq('type', 'fichier')
+      .eq('confidentiel', false)
       .order('date', { ascending: true })
       .then(({ data }) => {
         const fichiers: PjFichier[] = (data ?? []).map(r => ({

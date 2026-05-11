@@ -7,7 +7,7 @@ import { fetchHistorique, type HistoriqueEntry } from '@/lib/historique';
 import {
   MessageSquare, Paperclip, Send, Trash2, Download, FileText,
   FileImage, FileSpreadsheet, File, Clock, Pencil, Mail,
-  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye,
+  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -21,6 +21,7 @@ export interface PieceJointe {
   fichierUrl?: string;
   fichierTaille?: number;
   fichierMime?: string;
+  confidentiel?: boolean;
   date: string;
 }
 
@@ -85,6 +86,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const fileConfRef = useRef<HTMLInputElement>(null);
   const userId = useRef<string | null>(null);
   const dragCounter = useRef(0);
 
@@ -113,6 +115,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         fichierUrl: r.fichier_url ?? undefined,
         fichierTaille: r.fichier_taille ?? undefined,
         fichierMime: r.fichier_mime ?? undefined,
+        confidentiel: r.confidentiel ?? false,
         date: r.date,
       })));
       setHist(histData);
@@ -136,11 +139,13 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     }
   }, [open, load, initialMode]);
 
-  /* ── Timeline fusionnée ── */
+  /* ── Timeline (notes + fichiers publics + historique) ── */
   const timeline: EntreeTimeline[] = [
-    ...pjs.map(p => ({ kind: 'pj' as const, data: p, date: p.date })),
+    ...pjs.filter(p => !p.confidentiel).map(p => ({ kind: 'pj' as const, data: p, date: p.date })),
     ...hist.map(h => ({ kind: 'hist' as const, data: h, date: h.date })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const confidentiels = pjs.filter(p => p.confidentiel && p.type === 'fichier');
 
   /* ── Ajouter note ── */
   async function handleAddNote() {
@@ -160,8 +165,16 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     load();
   }
 
+  /* ── Toggle confidentiel ── */
+  async function handleToggleConfidentiel(pj: PieceJointe) {
+    await supabase.from('devis_pieces_jointes')
+      .update({ confidentiel: !pj.confidentiel })
+      .eq('id', pj.id);
+    setPjs(prev => prev.map(p => p.id === pj.id ? { ...p, confidentiel: !p.confidentiel } : p));
+  }
+
   /* ── Upload fichier ── */
-  async function handleUpload(file: File) {
+  async function handleUpload(file: File, confidentiel = false) {
     const uid = userId.current;
     if (!uid) return;
     setUploading(true);
@@ -189,6 +202,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         fichier_url: url,
         fichier_taille: file.size,
         fichier_mime: file.type,
+        confidentiel,
       });
       if (dbErr) throw new Error(dbErr.message);
 
@@ -298,7 +312,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         {/* ── Zone de saisie ── */}
         <div className="shrink-0 border border-border rounded-xl p-3 space-y-2 bg-muted/20">
           {/* Boutons mode */}
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <Button
               size="sm"
               variant={mode === 'note' ? 'default' : 'outline'}
@@ -318,12 +332,20 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               Joindre un fichier
             </Button>
-            <input
-              ref={fileRef}
-              type="file"
-              className="hidden"
-              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUpload(f); }}
-            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => fileConfRef.current?.click()}
+              className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30"
+              disabled={uploading}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              Confidentiel
+            </Button>
+            <input ref={fileRef} type="file" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUpload(f, false); }} />
+            <input ref={fileConfRef} type="file" className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUpload(f, true); }} />
           </div>
 
           {/* Saisie note */}
@@ -399,6 +421,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                           <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted" title="Télécharger">
                             <Download className="w-3.5 h-3.5 text-muted-foreground" />
                           </button>
+                          <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-muted" title="Rendre confidentiel">
+                            <Lock className="w-3.5 h-3.5 text-amber-500 opacity-50 hover:opacity-100" />
+                          </button>
                         </div>
                       </div>
                     )}
@@ -437,6 +462,41 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             );
           })}
         </div>
+
+        {/* ── Section Documents confidentiels ── */}
+        {confidentiels.length > 0 && (
+          <div className="shrink-0 mt-2 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-1.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
+              <Lock className="w-3.5 h-3.5" />
+              Documents confidentiels — non transmis à l'envoi
+            </div>
+            {confidentiels.map(pj => (
+              <div key={pj.id} className="flex items-center gap-2 group bg-white dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
+                <IconFichier mime={pj.fichierMime} />
+                <span className="text-sm flex-1 truncate">{pj.fichierNom}</span>
+                {pj.fichierTaille != null && (
+                  <span className="text-[10px] text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>
+                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
+                    <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Afficher">
+                      <Eye className="w-3.5 h-3.5 text-primary" />
+                    </button>
+                  )}
+                  <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-amber-100" title="Télécharger">
+                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                  <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-amber-100" title="Rendre public">
+                    <LockOpen className="w-3.5 h-3.5 text-amber-600" />
+                  </button>
+                  <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive" title="Supprimer">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         </div>{/* fin zone drag & drop */}
       </DialogContent>
     </Dialog>
