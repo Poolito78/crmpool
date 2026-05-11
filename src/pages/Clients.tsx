@@ -696,17 +696,16 @@ export default function Clients() {
 
       {/* Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
-        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0">
+        <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 min-h-0 overflow-y-auto">
           {!editingClient && (
-            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground mb-3" onClick={() => setEmailDialogOpen(true)}>
+            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
               <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
             </Button>
           )}
-          <div className="grid gap-3 py-1">
+          <div className="grid gap-3 py-2">
             {/* Société — identifiant principal */}
             <div>
               <Label>Société *</Label>
@@ -957,8 +956,7 @@ export default function Clients() {
               )}
             </div>
           </div>
-          </div>{/* end scrollable area */}
-          <div className="shrink-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
+          <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
           </div>
