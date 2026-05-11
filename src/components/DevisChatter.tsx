@@ -7,7 +7,7 @@ import { fetchHistorique, type HistoriqueEntry } from '@/lib/historique';
 import {
   MessageSquare, Paperclip, Send, Trash2, Download, FileText,
   FileImage, FileSpreadsheet, File, Clock, Pencil, Mail,
-  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote,
+  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -199,17 +199,30 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
     toast.success('Supprimé');
   }
 
-  /* ── Download signé (URL fraîche 60s) ── */
-  async function handleDownload(pj: PieceJointe) {
-    if (!pj.fichierUrl) return;
-    // Extraire le path depuis l'URL stockée (signée ou publique)
+  /* ── Obtenir une URL signée fraîche ── */
+  async function getSignedUrl(pj: PieceJointe, forDownload: boolean): Promise<string | null> {
+    if (!pj.fichierUrl) return null;
     const pathMatch = pj.fichierUrl.match(/\/devis-pj\/([^?]+)/);
     if (pathMatch) {
       const storagePath = decodeURIComponent(pathMatch[1]);
-      const { data } = await supabase.storage.from('devis-pj').createSignedUrl(storagePath, 60);
-      if (data?.signedUrl) { window.open(data.signedUrl, '_blank'); return; }
+      const { data } = await supabase.storage
+        .from('devis-pj')
+        .createSignedUrl(storagePath, 60, { download: forDownload });
+      if (data?.signedUrl) return data.signedUrl;
     }
-    window.open(pj.fichierUrl, '_blank');
+    return pj.fichierUrl;
+  }
+
+  /* ── Afficher dans le navigateur (PDF / image) ── */
+  async function handleView(pj: PieceJointe) {
+    const url = await getSignedUrl(pj, false);
+    if (url) window.open(url, '_blank');
+  }
+
+  /* ── Télécharger ── */
+  async function handleDownload(pj: PieceJointe) {
+    const url = await getSignedUrl(pj, true);
+    if (url) window.open(url, '_blank');
   }
 
   const nbPj = pjs.length;
@@ -323,9 +336,16 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
                             <p className="text-[10px] text-muted-foreground">{formatTaille(pj.fichierTaille)}</p>
                           )}
                         </div>
-                        <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted shrink-0" title="Télécharger">
-                          <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
+                            <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-muted" title="Afficher">
+                              <Eye className="w-3.5 h-3.5 text-primary" />
+                            </button>
+                          )}
+                          <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted" title="Télécharger">
+                            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+                          </button>
+                        </div>
                       </div>
                     )}
                     <p className="text-[10px] text-muted-foreground mt-1">{formatRelative(pj.date)}</p>
