@@ -144,29 +144,12 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero 
     load();
   }
 
-  /* ── Garantir que le bucket existe ── */
-  async function ensureBucket() {
-    const { data: buckets } = await supabase.storage.listBuckets();
-    const exists = buckets?.some(b => b.id === 'devis-pj');
-    if (!exists) {
-      const { error } = await supabase.storage.createBucket('devis-pj', {
-        public: false,
-        fileSizeLimit: 52428800, // 50 Mo
-      });
-      if (error && !error.message.includes('already exists')) {
-        throw new Error(`Impossible de créer le bucket : ${error.message}`);
-      }
-    }
-  }
-
   /* ── Upload fichier ── */
   async function handleUpload(file: File) {
     const uid = userId.current;
     if (!uid) return;
     setUploading(true);
     try {
-      // Créer le bucket si absent (1ère utilisation)
-      await ensureBucket();
 
       const path = `${uid}/${devisId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
 
