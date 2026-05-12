@@ -81,9 +81,11 @@ function generateAndDownloadEml(params: {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = params.pdfFileName ? params.pdfFileName.replace('.pdf', '.eml') : 'email.eml';
+  a.target = '_blank';
+  a.rel = 'noopener';
+  // Pas de a.download → le navigateur ouvre avec l'app associée (.eml = Outlook)
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 export default function CommandeEmailDialog({ open, onOpenChange, target, onSent }: Props) {

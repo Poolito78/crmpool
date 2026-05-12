@@ -116,14 +116,17 @@ function generateEml(params: {
   return lines.join('\r\n');
 }
 
-function downloadEml(emlContent: string, fileName: string) {
+function openEmlInOutlook(emlContent: string, fileName: string) {
   const blob = new Blob([emlContent], { type: 'message/rfc822' });
   const url = URL.createObjectURL(blob);
+  // window.open sans attribut download : Chrome propose "Ouvrir" → lance Outlook directement
   const a = document.createElement('a');
   a.href = url;
-  a.download = fileName;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  // Pas de a.download → le navigateur tente d'ouvrir avec l'app associée (.eml = Outlook)
   a.click();
-  URL.revokeObjectURL(url);
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
 interface Props {
@@ -283,7 +286,7 @@ François MOUHOT
         pdfFileName,
         extraAttachments,
       });
-      downloadEml(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
+      openEmlInOutlook(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
       toast.success('Fichier .eml téléchargé — ouvrez-le dans Outlook pour envoyer', {
         description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
         duration: 6000,
