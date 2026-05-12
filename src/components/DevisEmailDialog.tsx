@@ -212,9 +212,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
 Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Restant à ta disposition pour tout complément d'information.
-
-Bien cordialement`
+Restant à ta disposition pour tout complément d'information.`
     );
 
     if (pdfContainerRef?.current) {
