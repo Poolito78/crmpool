@@ -411,16 +411,15 @@ export default function Devis() {
     return () => clearTimeout(autoSaveRef.current);
   }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
-  // Recalcul auto des quantités en mode surface (uniquement lignes sans surface individuelle)
+  // Recalcul auto des quantités en mode surface — toutes les lignes suivent la surface globale
   useEffect(() => {
     if (modeCalcul !== 'surface' || !dialogOpen || surfaceGlobaleM2 <= 0) return;
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
-      if (l.surfaceM2 && l.surfaceM2 > 0 && l.surfaceM2 !== surfaceGlobaleM2) return l;
       const p = produits.find(pr => pr.id === l.produitId);
-      if (!p || !p.poids) return l;
+      if (!p || !p.poids) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const conso = l.consommation || p.consommation;
-      if (!conso) return l;
+      if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation);
       return { ...l, quantite, surfaceM2: surfaceGlobaleM2 };
     }));
