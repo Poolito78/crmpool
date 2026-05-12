@@ -316,6 +316,17 @@ export default function Devis() {
     });
   }
 
+  function duplicateLigne(id: string) {
+    setLignes(prev => {
+      const idx = prev.findIndex(l => l.id === id);
+      if (idx < 0) return prev;
+      const copy = { ...prev[idx], id: generateId() };
+      const next = [...prev];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+  }
+
   function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
     const conso = consoOverride || produit.consommation;
     if (!conso || conso <= 0 || !produit.poids || produit.poids <= 0) return 1;
@@ -919,6 +930,7 @@ export default function Devis() {
                       <div className="flex items-center gap-1">
                         <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                         <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
                         <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
