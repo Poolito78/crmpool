@@ -252,7 +252,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
         {devis.notes && (
           <div className="mb-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Objet</p>
             <p>{devis.notes}</p>
           </div>
         )}
