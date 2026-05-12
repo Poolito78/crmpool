@@ -59,14 +59,20 @@ function generateAndDownloadEml(params: {
   lines.push(`To: ${params.to}`);
   lines.push(`Subject: ${encodeHeader(params.subject)}`);
 
+  const htmlBody = params.body
+    .split('\n')
+    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`)
+    .join('\n');
+  const fullHtml = `<html><body>${htmlBody}</body></html>`;
+
   if (params.pdfBase64 && params.pdfFileName) {
     lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
     lines.push('');
     lines.push(`--${boundary}`);
-    lines.push('Content-Type: text/plain; charset="utf-8"');
+    lines.push('Content-Type: text/html; charset="utf-8"');
     lines.push('Content-Transfer-Encoding: quoted-printable');
     lines.push('');
-    lines.push(toQuotedPrintable(params.body));
+    lines.push(toQuotedPrintable(fullHtml));
     lines.push('');
     lines.push(`--${boundary}`);
     lines.push(`Content-Type: application/pdf; name="${params.pdfFileName}"`);
@@ -78,10 +84,10 @@ function generateAndDownloadEml(params: {
     lines.push('');
     lines.push(`--${boundary}--`);
   } else {
-    lines.push('Content-Type: text/plain; charset="utf-8"');
+    lines.push('Content-Type: text/html; charset="utf-8"');
     lines.push('Content-Transfer-Encoding: quoted-printable');
     lines.push('');
-    lines.push(toQuotedPrintable(params.body));
+    lines.push(toQuotedPrintable(fullHtml));
   }
 
   const eml = lines.join('\r\n');

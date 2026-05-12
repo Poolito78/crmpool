@@ -90,12 +90,17 @@ function generateEml(params: {
   lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
   lines.push('');
 
-  // Corps texte
+  // Corps HTML — Outlook insère sa signature APRÈS le HTML (pas avant)
+  const htmlBody = params.body
+    .split('\n')
+    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`)
+    .join('\n');
+  const fullHtml = `<html><body>${htmlBody}</body></html>`;
   lines.push(`--${boundary}`);
-  lines.push('Content-Type: text/plain; charset="utf-8"');
+  lines.push('Content-Type: text/html; charset="utf-8"');
   lines.push('Content-Transfer-Encoding: quoted-printable');
   lines.push('');
-  lines.push(toQuotedPrintable(params.body));
+  lines.push(toQuotedPrintable(fullHtml));
   lines.push('');
 
   // PDF devis
