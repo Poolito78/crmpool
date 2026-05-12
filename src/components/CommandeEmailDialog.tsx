@@ -54,6 +54,7 @@ function generateAndDownloadEml(params: {
   const lines: string[] = [];
 
   lines.push('MIME-Version: 1.0');
+  lines.push('X-Unsent: 1');
   lines.push(`From: ${params.from}`);
   lines.push(`To: ${params.to}`);
   lines.push(`Subject: ${encodeHeader(params.subject)}`);
