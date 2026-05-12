@@ -21,10 +21,17 @@ Règles :
 - "explanation" : 1-3 lignes maximum
 - Si incompréhensible : { "value": null, "explanation": "Je ne peux pas calculer ça." }
 
+NOTATION FRANÇAISE DES NOMBRES — règle CRITIQUE :
+- La VIRGULE est le séparateur décimal : "1,5" = 1.5, "0,03" = 0.03, "1,023" = 1.023
+- Le POINT ou l'ESPACE sont des séparateurs de milliers : "1.000" = 1000, "1 000" = 1000
+- JAMAIS interpréter une virgule comme séparateur de milliers
+- Exemples : "1,023" = 1.023 (et NON 1023), "2,5" = 2.5, "0,3" = 0.3, "4,8" = 4.8
+
 Exemples FORMAT 1 :
 - "pièce 5x4 m + couloir 2x8 m" → { "value": 36, "explanation": "5×4=20 + 2×8=16 = 36 m²" }
 - "3 pièces de 12m² et une de 8m²" → { "value": 44, "explanation": "3×12+8 = 44 m²" }
 - "0.3 kg/m² béton standard" → { "value": 0.3, "explanation": "Conso standard béton : 0,30 kg/m²" }
+- "1,023 × 3%" → { "value": 0.03, "explanation": "1,023 × 0,03 = 0,031 ≈ 0,03" }
 
 Exemples FORMAT 2 :
 - "ratio A+2,5B=3,2 kg/m²" → { "value": null, "values": [{"label":"A","value":0.91},{"label":"B","value":2.29}], "explanation": "A+2,5A=3,5A=3,2 → A=0,91 kg/m², B=2,5×0,91=2,29 kg/m²" }
