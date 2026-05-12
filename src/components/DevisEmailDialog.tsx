@@ -209,12 +209,12 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
 
-Suite à notre échange, veuillez trouver ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
+Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Restant à votre disposition pour tout complément d'information.
+Restant à ta disposition pour tout complément d'information.
 
-Cordialement,`
+Bien cordialement`
     );
 
     if (pdfContainerRef?.current) {
