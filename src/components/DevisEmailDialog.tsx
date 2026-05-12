@@ -209,13 +209,7 @@ Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
 Restant à votre disposition pour tout complément d'information.
 
-Cordialement,
-
-François MOUHOT
-📞 06 31 61 15 96
-📧 f.mouhot@isosign.fr
-🌐 www.isosign.fr
-🌐 www.isofloor.fr`
+Cordialement,`
     );
 
     if (pdfContainerRef?.current) {
