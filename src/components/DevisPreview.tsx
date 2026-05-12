@@ -53,7 +53,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
-  const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal').map(l => {
+  const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte').map(l => {
     const surface = getSurfaceLigne(l.id);
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -403,7 +403,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </tr>
                 )}
 
-                {/* Lignes produits (avec groupes) */}
+                {/* Lignes produits (avec groupes + texte) */}
                 {(() => {
                   let curGrp: string | null = null;
                   const lineGroup: Record<string, string | null> = {};
@@ -419,14 +419,39 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     const gid = lineGroup[l.id];
                     if (gid) grpSub[gid] = (grpSub[gid] || 0) + t.totalHT;
                   }
+                  const allLineById: Record<string, typeof allLines[0]> = {};
+                  for (const ld of allLines) allLineById[ld.l.id] = ld;
                   let lastGrp: string | null | undefined = undefined;
-                  return allLines.map(({ l, prod, conso, t, compDatas, isComposite }, idx) => {
+                  // Iterate over all devis.lignes to preserve order and intercalate text rows
+                  return devis.lignes.map((dl, idx) => {
+                    // groupe → skip (handled by showHeader below)
+                    if (dl.type === 'groupe') return null;
+                    // soustotal → render subtotal row
+                    if (dl.type === 'soustotal') {
+                      const gid = subGrpId[dl.id];
+                      const titre = gid ? grpTitles[gid] : '';
+                      const montant = gid ? (grpSub[gid] || 0) : 0;
+                      return (
+                        <tr key={dl.id} className="bg-primary/5 border-b-2 border-primary/20">
+                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
+                          <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
+                        </tr>
+                      );
+                    }
+                    // texte → render text-only row
+                    if (dl.type === 'texte') {
+                      return dl.description ? (
+                        <tr key={dl.id} className="border-b border-border/40">
+                          <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground">{dl.description}</td>
+                        </tr>
+                      ) : null;
+                    }
+                    // ligne produit normale
+                    const ld = allLineById[dl.id];
+                    if (!ld) return null;
+                    const { l, prod, conso, t, compDatas, isComposite } = ld;
                     const myGrp = lineGroup[l.id] ?? null;
                     const showHeader = myGrp != null && myGrp !== lastGrp;
-                    // showSub: true when the NEXT item in devis.lignes (after this line) is a soustotal marker for our group
-                    const thisIdx = devis.lignes.findIndex(dl => dl.id === l.id);
-                    const nextDl = thisIdx >= 0 && thisIdx < devis.lignes.length - 1 ? devis.lignes[thisIdx + 1] : null;
-                    const showSub = myGrp != null && nextDl?.type === 'soustotal' && subGrpId[nextDl.id] === myGrp;
                     lastGrp = myGrp;
                     return (
                   <Fragment key={l.id}>
@@ -525,13 +550,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         <td colSpan={9} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
                       </tr>
                     )}
-                    {/* Sous-total groupe */}
-                    {showSub && (
-                      <tr className="bg-primary/5 border-b-2 border-primary/20">
-                        <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total — {grpTitles[myGrp!]}</td>
-                        <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(grpSub[myGrp!] || 0)}</td>
-                      </tr>
-                    )}
                   </Fragment>
                     );
                   });
@@ -571,17 +589,38 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   if (gid) grpSubS[gid] = (grpSubS[gid] || 0) + calculerTotalLigne(l).totalHT;
                 }
                 const colSpan = showRemise ? 7 : 5;
+                const lignesEffByIdS: Record<string, typeof lignesEffectives[0]> = {};
+                for (const l of lignesEffectives) lignesEffByIdS[l.id] = l;
                 let lastGrpS: string | null | undefined = undefined;
-                return lignesEffectives.filter(l => l.description || l.prixUnitaireHT > 0).map(l => {
+                // Iterate devis.lignes to preserve order and show texte rows
+                return devis.lignes.map((dl) => {
+                  if (dl.type === 'groupe') return null;
+                  if (dl.type === 'soustotal') {
+                    const gid = subGrpIdS[dl.id];
+                    const titre = gid ? grpTitlesS[gid] : '';
+                    const montant = gid ? (grpSubS[gid] || 0) : 0;
+                    return (
+                      <tr key={dl.id} className="bg-primary/5 border-b-2 border-primary/20">
+                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
+                        <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
+                      </tr>
+                    );
+                  }
+                  if (dl.type === 'texte') {
+                    return dl.description ? (
+                      <tr key={dl.id} className="border-b border-border/40">
+                        <td colSpan={colSpan} className="py-1.5 px-2 text-xs italic text-muted-foreground">{dl.description}</td>
+                      </tr>
+                    ) : null;
+                  }
+                  const l = lignesEffByIdS[dl.id];
+                  if (!l || (!l.description && !l.prixUnitaireHT)) return null;
                   const t = calculerTotalLigne(l);
                   const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                   const composants = prod?.composants;
                   const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
                   const myGrpS = lineGroupS[l.id] ?? null;
                   const showHeaderS = myGrpS != null && myGrpS !== lastGrpS;
-                  const thisIdxS = devis.lignes.findIndex(dl => dl.id === l.id);
-                  const nextDlS = thisIdxS >= 0 && thisIdxS < devis.lignes.length - 1 ? devis.lignes[thisIdxS + 1] : null;
-                  const showSubS = myGrpS != null && nextDlS?.type === 'soustotal' && subGrpIdS[nextDlS.id] === myGrpS;
                   lastGrpS = myGrpS;
                   return (
                     <Fragment key={l.id}>
@@ -614,16 +653,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {/* Note de ligne — colspan toute la table */}
                       {l.note && (
                         <tr className="border-b border-border/60">
                           <td colSpan={colSpan} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
-                        </tr>
-                      )}
-                      {showSubS && (
-                        <tr className="bg-primary/5 border-b-2 border-primary/20">
-                          <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total — {grpTitlesS[myGrpS!]}</td>
-                          <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(grpSubS[myGrpS!] || 0)}</td>
                         </tr>
                       )}
                     </Fragment>

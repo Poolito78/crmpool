@@ -216,7 +216,7 @@ export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: stri
 
 export interface LigneDevis {
   id: string;
-  type?: 'ligne' | 'groupe' | 'soustotal';  // 'ligne' par défaut ; 'groupe' = en-tête ; 'soustotal' = marqueur fin de groupe
+  type?: 'ligne' | 'groupe' | 'soustotal' | 'texte';  // 'ligne' par défaut ; 'groupe' = en-tête ; 'soustotal' = marqueur fin de groupe ; 'texte' = ligne texte seul
   produitId?: string;
   description: string;
   quantite: number;

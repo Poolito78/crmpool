@@ -327,6 +327,16 @@ export default function Devis() {
     ]);
   }
 
+  function addTexte() {
+    saveSnapshot();
+    const id = generateId();
+    setLignes(prev => [
+      ...prev,
+      { id, type: 'texte', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    ]);
+    setNewLigneId(id);
+  }
+
   function updateLigne(id: string, field: string, value: any) {
     setLignes(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l));
   }
@@ -975,6 +985,7 @@ export default function Devis() {
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
                   </Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
+                  <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                 </div>
               </div>
@@ -1028,6 +1039,34 @@ export default function Devis() {
                         </div>
                       );
                     }
+
+                    if (l.type === 'texte') return (
+                      <div key={l.id}
+                        draggable
+                        onDragStart={() => setDraggedId(l.id)}
+                        onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
+                        onDrop={() => dropLigne(l.id)}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
+                          ${draggedId === l.id ? 'opacity-40' : ''}
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-amber-400 border-2 shadow-md bg-amber-50/50 dark:bg-amber-900/10' : draggedId === l.id ? '' : 'bg-amber-50/40 dark:bg-amber-900/10 border-amber-300/40'}`}>
+                        <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0" />
+                        <StickyNote className="w-4 h-4 text-amber-500 shrink-0" />
+                        <input
+                          type="text"
+                          value={l.description}
+                          onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                          autoFocus={l.id === newLigneId}
+                          className="flex-1 text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50"
+                          placeholder="Texte libre…"
+                        />
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </div>
+                    );
 
                     if (isGroupe) return (
                       <div key={l.id}
@@ -1243,6 +1282,12 @@ export default function Devis() {
                   className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/30 py-2 text-sm text-primary/60 hover:text-primary hover:border-primary/60 transition-colors"
                 >
                   <FolderPlus className="w-4 h-4" /> Ajouter un groupe
+                </button>
+                <button
+                  onClick={addTexte}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-amber-400/40 py-2 text-sm text-amber-600/60 hover:text-amber-600 hover:border-amber-400/80 transition-colors"
+                >
+                  <StickyNote className="w-4 h-4" /> Ajouter une note
                 </button>
                 <button
                   onClick={addLigne}
