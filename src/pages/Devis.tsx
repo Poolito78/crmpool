@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -79,6 +79,8 @@ export default function Devis() {
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
   const lignesRef = useRef<LigneDevis[]>([]);
   lignesRef.current = lignes;
   const [fraisPortHT, setFraisPortHT] = useState(0);
@@ -352,6 +354,22 @@ export default function Devis() {
       next.splice(idx + 1, 0, copy);
       return next;
     });
+  }
+
+  function dropLigne(targetId: string) {
+    if (!draggedId || draggedId === targetId) { setDraggedId(null); setDragOverId(null); return; }
+    saveSnapshot();
+    setLignes(prev => {
+      const next = [...prev];
+      const from = next.findIndex(l => l.id === draggedId);
+      const to = next.findIndex(l => l.id === targetId);
+      if (from < 0 || to < 0) return prev;
+      const [item] = next.splice(from, 1);
+      next.splice(to, 0, item);
+      return next;
+    });
+    setDraggedId(null);
+    setDragOverId(null);
   }
 
   function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
@@ -982,7 +1000,16 @@ export default function Devis() {
                     const showSub = !isGroupe && myGrp != null && (!nextL || nextL.type === 'groupe');
 
                     if (isGroupe) return (
-                      <div key={l.id} className="flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-2.5 mt-1">
+                      <div key={l.id}
+                        draggable
+                        onDragStart={() => setDraggedId(l.id)}
+                        onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
+                        onDrop={() => dropLigne(l.id)}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        className={`flex items-center gap-2 bg-primary/10 border rounded-lg px-3 py-2.5 mt-1 cursor-grab active:cursor-grabbing transition-all
+                          ${draggedId === l.id ? 'opacity-40' : ''}
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : 'border-primary/30'}`}>
+                        <GripVertical className="w-4 h-4 text-primary/40 shrink-0" />
                         <FolderPlus className="w-4 h-4 text-primary shrink-0" />
                         <input type="text" value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
                           className="flex-1 font-semibold text-sm bg-transparent border-none outline-none text-primary placeholder:text-primary/50" placeholder="Titre du groupe…" />
@@ -995,9 +1022,21 @@ export default function Devis() {
                     );
 
                     const card = (
-                      <div className={`bg-muted/30 rounded-lg p-3 space-y-2 border border-border/60${myGrp ? ' ml-4' : ''}`}>
+                      <div
+                        draggable
+                        onDragStart={() => setDraggedId(l.id)}
+                        onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
+                        onDrop={() => dropLigne(l.id)}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        className={`bg-muted/30 rounded-lg p-3 space-y-2 border transition-all cursor-grab active:cursor-grabbing
+                          ${myGrp ? ' ml-4' : ''}
+                          ${draggedId === l.id ? 'opacity-40 border-border/60' : ''}
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : draggedId === l.id ? '' : 'border-border/60'}`}>
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
+                          <div className="flex items-center gap-1.5">
+                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
+                            <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
+                          </div>
                           <div className="flex items-center gap-1">
                             <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                             <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
