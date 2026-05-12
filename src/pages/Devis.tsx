@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -78,6 +78,9 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
+  const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
+  const lignesRef = useRef<LigneDevis[]>([]);
+  lignesRef.current = lignes;
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
@@ -164,6 +167,7 @@ export default function Devis() {
     setAdresseLivraisonId(d.adresseLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
+    setUndoStack([]);
   }
 
   function openNew() {
@@ -189,6 +193,7 @@ export default function Devis() {
     setModeCalcul('standard');
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
+    setUndoStack([]);
     setDialogOpen(true);
   }
 
@@ -290,7 +295,20 @@ export default function Devis() {
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);
 
+  function saveSnapshot() {
+    setUndoStack(prev => [...prev.slice(-29), lignesRef.current]);
+  }
+
+  function undo() {
+    setUndoStack(prev => {
+      if (prev.length === 0) return prev;
+      setLignes(prev[prev.length - 1]);
+      return prev.slice(0, -1);
+    });
+  }
+
   function addLigne() {
+    saveSnapshot();
     const id = generateId();
     setLignes(prev => [...prev, { id, description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setNewLigneId(id);
@@ -301,10 +319,12 @@ export default function Devis() {
   }
 
   function removeLigne(id: string) {
+    saveSnapshot();
     setLignes(prev => prev.filter(l => l.id !== id));
   }
 
   function moveLigne(id: string, direction: 'up' | 'down') {
+    saveSnapshot();
     setLignes(prev => {
       const idx = prev.findIndex(l => l.id === id);
       if (idx < 0) return prev;
@@ -317,6 +337,7 @@ export default function Devis() {
   }
 
   function duplicateLigne(id: string) {
+    saveSnapshot();
     setLignes(prev => {
       const idx = prev.findIndex(l => l.id === id);
       if (idx < 0) return prev;
@@ -917,10 +938,15 @@ export default function Devis() {
             </div>
 
             {/* Lines */}
-            <div>
+            <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-base font-semibold">Lignes du devis</Label>
-                <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
+                <div className="flex items-center gap-1">
+                  <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
+                    <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
+                </div>
               </div>
               <div className="space-y-3">
                 {lignes.map((l, i) => (
