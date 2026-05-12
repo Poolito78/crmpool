@@ -53,7 +53,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
-  const lignesEffectives = devis.lignes.map(l => {
+  const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe').map(l => {
     const surface = getSurfaceLigne(l.id);
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -403,9 +403,34 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </tr>
                 )}
 
-                {/* Lignes produits */}
-                {allLines.map(({ l, prod, conso, t, compDatas, isComposite }) => (
+                {/* Lignes produits (avec groupes) */}
+                {(() => {
+                  let curGrp: string | null = null;
+                  const lineGroup: Record<string, string | null> = {};
+                  const grpTitles: Record<string, string> = {};
+                  for (const l of devis.lignes) {
+                    if (l.type === 'groupe') { curGrp = l.id; grpTitles[l.id] = l.description; }
+                    else { lineGroup[l.id] = curGrp; }
+                  }
+                  const grpSub: Record<string, number> = {};
+                  for (const { l, t } of allLines) {
+                    const gid = lineGroup[l.id];
+                    if (gid) grpSub[gid] = (grpSub[gid] || 0) + t.totalHT;
+                  }
+                  let lastGrp: string | null | undefined = undefined;
+                  return allLines.map(({ l, prod, conso, t, compDatas, isComposite }, idx) => {
+                    const myGrp = lineGroup[l.id] ?? null;
+                    const nextMyGrp = idx < allLines.length - 1 ? (lineGroup[allLines[idx + 1].l.id] ?? null) : null;
+                    const showHeader = myGrp != null && myGrp !== lastGrp;
+                    const showSub = myGrp != null && nextMyGrp !== myGrp;
+                    lastGrp = myGrp;
+                    return (
                   <Fragment key={l.id}>
+                    {showHeader && (
+                      <tr className="bg-primary/10 border-t border-primary/30">
+                        <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-primary uppercase tracking-wide">{grpTitles[myGrp!]}</td>
+                      </tr>
+                    )}
                     {/* Ligne produit principal */}
                     <tr className={l.note ? '' : 'border-b border-border/60'}>
                       <td className="py-1.5 px-2 font-medium">
@@ -496,8 +521,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         <td colSpan={9} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
                       </tr>
                     )}
+                    {/* Sous-total groupe */}
+                    {showSub && (
+                      <tr className="bg-primary/5 border-b-2 border-primary/20">
+                        <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total — {grpTitles[myGrp!]}</td>
+                        <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(grpSub[myGrp!] || 0)}</td>
+                      </tr>
+                    )}
                   </Fragment>
-                ))}
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           );

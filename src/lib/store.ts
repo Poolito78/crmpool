@@ -216,6 +216,7 @@ export const STATUTS_COMMANDE_CLIENT: Record<StatutCommandeClient, { label: stri
 
 export interface LigneDevis {
   id: string;
+  type?: 'ligne' | 'groupe';   // 'ligne' par défaut ; 'groupe' = en-tête de section
   produitId?: string;
   description: string;
   quantite: number;

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2 } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -312,6 +312,12 @@ export default function Devis() {
     const id = generateId();
     setLignes(prev => [...prev, { id, description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setNewLigneId(id);
+  }
+
+  function addGroupe() {
+    saveSnapshot();
+    const id = generateId();
+    setLignes(prev => [...prev, { id, type: 'groupe', description: 'Nouveau groupe', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
   }
 
   function updateLigne(id: string, field: string, value: any) {
@@ -945,21 +951,60 @@ export default function Devis() {
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
                   </Button>
+                  <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
-                {lignes.map((l, i) => (
-                  <div key={l.id} className="bg-muted/30 rounded-lg p-3 space-y-2 border border-border/60">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium text-muted-foreground">Ligne {i + 1}</span>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                {(() => {
+                  // Calcul appartenance aux groupes et sous-totaux
+                  let curGrp: string | null = null;
+                  const lineGroup: Record<string, string | null> = {};
+                  for (const l of lignes) {
+                    if (l.type === 'groupe') { curGrp = l.id; lineGroup[l.id] = null; }
+                    else { lineGroup[l.id] = curGrp; }
+                  }
+                  const grpSub: Record<string, number> = {};
+                  for (const l of lignes) {
+                    if (l.type !== 'groupe') {
+                      const gid = lineGroup[l.id];
+                      if (gid) grpSub[gid] = (grpSub[gid] || 0) + calculerTotalLigne(l).totalHT;
+                    }
+                  }
+                  let ligneNum = 0;
+                  const ligneNums: Record<string, number> = {};
+                  for (const l of lignes) { if (l.type !== 'groupe') { ligneNum++; ligneNums[l.id] = ligneNum; } }
+
+                  return lignes.map((l, i) => {
+                    const isGroupe = l.type === 'groupe';
+                    const nextL = lignes[i + 1];
+                    const myGrp = lineGroup[l.id];
+                    const showSub = !isGroupe && myGrp != null && (!nextL || nextL.type === 'groupe');
+
+                    if (isGroupe) return (
+                      <div key={l.id} className="flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-lg px-3 py-2.5 mt-1">
+                        <FolderPlus className="w-4 h-4 text-primary shrink-0" />
+                        <input type="text" value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                          className="flex-1 font-semibold text-sm bg-transparent border-none outline-none text-primary placeholder:text-primary/50" placeholder="Titre du groupe…" />
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-primary/60 hover:text-primary disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-primary/60 hover:text-primary disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
                       </div>
-                    </div>
+                    );
+
+                    const card = (
+                      <div className={`bg-muted/30 rounded-lg p-3 space-y-2 border border-border/60${myGrp ? ' ml-4' : ''}`}>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
                         <Label className="text-xs">Réf.</Label>
@@ -1116,8 +1161,22 @@ export default function Devis() {
                         </div>
                       );
                     })()}
-                  </div>
-                ))}
+                      </div>
+                    );
+
+                    return (
+                      <Fragment key={l.id}>
+                        {card}
+                        {showSub && (
+                          <div className="ml-4 flex justify-between items-center text-sm font-semibold bg-primary/5 rounded-md px-3 py-2 border border-primary/20 text-primary">
+                            <span>Sous-total — {lignes.find(x => x.id === myGrp)?.description}</span>
+                            <span>{formatMontant(grpSub[myGrp!] || 0)} HT</span>
+                          </div>
+                        )}
+                      </Fragment>
+                    );
+                  });
+                })()}
               </div>
               <button
                 onClick={addLigne}
