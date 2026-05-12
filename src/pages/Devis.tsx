@@ -1217,12 +1217,20 @@ export default function Devis() {
                   });
                 })()}
               </div>
-              <button
-                onClick={addLigne}
-                className="mt-3 w-full flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-              >
-                <Plus className="w-4 h-4" /> Ajouter une ligne
-              </button>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={addGroupe}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/30 py-2 text-sm text-primary/60 hover:text-primary hover:border-primary/60 transition-colors"
+                >
+                  <FolderPlus className="w-4 h-4" /> Ajouter un groupe
+                </button>
+                <button
+                  onClick={addLigne}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Ajouter une ligne
+                </button>
+              </div>
             </div>
 
             {/* Frais de port */}
