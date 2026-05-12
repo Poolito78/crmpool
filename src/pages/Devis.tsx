@@ -1093,6 +1093,11 @@ export default function Devis() {
                       const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
                       const coeff = prod && prod.prixAchat > 0 ? prixNetHT / prod.prixAchat : null;
                       const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
+                      const surface = l.surfaceM2 || surfaceGlobaleM2;
+                      const conso = l.consommation ?? prod?.consommation;
+                      const kgReel = modeCalcul === 'surface' && surface > 0 && conso != null && conso > 0
+                        ? Math.round(surface * conso * 1000) / 1000
+                        : null;
                       return (
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground gap-0.5 sm:gap-x-3">
                           <div className="flex items-center gap-2 flex-wrap">
@@ -1103,6 +1108,9 @@ export default function Devis() {
                             ) : null}
                             {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                             {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
+                            {kgReel !== null && (
+                              <span className="italic text-muted-foreground/80">↳ conso. chantier : {kgReel} kg</span>
+                            )}
                           </div>
                           <span className="font-medium text-foreground">Total HT: {formatMontant(t.totalHT)}</span>
                         </div>
