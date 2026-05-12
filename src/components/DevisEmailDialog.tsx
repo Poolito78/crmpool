@@ -272,24 +272,19 @@ François MOUHOT
       } catch { /* ignorer si échec sur un fichier */ }
     }
 
-    // 3. Envoyer via Resend (edge function) avec PDF + PJs en pièces jointes
+    // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
     try {
-      const { data, error } = await supabase.functions.invoke('send-devis-email', {
-        body: {
-          to,
-          subject,
-          body,
-          pdfBase64: pdfBase64Ref.current,
-          fileName: pdfFileName,
-          extraAttachments,
-        },
+      const emlContent = generateEml({
+        from: 'f.mouhot@isosign.fr',
+        to,
+        subject,
+        body,
+        pdfBase64: pdfBase64Ref.current!,
+        pdfFileName,
+        extraAttachments,
       });
-
-      if (error || data?.error) {
-        throw new Error(error?.message || data?.error || 'Erreur envoi');
-      }
-
-      toast.success('Mail envoyé avec le PDF en pièce jointe', {
+      downloadEml(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
+      toast.success('Fichier .eml téléchargé — ouvrez-le dans Outlook pour envoyer', {
         description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
         duration: 6000,
       });
@@ -297,27 +292,7 @@ François MOUHOT
       onOpenChange(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Fallback : génération d'un .eml avec pièces jointes (mailto: ne supporte pas les PJs)
-      try {
-        const emlContent = generateEml({
-          from: 'f.mouhot@isosign.fr',
-          to,
-          subject,
-          body,
-          pdfBase64: pdfBase64Ref.current!,
-          pdfFileName,
-          extraAttachments: extraAttachments.map(a => ({ filename: a.filename, content: a.content })),
-        });
-        downloadEml(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
-        toast.warning(`Envoi Resend échoué (${msg}) — fichier .eml téléchargé avec les pièces jointes, ouvrez-le dans Outlook`, { duration: 10000 });
-      } catch {
-        // Dernier recours sans PJs
-        toast.error(`Envoi échoué (${msg}) — ouverture Outlook sans pièces jointes`, { duration: 8000 });
-        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-        window.open(mailto, '_blank');
-      }
-      onSent(dateEnvoi);
-      onOpenChange(false);
+      toast.error(`Erreur génération .eml (${msg})`, { duration: 8000 });
     } finally {
       setSending(false);
     }
@@ -429,7 +404,7 @@ François MOUHOT
 
             <p className="text-xs text-muted-foreground border-t pt-2">
               <FileText className="w-3 h-3 inline mr-1" />
-              Le PDF sera envoyé en pièce jointe via Resend et copié dans le dossier.
+              Un fichier .eml sera téléchargé avec le PDF joint — ouvrez-le dans Outlook pour envoyer.
             </p>
           </div>
         </div>
@@ -438,8 +413,8 @@ François MOUHOT
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>Annuler</Button>
           <Button onClick={handleSend} disabled={!canSend}>
             {sending
-              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Envoi…</>
-              : <><Send className="w-4 h-4 mr-2" /> Envoyer</>
+              ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Préparation…</>
+              : <><Send className="w-4 h-4 mr-2" /> Ouvrir dans Outlook</>
             }
           </Button>
         </DialogFooter>
