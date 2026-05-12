@@ -948,9 +948,9 @@ export default function Devis() {
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                 </div>
               </div>
-              <div className="space-y-3">
+              <div className="flex flex-col gap-2">
                 {lignes.map((l, i) => (
-                  <div key={l.id} className="bg-muted/30 rounded-lg p-3 space-y-2">
+                  <div key={l.id} className="bg-muted/30 rounded-lg p-3 space-y-2 border border-border/60">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-medium text-muted-foreground">Ligne {i + 1}</span>
                       <div className="flex items-center gap-1">
