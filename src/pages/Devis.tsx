@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
@@ -318,8 +318,13 @@ export default function Devis() {
 
   function addGroupe() {
     saveSnapshot();
-    const id = generateId();
-    setLignes(prev => [...prev, { id, type: 'groupe', description: 'Nouveau groupe', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
+    const grpId = generateId();
+    const subId = generateId();
+    setLignes(prev => [
+      ...prev,
+      { id: grpId, type: 'groupe',    description: 'Nouveau groupe', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+      { id: subId, type: 'soustotal', description: '',               quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    ]);
   }
 
   function updateLigne(id: string, field: string, value: any) {
@@ -975,29 +980,54 @@ export default function Devis() {
               </div>
               <div className="flex flex-col gap-2">
                 {(() => {
-                  // Calcul appartenance aux groupes et sous-totaux
+                  // Appartenance groupe : entre en-tête et marqueur soustotal
                   let curGrp: string | null = null;
                   const lineGroup: Record<string, string | null> = {};
+                  const grpTitles: Record<string, string> = {};
+                  const subGrpId: Record<string, string | null> = {};
                   for (const l of lignes) {
-                    if (l.type === 'groupe') { curGrp = l.id; lineGroup[l.id] = null; }
+                    if (l.type === 'groupe') { curGrp = l.id; lineGroup[l.id] = null; grpTitles[l.id] = l.description; }
+                    else if (l.type === 'soustotal') { subGrpId[l.id] = curGrp; lineGroup[l.id] = null; curGrp = null; }
                     else { lineGroup[l.id] = curGrp; }
                   }
                   const grpSub: Record<string, number> = {};
                   for (const l of lignes) {
-                    if (l.type !== 'groupe') {
+                    if (!l.type || l.type === 'ligne') {
                       const gid = lineGroup[l.id];
                       if (gid) grpSub[gid] = (grpSub[gid] || 0) + calculerTotalLigne(l).totalHT;
                     }
                   }
                   let ligneNum = 0;
                   const ligneNums: Record<string, number> = {};
-                  for (const l of lignes) { if (l.type !== 'groupe') { ligneNum++; ligneNums[l.id] = ligneNum; } }
+                  for (const l of lignes) { if (!l.type || l.type === 'ligne') { ligneNum++; ligneNums[l.id] = ligneNum; } }
 
                   return lignes.map((l, i) => {
                     const isGroupe = l.type === 'groupe';
-                    const nextL = lignes[i + 1];
-                    const myGrp = lineGroup[l.id];
-                    const showSub = !isGroupe && myGrp != null && (!nextL || nextL.type === 'groupe');
+                    const isSousTotal = l.type === 'soustotal';
+
+                    if (isSousTotal) {
+                      const gid = subGrpId[l.id];
+                      const titre = gid ? grpTitles[gid] : '';
+                      const montant = gid ? (grpSub[gid] || 0) : 0;
+                      return (
+                        <div key={l.id}
+                          draggable
+                          onDragStart={() => setDraggedId(l.id)}
+                          onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
+                          onDrop={() => dropLigne(l.id)}
+                          onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                          className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
+                            ${draggedId === l.id ? 'opacity-40 border-primary/20 bg-primary/5' : ''}
+                            ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-primary/5 border-primary/20'}`}>
+                          <GripVertical className="w-4 h-4 text-primary/30 shrink-0" />
+                          <span className="flex-1 text-sm font-semibold text-primary italic">
+                            Sous-total{titre ? ` — ${titre}` : ''}
+                          </span>
+                          <span className="text-sm font-bold text-primary">{formatMontant(montant)} HT</span>
+                          <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      );
+                    }
 
                     if (isGroupe) return (
                       <div key={l.id}
@@ -1029,7 +1059,7 @@ export default function Devis() {
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
                         className={`bg-muted/30 rounded-lg p-3 space-y-2 border transition-all cursor-grab active:cursor-grabbing
-                          ${myGrp ? ' ml-4' : ''}
+                          ${lineGroup[l.id] ? ' ml-4' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : draggedId === l.id ? '' : 'border-border/60'}`}>
                         <div className="flex items-center justify-between">
@@ -1203,17 +1233,7 @@ export default function Devis() {
                       </div>
                     );
 
-                    return (
-                      <Fragment key={l.id}>
-                        {card}
-                        {showSub && (
-                          <div className="ml-4 flex justify-between items-center text-sm font-semibold bg-primary/5 rounded-md px-3 py-2 border border-primary/20 text-primary">
-                            <span>Sous-total — {lignes.find(x => x.id === myGrp)?.description}</span>
-                            <span>{formatMontant(grpSub[myGrp!] || 0)} HT</span>
-                          </div>
-                        )}
-                      </Fragment>
-                    );
+                    return card;
                   });
                 })()}
               </div>

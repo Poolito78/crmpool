@@ -53,7 +53,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
 
   // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
-  const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe').map(l => {
+  const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal').map(l => {
     const surface = getSurfaceLigne(l.id);
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -408,8 +408,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   let curGrp: string | null = null;
                   const lineGroup: Record<string, string | null> = {};
                   const grpTitles: Record<string, string> = {};
+                  const subGrpId: Record<string, string | null> = {};
                   for (const l of devis.lignes) {
                     if (l.type === 'groupe') { curGrp = l.id; grpTitles[l.id] = l.description; }
+                    else if (l.type === 'soustotal') { subGrpId[l.id] = curGrp; curGrp = null; }
                     else { lineGroup[l.id] = curGrp; }
                   }
                   const grpSub: Record<string, number> = {};
@@ -420,9 +422,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   let lastGrp: string | null | undefined = undefined;
                   return allLines.map(({ l, prod, conso, t, compDatas, isComposite }, idx) => {
                     const myGrp = lineGroup[l.id] ?? null;
-                    const nextMyGrp = idx < allLines.length - 1 ? (lineGroup[allLines[idx + 1].l.id] ?? null) : null;
                     const showHeader = myGrp != null && myGrp !== lastGrp;
-                    const showSub = myGrp != null && nextMyGrp !== myGrp;
+                    // showSub: true when the NEXT item in devis.lignes (after this line) is a soustotal marker for our group
+                    const thisIdx = devis.lignes.findIndex(dl => dl.id === l.id);
+                    const nextDl = thisIdx >= 0 && thisIdx < devis.lignes.length - 1 ? devis.lignes[thisIdx + 1] : null;
+                    const showSub = myGrp != null && nextDl?.type === 'soustotal' && subGrpId[nextDl.id] === myGrp;
                     lastGrp = myGrp;
                     return (
                   <Fragment key={l.id}>
@@ -550,46 +554,82 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               </tr>
             </thead>
             <tbody>
-              {lignesEffectives.filter(l => l.description || l.prixUnitaireHT > 0).map(l => {
-                const t = calculerTotalLigne(l);
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                const composants = prod?.composants;
-                const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
-                return (
-                  <Fragment key={l.id}>
-                    <tr className="border-b border-border">
-                      <td className="py-2">
-                        {l.description}
-                        {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
-                      </td>
-                      <td className="py-2 text-right">{l.quantite || ''}</td>
-                      <td className="py-2 text-center">{l.unite || ''}</td>
-                      {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
-                      {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
-                      <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                      <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
-                    </tr>
-                    {showComposants && composants && composants.length > 0 && composants.map(comp => {
-                      const compProd = produits.find(p => p.id === comp.produitId);
-                      if (!compProd) return null;
-                      return (
-                        <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
-                          <td className="py-1 pl-8 italic">↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}</td>
-                          <td className="py-1 text-right">{Math.round(comp.quantite * l.quantite * 1000) / 1000}</td>
-                          <td className="py-1 text-center">{compProd.unite || ''}</td>
-                          <td colSpan={showRemise ? 3 : 2} />
+              {(() => {
+                // Precompute group membership using explicit soustotal markers
+                let curGrpS: string | null = null;
+                const lineGroupS: Record<string, string | null> = {};
+                const grpTitlesS: Record<string, string> = {};
+                const subGrpIdS: Record<string, string | null> = {};
+                for (const l of devis.lignes) {
+                  if (l.type === 'groupe') { curGrpS = l.id; grpTitlesS[l.id] = l.description; }
+                  else if (l.type === 'soustotal') { subGrpIdS[l.id] = curGrpS; curGrpS = null; }
+                  else { lineGroupS[l.id] = curGrpS; }
+                }
+                const grpSubS: Record<string, number> = {};
+                for (const l of lignesEffectives) {
+                  const gid = lineGroupS[l.id];
+                  if (gid) grpSubS[gid] = (grpSubS[gid] || 0) + calculerTotalLigne(l).totalHT;
+                }
+                const colSpan = showRemise ? 7 : 5;
+                let lastGrpS: string | null | undefined = undefined;
+                return lignesEffectives.filter(l => l.description || l.prixUnitaireHT > 0).map(l => {
+                  const t = calculerTotalLigne(l);
+                  const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                  const composants = prod?.composants;
+                  const prixNet = l.prixUnitaireHT * (1 - l.remise / 100);
+                  const myGrpS = lineGroupS[l.id] ?? null;
+                  const showHeaderS = myGrpS != null && myGrpS !== lastGrpS;
+                  const thisIdxS = devis.lignes.findIndex(dl => dl.id === l.id);
+                  const nextDlS = thisIdxS >= 0 && thisIdxS < devis.lignes.length - 1 ? devis.lignes[thisIdxS + 1] : null;
+                  const showSubS = myGrpS != null && nextDlS?.type === 'soustotal' && subGrpIdS[nextDlS.id] === myGrpS;
+                  lastGrpS = myGrpS;
+                  return (
+                    <Fragment key={l.id}>
+                      {showHeaderS && (
+                        <tr className="bg-primary/10 border-t border-primary/30">
+                          <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-primary uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
                         </tr>
-                      );
-                    })}
-                    {/* Note de ligne — colspan toute la table */}
-                    {l.note && (
-                      <tr className="border-b border-border/60">
-                        <td colSpan={showRemise ? 7 : 5} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
+                      )}
+                      <tr className="border-b border-border">
+                        <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
+                          {l.description}
+                          {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
+                        </td>
+                        <td className="py-2 text-right">{l.quantite || ''}</td>
+                        <td className="py-2 text-center">{l.unite || ''}</td>
+                        {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
+                        {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
+                        <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
+                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
                       </tr>
-                    )}
-                  </Fragment>
-                );
-              })}
+                      {showComposants && composants && composants.length > 0 && composants.map(comp => {
+                        const compProd = produits.find(p => p.id === comp.produitId);
+                        if (!compProd) return null;
+                        return (
+                          <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
+                            <td className="py-1 pl-8 italic">↳ <span className="font-mono">{compProd.reference}</span> — {compProd.description}</td>
+                            <td className="py-1 text-right">{Math.round(comp.quantite * l.quantite * 1000) / 1000}</td>
+                            <td className="py-1 text-center">{compProd.unite || ''}</td>
+                            <td colSpan={showRemise ? 3 : 2} />
+                          </tr>
+                        );
+                      })}
+                      {/* Note de ligne — colspan toute la table */}
+                      {l.note && (
+                        <tr className="border-b border-border/60">
+                          <td colSpan={colSpan} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
+                        </tr>
+                      )}
+                      {showSubS && (
+                        <tr className="bg-primary/5 border-b-2 border-primary/20">
+                          <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total — {grpTitlesS[myGrpS!]}</td>
+                          <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(grpSubS[myGrpS!] || 0)}</td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         )}
