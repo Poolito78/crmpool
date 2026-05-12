@@ -43,6 +43,89 @@ async function fetchFileAsBase64(signedUrl: string): Promise<string> {
   });
 }
 
+function toQuotedPrintable(str: string): string {
+  return str
+    .split('\n')
+    .map(line => {
+      let encoded = '';
+      for (const char of line) {
+        const code = char.charCodeAt(0);
+        if (code > 127 || char === '=') {
+          encoded += '=' + code.toString(16).toUpperCase().padStart(2, '0');
+        } else {
+          encoded += char;
+        }
+      }
+      return encoded;
+    })
+    .join('\r\n');
+}
+
+function generateEml(params: {
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  pdfBase64: string;
+  pdfFileName: string;
+  extraAttachments?: Array<{ filename: string; content: string; mime?: string }>;
+}): string {
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const lines: string[] = [];
+
+  lines.push('MIME-Version: 1.0');
+  lines.push(`From: ${params.from}`);
+  lines.push(`To: ${params.to}`);
+  lines.push(`Subject: ${params.subject}`);
+  lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+  lines.push('');
+
+  // Corps texte
+  lines.push(`--${boundary}`);
+  lines.push('Content-Type: text/plain; charset="utf-8"');
+  lines.push('Content-Transfer-Encoding: quoted-printable');
+  lines.push('');
+  lines.push(toQuotedPrintable(params.body));
+  lines.push('');
+
+  // PDF devis
+  lines.push(`--${boundary}`);
+  lines.push(`Content-Type: application/pdf; name="${params.pdfFileName}"`);
+  lines.push('Content-Transfer-Encoding: base64');
+  lines.push(`Content-Disposition: attachment; filename="${params.pdfFileName}"`);
+  lines.push('');
+  // Découper le base64 en lignes de 76 caractères (norme MIME)
+  const pdfChunks = params.pdfBase64.match(/.{1,76}/g) ?? [];
+  lines.push(...pdfChunks);
+  lines.push('');
+
+  // PJs supplémentaires
+  for (const att of params.extraAttachments ?? []) {
+    const mime = att.mime ?? 'application/octet-stream';
+    lines.push(`--${boundary}`);
+    lines.push(`Content-Type: ${mime}; name="${att.filename}"`);
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push(`Content-Disposition: attachment; filename="${att.filename}"`);
+    lines.push('');
+    const chunks = att.content.match(/.{1,76}/g) ?? [];
+    lines.push(...chunks);
+    lines.push('');
+  }
+
+  lines.push(`--${boundary}--`);
+  return lines.join('\r\n');
+}
+
+function downloadEml(emlContent: string, fileName: string) {
+  const blob = new Blob([emlContent], { type: 'message/rfc822' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = fileName;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -214,10 +297,25 @@ François MOUHOT
       onOpenChange(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      // Fallback mailto si Resend non configuré
-      toast.error(`Envoi échoué — ouverture Outlook (${msg})`, { duration: 8000 });
-      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      window.open(mailto, '_blank');
+      // Fallback : génération d'un .eml avec pièces jointes (mailto: ne supporte pas les PJs)
+      try {
+        const emlContent = generateEml({
+          from: 'f.mouhot@isosign.fr',
+          to,
+          subject,
+          body,
+          pdfBase64: pdfBase64Ref.current!,
+          pdfFileName,
+          extraAttachments: extraAttachments.map(a => ({ filename: a.filename, content: a.content })),
+        });
+        downloadEml(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
+        toast.warning(`Envoi Resend échoué (${msg}) — fichier .eml téléchargé avec les pièces jointes, ouvrez-le dans Outlook`, { duration: 10000 });
+      } catch {
+        // Dernier recours sans PJs
+        toast.error(`Envoi échoué (${msg}) — ouverture Outlook sans pièces jointes`, { duration: 8000 });
+        const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+        window.open(mailto, '_blank');
+      }
       onSent(dateEnvoi);
       onOpenChange(false);
     } finally {

@@ -11,6 +11,7 @@ import { logHistorique } from '@/lib/historique';
 import CommandeFournisseurEditDialog from '@/components/CommandeFournisseurEditDialog';
 import CommandeFournisseurPreviewDialog from '@/components/CommandeFournisseurPreviewDialog';
 import CommandeEmailDialog from '@/components/CommandeEmailDialog';
+import { generatePdfFromElement } from '@/lib/pdfFolder';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 
 const statutConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
@@ -78,10 +79,16 @@ export default function Commandes() {
     updateCommandesFournisseur(prev => prev.map(cf => cf.id === updated.id ? updated : cf));
   }
 
-  function openEmail(cf: CommandeFournisseur) {
+  async function openEmail(cf: CommandeFournisseur) {
     const fourn = fournisseurs.find(f => f.id === cf.fournisseurId);
     if (!fourn) { toast.error('Fournisseur introuvable'); return; }
-    setEmailTarget({ type: 'fournisseur', commande: cf, contact: fourn });
+    let pdfBase64: string | undefined;
+    const el = document.getElementById('cmd-fournisseur-print');
+    if (el) {
+      try { pdfBase64 = await generatePdfFromElement(el); } catch { /* sans PDF si échec */ }
+    }
+    const pdfFileName = pdfBase64 ? `Commande_${cf.numero}.pdf` : undefined;
+    setEmailTarget({ type: 'fournisseur', commande: cf, contact: fourn, pdfBase64, pdfFileName });
   }
 
   const stats = {

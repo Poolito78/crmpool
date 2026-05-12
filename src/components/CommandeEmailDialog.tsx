@@ -3,18 +3,87 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send } from 'lucide-react';
+import { Mail, Send, Paperclip } from 'lucide-react';
 import { type CommandeFournisseur, type CommandeClient, type Fournisseur, type Client, formatMontant, formatDate } from '@/lib/store';
 
 type EmailTarget =
-  | { type: 'fournisseur'; commande: CommandeFournisseur; contact: Fournisseur }
-  | { type: 'facture'; commande: CommandeClient; contact: Client };
+  | { type: 'fournisseur'; commande: CommandeFournisseur; contact: Fournisseur; pdfBase64?: string; pdfFileName?: string }
+  | { type: 'facture'; commande: CommandeClient; contact: Client; pdfBase64?: string; pdfFileName?: string };
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   target: EmailTarget | null;
   onSent?: () => void;
+}
+
+function toQuotedPrintable(str: string): string {
+  return str
+    .split('\n')
+    .map(line => {
+      let encoded = '';
+      for (const char of line) {
+        const code = char.charCodeAt(0);
+        if (code > 127 || char === '=') {
+          encoded += '=' + code.toString(16).toUpperCase().padStart(2, '0');
+        } else {
+          encoded += char;
+        }
+      }
+      return encoded;
+    })
+    .join('\r\n');
+}
+
+function generateAndDownloadEml(params: {
+  from: string;
+  to: string;
+  subject: string;
+  body: string;
+  pdfBase64?: string;
+  pdfFileName?: string;
+}) {
+  const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const lines: string[] = [];
+
+  lines.push('MIME-Version: 1.0');
+  lines.push(`From: ${params.from}`);
+  lines.push(`To: ${params.to}`);
+  lines.push(`Subject: ${params.subject}`);
+
+  if (params.pdfBase64 && params.pdfFileName) {
+    lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
+    lines.push('');
+    lines.push(`--${boundary}`);
+    lines.push('Content-Type: text/plain; charset="utf-8"');
+    lines.push('Content-Transfer-Encoding: quoted-printable');
+    lines.push('');
+    lines.push(toQuotedPrintable(params.body));
+    lines.push('');
+    lines.push(`--${boundary}`);
+    lines.push(`Content-Type: application/pdf; name="${params.pdfFileName}"`);
+    lines.push('Content-Transfer-Encoding: base64');
+    lines.push(`Content-Disposition: attachment; filename="${params.pdfFileName}"`);
+    lines.push('');
+    const chunks = params.pdfBase64.match(/.{1,76}/g) ?? [];
+    lines.push(...chunks);
+    lines.push('');
+    lines.push(`--${boundary}--`);
+  } else {
+    lines.push('Content-Type: text/plain; charset="utf-8"');
+    lines.push('Content-Transfer-Encoding: quoted-printable');
+    lines.push('');
+    lines.push(toQuotedPrintable(params.body));
+  }
+
+  const eml = lines.join('\r\n');
+  const blob = new Blob([eml], { type: 'message/rfc822' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = params.pdfFileName ? params.pdfFileName.replace('.pdf', '.eml') : 'email.eml';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export default function CommandeEmailDialog({ open, onOpenChange, target, onSent }: Props) {
@@ -74,8 +143,17 @@ Cordialement,
   }, [target, open]);
 
   function handleSend() {
-    const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-    window.open(mailto, '_blank');
+    const pdfBase64 = target?.pdfBase64;
+    const pdfFileName = target?.pdfFileName;
+
+    generateAndDownloadEml({
+      from: 'f.mouhot@isosign.fr',
+      to,
+      subject,
+      body,
+      pdfBase64,
+      pdfFileName,
+    });
     onSent?.();
     onOpenChange(false);
   }
@@ -110,14 +188,17 @@ Cordialement,
               onChange={e => setBody(e.target.value)}
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            💡 Cliquer sur "Envoyer" ouvrira votre client mail (Outlook, etc.) avec le message pré-rempli. Pensez à joindre le PDF.
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Paperclip className="w-3 h-3 shrink-0" />
+            {target?.pdfBase64
+              ? 'Le PDF sera joint automatiquement — ouvrez le fichier .eml téléchargé dans Outlook.'
+              : 'Un fichier .eml sera téléchargé — ouvrez-le dans Outlook pour envoyer.'}
           </p>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
           <Button onClick={handleSend} disabled={!to}>
-            <Send className="w-4 h-4 mr-2" /> Envoyer via Outlook
+            <Send className="w-4 h-4 mr-2" /> {target?.pdfBase64 ? 'Ouvrir dans Outlook (avec PDF)' : 'Ouvrir dans Outlook'}
           </Button>
         </DialogFooter>
       </DialogContent>
