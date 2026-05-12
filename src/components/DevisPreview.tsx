@@ -596,6 +596,20 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <div className="h-14"></div>
           </div>
         </div>
+
+        {/* Pied de page */}
+        <div className="mt-6 pt-4 border-t border-border">
+          <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
+            <p>Pour tout renseignement, consultez la fiche technique et fiche de données de sécurité</p>
+            <p>La préparation des supports doit être conforme aux normes et DTU en vigueur</p>
+            <p>Après toute livraison, il est important de procéder à la répartition des composants par N° de lot</p>
+          </div>
+          <div className="text-xs">
+            <p className="font-semibold">François MOUHOT</p>
+            <p>Port : 06.31.61.15.96</p>
+            <p>E-mail : f.mouhot@isosign.fr</p>
+          </div>
+        </div>
       </div>{/* fin printAreaRef */}
       </div>{/* fin page A4 */}
       </div>{/* fin zone défilement */}
