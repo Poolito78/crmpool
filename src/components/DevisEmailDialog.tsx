@@ -43,22 +43,31 @@ async function fetchFileAsBase64(signedUrl: string): Promise<string> {
   });
 }
 
+const _utf8Encoder = new TextEncoder();
+
+// Encode les octets UTF-8 (pas les code points Unicode) — requis par la norme MIME
 function toQuotedPrintable(str: string): string {
-  return str
-    .split('\n')
-    .map(line => {
-      let encoded = '';
-      for (const char of line) {
-        const code = char.charCodeAt(0);
-        if (code > 127 || char === '=') {
-          encoded += '=' + code.toString(16).toUpperCase().padStart(2, '0');
-        } else {
-          encoded += char;
-        }
+  return str.split('\n').map(line => {
+    const bytes = _utf8Encoder.encode(line);
+    let out = '';
+    for (const b of bytes) {
+      if (b > 127 || b === 61 /* = */) {
+        out += '=' + b.toString(16).toUpperCase().padStart(2, '0');
+      } else {
+        out += String.fromCharCode(b);
       }
-      return encoded;
-    })
-    .join('\r\n');
+    }
+    return out;
+  }).join('\r\n');
+}
+
+// Encode un header MIME (Subject, From display name…) en UTF-8 base64 RFC 2047
+function encodeHeader(str: string): string {
+  if (/^[\x00-\x7F]*$/.test(str)) return str;
+  const bytes = _utf8Encoder.encode(str);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return `=?UTF-8?B?${btoa(binary)}?=`;
 }
 
 function generateEml(params: {
@@ -76,7 +85,7 @@ function generateEml(params: {
   lines.push('MIME-Version: 1.0');
   lines.push(`From: ${params.from}`);
   lines.push(`To: ${params.to}`);
-  lines.push(`Subject: ${params.subject}`);
+  lines.push(`Subject: ${encodeHeader(params.subject)}`);
   lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
   lines.push('');
 
