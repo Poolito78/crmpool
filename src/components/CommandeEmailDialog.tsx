@@ -91,13 +91,19 @@ function generateAndDownloadEml(params: {
   }
 
   const eml = lines.join('\r\n');
+  const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+  if (isMobile) {
+    // Sur mobile : blob .eml non supporté → mailto ouvre Outlook mobile directement
+    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`;
+    window.location.href = mailto;
+    return;
+  }
   const blob = new Blob([eml], { type: 'message/rfc822' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
   a.rel = 'noopener';
-  // Pas de a.download → le navigateur ouvre avec l'app associée (.eml = Outlook)
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }

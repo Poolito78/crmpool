@@ -131,15 +131,22 @@ function generateEml(params: {
   return lines.join('\r\n');
 }
 
-function openEmlInOutlook(emlContent: string, fileName: string) {
+function isMobile(): boolean {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+function openEmlInOutlook(emlContent: string, fileName: string, fallbackMailto?: string) {
+  if (isMobile() && fallbackMailto) {
+    // Sur mobile : blob .eml non supporté → mailto ouvre Outlook mobile directement
+    window.location.href = fallbackMailto;
+    return;
+  }
   const blob = new Blob([emlContent], { type: 'message/rfc822' });
   const url = URL.createObjectURL(blob);
-  // window.open sans attribut download : Chrome propose "Ouvrir" → lance Outlook directement
   const a = document.createElement('a');
   a.href = url;
   a.target = '_blank';
   a.rel = 'noopener';
-  // Pas de a.download → le navigateur tente d'ouvrir avec l'app associée (.eml = Outlook)
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
@@ -293,7 +300,8 @@ Restant à ta disposition pour tout complément d'information.`
         pdfFileName,
         extraAttachments,
       });
-      openEmlInOutlook(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`);
+      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+      openEmlInOutlook(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`, mailto);
       toast.success('Fichier .eml téléchargé — ouvrez-le dans Outlook pour envoyer', {
         description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
         duration: 6000,
