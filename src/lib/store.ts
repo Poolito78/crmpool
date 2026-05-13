@@ -90,6 +90,7 @@ export interface Produit {
   categorie?: string;
   composants?: ComposantProduit[];
   ficheUrl?: string;
+  ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   dateCreation: string;
 }
 

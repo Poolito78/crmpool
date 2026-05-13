@@ -291,10 +291,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       .filter((p): p is NonNullable<typeof p> => !!p?.ficheUrl)
       .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
 
-    const links = fichesLignes.map(p => ({ label: `${p.reference} — ${p.description}`, url: p.ficheUrl! }));
+    const links = fichesLignes.map(p => ({
+      label: p.ficheLinkLabel?.trim() || `${p.reference} — ${p.description}`,
+      url: p.ficheUrl!,
+    }));
     setFicheLinks(links);
 
-    // Dans la textarea : juste les noms (sans URL disgracieuse)
+    // Dans la textarea : texte affiché (sans URL disgracieuse)
     const ficheTextSection = links.length > 0
       ? `\n\nFiches produit :\n${links.map(l => `• ${l.label}`).join('\n')}`
       : '';
