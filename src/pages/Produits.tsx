@@ -33,7 +33,7 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: ''
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: ''
 };
 
 // Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
@@ -352,7 +352,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '' });
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '' });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -1083,6 +1083,29 @@ export default function Produits() {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
               <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex-1">
+                <Label className="flex items-center gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5 text-muted-foreground" />
+                  Lien fiche produit
+                  <span className="text-xs font-normal text-muted-foreground">(inclus automatiquement dans les mails devis)</span>
+                </Label>
+                <Input
+                  type="url"
+                  value={form.ficheUrl || ''}
+                  onChange={e => setForm(p => ({ ...p, ficheUrl: e.target.value }))}
+                  placeholder="https://www.fournisseur.fr/produit/ref"
+                />
+              </div>
+              {form.ficheUrl && (
+                <a href={form.ficheUrl} target="_blank" rel="noopener noreferrer"
+                  className="mt-5 p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0"
+                  title="Ouvrir le lien">
+                  <ExternalLink className="w-4 h-4" />
+                </a>
+              )}
             </div>
 
             {/* Composition */}

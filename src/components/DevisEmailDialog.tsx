@@ -272,13 +272,24 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
     setTo(client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
+
+    // Fiches produit des lignes du devis (produits avec ficheUrl)
+    const fichesLignes = devis.lignes
+      .map(l => produits.find(p => p.id === l.produitId))
+      .filter((p): p is NonNullable<typeof p> => !!p?.ficheUrl)
+      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i); // dédoublonner
+
+    const ficheSection = fichesLignes.length > 0
+      ? `\n\nFiches produit :\n${fichesLignes.map(p => `• ${p.reference} — ${p.description} : ${p.ficheUrl}`).join('\n')}`
+      : '';
+
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
 
 Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Restant à ta disposition pour tout complément d'information.`
+Restant à ta disposition pour tout complément d'information.${ficheSection}`
     );
 
     if (pdfContainerRef?.current) {
@@ -286,7 +297,7 @@ Restant à ta disposition pour tout complément d'information.`
       pdfBase64Ref.current = null;
       setTimeout(() => generatePdf(), 600);
     }
-  }, [devis, client, open]);
+  }, [devis, client, open, produits]);
 
   async function generatePdf() {
     if (!pdfContainerRef?.current || !devis) return;

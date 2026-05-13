@@ -89,6 +89,7 @@ export interface Produit {
   fournisseurId?: string;
   categorie?: string;
   composants?: ComposantProduit[];
+  ficheUrl?: string;
   dateCreation: string;
 }
 
