@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet, ExternalLink } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
@@ -285,30 +285,25 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setTo(client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
 
-    // Fiches produit : liens séparés (rendus en <a> dans le HTML du mail)
+    // Fiches produit : uniquement en HTML dans le .eml (pas dans le textarea → évite les doublons)
     const fichesLignes = devis.lignes
       .map(l => produits.find(p => p.id === l.produitId))
       .filter((p): p is NonNullable<typeof p> => !!p?.ficheUrl)
       .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
 
-    const links = fichesLignes.map(p => ({
+    setFicheLinks(fichesLignes.map(p => ({
       label: p.ficheLinkLabel?.trim() || `${p.reference} — ${p.description}`,
       url: p.ficheUrl!,
-    }));
-    setFicheLinks(links);
+    })));
 
-    // Dans la textarea : texte affiché (sans URL disgracieuse)
-    const ficheTextSection = links.length > 0
-      ? `\n\nFiches produit :\n${links.map(l => `• ${l.label}`).join('\n')}`
-      : '';
-
+    // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
 
 Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Restant à ta disposition pour tout complément d'information.${ficheTextSection}`
+Restant à ta disposition pour tout complément d'information.`
     );
 
     if (pdfContainerRef?.current) {
@@ -454,6 +449,22 @@ Restant à ta disposition pour tout complément d'information.${ficheTextSection
               onChange={e => setBody(e.target.value)}
             />
           </div>
+
+          {/* ── Fiches produit (liens hypertexte dans le HTML du mail) ── */}
+          {ficheLinks.length > 0 && (
+            <div className="rounded-md border px-3 py-2 space-y-1">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ExternalLink className="w-4 h-4 text-primary" />
+                Fiches produit ajoutées au mail
+                <span className="text-xs font-normal text-muted-foreground">(liens cliquables dans Outlook)</span>
+              </div>
+              {ficheLinks.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 pl-6 text-sm">
+                  <span className="text-primary underline truncate">{f.label}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* ── Pièces jointes du chatter ── */}
           {pjFichiers.length > 0 && (
