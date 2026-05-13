@@ -155,14 +155,20 @@ async function openEmlInOutlook(params: {
   subject: string;
   body: string;
   extraAttachments?: Array<{ filename: string; content: string; mime?: string }>;
+  ficheLinks?: Array<{ label: string; url: string }>;
 }): Promise<'eml' | 'share' | 'mailto'> {
   if (isMobile()) {
+    // Sur mobile : corps texte enrichi avec les liens fiches (texte brut "label : url")
+    const ficheText = params.ficheLinks && params.ficheLinks.length > 0
+      ? `\n\nFiches produit :\n${params.ficheLinks.map(f => `• ${f.label} : ${f.url}`).join('\n')}`
+      : '';
+    const mobileBody = params.body + ficheText;
+
     // Essayer Web Share API avec tous les fichiers (PDF + PJs) en pièces jointes
     try {
       const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
       const pdfFile = new File([pdfBytes], params.pdfFileName, { type: 'application/pdf' });
 
-      // Construire les fichiers PJs supplémentaires
       const extraFiles: File[] = (params.extraAttachments ?? []).map(att => {
         const bytes = Uint8Array.from(atob(att.content), c => c.charCodeAt(0));
         return new File([bytes], att.filename, { type: att.mime ?? 'application/octet-stream' });
@@ -172,7 +178,7 @@ async function openEmlInOutlook(params: {
       if (navigator.canShare?.({ files: allFiles })) {
         await navigator.share({
           title: params.subject,
-          text: params.body,
+          text: mobileBody,
           files: allFiles,
         });
         return 'share';
@@ -189,7 +195,6 @@ async function openEmlInOutlook(params: {
     a.click();
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
 
-    // Télécharger aussi les PJs supplémentaires
     let delay = 400;
     for (const att of params.extraAttachments ?? []) {
       setTimeout(() => {
@@ -205,7 +210,7 @@ async function openEmlInOutlook(params: {
       delay += 400;
     }
 
-    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`;
+    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(mobileBody)}`;
     setTimeout(() => { window.location.href = mailto; }, delay);
     return 'mailto';
   }
@@ -392,6 +397,7 @@ Restant à ta disposition pour tout complément d'information.`
         pdfFileName,
         to, subject, body,
         extraAttachments,
+        ficheLinks,
       });
       const totalFichiers = 1 + extraAttachments.length;
       const desc = result === 'mailto'
