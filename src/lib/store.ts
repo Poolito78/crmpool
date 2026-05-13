@@ -356,6 +356,8 @@ function dbToProduit(r: any): Produit {
     fournisseurId: r.fournisseur_id || undefined,
     categorie: r.categorie || undefined,
     composants: r.composants ? (Array.isArray(r.composants) ? r.composants : JSON.parse(r.composants)) : undefined,
+    ficheUrl: r.fiche_url || undefined,
+    ficheLinkLabel: r.fiche_link_label || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
 }
@@ -382,6 +384,8 @@ function produitToDb(p: Produit, userId: string) {
     fournisseur_id: p.fournisseurId || null,
     categorie: p.categorie || null,
     composants: p.composants && p.composants.length > 0 ? p.composants : null,
+    fiche_url: p.ficheUrl || null,
+    fiche_link_label: p.ficheLinkLabel || null,
     date_creation: p.dateCreation,
   };
 }
