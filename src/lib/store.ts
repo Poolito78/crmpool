@@ -66,6 +66,7 @@ export interface ComposantProduit {
   consommationPct?: number;   // si défini : quantite = baseQuantite × consommationPct / 100
   baseComposantId?: string;   // (optionnel) produitId d'un autre composant — synchronise baseQuantite automatiquement
   baseQuantite?: number;      // valeur de base pour le calcul % (saisie manuelle ou issue de baseComposantId)
+  poidsKg?: number;           // si défini : mode poids — quantite = poidsKg / produit.poids (ou = poidsKg si unite kg)
 }
 
 export interface Produit {

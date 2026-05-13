@@ -1452,21 +1452,40 @@ export default function Devis() {
             )}
           </div>
           <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
-            <Button variant="outline" size="sm" onClick={() => {
-              const existing = editingId ? devis.find(d => d.id === editingId) : null;
-              const preview: DevisType = {
-                id: editingId || 'preview',
-                numero: existing?.numero || 'APERÇU',
-                clientId, adresseLivraisonId: adresseLivraisonId || undefined,
-                dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
-                fraisPortHT, fraisPortTVA, modeCalcul,
-                surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-              };
-              setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
-              setPreviewDevis(preview);
-            }}>
-              <Eye className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Aperçu</span>
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => {
+                const existing = editingId ? devis.find(d => d.id === editingId) : null;
+                const preview: DevisType = {
+                  id: editingId || 'preview',
+                  numero: existing?.numero || 'APERÇU',
+                  clientId, adresseLivraisonId: adresseLivraisonId || undefined,
+                  dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
+                  fraisPortHT, fraisPortTVA, modeCalcul,
+                  surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                };
+                setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
+                setPreviewDevis(preview);
+              }}>
+                <Eye className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Aperçu</span>
+              </Button>
+              {editingId && (
+                <Button variant="outline" size="sm" onClick={() => {
+                  save(true);
+                  const existing = devis.find(d => d.id === editingId);
+                  const current: DevisType = {
+                    id: editingId,
+                    numero: existing?.numero || editingId,
+                    clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+                    dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
+                    systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                    surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                  };
+                  setEmailDevis(current);
+                }}>
+                  <Mail className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Envoyer par mail</span>
+                </Button>
+              )}
+            </div>
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Annuler</Button>
               <Button size="sm" onClick={() => save()}>

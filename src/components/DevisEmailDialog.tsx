@@ -143,22 +143,32 @@ async function openEmlInOutlook(params: {
   to: string;
   subject: string;
   body: string;
+  extraAttachments?: Array<{ filename: string; content: string; mime?: string }>;
 }): Promise<'eml' | 'share' | 'mailto'> {
   if (isMobile()) {
-    // Essayer Web Share API avec le PDF en pièce jointe (iOS Safari 15+, Android Chrome 89+)
+    // Essayer Web Share API avec tous les fichiers (PDF + PJs) en pièces jointes
     try {
       const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
       const pdfFile = new File([pdfBytes], params.pdfFileName, { type: 'application/pdf' });
-      if (navigator.canShare?.({ files: [pdfFile] })) {
+
+      // Construire les fichiers PJs supplémentaires
+      const extraFiles: File[] = (params.extraAttachments ?? []).map(att => {
+        const bytes = Uint8Array.from(atob(att.content), c => c.charCodeAt(0));
+        return new File([bytes], att.filename, { type: att.mime ?? 'application/octet-stream' });
+      });
+
+      const allFiles = [pdfFile, ...extraFiles];
+      if (navigator.canShare?.({ files: allFiles })) {
         await navigator.share({
           title: params.subject,
           text: params.body,
-          files: [pdfFile],
+          files: allFiles,
         });
         return 'share';
       }
     } catch { /* annulé par l'utilisateur ou non supporté */ }
-    // Fallback : télécharger le PDF + ouvrir mailto
+
+    // Fallback : télécharger chaque fichier + ouvrir mailto
     const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
     const pdfUrl = URL.createObjectURL(pdfBlob);
@@ -167,8 +177,25 @@ async function openEmlInOutlook(params: {
     a.download = params.pdfFileName;
     a.click();
     setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
+
+    // Télécharger aussi les PJs supplémentaires
+    let delay = 400;
+    for (const att of params.extraAttachments ?? []) {
+      setTimeout(() => {
+        const bytes = Uint8Array.from(atob(att.content), c => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: att.mime ?? 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = att.filename;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      }, delay);
+      delay += 400;
+    }
+
     const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`;
-    setTimeout(() => { window.location.href = mailto; }, 500);
+    setTimeout(() => { window.location.href = mailto; }, delay);
     return 'mailto';
   }
   // Desktop : blob .eml
@@ -338,10 +365,12 @@ Restant à ta disposition pour tout complément d'information.`
         pdfBase64: pdfBase64Ref.current!,
         pdfFileName,
         to, subject, body,
+        extraAttachments,
       });
+      const totalFichiers = 1 + extraAttachments.length;
       const desc = result === 'mailto'
-        ? 'PDF téléchargé — joignez-le manuellement dans Outlook'
-        : result === 'share' ? 'Partagé via la feuille de partage' : '';
+        ? `${totalFichiers > 1 ? `${totalFichiers} fichiers téléchargés` : 'PDF téléchargé'} — joignez-les manuellement dans Outlook`
+        : result === 'share' ? `Partagé via la feuille de partage${extraAttachments.length > 0 ? ` (${totalFichiers} fichiers)` : ''}` : '';
       toast.success('Outlook ouvert avec le devis', {
         description: desc || (folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : ''),
         duration: 6000,

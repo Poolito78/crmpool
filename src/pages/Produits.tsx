@@ -1088,10 +1088,20 @@ export default function Produits() {
                 <p className="text-xs text-muted-foreground">Aucun composant — cliquez sur "Ajouter" pour créer un produit composé</p>
               )}
               {(() => {
+                // Calcule la quantité effective d'un composant en mode poids
+                function qteDepuisPoids(c: typeof composants[0], p: typeof produits[0]): number {
+                  if (c.poidsKg == null) return c.quantite;
+                  // Si le produit est vendu au kg : quantite = poids saisi
+                  if (p.unite?.toLowerCase() === 'kg') return c.poidsKg;
+                  // Sinon : quantite = poidsKg / poids_unitaire
+                  return p.poids && p.poids > 0 ? Math.round(c.poidsKg / p.poids * 10000) / 10000 : c.poidsKg;
+                }
                 function prixComposant(c: typeof composants[0]) {
                   const p = produits.find(pr => pr.id === c.produitId);
                   if (!p) return 0;
-                  // En mode % : coût = pct% du prix unitaire (ex: 28% d'un sac à 8,92€ = 2,50€)
+                  // Mode poids : prix = prixAchat × quantite_calculee
+                  if (c.poidsKg != null) return p.prixAchat * qteDepuisPoids(c, p);
+                  // Mode % : coût = pct% du prix unitaire
                   if (c.consommationPct != null) return p.prixAchat * c.consommationPct / 100;
                   return p.prixAchat * c.quantite;
                 }
@@ -1100,14 +1110,12 @@ export default function Produits() {
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
                 // Propage les modifications de quantité aux composants en mode %
-                // Formule : pct/100 × quantite_base (kg/m²)
                 function calcQtyPct(pct: number, baseComp: typeof composants[0]) {
                   return Math.round(baseComp.quantite * pct / 100 * 10000) / 10000 || 0.0001;
                 }
                 function propagatePct(updated: typeof composants) {
                   return updated.map(c => {
                     if (c.consommationPct != null) {
-                      // Priorité : composant lié → sinon baseQuantite manuelle
                       if (c.baseComposantId) {
                         const base = updated.find(b => b.produitId === c.baseComposantId);
                         if (base) return { ...c, baseQuantite: base.quantite, quantite: calcQtyPct(c.consommationPct, base) };
@@ -1122,13 +1130,15 @@ export default function Produits() {
                   const compProd = produits.find(p => p.id === comp.produitId);
                   const search = composantSearches[idx] || '';
                   const isOpen = composantOpenIdx === idx;
-                  const modePercent = comp.consommationPct != null;
+                  const modePoids = comp.poidsKg != null;
+                  const modePercent = !modePoids && comp.consommationPct != null;
                   const availableProduits = produits
                     .filter(p => (!editing || p.id !== editing.id) && !composants.some((c, i) => i !== idx && c.produitId === p.id))
                     .filter(p => !search || `${p.reference} ${p.description}`.toLowerCase().includes(search.toLowerCase()))
                     .sort((a, b) => a.reference.localeCompare(b.reference));
-                  // Composants disponibles comme base pour le % (tous sauf soi-même, avec un produit sélectionné)
                   const basesDisponibles = composants.filter((c, i) => i !== idx && c.produitId);
+                  // Quantité calculée en mode poids (pour affichage)
+                  const qteCalcPoids = compProd && modePoids ? qteDepuisPoids(comp, compProd) : null;
 
                   return (
                     <div key={comp.produitId || `new-${idx}`} className="space-y-1">
@@ -1200,10 +1210,44 @@ export default function Produits() {
                           )}
                         </div>
 
-                        {/* Quantité fixe ou calculée en % */}
-                        {modePercent ? (
+                        {/* Quantité / Poids / % */}
+                        {modePoids ? (
+                          /* ── Mode Poids ── */
                           <div className="flex items-center gap-1 shrink-0 flex-wrap">
-                            {/* Pourcentage */}
+                            <Input
+                              type="number" min={0.001} step={0.001}
+                              value={comp.poidsKg ?? ''}
+                              onChange={e => {
+                                const kg = parseFloat(e.target.value) || 0;
+                                const qte = compProd ? qteDepuisPoids({ ...comp, poidsKg: kg }, compProd) : kg;
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], poidsKg: kg, quantite: qte };
+                                setComposants(updated);
+                                recalcPrix(updated);
+                              }}
+                              className="w-20 text-sm"
+                              placeholder="kg"
+                            />
+                            <span className="text-xs text-muted-foreground">kg</span>
+                            {/* Afficher la quantité calculée si l'unité n'est pas kg */}
+                            {compProd && compProd.unite?.toLowerCase() !== 'kg' && compProd.poids && compProd.poids > 0 && qteCalcPoids != null && (
+                              <span className="text-xs text-muted-foreground">
+                                → <span className="font-medium text-foreground">{qteCalcPoids} {compProd.unite || 'u.'}</span>
+                              </span>
+                            )}
+                            <button type="button" title="Repasser en quantité fixe"
+                              onClick={() => {
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], poidsKg: undefined };
+                                setComposants(updated);
+                                recalcPrix(updated);
+                              }}
+                              className="text-xs text-muted-foreground hover:text-destructive"
+                            >✕</button>
+                          </div>
+                        ) : modePercent ? (
+                          /* ── Mode % ── */
+                          <div className="flex items-center gap-1 shrink-0 flex-wrap">
                             <Input
                               type="number" min={0.01} max={100} step={0.1}
                               value={comp.consommationPct ?? ''}
@@ -1222,7 +1266,6 @@ export default function Produits() {
                               placeholder="%"
                             />
                             <span className="text-xs text-muted-foreground">% ×</span>
-                            {/* Base : saisie manuelle */}
                             <Input
                               type="number" min={0.001} step={0.001}
                               value={comp.baseQuantite ?? ''}
@@ -1238,7 +1281,6 @@ export default function Produits() {
                               className="w-20 text-sm"
                               placeholder="base"
                             />
-                            {/* Lier à un autre composant (optionnel) */}
                             {basesDisponibles.length > 0 && (
                               <select
                                 value={comp.baseComposantId || ''}
@@ -1254,7 +1296,7 @@ export default function Produits() {
                                   recalcPrix(updated);
                                 }}
                                 className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[110px]"
-                                title="Lier à un autre composant (synchronise la base automatiquement)"
+                                title="Lier à un autre composant"
                               >
                                 <option value="">lier…</option>
                                 {basesDisponibles.map(c => {
@@ -1274,6 +1316,7 @@ export default function Produits() {
                             >✕</button>
                           </div>
                         ) : (
+                          /* ── Mode Quantité fixe ── */
                           <div className="flex items-center gap-1 shrink-0">
                             <Input
                               type="number" min={0.01} step={0.01}
@@ -1288,10 +1331,19 @@ export default function Produits() {
                               className="w-20 text-sm"
                               placeholder="Qté"
                             />
+                            <button type="button" title="Saisir en poids (kg)"
+                              onClick={() => {
+                                const updated = [...composants];
+                                updated[idx] = { ...updated[idx], poidsKg: comp.quantite, consommationPct: undefined, baseComposantId: undefined, baseQuantite: undefined };
+                                setComposants(updated);
+                                recalcPrix(updated);
+                              }}
+                              className="text-xs px-1.5 py-1 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary"
+                            >kg</button>
                             <button type="button" title="Définir en % d'un autre composant"
                               onClick={() => {
                                 const updated = [...composants];
-                                updated[idx] = { ...updated[idx], consommationPct: 10, baseComposantId: '' };
+                                updated[idx] = { ...updated[idx], consommationPct: 10, baseComposantId: '', poidsKg: undefined };
                                 setComposants(updated);
                               }}
                               className="text-xs px-1.5 py-1 rounded border border-border text-muted-foreground hover:text-primary hover:border-primary"
@@ -1315,6 +1367,19 @@ export default function Produits() {
                           <Trash className="w-4 h-4" />
                         </button>
                       </div>
+                      {/* Ligne de détail selon le mode */}
+                      {modePoids && compProd && comp.poidsKg != null && (
+                        <p className="text-xs text-muted-foreground pl-1 flex flex-wrap gap-x-3 gap-y-0.5">
+                          {compProd.unite?.toLowerCase() !== 'kg' && compProd.poids && compProd.poids > 0 ? (
+                            <span>
+                              {comp.poidsKg} kg ÷ {compProd.poids} kg/{compProd.unite || 'u.'} = <span className="font-medium text-foreground">{qteCalcPoids} {compProd.unite || 'u.'}</span>
+                              <span className="ml-2">× {formatMontant(compProd.prixAchat)} = <span className="font-medium text-foreground">{formatMontant(prixComposant(comp))}</span></span>
+                            </span>
+                          ) : (
+                            <span>{comp.poidsKg} kg × {formatMontant(compProd.prixAchat)}/kg = <span className="font-medium text-foreground">{formatMontant(prixComposant(comp))}</span></span>
+                          )}
+                        </p>
+                      )}
                       {modePercent && comp.consommationPct != null && (() => {
                         const baseComp = comp.baseComposantId ? composants.find(c => c.produitId === comp.baseComposantId) : null;
                         const baseProd = comp.baseComposantId ? produits.find(p => p.id === comp.baseComposantId) : null;
@@ -1347,7 +1412,12 @@ export default function Produits() {
                   <span>{formatMontant(composants.reduce((sum, c) => {
                     const p = produits.find(pr => pr.id === c.produitId);
                     if (!p) return sum;
-                    return sum + (c.consommationPct != null ? p.prixAchat * c.consommationPct / 100 : p.prixAchat * c.quantite);
+                    if (c.poidsKg != null) {
+                      const qte = p.unite?.toLowerCase() === 'kg' ? c.poidsKg : (p.poids && p.poids > 0 ? c.poidsKg / p.poids : c.poidsKg);
+                      return sum + p.prixAchat * qte;
+                    }
+                    if (c.consommationPct != null) return sum + p.prixAchat * c.consommationPct / 100;
+                    return sum + p.prixAchat * c.quantite;
                   }, 0))}</span>
                 </div>
               )}
