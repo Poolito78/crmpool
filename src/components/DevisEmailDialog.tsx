@@ -78,6 +78,7 @@ function generateEml(params: {
   pdfBase64: string;
   pdfFileName: string;
   extraAttachments?: Array<{ filename: string; content: string; mime?: string }>;
+  ficheLinks?: Array<{ label: string; url: string }>;
 }): string {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const lines: string[] = [];
@@ -91,11 +92,21 @@ function generateEml(params: {
   lines.push('');
 
   // Corps HTML — Outlook insère sa signature APRÈS le HTML (pas avant)
+  const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   const htmlBody = params.body
     .split('\n')
-    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`)
+    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${esc(l)}</p>`)
     .join('\n');
-  const fullHtml = `<html><body>${htmlBody}</body></html>`;
+
+  // Section fiches produit avec vrais liens cliquables
+  const ficheHtml = params.ficheLinks && params.ficheLinks.length > 0
+    ? `<br><p style="margin:0 0 4px 0"><strong>Fiches produit :</strong></p>` +
+      params.ficheLinks.map(f =>
+        `<p style="margin:0 0 2px 0">&#8226; <a href="${esc(f.url)}" style="color:#0563C1">${esc(f.label)}</a></p>`
+      ).join('')
+    : '';
+
+  const fullHtml = `<html><body>${htmlBody}${ficheHtml}</body></html>`;
   lines.push(`--${boundary}`);
   lines.push('Content-Type: text/html; charset="utf-8"');
   lines.push('Content-Transfer-Encoding: quoted-printable');
@@ -224,6 +235,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  const [ficheLinks, setFicheLinks] = useState<Array<{ label: string; url: string }>>([]);
   const [dateEnvoi, setDateEnvoi] = useState(new Date().toISOString().split('T')[0]);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
@@ -273,14 +285,18 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setTo(client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
 
-    // Fiches produit des lignes du devis (produits avec ficheUrl)
+    // Fiches produit : liens séparés (rendus en <a> dans le HTML du mail)
     const fichesLignes = devis.lignes
       .map(l => produits.find(p => p.id === l.produitId))
       .filter((p): p is NonNullable<typeof p> => !!p?.ficheUrl)
-      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i); // dédoublonner
+      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
 
-    const ficheSection = fichesLignes.length > 0
-      ? `\n\nFiches produit :\n${fichesLignes.map(p => `• ${p.reference} — ${p.description} : ${p.ficheUrl}`).join('\n')}`
+    const links = fichesLignes.map(p => ({ label: `${p.reference} — ${p.description}`, url: p.ficheUrl! }));
+    setFicheLinks(links);
+
+    // Dans la textarea : juste les noms (sans URL disgracieuse)
+    const ficheTextSection = links.length > 0
+      ? `\n\nFiches produit :\n${links.map(l => `• ${l.label}`).join('\n')}`
       : '';
 
     setBody(
@@ -289,7 +305,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
 Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
-Restant à ta disposition pour tout complément d'information.${ficheSection}`
+Restant à ta disposition pour tout complément d'information.${ficheTextSection}`
     );
 
     if (pdfContainerRef?.current) {
@@ -369,6 +385,7 @@ Restant à ta disposition pour tout complément d'information.${ficheSection}`
         pdfBase64: pdfBase64Ref.current!,
         pdfFileName,
         extraAttachments,
+        ficheLinks,
       });
       const result = await openEmlInOutlook({
         emlContent,
