@@ -170,6 +170,13 @@ export default function Produits() {
         const compPrix = (comp.composants && comp.composants.length > 0)
           ? calcPrixAchatCompose(comp)
           : (comp.prixAchat ?? 0);
+        // Mode poids : quantite = poidsKg / poids_unitaire (ou = poidsKg si vendu au kg)
+        if (c.poidsKg != null) {
+          const qte = comp.unite?.toLowerCase() === 'kg' ? c.poidsKg : (comp.poids && comp.poids > 0 ? c.poidsKg / comp.poids : c.poidsKg);
+          return sum + compPrix * qte;
+        }
+        // Mode % : coût = pct% du prix unitaire
+        if (c.consommationPct != null) return sum + compPrix * c.consommationPct / 100;
         return sum + compPrix * c.quantite;
       }, 0);
       return Math.round(total * 100) / 100;
@@ -328,12 +335,18 @@ export default function Produits() {
   function openEdit(p: Produit) {
     setEditing(p);
     const comps = p.composants || [];
-    // Recalculate prixAchat from composants if composite
+    // Recalculate prixAchat from composants if composite (handles qty / poids / % modes)
     let prixAchat = p.prixAchat;
     if (comps.length > 0) {
       const total = comps.reduce((sum, c) => {
         const cp = produits.find(pr => pr.id === c.produitId);
-        return sum + (cp ? cp.prixAchat * c.quantite : 0);
+        if (!cp) return sum;
+        if (c.poidsKg != null) {
+          const qte = cp.unite?.toLowerCase() === 'kg' ? c.poidsKg : (cp.poids && cp.poids > 0 ? c.poidsKg / cp.poids : c.poidsKg);
+          return sum + cp.prixAchat * qte;
+        }
+        if (c.consommationPct != null) return sum + cp.prixAchat * c.consommationPct / 100;
+        return sum + cp.prixAchat * c.quantite;
       }, 0);
       if (total > 0) prixAchat = Math.round(total * 100) / 100;
     }
