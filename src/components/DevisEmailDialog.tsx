@@ -135,13 +135,44 @@ function isMobile(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
 }
 
-function openEmlInOutlook(emlContent: string, fileName: string, fallbackMailto?: string) {
-  if (isMobile() && fallbackMailto) {
-    // Sur mobile : blob .eml non supporté → mailto ouvre Outlook mobile directement
-    window.location.href = fallbackMailto;
-    return;
+async function openEmlInOutlook(params: {
+  emlContent: string;
+  fileName: string;
+  pdfBase64: string;
+  pdfFileName: string;
+  to: string;
+  subject: string;
+  body: string;
+}): Promise<'eml' | 'share' | 'mailto'> {
+  if (isMobile()) {
+    // Essayer Web Share API avec le PDF en pièce jointe (iOS Safari 15+, Android Chrome 89+)
+    try {
+      const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
+      const pdfFile = new File([pdfBytes], params.pdfFileName, { type: 'application/pdf' });
+      if (navigator.canShare?.({ files: [pdfFile] })) {
+        await navigator.share({
+          title: params.subject,
+          text: params.body,
+          files: [pdfFile],
+        });
+        return 'share';
+      }
+    } catch { /* annulé par l'utilisateur ou non supporté */ }
+    // Fallback : télécharger le PDF + ouvrir mailto
+    const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
+    const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const pdfUrl = URL.createObjectURL(pdfBlob);
+    const a = document.createElement('a');
+    a.href = pdfUrl;
+    a.download = params.pdfFileName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(pdfUrl), 10000);
+    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`;
+    setTimeout(() => { window.location.href = mailto; }, 500);
+    return 'mailto';
   }
-  const blob = new Blob([emlContent], { type: 'message/rfc822' });
+  // Desktop : blob .eml
+  const blob = new Blob([params.emlContent], { type: 'message/rfc822' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -149,6 +180,7 @@ function openEmlInOutlook(emlContent: string, fileName: string, fallbackMailto?:
   a.rel = 'noopener';
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
+  return 'eml';
 }
 
 interface Props {
@@ -300,10 +332,18 @@ Restant à ta disposition pour tout complément d'information.`
         pdfFileName,
         extraAttachments,
       });
-      const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-      openEmlInOutlook(emlContent, `${pdfFileName.replace('.pdf', '')}.eml`, mailto);
-      toast.success('Fichier .eml téléchargé — ouvrez-le dans Outlook pour envoyer', {
-        description: folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : '',
+      const result = await openEmlInOutlook({
+        emlContent,
+        fileName: `${pdfFileName.replace('.pdf', '')}.eml`,
+        pdfBase64: pdfBase64Ref.current!,
+        pdfFileName,
+        to, subject, body,
+      });
+      const desc = result === 'mailto'
+        ? 'PDF téléchargé — joignez-le manuellement dans Outlook'
+        : result === 'share' ? 'Partagé via la feuille de partage' : '';
+      toast.success('Outlook ouvert avec le devis', {
+        description: desc || (folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : ''),
         duration: 6000,
       });
       onSent(dateEnvoi);
