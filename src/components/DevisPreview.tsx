@@ -182,8 +182,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="grid grid-cols-2 gap-5 mb-4">
           <div className="bg-muted/30 rounded-lg p-4">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
-            <p className="font-semibold">{client?.nom || '—'}</p>
-            {client?.societe && <p className="text-muted-foreground">{client.societe}</p>}
+            <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+            {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
             {client && <p className="text-muted-foreground">{client.adresse}</p>}
             {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
             {client?.email && <p className="text-muted-foreground">{client.email}</p>}
@@ -207,8 +207,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               }
               return (
                 <>
-                  <p className="font-semibold">{client?.nom || '—'}</p>
-                  {client?.societe && <p className="text-muted-foreground">{client.societe}</p>}
+                  <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                  {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
                   {client && <p className="text-muted-foreground">{client.adresse}</p>}
                   {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
                 </>
