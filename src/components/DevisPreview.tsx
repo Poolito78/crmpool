@@ -211,7 +211,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   {client?.societe && <p className="text-muted-foreground">{client.societe}</p>}
                   {client && <p className="text-muted-foreground">{client.adresse}</p>}
                   {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                  <p className="text-xs text-muted-foreground italic mt-1">Identique à l'adresse de facturation</p>
                 </>
               );
             })()}
