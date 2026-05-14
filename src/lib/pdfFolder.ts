@@ -128,6 +128,46 @@ export async function generatePdfFromElement(
     }
   }
 
+  // Calcule les positions de saut de page en évitant de couper les <tr>
+  // Retourne un tableau de hauteurs de tranches (en mm dans l'espace imgH)
+  function computePageSlices(): number[] {
+    const elementH = element.scrollHeight;
+    if (elementH === 0) return [];
+    const domToMm = imgH / elementH;          // mm par pixel DOM
+    const elTop = element.getBoundingClientRect().top;
+
+    // Récupère le bord bas de chaque <tr> en mm depuis le haut du container
+    const rowBottoms: number[] = [];
+    element.querySelectorAll('tr').forEach(tr => {
+      const r = tr.getBoundingClientRect();
+      const bottom = (r.bottom - elTop) * domToMm;
+      if (bottom > 0 && bottom <= imgH) rowBottoms.push(bottom);
+    });
+    rowBottoms.sort((a, b) => a - b);
+
+    const slices: number[] = [];
+    let consumed = 0;
+    while (consumed < imgH) {
+      const remaining = imgH - consumed;
+      if (remaining <= contentH) { slices.push(remaining); break; }
+      // Point naturel de coupure
+      const naturalBreak = consumed + contentH;
+      // Cherche le dernier bord de <tr> avant ce point
+      let bestBreak = naturalBreak;
+      for (let i = rowBottoms.length - 1; i >= 0; i--) {
+        if (rowBottoms[i] <= naturalBreak && rowBottoms[i] > consumed) {
+          bestBreak = rowBottoms[i];
+          break;
+        }
+      }
+      // Si on n'a rien trouvé (ex: une seule très longue tr), on coupe quand même
+      if (bestBreak <= consumed) bestBreak = naturalBreak;
+      slices.push(bestBreak - consumed);
+      consumed = bestBreak;
+    }
+    return slices;
+  }
+
   // Si le dépassement est inférieur à 100 mm, on réduit pour tenir sur une page
   const overflow = imgH - contentH;
   const forceSinglePage = overflow > 0 && overflow < 100;
@@ -137,20 +177,21 @@ export async function generatePdfFromElement(
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH);
     drawFooter(1, 1);
   } else {
-    const totalPages = Math.ceil(imgH / contentH);
-    let yOffset = 0, page = 0;
-    while (yOffset < imgH) {
+    const slices = computePageSlices();
+    const totalPages = slices.length;
+    let yOffsetMm = 0, page = 0;
+    for (const sliceH of slices) {
       if (page > 0) pdf.addPage();
-      const srcY = (yOffset / imgH) * canvas.height;
-      const availH = Math.min(contentH, imgH - yOffset);
-      const srcH = (availH / imgH) * canvas.height;
+      // Convertit mm → pixels canvas
+      const srcY = Math.round((yOffsetMm / imgH) * canvas.height);
+      const srcH = Math.round((sliceH / imgH) * canvas.height);
       const tmp = document.createElement('canvas');
-      tmp.width = canvas.width; tmp.height = Math.round(srcH);
+      tmp.width = canvas.width; tmp.height = Math.max(1, srcH);
       tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, availH);
+      // Dessine la tranche en la dimensionnant à sliceH mm (pas toujours contentH)
+      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
       drawFooter(page + 1, totalPages);
-
-      yOffset += contentH; page++;
+      yOffsetMm += sliceH; page++;
     }
   }
   return pdf.output('datauristring').split(',')[1];
