@@ -1207,7 +1207,7 @@ export default function Devis() {
                             <div className="flex items-end gap-1 flex-wrap">
                               <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
                               <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0">#{ligneNums[l.id]}</span>
-                              <div className="w-32 shrink-0">
+                              <div className="w-48 shrink-0">
                                 <Label className="text-xs">Réf.</Label>
                                 <div className="flex gap-0.5 items-center">
                                   <div className="flex-1 min-w-0">
@@ -1220,40 +1220,40 @@ export default function Devis() {
                                   )}
                                 </div>
                               </div>
-                              <div className="flex-1 min-w-[100px]">
+                              <div className="flex-1 min-w-[120px]">
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                               </div>
-                              <div className="w-14 shrink-0">
+                              <div className="w-16 shrink-0">
                                 <Label className="text-xs">Qté</Label>
                                 <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
                               {consoVal != null && (
-                                <div className="w-16 shrink-0">
+                                <div className="w-18 shrink-0">
                                   <Label className="text-xs text-muted-foreground">Conso.</Label>
                                   <Input type="number" step="0.01" value={consoVal ?? ''} onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li)); }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : '—'} />
                                 </div>
                               )}
-                              <div className="w-12 shrink-0">
+                              <div className="w-14 shrink-0">
                                 <Label className="text-xs">Unité</Label>
                                 <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />
                               </div>
-                              <div className="w-20 shrink-0">
+                              <div className="w-24 shrink-0">
                                 <Label className="text-xs">Prix HT</Label>
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
                               </div>
-                              <div className="w-14 shrink-0">
+                              <div className="w-16 shrink-0">
                                 <Label className="text-xs">Rem. %</Label>
                                 <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
-                              <div className="w-20 shrink-0">
+                              <div className="w-24 shrink-0">
                                 <Label className="text-xs">Net HT</Label>
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
                               </div>
                               <div className="shrink-0 flex flex-col items-end">
                                 <Label className="text-xs">Total HT</Label>
                                 <div className="flex items-center h-8 gap-0.5">
-                                  <span className="text-sm font-semibold w-[4.5rem] text-right">{formatMontant(t.totalHT)}</span>
+                                  <span className="text-sm font-semibold w-28 text-right">{formatMontant(t.totalHT)}</span>
                                   <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
