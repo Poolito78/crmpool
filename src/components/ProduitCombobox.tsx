@@ -37,8 +37,8 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
     }
   }, [open]);
 
-  // Reset highlight when filtered list changes
-  useEffect(() => { setHighlightIndex(0); }, [filtered]);
+  // Reset highlight when filtered list changes — pre-select first result when searching
+  useEffect(() => { setHighlightIndex(query.trim() && filtered.length > 0 ? 1 : 0); }, [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Scroll highlighted item into view
   useEffect(() => {
