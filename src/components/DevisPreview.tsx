@@ -621,7 +621,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         <tr className="border-b border-border/60">
                           <td colSpan={9} className="py-1 px-2 text-xs italic">
                             {ralStyle
-                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '1px 8px', borderRadius: '3px', display: 'inline-block' }}>{l.note}</span>
+                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '2px 8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
                               : <span className="text-muted-foreground">{l.note}</span>
                             }
                           </td>
@@ -746,7 +746,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <tr className="border-b border-border/60">
                             <td colSpan={colSpan} className="py-1 px-2 text-xs italic">
                               {ralStyle
-                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '1px 8px', borderRadius: '3px', display: 'inline-block' }}>{l.note}</span>
+                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '2px 8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
                                 : <span className="text-muted-foreground">{l.note}</span>
                               }
                             </td>
