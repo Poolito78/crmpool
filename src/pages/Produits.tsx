@@ -1485,8 +1485,8 @@ export default function Produits() {
             </div>
 
             {/* Kit — groupe de lignes type */}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <div className="flex items-center justify-between">
+            <div className="border border-border rounded-lg bg-muted/30">
+              <div className="flex items-center justify-between sticky top-0 z-10 bg-muted/50 backdrop-blur-sm px-3 py-2 rounded-t-lg border-b border-border/60">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1500,12 +1500,13 @@ export default function Produits() {
                   <button
                     type="button"
                     onClick={() => setLignesKit(prev => [...prev, { description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 }])}
-                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                    className="text-xs text-primary hover:underline flex items-center gap-1 px-2 py-1 rounded border border-primary/30 hover:bg-primary/5 transition-colors"
                   >
                     <Plus className="w-3 h-3" /> Ajouter une ligne
                   </button>
                 )}
               </div>
+              <div className="p-3 space-y-3">
               {isTypeKit && (
                 <>
                   {lignesKit.length === 0 && (
@@ -1634,6 +1635,7 @@ export default function Produits() {
                   })}
                 </>
               )}
+              </div>{/* fin p-3 space-y-3 */}
             </div>
 
             {/* Picker composant */}
