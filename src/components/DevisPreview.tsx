@@ -76,7 +76,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
-  // surfacesParLigne : overrides individuels seulement â€" {} par dÃ©faut â†' fallback sur surfaceGlobale
+  // surfacesParLigne : overrides individuels seulement â€" {} par défaut â†' fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
 
   function getSurfaceLigne(ligneId: string): number {
@@ -89,7 +89,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
-    // PrÃ©-remplit uniquement les lignes sans surface individuelle dÃ©jÃ  saisie
+    // Pré-remplit uniquement les lignes sans surface individuelle déjà saisie
     setSurfacesParLigne(prev => {
       const next = { ...prev };
       for (const l of devis.lignes) {
@@ -99,12 +99,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     });
   }
 
-  // Calcul des totaux avec les surfaces locales (pour recalcul qtÃ© si surface mode)
+  // Calcul des totaux avec les surfaces locales (pour recalcul qté si surface mode)
   const lignesEffectives = devis.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte').map(l => {
     const surface = getSurfaceLigne(l.id);
     if (!showConso || !surface) return l;
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-    // Pour les produits composites, ne pas recalculer la quantitÃ© depuis la surface
+    // Pour les produits composites, ne pas recalculer la quantité depuis la surface
     const isComposite = !!(prod?.composants && prod.composants.length > 0);
     if (isComposite) return { ...l, surfaceM2: surface };
     const conso = l.consommation || prod?.consommation || 0;
@@ -131,19 +131,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
     try {
       const fileName = `Devis_${devis.numero}.pdf`;
-      // PrÃ©pare le logo en data URL pour l'entÃªte rÃ©pÃ©tÃ© sur pages 2+
-      const logoDataUrl: string | null = await new Promise(resolve => {
-        const img = new Image();
-        img.onload = () => {
-          const c = document.createElement('canvas');
-          const scale = 28 / img.height;
-          c.width = Math.round(img.width * scale); c.height = 28;
-          c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height);
-          resolve(c.toDataURL('image/png'));
-        };
-        img.onerror = () => resolve(null);
-        img.src = logoIsofloor;
-      });
+      // Prépare le logo en data URL pour l'entête répété sur pages 2+
+      const logoDataUrl: string | null = await fetch(logoIsofloor)
+        .then(r => r.blob())
+        .then(blob => new Promise<string>(res => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.readAsDataURL(blob);
+        }))
+        .catch(() => null);
       const refDate = devis.dateEnvoi || devis.dateCreation;
       const res = await savePdfFromElement(printAreaRef.current, fileName, {
         devisNumero: devis.numero,
@@ -153,13 +149,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       window.open(res.blobUrl, '_blank');
       setTimeout(() => URL.revokeObjectURL(res.blobUrl), 60000);
       if (res.ok) {
-        toast.success(`PDF sauvegardÃ© dans "${res.folderName}"`, { description: fileName, duration: 6000 });
+        toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
       } else {
-        toast.success('PDF gÃ©nÃ©rÃ©', { description: fileName, duration: 4000 });
+        toast.success('PDF généré', { description: fileName, duration: 4000 });
       }
     } catch (err) {
       console.error(err);
-      toast.error('Erreur lors de la gÃ©nÃ©ration du PDF');
+      toast.error('Erreur lors de la génération du PDF');
     } finally {
       setPdfMode(false);
       setPrinting(false);
@@ -170,13 +166,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   return (
     <div className="flex flex-col min-h-0">
-      {/* Barre de contrÃ´les â€" masquÃ©e pour la gÃ©nÃ©ration PDF */}
+      {/* Barre de contrôles â€" masquée pour la génération PDF */}
       {!hideControls && (
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap }); }} className="rounded" />
-              mÂ²/conso
+              m²/conso
             </label>
             {showConso && (
               <>
@@ -186,14 +182,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     type="number" min={0} step={1}
                     value={surfaceGlobale || ''}
                     onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
-                    placeholder="mÂ²"
+                    placeholder="m²"
                     className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
                   />
-                  mÂ²
+                  m²
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
                   <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked }); }} className="rounded" />
-                  RÃ©cap. KG
+                  Récap. KG
                 </label>
               </>
             )}
@@ -214,7 +210,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             )}
             <Button size="sm" onClick={handlePrint} disabled={printing}>
               {printing
-                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> GÃ©nÃ©rationâ€¦</>
+                ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Générationâ€¦</>
                 : <><Printer className="w-3.5 h-3.5 mr-1.5" /> PDF</>
               }
             </Button>
@@ -222,13 +218,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         </div>
       )}
 
-      {/* Zone de dÃ©filement du document */}
+      {/* Zone de défilement du document */}
       <div className="overflow-auto bg-muted/40 print:bg-transparent p-4 md:p-8 flex-1">
       {/* Devis document â€" effet page A4 */}
       <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
            style={{ width: '100%', maxWidth: '794px' }}>
       <div className="px-10 pb-7 text-sm" style={{ paddingTop: '1rem' }} id="devis-print" ref={printAreaRef}>
-        {/* Espace libre en haut pour impression (entÃªte papier Ã  en-tÃªte) */}
+        {/* Espace libre en haut pour impression (entête papier à en-tête) */}
         <div style={{ height: '0.3cm' }} />
         {/* Header */}
         {(() => {
@@ -244,13 +240,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           })();
           return (
             <>
-              {/* Ligne 1 : logo + DEVIS / numÃ©ro / date / validitÃ© */}
+              {/* Ligne 1 : logo + DEVIS / numéro / date / validité */}
               <div className="flex justify-between items-start mb-5">
                 <div>
                   <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
                   <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
                   <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
-                  <p className="text-muted-foreground text-xs">TÃ©l : 03 85 77 07 25</p>
+                  <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
                   <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
                 </div>
                 <div className="text-right">
@@ -258,7 +254,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <p className="text-lg font-semibold text-primary mt-1">{devis.numero}</p>
                   <div className="mt-2 space-y-0.5 text-sm">
                     <div className="flex justify-end gap-4"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
-                    <div className="flex justify-end gap-4"><span className="text-muted-foreground">ValiditÃ© :</span><span>{formatDate(displayValidite)}</span></div>
+                    <div className="flex justify-end gap-4"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
                   </div>
                 </div>
               </div>
@@ -286,7 +282,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
                           <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
                           {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
-                          {adresseLivraison.telephone && <p className="text-muted-foreground">TÃ©l : {adresseLivraison.telephone}</p>}
+                          {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
                         </>
                       );
                     }
@@ -302,17 +298,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </div>
               </div>
 
-              {/* Ligne 3 : rÃ©f affaire + systÃ¨me (gauche) */}
+              {/* Ligne 3 : réf affaire + système (gauche) */}
               {(devis.referenceAffaire || devis.systeme || (devis.surfaceGlobaleM2 || 0) > 0) && (
                 <div className="space-y-0.5 mb-4 text-sm">
                   {devis.referenceAffaire && (
-                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">RÃ©f. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
+                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
                   )}
                   {devis.systeme && (
-                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">SystÃ¨me :</span><span className="font-medium">{devis.systeme}</span></div>
+                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">Système :</span><span className="font-medium">{devis.systeme}</span></div>
                   )}
                   {(devis.surfaceGlobaleM2 || 0) > 0 && (
-                    <div className="flex gap-2"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} mÂ²</span></div>
+                    <div className="flex gap-2"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
                   )}
                 </div>
               )}
@@ -328,7 +324,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
         {/* Table */}
         {showConso ? (() => {
-          // â"€â"€ PrÃ©-calcul donnÃ©es composants pour toutes les lignes â"€â"€
+          // â"€â"€ Pré-calcul données composants pour toutes les lignes â"€â"€
           type CompData = {
             comp: typeof devis.lignes[0] extends { id: string } ? any : any;
             compProd: typeof produits[0] | undefined;
@@ -356,8 +352,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             const composants = prod?.composants;
             const isComposite = !!(composants && composants.length > 0);
 
-            // Passe 1 : kg/mÂ² des composants directs (non-%)
-            // Formule : quantite_unitÃ©s Ã— poids_composant / poids_parent Ã— conso_parent
+            // Passe 1 : kg/m² des composants directs (non-%)
+            // Formule : quantite_unités Ã— poids_composant / poids_parent Ã— conso_parent
             const poidsParent = prod?.poids || 0;
             const compBase = isComposite ? composants!.map(comp => {
               const compProd = produits.find(p => p.id === comp.produitId);
@@ -368,7 +364,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               return { comp, compProd, consoComp: consoCompDirect };
             }) : [];
 
-            // Passe 2 : kg/mÂ² des composants en % (base_kg/mÂ² Ã— pct/100)
+            // Passe 2 : kg/m² des composants en % (base_kg/m² Ã— pct/100)
             const surfaceLigneCalc = getSurfaceLigne(l.id) || 0;
             const compDatas: CompData[] = compBase.map(({ comp, compProd, consoComp }) => {
               let finalConsoComp = consoComp;
@@ -387,14 +383,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               return { comp, compProd, consoComp: finalConsoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
             });
 
-            // Si produit composite sans consommation globale renseignÃ©e â†' somme des composants
+            // Si produit composite sans consommation globale renseignée â†' somme des composants
             const consoEffective = isComposite && conso === 0
               ? Math.round(compDatas.reduce((s, c) => s + c.consoComp, 0) * 10000) / 10000
               : conso;
             return { l, prod, conso: consoEffective, t, compDatas, isComposite };
           });
 
-          // â"€â"€ Totaux ligne rÃ©capitulatif â"€â"€
+          // â"€â"€ Totaux ligne récapitulatif â"€â"€
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
             const surfLigne = getSurfaceLigne(l.id);
@@ -438,28 +434,28 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {/* Ligne 1 : groupes */}
                 <tr className="bg-[#CC0000] text-white">
                   <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-bottom border-r border-white/20">
-                    DÃ©signation
+                    Désignation
                     {/* lien site */}
-                    <span className="block text-[10px] font-normal italic text-primary-foreground/70">Fiches systÃ¨me / Produit : www.isofloor.fr</span>
+                    <span className="block text-[10px] font-normal italic text-primary-foreground/70">Fiches système / Produit : www.isofloor.fr</span>
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20">Conso. EstimÃ©e</th>
+                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20">Conso. Estimée</th>
                   <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Conditionnement</th>
                   <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Prix</th>
                 </tr>
                 {/* Ligne 2 : sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  <th className="py-1 px-1 text-right border-l border-white/20 w-14">kg/mÂ²</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20 w-14">kg/m²</th>
                   <th className="py-1 px-1 text-right w-16">Total KG</th>
                   <th className="py-1 px-1 text-right border-l border-white/20 w-12">kg</th>
-                  <th className="py-1 px-1 text-right w-12">UnitÃ©</th>
+                  <th className="py-1 px-1 text-right w-12">Unité</th>
                   <th className="py-1 px-1 text-right w-16">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20 w-20">UnitÃ©</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20 w-20">Unité</th>
                   <th className="py-1 px-1 text-right w-16">(Kg)</th>
                   <th className="py-1 px-1 text-right w-20">Total HT</th>
                 </tr>
               </thead>
               <tbody>
-                {/* Ligne rÃ©capitulatif surface + totaux */}
+                {/* Ligne récapitulatif surface + totaux */}
                 {showKgRecap && (
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td />
@@ -468,7 +464,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : ''}</td>
                   <td colSpan={3} className="py-1.5 px-1 text-right font-bold text-[#CC0000] not-italic whitespace-nowrap">
-                    {coutChantierM2 != null ? `CoÃ»t chantier : ${coutChantierM2.toFixed(2)} â‚¬/mÂ²` : ''}
+                    {coutChantierM2 != null ? `Coût chantier : ${coutChantierM2.toFixed(2)} â‚¬/m²` : ''}
                   </td>
                 </tr>
                 )}
@@ -536,7 +532,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {l.description}
                         {(hideControls || pdfMode) ? (
                           <span className="ml-2 text-xs text-muted-foreground">
-                            {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} mÂ²` : ''}
+                            {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
                           </span>
                         ) : (
                           <span className="ml-2 print:hidden">
@@ -545,9 +541,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               value={getSurfaceLigne(l.id) || ''}
                               onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                               className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                              placeholder="mÂ²"
+                              placeholder="m²"
                             />
-                            <span className="text-xs text-muted-foreground ml-0.5">mÂ²</span>
+                            <span className="text-xs text-muted-foreground ml-0.5">m²</span>
                           </span>
                         )}
                       </td>
@@ -619,10 +615,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       const ralStyle = getRalStyle(l.note!);
                       return (
                         <tr className="border-b border-border/60">
-                          <td colSpan={9} className="py-1 px-2 text-xs italic">
+                          <td colSpan={9} className="py-0 px-2" style={{ lineHeight: 0 }}>
                             {ralStyle
-                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '2px 8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
-                              : <span className="text-muted-foreground">{l.note}</span>
+                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
+                              : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
                             }
                           </td>
                         </tr>
@@ -640,8 +636,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <table className="w-full mb-6 text-xs table-fixed">
             <colgroup>
               <col />{/* Description : prend tout l'espace restant */}
-              <col className="w-10" />{/* QtÃ© */}
-              <col className="w-10" />{/* UnitÃ© */}
+              <col className="w-10" />{/* Qté */}
+              <col className="w-10" />{/* Unité */}
               {showRemise && <col className="w-20" />}{/* P.U. HT */}
               {showRemise && <col className="w-12" />}{/* Rem. */}
               <col className="w-20" />{/* P.U. net HT */}
@@ -650,8 +646,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <thead>
               <tr className="border-b-2 border-[#CC0000]">
                 <th className="text-left py-2 font-semibold">Description</th>
-                <th className="text-right py-2 font-semibold">QtÃ©</th>
-                <th className="text-center py-2 font-semibold">UnitÃ©</th>
+                <th className="text-right py-2 font-semibold">Qté</th>
+                <th className="text-center py-2 font-semibold">Unité</th>
                 {showRemise && <th className="text-right py-2 font-semibold">P.U. HT</th>}
                 {showRemise && <th className="text-right py-2 font-semibold">Rem.</th>}
                 <th className="text-right py-2 font-semibold">P.U. net HT</th>
@@ -744,10 +740,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const ralStyle = getRalStyle(l.note!);
                         return (
                           <tr className="border-b border-border/60">
-                            <td colSpan={colSpan} className="py-1 px-2 text-xs italic">
+                            <td colSpan={colSpan} className="py-0 px-2" style={{ lineHeight: 0 }}>
                               {ralStyle
-                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '2px 8px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
-                                : <span className="text-muted-foreground">{l.note}</span>
+                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
+                                : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
                               }
                             </td>
                           </tr>
@@ -801,19 +797,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         {/* Pied de page */}
         <div className="mt-6 pt-4 border-t border-border">
           <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
-            <p>Pour tout renseignement, consultez la fiche technique et fiche de donnÃ©es de sÃ©curitÃ©</p>
-            <p>La prÃ©paration des supports doit Ãªtre conforme aux normes et DTU en vigueur</p>
-            <p>AprÃ¨s toute livraison, il est important de procÃ©der Ã  la rÃ©partition des composants par NÂ° de lot</p>
+            <p>Pour tout renseignement, consultez la fiche technique et fiche de données de sécurité</p>
+            <p>La préparation des supports doit être conforme aux normes et DTU en vigueur</p>
+            <p>Après toute livraison, il est important de procéder à la répartition des composants par N° de lot</p>
           </div>
           <div className="text-xs">
-            <p className="font-semibold">FranÃ§ois MOUHOT</p>
+            <p className="font-semibold">François MOUHOT</p>
             <p>Port : 06.31.61.15.96</p>
             <p>E-mail : f.mouhot@isosign.fr</p>
           </div>
         </div>
       </div>{/* fin printAreaRef */}
       </div>{/* fin page A4 */}
-      </div>{/* fin zone dÃ©filement */}
+      </div>{/* fin zone défilement */}
     </div>
   );
 }
