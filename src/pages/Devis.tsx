@@ -1229,7 +1229,7 @@ export default function Devis() {
                                 <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
                               {consoVal != null && (
-                                <div className="w-18 shrink-0">
+                                <div className="w-20 shrink-0">
                                   <Label className="text-xs text-muted-foreground">Conso.</Label>
                                   <Input type="number" step="0.01" value={consoVal ?? ''} onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li)); }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : '—'} />
                                 </div>
