@@ -455,7 +455,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     return (
                   <Fragment key={l.id}>
                     {showHeader && (
-                      <tr className="bg-primary/5 border-t border-[#CC0000]">
+                      <tr className="bg-primary/[0.03] border-t border-[#CC0000]">
                         <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
                       </tr>
                     )}
@@ -599,7 +599,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     const titre = gid ? grpTitlesS[gid] : '';
                     const montant = gid ? (grpSubS[gid] || 0) : 0;
                     return (
-                      <tr key={dl.id} className="bg-primary/5 border-b-2 border-primary/20">
+                      <tr key={dl.id} className="bg-primary/[0.03] border-b-2 border-primary/20">
                         <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
                         <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
                       </tr>
@@ -624,7 +624,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   return (
                     <Fragment key={l.id}>
                       {showHeaderS && (
-                        <tr className="bg-primary/5 border-t border-[#CC0000]">
+                        <tr className="bg-primary/[0.03] border-t border-[#CC0000]">
                           <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
                         </tr>
                       )}
