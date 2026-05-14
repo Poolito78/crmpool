@@ -1486,7 +1486,7 @@ export default function Produits() {
 
             {/* Kit — groupe de lignes type */}
             <div className="border border-border rounded-lg bg-muted/30">
-              <div className="flex items-center justify-between sticky top-0 z-10 bg-muted/50 backdrop-blur-sm px-3 py-2 rounded-t-lg border-b border-border/60">
+              <div className="flex items-center justify-between px-3 py-2 border-b border-border/60">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1634,6 +1634,15 @@ export default function Produits() {
                     );
                   })}
                 </>
+              )}
+              {isTypeKit && lignesKit.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setLignesKit(prev => [...prev, { description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 }])}
+                  className="w-full mt-1 py-2 text-xs text-primary border border-dashed border-primary/40 rounded-lg hover:bg-primary/5 transition-colors flex items-center justify-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Ajouter une ligne
+                </button>
               )}
               </div>{/* fin p-3 space-y-3 */}
             </div>
