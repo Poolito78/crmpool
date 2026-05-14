@@ -72,10 +72,10 @@ export default function Produits() {
     try {
       const s = localStorage.getItem('produits_visible_cols');
       if (s) {
-        const saved = new Set(JSON.parse(s) as ColKey[]);
-        // Ajoute les nouvelles colonnes par défaut qui n'étaient pas encore sauvegardées
-        DEFAULT_VISIBLE_COLS.forEach(k => saved.add(k));
-        return saved;
+        // Filtre uniquement les clés valides (supprime les anciennes clés obsolètes)
+        const validKeys = new Set(COLUMNS.map(c => c.key));
+        const saved = new Set((JSON.parse(s) as ColKey[]).filter(k => validKeys.has(k)));
+        if (saved.size > 0) return saved;
       }
     } catch {}
     return new Set(DEFAULT_VISIBLE_COLS);
