@@ -5,31 +5,54 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Tu es un assistant expert pour un logiciel de CRM et devis dans le bâtiment (revêtements de sol, chapes, enduits, isolants, produits de construction).
+const SYSTEM_PROMPT = `Tu es un assistant expert pour un logiciel de CRM et devis dans le bâtiment (revêtements de sol, chapes, enduits, isolants, produits de construction type Flowfast, Flowcoat, etc.).
 
 Tu aides l'utilisateur à :
-- Analyser et améliorer ses devis
-- Répondre à des questions sur les produits, quantités, prix
-- Faire des calculs (surfaces, consommations, quantités, ratios)
+- Analyser et améliorer ses devis (marges, cohérence, prix)
+- Répondre à des questions sur les produits, quantités, prix, consommations
+- Faire des calculs (surfaces, consommations, quantités, ratios de mélange)
 - Rédiger des descriptions, notes ou conditions
-- Détecter des anomalies ou incohérences dans les devis
-- Suggérer des produits complémentaires ou alternatifs
+- Analyser des documents joints (plans, fiches techniques, emails, PDF)
+- Générer des lignes de devis pour un système ou une application spécifique
 
-Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes à puces).`;
+GÉNÉRATION DE LIGNES DE DEVIS :
+Quand l'utilisateur demande de créer/générer des lignes de devis pour un système (ex: "génère les lignes pour Flowfast 319 Road", "crée le devis pour une chape liquide"), tu dois :
+1. Expliquer brièvement ce que tu proposes
+2. Inclure OBLIGATOIREMENT un bloc JSON structuré EXACTEMENT ainsi (pas de texte à l'intérieur du bloc) :
+
+<<<LIGNES>>>
+[{"produitId": "ID_EXACT_DU_CATALOGUE_OU_VIDE", "description": "Nom du produit ou de la prestation", "quantite": 1, "unite": "U", "prixUnitaireHT": 0, "remise": 0, "note": "remarque optionnelle"}]
+<<<FIN_LIGNES>>>
+
+RÈGLES pour les lignes :
+- Utilise les IDs exacts du catalogue fourni quand le produit correspond
+- Si aucun produit du catalogue ne correspond, laisse produitId vide ("") et mets la description
+- prixUnitaireHT: utilise le prix du catalogue si disponible, sinon 0
+- Propose toutes les lignes nécessaires pour le système complet (primaire, produit principal, finition, etc.)
+- Pour les systèmes multi-composants, crée une ligne par produit/étape
+
+Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes).`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { message, history = [], devisContext } = await req.json();
-    if (!message) return new Response(JSON.stringify({ error: "message requis" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    const { message, history = [], devisContext, produitsCatalog } = await req.json();
+    if (!message) return new Response(JSON.stringify({ error: "message requis" }), {
+      status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
 
     const groqKey = Deno.env.get("GROQ_API_KEY") ?? "";
     const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? null;
 
-    const systemContent = devisContext
-      ? `${SYSTEM_PROMPT}\n\n--- CONTEXTE DU DEVIS ACTUEL ---\n${devisContext}\n---`
-      : SYSTEM_PROMPT;
+    // Build enriched system prompt with context
+    let systemContent = SYSTEM_PROMPT;
+    if (produitsCatalog) {
+      systemContent += `\n\n--- CATALOGUE PRODUITS DISPONIBLES ---\n${produitsCatalog}\n---`;
+    }
+    if (devisContext) {
+      systemContent += `\n\n--- DEVIS EN COURS ---\n${devisContext}\n---`;
+    }
 
     async function callGroq(): Promise<string> {
       const messages = [
@@ -42,8 +65,8 @@ serve(async (req) => {
         headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 1000,
-          temperature: 0.3,
+          max_tokens: 1500,
+          temperature: 0.2,
           messages,
         }),
       });
@@ -54,7 +77,10 @@ serve(async (req) => {
 
     async function callGemini(): Promise<string> {
       const contents = [
-        ...history.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
+        ...history.map((m: any) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
         { role: "user", parts: [{ text: message }] },
       ];
       const response = await fetch(
@@ -65,7 +91,7 @@ serve(async (req) => {
           body: JSON.stringify({
             systemInstruction: { parts: [{ text: systemContent }] },
             contents,
-            generationConfig: { temperature: 0.3, maxOutputTokens: 1000 },
+            generationConfig: { temperature: 0.2, maxOutputTokens: 1500 },
           }),
         }
       );

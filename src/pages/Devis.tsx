@@ -1611,6 +1611,12 @@ export default function Devis() {
       <DevisAssistantDialog
         open={assistantOpen}
         onOpenChange={setAssistantOpen}
+        produits={produits}
+        onInsertLignes={(newLignes) => {
+          saveSnapshot();
+          setLignes(prev => [...prev, ...newLignes]);
+          setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
+        }}
         devisContext={(() => {
           const lines = lignes.map((l, i) => {
             if (l.type === 'groupe') return `[Groupe] ${l.description}`;
