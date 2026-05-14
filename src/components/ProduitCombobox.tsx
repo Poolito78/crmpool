@@ -38,7 +38,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
   }, [open]);
 
   // Reset highlight when filtered list changes — pre-select first result when searching
-  useEffect(() => { setHighlightIndex(query.trim() && filtered.length > 0 ? 1 : 0); }, [filtered]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { setHighlightIndex(query.trim() && filtered.length > 0 ? 1 : 0); }, [filtered, query]);
 
   // Scroll highlighted item into view
   useEffect(() => {
@@ -81,17 +81,18 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
         break;
       case 'Enter':
         e.preventDefault();
-        if (highlightIndex === 0) {
-          onSelect('');
+        if (highlightIndex > 0) {
+          const p = filtered[highlightIndex - 1];
+          if (p) { onSelect(p.id); setOpen(false); setQuery(''); }
+        } else if (query.trim() && filtered.length > 0) {
+          // Aucun highlight actif mais recherche en cours → sélectionne le premier résultat
+          onSelect(filtered[0].id);
           setOpen(false);
           setQuery('');
         } else {
-          const p = filtered[highlightIndex - 1];
-          if (p) {
-            onSelect(p.id);
-            setOpen(false);
-            setQuery('');
-          }
+          onSelect('');
+          setOpen(false);
+          setQuery('');
         }
         break;
       case 'Escape':
