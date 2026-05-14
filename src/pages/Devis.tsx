@@ -1338,46 +1338,35 @@ export default function Devis() {
                                 const consoValue = l.consommation ?? prod?.consommation ?? '';
                                 const v = visibleLigneCols;
                                 const cols = LIGNE_COLS.filter(c => v.has(c.key));
+                                const C = 'h-7 text-xs min-w-0'; // classe commune input
                                 return (
-                                  <div className="bg-accent/30 rounded-md p-2 overflow-x-auto"
-                                    style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(72px, 1fr))`, gap: '6px' }}>
-                                    {v.has('surface') && <div>
-                                      <Label className="text-xs truncate block">Surface (m²)</Label>
-                                      <div className="flex gap-0.5">
+                                  <div className="bg-accent/30 rounded-md px-2 py-1.5 overflow-x-auto"
+                                    style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(60px, 1fr))`, gap: '4px', alignItems: 'center' }}>
+                                    {v.has('surface') && <div className="flex gap-0.5 items-center">
                                         <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                                           const surface = parseFloat(e.target.value) || 0;
                                           const quantite = prod && (l.consommation || prod.consommation) && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
                                           setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
-                                        }} className="h-8 text-xs min-w-0" />
-                                        <button type="button" title="IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-8 w-7 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
-                                      </div>
+                                        }} className={C} placeholder="m²" title="Surface (m²)" />
+                                        <button type="button" title="Surface IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-7 w-6 shrink-0 flex items-center justify-center rounded border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
                                     </div>}
-                                    {v.has('conso') && <div>
-                                      <Label className="text-xs truncate block">Conso. (kg/m²)</Label>
-                                      <div className="flex gap-0.5">
+                                    {v.has('conso') && <div className="flex gap-0.5 items-center">
                                         <Input type="number" step="0.01" value={consoValue} onChange={e => {
                                           const raw = e.target.value;
                                           const conso = raw === '' ? undefined : parseFloat(raw);
                                           const surface = l.surfaceM2 || surfaceGlobaleM2;
                                           const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
                                           setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
-                                        }} className="h-8 text-xs min-w-0" placeholder={prod?.consommation != null ? String(prod.consommation) : ''} />
-                                        <button type="button" title="IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })} className="h-8 w-7 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
-                                      </div>
+                                        }} className={C} placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} title="Conso. (kg/m²)" />
+                                        <button type="button" title="Conso. IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })} className="h-7 w-6 shrink-0 flex items-center justify-center rounded border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
                                     </div>}
-                                    {v.has('poids') && <div>
-                                      <Label className="text-xs text-muted-foreground truncate block">Poids (kg)</Label>
-                                      <Input value={prod?.poids ? `${prod.poids} kg` : '—'} readOnly className="h-8 text-xs bg-muted/50 min-w-0" />
-                                    </div>}
-                                    {v.has('cellules') && <div>
-                                      <Label className="text-xs truncate block">Nb cellules</Label>
-                                      <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className="h-8 text-xs min-w-0" placeholder="0" />
-                                    </div>}
-                                    {v.has('qte') && <div><Label className="text-xs truncate block">Qté (auto)</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-xs bg-accent/20 font-medium min-w-0" readOnly={!!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>}
-                                    {v.has('unite') && <div><Label className="text-xs truncate block">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-xs min-w-0" /></div>}
-                                    {v.has('prixHT') && <div><Label className="text-xs truncate block">Prix HT</Label><Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-xs min-w-0" placeholder="0,00" /></div>}
-                                    {v.has('remise') && <div><Label className="text-xs truncate block">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-xs min-w-0" /></div>}
-                                    {v.has('prixRemise') && <div><Label className="text-xs truncate block">Prix remisé</Label><Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-xs min-w-0" placeholder="0,00" /></div>}
+                                    {v.has('poids') && <Input value={prod?.poids ? `${prod.poids} kg` : '—'} readOnly className={`${C} bg-muted/50 text-muted-foreground`} title="Poids (kg)" />}
+                                    {v.has('cellules') && <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className={C} placeholder="cell." title="Nb cellules" />}
+                                    {v.has('qte') && <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`${C} bg-accent/40 font-semibold`} placeholder="Qté" title="Qté (auto)" readOnly={!!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} />}
+                                    {v.has('unite') && <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className={C} placeholder="Unité" title="Unité" />}
+                                    {v.has('prixHT') && <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className={C} placeholder="Prix HT" title="Prix HT" />}
+                                    {v.has('remise') && <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={C} placeholder="Rem.%" title="Remise %" />}
+                                    {v.has('prixRemise') && <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className={C} placeholder="P. remisé" title="Prix remisé" />}
                                   </div>
                                 );
                               })()}
