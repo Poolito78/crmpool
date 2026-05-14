@@ -564,16 +564,25 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           );
         })() : (
           /* Table simple (sans mode conso) */
-          <table className="w-full mb-6">
+          <table className="w-full mb-6 text-xs table-fixed">
+            <colgroup>
+              <col />{/* Description : prend tout l'espace restant */}
+              <col className="w-10" />{/* Qté */}
+              <col className="w-10" />{/* Unité */}
+              {showRemise && <col className="w-20" />}{/* P.U. HT */}
+              {showRemise && <col className="w-12" />}{/* Rem. */}
+              <col className="w-20" />{/* P.U. net HT */}
+              <col className="w-24" />{/* Total HT */}
+            </colgroup>
             <thead>
               <tr className="border-b-2 border-[#CC0000]">
                 <th className="text-left py-2 font-semibold">Description</th>
-                <th className="text-right py-2 font-semibold w-16">Qté</th>
-                <th className="text-center py-2 font-semibold w-16">Unité</th>
-                {showRemise && <th className="text-right py-2 font-semibold w-24">P.U. HT</th>}
-                {showRemise && <th className="text-right py-2 font-semibold w-16">Rem.</th>}
-                <th className="text-right py-2 font-semibold w-24">P.U. net HT</th>
-                <th className="text-right py-2 font-semibold w-28">Total HT</th>
+                <th className="text-right py-2 font-semibold">Qté</th>
+                <th className="text-center py-2 font-semibold">Unité</th>
+                {showRemise && <th className="text-right py-2 font-semibold">P.U. HT</th>}
+                {showRemise && <th className="text-right py-2 font-semibold">Rem.</th>}
+                <th className="text-right py-2 font-semibold">P.U. net HT</th>
+                <th className="text-right py-2 font-semibold">Total HT</th>
               </tr>
             </thead>
             <tbody>
