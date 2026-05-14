@@ -180,49 +180,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           </div>
         </div>
 
-        {/* Info grid */}
-        <div className="grid grid-cols-2 gap-5 mb-4">
-          <div className="bg-muted/30 rounded-lg p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
-            <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-            {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
-            {client && <p className="text-muted-foreground">{client.adresse}</p>}
-            {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-            {client?.email && <p className="text-muted-foreground">{client.email}</p>}
-          </div>
-          <div className="bg-muted/30 rounded-lg p-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
-            {(() => {
-              const adresseLivraison = devis.adresseLivraisonId
-                ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
-                : null;
-              if (adresseLivraison) {
-                return (
-                  <>
-                    <p className="font-semibold">{adresseLivraison.libelle}</p>
-                    <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
-                    <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
-                    {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
-                    {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
-                  </>
-                );
-              }
-              return (
-                <>
-                  <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                  {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
-                  {client && <p className="text-muted-foreground">{client.adresse}</p>}
-                  {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                </>
-              );
-            })()}
-          </div>
-        </div>
-
+        {/* Info grid — 3 colonnes : facturation | livraison | infos devis */}
         {(() => {
-          // Date de référence : dateEnvoi si disponible, sinon dateCreation
           const refDate = devis.dateEnvoi || devis.dateCreation;
-          // Validité : décalée de la même durée par rapport à la date de référence
           const displayValidite = (() => {
             if (devis.dateEnvoi && devis.dateCreation && devis.dateValidite) {
               const durationMs = new Date(devis.dateValidite).getTime() - new Date(devis.dateCreation).getTime();
@@ -233,10 +193,46 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             return devis.dateValidite;
           })();
           return (
-            <div className="grid grid-cols-2 gap-5 mb-5">
-              <div></div>
-              <div className="bg-muted/30 rounded-lg p-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Informations</p>
+            <div className="grid grid-cols-3 gap-4 mb-5">
+              {/* Adresse facturation */}
+              <div className="bg-muted/30 rounded-lg p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
+                <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                {client?.email && <p className="text-muted-foreground">{client.email}</p>}
+              </div>
+              {/* Adresse livraison */}
+              <div className="bg-muted/30 rounded-lg p-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
+                {(() => {
+                  const adresseLivraison = devis.adresseLivraisonId
+                    ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
+                    : null;
+                  if (adresseLivraison) {
+                    return (
+                      <>
+                        <p className="font-semibold">{adresseLivraison.libelle}</p>
+                        <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
+                        <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
+                        {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
+                        {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
+                      </>
+                    );
+                  }
+                  return (
+                    <>
+                      <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                      {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                      {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                      {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                    </>
+                  );
+                })()}
+              </div>
+              {/* Infos devis */}
+              <div className="bg-muted/30 rounded-lg p-4">
                 <div className="space-y-1">
                   <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
