@@ -76,7 +76,16 @@ export default function Devis() {
   const kitPickerRef = useRef<HTMLDivElement>(null);
   const [colChooserOpen, setColChooserOpen] = useState(false);
   const colChooserRef = useRef<HTMLDivElement>(null);
-  const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => new Set(DEFAULT_LIGNE_COLS));
+  const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => {
+    try {
+      const s = localStorage.getItem('devis_ligne_cols');
+      if (s) {
+        const parsed = JSON.parse(s) as LigneColKey[];
+        if (Array.isArray(parsed) && parsed.length > 0) return new Set(parsed);
+      }
+    } catch { /* ignore */ }
+    return new Set(DEFAULT_LIGNE_COLS);
+  });
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
@@ -384,6 +393,10 @@ export default function Devis() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [colChooserOpen]);
+
+  useEffect(() => {
+    localStorage.setItem('devis_ligne_cols', JSON.stringify([...visibleLigneCols]));
+  }, [visibleLigneCols]);
 
   function insertKit(kitProd: Produit) {
     saveSnapshot();
