@@ -88,6 +88,9 @@ export default function Devis() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const lignesRef = useRef<LigneDevis[]>([]);
   lignesRef.current = lignes;
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const dragScrollRafRef = useRef<number | null>(null);
+  const dragClientYRef = useRef<number>(0);
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
@@ -409,6 +412,29 @@ export default function Devis() {
       next.splice(idx + 1, 0, copy);
       return next;
     });
+  }
+
+  function startDragScroll() {
+    if (dragScrollRafRef.current !== null) return;
+    const ZONE = 80;
+    const SPEED = 12;
+    function loop() {
+      const el = scrollContainerRef.current;
+      if (!el) { dragScrollRafRef.current = null; return; }
+      const { top, bottom } = el.getBoundingClientRect();
+      const y = dragClientYRef.current;
+      if (y - top < ZONE) el.scrollTop -= SPEED * (1 - (y - top) / ZONE);
+      else if (bottom - y < ZONE) el.scrollTop += SPEED * (1 - (bottom - y) / ZONE);
+      dragScrollRafRef.current = requestAnimationFrame(loop);
+    }
+    dragScrollRafRef.current = requestAnimationFrame(loop);
+  }
+
+  function stopDragScroll() {
+    if (dragScrollRafRef.current !== null) {
+      cancelAnimationFrame(dragScrollRafRef.current);
+      dragScrollRafRef.current = null;
+    }
   }
 
   function dropLigne(targetId: string) {
@@ -842,7 +868,7 @@ export default function Devis() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
-          <div className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1">
+          <div ref={scrollContainerRef} className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1" onDragOver={e => { dragClientYRef.current = e.clientY; }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <div className="flex items-center justify-between">
@@ -1105,10 +1131,10 @@ export default function Devis() {
                       return (
                         <div key={l.id}
                           draggable
-                          onDragStart={() => setDraggedId(l.id)}
+                          onDragStart={() => { setDraggedId(l.id); startDragScroll(); }}
                           onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                           onDrop={() => dropLigne(l.id)}
-                          onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                          onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                           className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
                             ${draggedId === l.id ? 'opacity-40 border-primary/20 bg-primary/5' : ''}
                             ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-primary/5 border-primary/20'}`}>
@@ -1125,10 +1151,10 @@ export default function Devis() {
                     if (l.type === 'texte') return (
                       <div key={l.id}
                         draggable
-                        onDragStart={() => setDraggedId(l.id)}
+                        onDragStart={() => { setDraggedId(l.id); startDragScroll(); }}
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
-                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                         className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
                           ${draggedId === l.id ? 'opacity-40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-amber-400 border-2 shadow-md bg-amber-50/50 dark:bg-amber-900/10' : draggedId === l.id ? '' : 'bg-amber-50/40 dark:bg-amber-900/10 border-amber-300/40'}`}>
@@ -1153,10 +1179,10 @@ export default function Devis() {
                     if (isGroupe) return (
                       <div key={l.id}
                         draggable
-                        onDragStart={() => setDraggedId(l.id)}
+                        onDragStart={() => { setDraggedId(l.id); startDragScroll(); }}
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
-                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                         className={`flex items-center gap-2 bg-primary/10 border rounded-lg px-3 py-2.5 mt-1 cursor-grab active:cursor-grabbing transition-all
                           ${draggedId === l.id ? 'opacity-40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : 'border-primary/30'}`}>
@@ -1187,10 +1213,10 @@ export default function Devis() {
                     const card = (
                       <div
                         draggable
-                        onDragStart={() => setDraggedId(l.id)}
+                        onDragStart={() => { setDraggedId(l.id); startDragScroll(); }}
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
-                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                        onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                         className={`rounded-lg px-2 py-1.5 border transition-all cursor-grab active:cursor-grabbing
                           ${lineGroup[l.id] ? ' ml-4' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
