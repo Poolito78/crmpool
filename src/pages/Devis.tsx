@@ -18,6 +18,7 @@ import DevisEmailDialog from '@/components/DevisEmailDialog';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import AiCalculatorDialog from '@/components/AiCalculatorDialog';
+import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -54,6 +55,7 @@ export default function Devis() {
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [aiCalc, setAiCalc] = useState<{ ligneId: string; field: 'surfaceM2' | 'consommation' | 'quantite'; label: string; current?: number } | null>(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
@@ -987,6 +989,7 @@ export default function Devis() {
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
+                  <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -1604,6 +1607,22 @@ export default function Devis() {
           initialMode={chatterMode}
         />
       )}
+
+      <DevisAssistantDialog
+        open={assistantOpen}
+        onOpenChange={setAssistantOpen}
+        devisContext={(() => {
+          const lines = lignes.map((l, i) => {
+            if (l.type === 'groupe') return `[Groupe] ${l.description}`;
+            if (l.type === 'texte') return `[Note] ${l.description}`;
+            if (l.type === 'soustotal') return `[Sous-total]`;
+            const t = calculerTotalLigne(l);
+            return `${i + 1}. ${l.description || 'sans nom'} | Réf: ${l.produitId ? (produits.find(p => p.id === l.produitId)?.reference ?? l.produitId) : 'libre'} | Qté: ${l.quantite} ${l.unite || ''} | Prix HT: ${l.prixUnitaireHT} | Remise: ${l.remise}% | Total HT: ${formatMontant(t.totalHT)}`;
+          }).join('\n');
+          const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
+          return `Lignes du devis:\n${lines}\n\nTotal HT: ${formatMontant(total.totalHT)}\nTotal TTC: ${formatMontant(total.totalTTC)}`;
+        })()}
+      />
 
       {aiCalc && (
         <AiCalculatorDialog
