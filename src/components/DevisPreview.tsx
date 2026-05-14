@@ -1,4 +1,4 @@
-﻿import { useState, useRef, Fragment } from 'react';
+import { useState, useRef, Fragment } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -6,7 +6,7 @@ import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 
-// â”€â”€â”€ Couleurs RAL â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â"€â"€â"€ Couleurs RAL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
   '1003':{ hex:'#F9A800', dark:false }, '1007':{ hex:'#DCA300', dark:false },
   '1013':{ hex:'#EAE6CA', dark:false }, '1014':{ hex:'#E1CC4F', dark:false },
@@ -41,7 +41,7 @@ const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
 };
 
 function getRalStyle(note: string): { backgroundColor: string; color: string; border?: string } | undefined {
-  const m = note.match(/RAL\s+(?:[A-Za-zÃ€-Ã¿]+\s+)*(\d{4})/i);
+  const m = note.match(/RAL\s+(?:[^\s\d]+\s+)*(\d{4})/i);
   if (!m) return undefined;
   const c = RAL_COLORS[m[1]];
   if (!c) return undefined;
@@ -76,7 +76,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
-  // surfacesParLigne : overrides individuels seulement â€” {} par dÃ©faut â†’ fallback sur surfaceGlobale
+  // surfacesParLigne : overrides individuels seulement â€" {} par dÃ©faut â†' fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
 
   function getSurfaceLigne(ligneId: string): number {
@@ -170,7 +170,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   return (
     <div className="flex flex-col min-h-0">
-      {/* Barre de contrÃ´les â€” masquÃ©e pour la gÃ©nÃ©ration PDF */}
+      {/* Barre de contrÃ´les â€" masquÃ©e pour la gÃ©nÃ©ration PDF */}
       {!hideControls && (
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
@@ -224,7 +224,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
       {/* Zone de dÃ©filement du document */}
       <div className="overflow-auto bg-muted/40 print:bg-transparent p-4 md:p-8 flex-1">
-      {/* Devis document â€” effet page A4 */}
+      {/* Devis document â€" effet page A4 */}
       <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
            style={{ width: '100%', maxWidth: '794px' }}>
       <div className="px-10 pb-7 text-sm" style={{ paddingTop: '1rem' }} id="devis-print" ref={printAreaRef}>
@@ -267,7 +267,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <div className="grid grid-cols-2 gap-4 mb-3">
                 <div className="bg-muted/30 rounded-lg p-4">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
-                  <p className="font-semibold">{client?.societe || client?.nom || 'â€”'}</p>
+                  <p className="font-semibold">{client?.societe || client?.nom || 'â€"'}</p>
                   {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
                   {client && <p className="text-muted-foreground">{client.adresse}</p>}
                   {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
@@ -292,7 +292,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     }
                     return (
                       <>
-                        <p className="font-semibold">{client?.societe || client?.nom || 'â€”'}</p>
+                        <p className="font-semibold">{client?.societe || client?.nom || 'â€"'}</p>
                         {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
                         {client && <p className="text-muted-foreground">{client.adresse}</p>}
                         {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
@@ -328,7 +328,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
         {/* Table */}
         {showConso ? (() => {
-          // â”€â”€ PrÃ©-calcul donnÃ©es composants pour toutes les lignes â”€â”€
+          // â"€â"€ PrÃ©-calcul donnÃ©es composants pour toutes les lignes â"€â"€
           type CompData = {
             comp: typeof devis.lignes[0] extends { id: string } ? any : any;
             compProd: typeof produits[0] | undefined;
@@ -387,14 +387,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               return { comp, compProd, consoComp: finalConsoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp };
             });
 
-            // Si produit composite sans consommation globale renseignÃ©e â†’ somme des composants
+            // Si produit composite sans consommation globale renseignÃ©e â†' somme des composants
             const consoEffective = isComposite && conso === 0
               ? Math.round(compDatas.reduce((s, c) => s + c.consoComp, 0) * 10000) / 10000
               : conso;
             return { l, prod, conso: consoEffective, t, compDatas, isComposite };
           });
 
-          // â”€â”€ Totaux ligne rÃ©capitulatif â”€â”€
+          // â"€â"€ Totaux ligne rÃ©capitulatif â"€â"€
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
             const surfLigne = getSurfaceLigne(l.id);
@@ -494,21 +494,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   let lastGrp: string | null | undefined = undefined;
                   // Iterate over all devis.lignes to preserve order and intercalate text rows
                   return devis.lignes.map((dl, idx) => {
-                    // groupe â†’ skip (handled by showHeader below)
+                    // groupe â†' skip (handled by showHeader below)
                     if (dl.type === 'groupe') return null;
-                    // soustotal â†’ render subtotal row
+                    // soustotal â†' render subtotal row
                     if (dl.type === 'soustotal') {
                       const gid = subGrpId[dl.id];
                       const titre = gid ? grpTitles[gid] : '';
                       const montant = gid ? (grpSub[gid] || 0) : 0;
                       return (
                         <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]">
-                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">Sous-total{titre ? ` â€” ${titre}` : ''}</td>
+                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">Sous-total{titre ? ` â€" ${titre}` : ''}</td>
                           <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right">{formatMontant(montant)}</td>
                         </tr>
                       );
                     }
-                    // texte â†’ render text-only row
+                    // texte â†' render text-only row
                     if (dl.type === 'texte') {
                       return dl.description ? (
                         <tr key={dl.id} className="border-b border-border/40">
@@ -618,11 +618,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {l.note && (() => {
                       const ralStyle = getRalStyle(l.note!);
                       return (
-                        <tr className=”border-b border-border/60”>
-                          <td colSpan={9} className=”py-1 px-2 text-xs italic”>
+                        <tr className="border-b border-border/60">
+                          <td colSpan={9} className="py-1 px-2 text-xs italic">
                             {ralStyle
                               ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '1px 8px', borderRadius: '3px', display: 'inline-block' }}>{l.note}</span>
-                              : <span className=”text-muted-foreground”>{l.note}</span>
+                              : <span className="text-muted-foreground">{l.note}</span>
                             }
                           </td>
                         </tr>
@@ -688,7 +688,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     const montant = gid ? (grpSubS[gid] || 0) : 0;
                     return (
                       <tr key={dl.id} className="bg-primary/[0.03] border-b-2 border-primary/20">
-                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` â€” ${titre}` : ''}</td>
+                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` â€" ${titre}` : ''}</td>
                         <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
                       </tr>
                     );
@@ -733,7 +733,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         if (!compProd) return null;
                         return (
                           <tr key={`${l.id}-${comp.produitId}`} className="bg-muted/20 text-muted-foreground text-xs">
-                            <td className="py-1 pl-8 italic">â†³ <span className="font-mono">{compProd.reference}</span> â€” {compProd.description}</td>
+                            <td className="py-1 pl-8 italic">â†³ <span className="font-mono">{compProd.reference}</span> â€" {compProd.description}</td>
                             <td className="py-1 text-right">{Math.round(comp.quantite * l.quantite * 1000) / 1000}</td>
                             <td className="py-1 text-center">{compProd.unite || ''}</td>
                             <td colSpan={showRemise ? 3 : 2} />
