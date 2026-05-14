@@ -1379,7 +1379,17 @@ export default function Devis() {
                                 {tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
                                 {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
-                                {kgReel !== null && <span className="italic">↳ {kgReel} kg chantier</span>}
+                                {kgReel !== null && (() => {
+                                  const poidsConditionne = prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
+                                  return (
+                                    <span className="italic">
+                                      ↳ {kgReel} kg chantier
+                                      {poidsConditionne != null && poidsConditionne !== kgReel && (
+                                        <span className="text-muted-foreground/70"> · {poidsConditionne} kg cond.</span>
+                                      )}
+                                    </span>
+                                  );
+                                })()}
                               </div>
                             )}
                         </>
