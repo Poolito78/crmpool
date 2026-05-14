@@ -431,8 +431,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       const titre = gid ? grpTitles[gid] : '';
                       const montant = gid ? (grpSub[gid] || 0) : 0;
                       return (
-                        <tr key={dl.id} className="bg-primary/5 border-b-2 border-primary/20">
-                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
+                        <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]/20">
+                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
                           <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
                         </tr>
                       );
@@ -455,8 +455,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     return (
                   <Fragment key={l.id}>
                     {showHeader && (
-                      <tr className="bg-primary/10 border-t border-primary/30">
-                        <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-primary uppercase tracking-wide">{grpTitles[myGrp!]}</td>
+                      <tr className="bg-[#CC0000]/10 border-t border-[#CC0000]/30">
+                        <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
                       </tr>
                     )}
                     {/* Ligne produit principal */}
@@ -624,8 +624,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   return (
                     <Fragment key={l.id}>
                       {showHeaderS && (
-                        <tr className="bg-primary/10 border-t border-primary/30">
-                          <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-primary uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
+                        <tr className="bg-[#CC0000]/10 border-t border-[#CC0000]/30">
+                          <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
                         </tr>
                       )}
                       <tr className="border-b border-border">
