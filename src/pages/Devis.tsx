@@ -984,9 +984,9 @@ export default function Devis() {
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
                   </Button>
+                  <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
-                  <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -1090,6 +1090,18 @@ export default function Devis() {
                       </div>
                     );
 
+                    const t = calculerTotalLigne(l);
+                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
+                    const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
+                    const coeff = prod && prod.prixAchat > 0 ? prixNetHT / prod.prixAchat : null;
+                    const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
+                    const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
+                    const consoLigne = l.consommation ?? prod?.consommation;
+                    const kgReel = modeCalcul === 'surface' && surfaceVal > 0 && consoLigne != null && consoLigne > 0
+                      ? Math.round(surfaceVal * consoLigne * 1000) / 1000 : null;
+                    const consoVal = l.consommation ?? prod?.consommation;
+
                     const card = (
                       <div
                         draggable
@@ -1097,178 +1109,170 @@ export default function Devis() {
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
-                        className={`bg-muted/30 rounded-lg p-3 space-y-2 border transition-all cursor-grab active:cursor-grabbing
+                        className={`rounded-lg px-2 py-1.5 border transition-all cursor-grab active:cursor-grabbing
                           ${lineGroup[l.id] ? ' ml-4' : ''}
-                          ${draggedId === l.id ? 'opacity-40 border-border/60' : ''}
-                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : draggedId === l.id ? '' : 'border-border/60'}`}>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5">
-                            <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
-                            <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
-                            <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
-                          </div>
-                        </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      <div>
-                        <Label className="text-xs">Réf.</Label>
-                        <div className="flex gap-1 items-end">
-                          <div className="flex-1">
-                            <ProduitCombobox
-                              produits={produits}
-                              value={l.produitId || ''}
-                              onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }}
-                              autoFocus={l.id === newLigneId}
-                            />
-                          </div>
-                          {l.produitId && (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0"
-                              title="Voir la fiche produit"
-                              onClick={() => {
-                                const savedId = save(true);
-                                const devisId = savedId || editingId;
-                                const prod = produits.find(p => p.id === l.produitId);
-                                navigate(`/produits?search=${encodeURIComponent(prod?.reference || '')}&returnDevis=${devisId || ''}`);
-                              }}
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                      <div>
-                        <Label className="text-xs">Description</Label>
-                        <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
-                      <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
-                    </div>
-                    <div className={`grid gap-2 ${modeCalcul === 'surface' ? 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2' : 'grid-cols-2 sm:grid-cols-4 lg:grid-cols-5'}`}>
-                      {modeCalcul === 'surface' && (() => {
-                        const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                        const consoValue = l.consommation ?? p?.consommation ?? '';
-                        return (
+                          ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-muted/60 border-border'}`}>
+                        {modeCalcul === 'surface' ? (
                           <>
-                            <div>
-                              <Label className="text-xs">Surface (m²)</Label>
-                              <div className="flex gap-1">
-                                <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
-                                  const surface = parseFloat(e.target.value) || 0;
-                                  const quantite = p && (l.consommation || p.consommation) && p.poids ? calcQuantiteSurface(p, surface, l.consommation) : l.quantite;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
-                                }} className="h-8 text-sm" />
-                                <button type="button" title="Calculer avec l'IA"
-                                  onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })}
-                                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary">
-                                  <Bot className="w-3.5 h-3.5" />
-                                </button>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-1.5">
+                                <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
+                                <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
+                                <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              <div>
+                                <Label className="text-xs">Réf.</Label>
+                                <div className="flex gap-1 items-end">
+                                  <div className="flex-1">
+                                    <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
+                                  </div>
+                                  {l.produitId && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
+                                      <ExternalLink className="w-3.5 h-3.5" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <div>
+                                <Label className="text-xs">Description</Label>
+                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                               </div>
                             </div>
                             <div>
-                              <Label className="text-xs">Conso. (kg/m²)</Label>
-                              <div className="flex gap-1">
-                                <Input type="number" step="0.01" value={consoValue} onChange={e => {
-                                  const raw = e.target.value;
-                                  const conso = raw === '' ? undefined : parseFloat(raw);
-                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = p && p.poids && conso != null && conso > 0 ? calcQuantiteSurface(p, surface, conso) : l.quantite;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
-                                }} className="h-8 text-sm" placeholder={p?.consommation != null ? String(p.consommation) : ''} />
-                                <button type="button" title="Calculer avec l'IA"
-                                  onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })}
-                                  className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary">
-                                  <Bot className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
+                              <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
+                              <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
                             </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
-                              <Input value={p?.poids ? `${p.poids} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2 gap-2">
+                              {(() => {
+                                const consoValue = l.consommation ?? prod?.consommation ?? '';
+                                return (
+                                  <>
+                                    <div>
+                                      <Label className="text-xs">Surface (m²)</Label>
+                                      <div className="flex gap-1">
+                                        <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                                          const surface = parseFloat(e.target.value) || 0;
+                                          const quantite = prod && (l.consommation || prod.consommation) && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
+                                          setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                                        }} className="h-8 text-sm" />
+                                        <button type="button" title="Calculer avec l'IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3.5 h-3.5" /></button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs">Conso. (kg/m²)</Label>
+                                      <div className="flex gap-1">
+                                        <Input type="number" step="0.01" value={consoValue} onChange={e => {
+                                          const raw = e.target.value;
+                                          const conso = raw === '' ? undefined : parseFloat(raw);
+                                          const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                          const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
+                                          setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
+                                        }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : ''} />
+                                        <button type="button" title="Calculer avec l'IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })} className="h-8 w-8 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3.5 h-3.5" /></button>
+                                      </div>
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
+                                      <Input value={prod?.poids ? `${prod.poids} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                              <div><Label className="text-xs">Qté (auto)</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm bg-accent/20 font-medium" readOnly={!!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
+                              <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
+                              <div><Label className="text-xs">Prix HT</Label><Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" /></div>
+                              <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
+                              <div><Label className="text-xs">Prix remisé</Label><Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" /></div>
+                            </div>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground gap-0.5 sm:gap-x-3 mt-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {tauxMarque !== null ? <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span> : null}
+                                {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
+                                {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
+                                {kgReel !== null && <span className="italic text-muted-foreground/80">↳ conso. chantier : {kgReel} kg</span>}
+                              </div>
+                              <span className="font-medium text-foreground">Total HT: {formatMontant(t.totalHT)}</span>
                             </div>
                           </>
-                        );
-                      })()}
-                      <div><Label className="text-xs">Qté {modeCalcul === 'surface' ? '(auto)' : ''}</Label><Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`h-8 text-sm ${modeCalcul === 'surface' ? 'bg-accent/20 font-medium' : ''}`} readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} /></div>
-                      {modeCalcul !== 'surface' && (() => {
-                        const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
-                        const consoVal = l.consommation ?? p?.consommation;
-                        if (consoVal == null && !l.produitId) return null;
-                        return (
-                          <div>
-                            <Label className="text-xs text-muted-foreground">Conso. (kg/m²)</Label>
-                            <Input
-                              type="number" step="0.01"
-                              value={consoVal ?? ''}
-                              onChange={e => {
-                                const v = e.target.value === '' ? undefined : parseFloat(e.target.value);
-                                setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li));
-                              }}
-                              className="h-8 text-sm"
-                              placeholder={p?.consommation != null ? String(p.consommation) : '—'}
-                            />
-                          </div>
-                        );
-                      })()}
-                      <div><Label className="text-xs">Unité</Label><Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" /></div>
-                      <div>
-                        <Label className="text-xs">Prix HT</Label>
-                        <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
-                      </div>
-                      <div><Label className="text-xs">Remise %</Label><Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" /></div>
-                      <div>
-                        <Label className="text-xs">Prix remisé</Label>
-                        <Input
-                          type="number" step="0.01"
-                          value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''}
-                          onChange={e => {
-                            const net = parseFloat(e.target.value) || 0;
-                            const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net;
-                            updateLigne(l.id, 'prixUnitaireHT', ht);
-                          }}
-                          className="h-8 text-sm"
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
-                    {(() => {
-                      const t = calculerTotalLigne(l);
-                      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                      const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
-                      const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
-                      const coeff = prod && prod.prixAchat > 0 ? prixNetHT / prod.prixAchat : null;
-                      const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
-                      const surface = l.surfaceM2 || surfaceGlobaleM2;
-                      const conso = l.consommation ?? prod?.consommation;
-                      const kgReel = modeCalcul === 'surface' && surface > 0 && conso != null && conso > 0
-                        ? Math.round(surface * conso * 1000) / 1000
-                        : null;
-                      return (
-                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground gap-0.5 sm:gap-x-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {tauxMarque !== null ? (
-                              <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>
-                                Marge: {tauxMarque.toFixed(1)}%
-                              </span>
-                            ) : null}
-                            {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
-                            {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
-                            {kgReel !== null && (
-                              <span className="italic text-muted-foreground/80">↳ conso. chantier : {kgReel} kg</span>
+                        ) : (
+                          <>
+                            <div className="flex items-end gap-1 flex-wrap">
+                              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
+                              <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0">#{ligneNums[l.id]}</span>
+                              <div className="w-32 shrink-0">
+                                <Label className="text-xs">Réf.</Label>
+                                <div className="flex gap-0.5 items-center">
+                                  <div className="flex-1 min-w-0">
+                                    <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
+                                  </div>
+                                  {l.produitId && (
+                                    <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
+                                      <ExternalLink className="w-3 h-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="flex-1 min-w-[100px]">
+                                <Label className="text-xs">Description</Label>
+                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
+                              </div>
+                              <div className="w-14 shrink-0">
+                                <Label className="text-xs">Qté</Label>
+                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                              </div>
+                              {consoVal != null && (
+                                <div className="w-16 shrink-0">
+                                  <Label className="text-xs text-muted-foreground">Conso.</Label>
+                                  <Input type="number" step="0.01" value={consoVal ?? ''} onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li)); }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : '—'} />
+                                </div>
+                              )}
+                              <div className="w-12 shrink-0">
+                                <Label className="text-xs">Unité</Label>
+                                <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />
+                              </div>
+                              <div className="w-20 shrink-0">
+                                <Label className="text-xs">Prix HT</Label>
+                                <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
+                              </div>
+                              <div className="w-14 shrink-0">
+                                <Label className="text-xs">Rem. %</Label>
+                                <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                              </div>
+                              <div className="w-20 shrink-0">
+                                <Label className="text-xs">Net HT</Label>
+                                <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
+                              </div>
+                              <div className="shrink-0 flex flex-col items-end">
+                                <Label className="text-xs">Total HT</Label>
+                                <div className="flex items-center h-8 gap-0.5">
+                                  <span className="text-sm font-semibold w-[4.5rem] text-right">{formatMontant(t.totalHT)}</span>
+                                  <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center mt-1 pl-9">
+                              <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Note (optionnelle)…" className="h-6 text-xs text-muted-foreground bg-transparent border-transparent hover:border-input focus:border-input" />
+                            </div>
+                            {(tauxMarque !== null || coeff !== null || prixKg !== null) && (
+                              <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
+                                {tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
+                                {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
+                                {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
+                              </div>
                             )}
-                          </div>
-                          <span className="font-medium text-foreground">Total HT: {formatMontant(t.totalHT)}</span>
-                        </div>
-                      );
-                    })()}
+                          </>
+                        )}
                       </div>
                     );
 
@@ -1277,6 +1281,12 @@ export default function Devis() {
                 })()}
               </div>
               <div className="mt-3 flex gap-2">
+                <button
+                  onClick={addLigne}
+                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
+                >
+                  <Plus className="w-4 h-4" /> Ajouter une ligne
+                </button>
                 <button
                   onClick={addGroupe}
                   className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/30 py-2 text-sm text-primary/60 hover:text-primary hover:border-primary/60 transition-colors"
@@ -1288,12 +1298,6 @@ export default function Devis() {
                   className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-amber-400/40 py-2 text-sm text-amber-600/60 hover:text-amber-600 hover:border-amber-400/80 transition-colors"
                 >
                   <StickyNote className="w-4 h-4" /> Ajouter une note
-                </button>
-                <button
-                  onClick={addLigne}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Ajouter une ligne
                 </button>
               </div>
             </div>
