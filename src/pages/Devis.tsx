@@ -81,7 +81,7 @@ export default function Devis() {
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
-  const [conditions, setConditions] = useState('Paiement à 30 jours à compter de la date de facturation.');
+  const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
