@@ -513,11 +513,10 @@ export default function Devis() {
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      let quantite = l.quantite;
-      if (surfaceGlobaleM2 > 0 && p.consommation && p.poids) {
-        quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
-      }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
+      const autoQuantite = (surfaceGlobaleM2 > 0 && p.consommation && p.poids)
+        ? calcQuantiteSurface(p, surfaceGlobaleM2)
+        : null;
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: autoQuantite !== null ? autoQuantite : l.quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
     }
   }
 
