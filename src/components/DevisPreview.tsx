@@ -431,9 +431,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       const titre = gid ? grpTitles[gid] : '';
                       const montant = gid ? (grpSub[gid] || 0) : 0;
                       return (
-                        <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]/20">
+                        <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]">
                           <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
-                          <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
+                          <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right">{formatMontant(montant)}</td>
                         </tr>
                       );
                     }
