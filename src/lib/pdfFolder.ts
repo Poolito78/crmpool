@@ -104,7 +104,7 @@ export async function generatePdfFromElement(
   const imgH = (canvas.height * pw) / canvas.width;
 
   // Zone réservée en bas pour le pied de page (mentions légales + numéro de page)
-  const footerH = 14;
+  const footerH = 12;
   const contentH = ph - footerH;
 
   const LEGAL_LINE1 = 'ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr';
@@ -115,16 +115,17 @@ export async function generatePdfFromElement(
     pdf.setDrawColor(200, 200, 200);
     pdf.setLineWidth(0.2);
     pdf.line(8, ph - footerH + 1, pw - 8, ph - footerH + 1);
-    // Mentions légales
+    // Mentions légales sur 2 lignes resserrées
     pdf.setFontSize(6.5);
     pdf.setTextColor(130, 130, 130);
-    pdf.text(LEGAL_LINE1, pw / 2, ph - footerH + 5, { align: 'center' });
-    pdf.text(LEGAL_LINE2, pw / 2, ph - footerH + 9, { align: 'center' });
-    // Numéro de page
-    pdf.setFontSize(8);
-    pdf.text(`Page ${pageNum} / ${totalPages}`, pw / 2, ph - 2, { align: 'center' });
-    if (pageNum > 1 && opts?.devisNumero) {
-      pdf.text(opts.devisNumero, pw - 8, ph - 2, { align: 'right' });
+    pdf.text(LEGAL_LINE1, pw / 2, ph - footerH + 4.5, { align: 'center' });
+    pdf.text(LEGAL_LINE2, pw / 2, ph - footerH + 8.5, { align: 'center' });
+    // Numéro de page à droite, aligné sur la 2e ligne de mentions
+    pdf.setFontSize(7.5);
+    pdf.text(`Page ${pageNum} / ${totalPages}`, pw - 8, ph - footerH + 8.5, { align: 'right' });
+    if (opts?.devisNumero) {
+      pdf.setFontSize(7);
+      pdf.text(opts.devisNumero, 8, ph - footerH + 8.5, { align: 'left' });
     }
   }
 
