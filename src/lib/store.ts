@@ -69,6 +69,16 @@ export interface ComposantProduit {
   poidsKg?: number;           // si défini : mode poids — quantite = poidsKg / produit.poids (ou = poidsKg si unite kg)
 }
 
+export interface LigneKit {
+  produitId?: string;
+  description: string;
+  quantite: number;
+  unite: string;
+  prixUnitaireHT: number;
+  remise: number;
+  note?: string;
+}
+
 export interface Produit {
   id: string;
   reference: string;
@@ -89,6 +99,8 @@ export interface Produit {
   fournisseurId?: string;
   categorie?: string;
   composants?: ComposantProduit[];
+  typeKit?: boolean;
+  lignesKit?: LigneKit[];
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   dateCreation: string;
@@ -356,6 +368,8 @@ function dbToProduit(r: any): Produit {
     fournisseurId: r.fournisseur_id || undefined,
     categorie: r.categorie || undefined,
     composants: r.composants ? (Array.isArray(r.composants) ? r.composants : JSON.parse(r.composants)) : undefined,
+    typeKit: r.type_kit ?? false,
+    lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
@@ -384,6 +398,8 @@ function produitToDb(p: Produit, userId: string) {
     fournisseur_id: p.fournisseurId || null,
     categorie: p.categorie || null,
     composants: p.composants && p.composants.length > 0 ? p.composants : null,
+    type_kit: p.typeKit ?? false,
+    lignes_kit: p.lignesKit && p.lignesKit.length > 0 ? p.lignesKit : null,
     fiche_url: p.ficheUrl || null,
     fiche_link_label: p.ficheLinkLabel || null,
     date_creation: p.dateCreation,

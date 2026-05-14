@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical } from 'lucide-react';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -56,6 +56,9 @@ export default function Devis() {
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [aiCalc, setAiCalc] = useState<{ ligneId: string; field: 'surfaceM2' | 'consommation' | 'quantite'; label: string; current?: number } | null>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [kitPickerOpen, setKitPickerOpen] = useState(false);
+  const [kitSearch, setKitSearch] = useState('');
+  const kitPickerRef = useRef<HTMLDivElement>(null);
 
   // Auto-open devis editor when returning from product page
   useEffect(() => {
@@ -337,6 +340,41 @@ export default function Devis() {
       { id, type: 'texte', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
+  }
+
+  useEffect(() => {
+    if (!kitPickerOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (kitPickerRef.current && !kitPickerRef.current.contains(e.target as Node)) {
+        setKitPickerOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [kitPickerOpen]);
+
+  function insertKit(kitProd: Produit) {
+    saveSnapshot();
+    const grpId = generateId();
+    const subId = generateId();
+    const newLignes: LigneDevis[] = [
+      { id: grpId, type: 'groupe', description: `${kitProd.reference} — ${kitProd.description}`, quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+      ...(kitProd.lignesKit || []).map(lk => ({
+        id: generateId(),
+        produitId: lk.produitId || undefined,
+        description: lk.description,
+        quantite: lk.quantite,
+        unite: lk.unite,
+        prixUnitaireHT: lk.prixUnitaireHT,
+        tva: 20,
+        remise: lk.remise,
+        note: lk.note,
+      })),
+      { id: subId, type: 'soustotal', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    ];
+    setLignes(prev => [...prev, ...newLignes]);
+    setKitPickerOpen(false);
+    setKitSearch('');
   }
 
   function updateLigne(id: string, field: string, value: any) {
@@ -989,6 +1027,40 @@ export default function Devis() {
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
+                  <div ref={kitPickerRef} className="relative">
+                    <Button variant="outline" size="sm" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
+                      <Layers className="w-3 h-3 mr-1" /> Kit
+                    </Button>
+                    {kitPickerOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-50 w-72 bg-popover border border-border rounded-md shadow-lg">
+                        <div className="p-2 border-b border-border">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={kitSearch}
+                            onChange={e => setKitSearch(e.target.value)}
+                            placeholder="Rechercher un kit…"
+                            className="w-full text-sm bg-transparent outline-none placeholder:text-muted-foreground px-1 py-0.5"
+                          />
+                        </div>
+                        <div className="max-h-56 overflow-y-auto">
+                          {(() => {
+                            const kits = produits.filter(p => p.typeKit).filter(p => !kitSearch || `${p.reference} ${p.description}`.toLowerCase().includes(kitSearch.toLowerCase())).sort((a, b) => a.reference.localeCompare(b.reference));
+                            if (kits.length === 0) return <p className="text-xs text-muted-foreground text-center py-4">Aucun kit trouvé — créez-en un dans la fiche produit</p>;
+                            return kits.map(k => (
+                              <button key={k.id} type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-muted flex flex-col gap-0.5"
+                                onClick={() => insertKit(k)}
+                              >
+                                <span className="font-medium">{k.reference}</span>
+                                <span className="text-xs text-muted-foreground truncate">{k.description} · {(k.lignesKit || []).length} ligne{(k.lignesKit || []).length !== 1 ? 's' : ''}</span>
+                              </button>
+                            ));
+                          })()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
                   <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
                 </div>
               </div>

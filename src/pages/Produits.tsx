@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit } from '@/lib/store';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit, type LigneKit } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
@@ -103,6 +103,8 @@ export default function Produits() {
   const [composantOpenIdx, setComposantOpenIdx] = useState<number | null>(null);
   const [composantPickerOpen, setComposantPickerOpen] = useState(false);
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
+  const [isTypeKit, setIsTypeKit] = useState(false);
+  const [lignesKit, setLignesKit] = useState<LigneKit[]>([]);
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
 
@@ -318,7 +320,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setEditingStack([]); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setEditingStack([]); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -356,6 +358,8 @@ export default function Produits() {
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
+    setIsTypeKit(p.typeKit ?? false);
+    setLignesKit(p.lignesKit || []);
     setDialogOpen(true);
   }
 
@@ -408,12 +412,13 @@ export default function Produits() {
     });
     const composantsToSave = composantsRecalc.length > 0 ? composantsRecalc : null;
 
+    const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
     if (editing) {
-      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined };
+      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined };
       updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
-      // Écriture directe Supabase pour garantir la persistance des composants
-      supabase.from('produits').update({ composants: composantsToSave as any }).eq('id', editing.id).then(({ error }) => {
-        if (error) console.error('Erreur sauvegarde composants:', error);
+      // Écriture directe Supabase pour garantir la persistance
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any }).eq('id', editing.id).then(({ error }) => {
+        if (error) console.error('Erreur sauvegarde composants/kit:', error);
       });
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -428,12 +433,12 @@ export default function Produits() {
       toast.success('Produit modifié');
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
-      // Écriture directe Supabase pour garantir la persistance des composants
-      if (composantsToSave) {
-        supabase.from('produits').update({ composants: composantsToSave as any }).eq('id', newId).then(({ error }) => {
-          if (error) console.error('Erreur sauvegarde composants nouveau produit:', error);
+      // Écriture directe Supabase pour garantir la persistance
+      if (composantsToSave || lignesKitToSave) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any }).eq('id', newId).then(({ error }) => {
+          if (error) console.error('Erreur sauvegarde composants/kit nouveau produit:', error);
         });
       }
       toast.success('Produit ajouté');
@@ -453,11 +458,11 @@ export default function Produits() {
     autoSaveProdRef.current = setTimeout(() => {
       if (form.reference.trim() && form.description.trim()) {
         const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined } : p));
+        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined } : p));
       }
     }, 500);
     return () => clearTimeout(autoSaveProdRef.current);
-  }, [form, composants, editing, dialogOpen]);
+  }, [form, composants, isTypeKit, lignesKit, editing, dialogOpen]);
 
   function remove(id: string) {
     confirmDelete(id);
@@ -1474,6 +1479,125 @@ export default function Produits() {
                     return sum + p.prixAchat * c.quantite;
                   }, 0))}</span>
                 </div>
+              )}
+            </div>
+
+            {/* Kit — groupe de lignes type */}
+            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={isTypeKit}
+                    onChange={e => setIsTypeKit(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-sm font-semibold">Type Kit (groupe de lignes)</span>
+                </label>
+                {isTypeKit && (
+                  <button
+                    type="button"
+                    onClick={() => setLignesKit(prev => [...prev, { description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 }])}
+                    className="text-xs text-primary hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> Ajouter une ligne
+                  </button>
+                )}
+              </div>
+              {isTypeKit && (
+                <>
+                  {lignesKit.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Aucune ligne — ce kit sera inséré comme groupe vide dans le devis</p>
+                  )}
+                  {lignesKit.map((lk, idx) => {
+                    const lkProd = lk.produitId ? produits.find(p => p.id === lk.produitId) : null;
+                    return (
+                      <div key={idx} className="flex flex-wrap gap-1.5 items-end">
+                        {/* Produit */}
+                        <div className="flex flex-col gap-0.5 min-w-[160px] flex-1">
+                          <span className="text-xs text-muted-foreground">Produit</span>
+                          <select
+                            value={lk.produitId || ''}
+                            onChange={e => {
+                              const p = produits.find(pr => pr.id === e.target.value);
+                              setLignesKit(prev => prev.map((l, i) => i !== idx ? l : {
+                                ...l,
+                                produitId: e.target.value || undefined,
+                                description: p ? p.description : l.description,
+                                unite: p ? p.unite : l.unite,
+                                prixUnitaireHT: p ? p.prixHT : l.prixUnitaireHT,
+                              }));
+                            }}
+                            className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground"
+                          >
+                            <option value="">— Libre —</option>
+                            {produits.filter(p => !p.typeKit).sort((a, b) => a.reference.localeCompare(b.reference)).map(p => (
+                              <option key={p.id} value={p.id}>{p.reference} — {p.description.slice(0, 40)}</option>
+                            ))}
+                          </select>
+                          {lkProd && <span className="text-xs text-primary truncate">{lkProd.reference}</span>}
+                        </div>
+                        {/* Description */}
+                        <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
+                          <span className="text-xs text-muted-foreground">Description</span>
+                          <Input
+                            value={lk.description}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, description: e.target.value }))}
+                            placeholder="Description…"
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        {/* Qté */}
+                        <div className="flex flex-col gap-0.5 w-14">
+                          <span className="text-xs text-muted-foreground">Qté</span>
+                          <Input
+                            type="number" min={0.01} step={0.01}
+                            value={lk.quantite}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, quantite: parseFloat(e.target.value) || 1 }))}
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        {/* Unité */}
+                        <div className="flex flex-col gap-0.5 w-16">
+                          <span className="text-xs text-muted-foreground">Unité</span>
+                          <Input
+                            value={lk.unite}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, unite: e.target.value }))}
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        {/* Prix HT */}
+                        <div className="flex flex-col gap-0.5 w-20">
+                          <span className="text-xs text-muted-foreground">Prix HT</span>
+                          <Input
+                            type="number" min={0} step={0.01}
+                            value={lk.prixUnitaireHT}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, prixUnitaireHT: parseFloat(e.target.value) || 0 }))}
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        {/* Remise */}
+                        <div className="flex flex-col gap-0.5 w-14">
+                          <span className="text-xs text-muted-foreground">Rem%</span>
+                          <Input
+                            type="number" min={0} max={100} step={1}
+                            value={lk.remise}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, remise: parseFloat(e.target.value) || 0 }))}
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLignesKit(prev => prev.filter((_, i) => i !== idx))}
+                          className="p-1 hover:bg-destructive/10 rounded text-destructive"
+                          title="Supprimer cette ligne"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </>
               )}
             </div>
 
