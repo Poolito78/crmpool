@@ -22,20 +22,15 @@ import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
 import { supabase } from '@/integrations/supabase/client';
 
-// ── Colonnes visibles dans la grille ligne (mode surface) ────────────────────
+// ── Colonnes supplémentaires (mode surface) ───────────────────────────────────
 const LIGNE_COLS = [
-  { key: 'surface',    label: 'Surface (m²)' },
-  { key: 'conso',      label: 'Conso. (kg/m²)' },
-  { key: 'poids',      label: 'Poids (kg)' },
-  { key: 'cellules',   label: 'Nb cellules' },
-  { key: 'qte',        label: 'Qté (auto)' },
-  { key: 'unite',      label: 'Unité' },
-  { key: 'prixHT',     label: 'Prix HT' },
-  { key: 'remise',     label: 'Remise %' },
-  { key: 'prixRemise', label: 'Prix remisé' },
+  { key: 'surface',  label: 'Surface (m²)' },
+  { key: 'conso',    label: 'Conso. (kg/m²)' },
+  { key: 'poids',    label: 'Poids (kg)' },
+  { key: 'cellules', label: 'Nb cellules' },
 ] as const;
 type LigneColKey = typeof LIGNE_COLS[number]['key'];
-const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface','conso','poids','qte','unite','prixHT','remise','prixRemise'];
+const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso'];
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -1297,94 +1292,12 @@ export default function Devis() {
                           ${lineGroup[l.id] ? ' ml-4' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
-                        {modeCalcul === 'surface' ? (
-                          <>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-1.5">
-                                <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40" />
-                                <span className="text-xs font-medium text-muted-foreground">Ligne {ligneNums[l.id]}</span>
-                              </div>
-                              <div className="flex items-center gap-1">
-                                <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground ml-1"><Copy className="w-3.5 h-3.5" /></button>
-                                <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
-                              </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              <div>
-                                <Label className="text-xs">Réf.</Label>
-                                <div className="flex gap-1 items-end">
-                                  <div className="flex-1">
-                                    <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
-                                  </div>
-                                  {l.produitId && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
-                                      <ExternalLink className="w-3.5 h-3.5" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                              <div>
-                                <Label className="text-xs">Description</Label>
-                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
-                              </div>
-                            </div>
-                            <div>
-                              <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
-                              <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
-                            </div>
-                            {(() => {
-                                const consoValue = l.consommation ?? prod?.consommation ?? '';
-                                const v = visibleLigneCols;
-                                const cols = LIGNE_COLS.filter(c => v.has(c.key));
-                                const C = 'h-7 text-xs min-w-0'; // classe commune input
-                                return (
-                                  <div className="bg-accent/30 rounded-md px-2 py-1.5 overflow-x-auto"
-                                    style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(60px, 1fr))`, gap: '4px', alignItems: 'center' }}>
-                                    {v.has('surface') && <div className="flex gap-0.5 items-center">
-                                        <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
-                                          const surface = parseFloat(e.target.value) || 0;
-                                          const quantite = prod && (l.consommation || prod.consommation) && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
-                                          setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
-                                        }} className={C} placeholder="m²" title="Surface (m²)" />
-                                        <button type="button" title="Surface IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-7 w-6 shrink-0 flex items-center justify-center rounded border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
-                                    </div>}
-                                    {v.has('conso') && <div className="flex gap-0.5 items-center">
-                                        <Input type="number" step="0.01" value={consoValue} onChange={e => {
-                                          const raw = e.target.value;
-                                          const conso = raw === '' ? undefined : parseFloat(raw);
-                                          const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                          const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
-                                          setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
-                                        }} className={C} placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} title="Conso. (kg/m²)" />
-                                        <button type="button" title="Conso. IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })} className="h-7 w-6 shrink-0 flex items-center justify-center rounded border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
-                                    </div>}
-                                    {v.has('poids') && <Input value={prod?.poids ? `${prod.poids} kg` : '—'} readOnly className={`${C} bg-muted/50 text-muted-foreground`} title="Poids (kg)" />}
-                                    {v.has('cellules') && <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className={C} placeholder="cell." title="Nb cellules" />}
-                                    {v.has('qte') && <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={`${C} bg-accent/40 font-semibold`} placeholder="Qté" title="Qté (auto)" readOnly={!!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} />}
-                                    {v.has('unite') && <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className={C} placeholder="Unité" title="Unité" />}
-                                    {v.has('prixHT') && <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className={C} placeholder="Prix HT" title="Prix HT" />}
-                                    {v.has('remise') && <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className={C} placeholder="Rem.%" title="Remise %" />}
-                                    {v.has('prixRemise') && <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className={C} placeholder="P. remisé" title="Prix remisé" />}
-                                  </div>
-                                );
-                              })()}
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between text-xs text-muted-foreground gap-0.5 sm:gap-x-3 mt-1">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                {tauxMarque !== null ? <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span> : null}
-                                {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
-                                {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
-                                {kgReel !== null && <span className="italic text-muted-foreground/80">↳ conso. chantier : {kgReel} kg</span>}
-                              </div>
-                              <span className="font-medium text-foreground">Total HT: {formatMontant(t.totalHT)}</span>
-                            </div>
-                          </>
-                        ) : (
-                          <>
+                        <>
+                            {/* ── Ligne unifiée (surface + standard) ── */}
                             <div className="flex items-end gap-1 flex-wrap">
                               <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
                               <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0">#{ligneNums[l.id]}</span>
+                              {/* Réf. */}
                               <div className="w-48 shrink-0">
                                 <Label className="text-xs">Réf.</Label>
                                 <div className="flex gap-0.5 items-center">
@@ -1398,59 +1311,113 @@ export default function Devis() {
                                   )}
                                 </div>
                               </div>
+                              {/* Description */}
                               <div className="flex-1 min-w-[120px]">
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                               </div>
+                              {/* Surface m² — surface mode + col visible */}
+                              {modeCalcul === 'surface' && visibleLigneCols.has('surface') && (
+                                <div className="w-24 shrink-0">
+                                  <Label className="text-xs">Surface m²</Label>
+                                  <div className="flex gap-0.5">
+                                    <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                                      const surface = parseFloat(e.target.value) || 0;
+                                      const quantite = prod && (l.consommation || prod.consommation) && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
+                                      setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                                    }} className="h-8 text-sm" placeholder="m²" />
+                                    <button type="button" title="IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-8 w-7 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Conso kg/m² — surface mode + col visible */}
+                              {modeCalcul === 'surface' && visibleLigneCols.has('conso') && (
+                                <div className="w-24 shrink-0">
+                                  <Label className="text-xs">Conso. kg/m²</Label>
+                                  <div className="flex gap-0.5">
+                                    <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onChange={e => {
+                                      const raw = e.target.value;
+                                      const conso = raw === '' ? undefined : parseFloat(raw);
+                                      const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                      const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
+                                      setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
+                                    }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />
+                                    <button type="button" title="IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'consommation', label: `Conso. kg/m² — ${l.description || 'ligne'}`, current: l.consommation })} className="h-8 w-7 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
+                                  </div>
+                                </div>
+                              )}
+                              {/* Poids — surface mode + col visible */}
+                              {modeCalcul === 'surface' && visibleLigneCols.has('poids') && (
+                                <div className="w-16 shrink-0">
+                                  <Label className="text-xs text-muted-foreground">Poids kg</Label>
+                                  <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                </div>
+                              )}
+                              {/* Nb cellules — surface mode + col visible */}
+                              {modeCalcul === 'surface' && visibleLigneCols.has('cellules') && (
+                                <div className="w-16 shrink-0">
+                                  <Label className="text-xs">Cellules</Label>
+                                  <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className="h-8 text-sm" placeholder="0" />
+                                </div>
+                              )}
+                              {/* Qté */}
                               <div className="w-16 shrink-0">
-                                <Label className="text-xs">Qté</Label>
-                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                                <Label className="text-xs">{modeCalcul === 'surface' ? 'Qté auto' : 'Qté'}</Label>
+                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} />
                               </div>
-                              {consoVal != null && (
+                              {/* Conso. standard (mode standard uniquement) */}
+                              {modeCalcul !== 'surface' && consoVal != null && (
                                 <div className="w-20 shrink-0">
                                   <Label className="text-xs text-muted-foreground">Conso.</Label>
                                   <Input type="number" step="0.01" value={consoVal ?? ''} onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li)); }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : '—'} />
                                 </div>
                               )}
+                              {/* Unité */}
                               <div className="w-14 shrink-0">
                                 <Label className="text-xs">Unité</Label>
                                 <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />
                               </div>
+                              {/* Prix HT */}
                               <div className="w-24 shrink-0">
                                 <Label className="text-xs">Prix HT</Label>
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
                               </div>
+                              {/* Remise % */}
                               <div className="w-16 shrink-0">
                                 <Label className="text-xs">Rem. %</Label>
                                 <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
+                              {/* Net HT */}
                               <div className="w-24 shrink-0">
                                 <Label className="text-xs">Net HT</Label>
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
                               </div>
+                              {/* Total HT + actions */}
                               <div className="shrink-0 flex flex-col items-end">
                                 <Label className="text-xs">Total HT</Label>
                                 <div className="flex items-center h-8 gap-0.5">
-                                  <span className="text-sm font-semibold w-28 text-right">{formatMontant(t.totalHT)}</span>
+                                  <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
                                   <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => duplicateLigne(l.id)} title="Dupliquer cette ligne" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
                                   <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </div>
                               </div>
                             </div>
+                            {/* Note */}
                             <div className="flex items-center mt-1 pl-9">
                               <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Note (optionnelle)…" className="h-6 text-xs text-muted-foreground bg-transparent border-transparent hover:border-input focus:border-input" />
                             </div>
-                            {(tauxMarque !== null || coeff !== null || prixKg !== null) && (
+                            {/* Infos marges */}
+                            {(tauxMarque !== null || coeff !== null || prixKg !== null || kgReel !== null) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
                                 {tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
                                 {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
+                                {kgReel !== null && <span className="italic">↳ {kgReel} kg chantier</span>}
                               </div>
                             )}
-                          </>
-                        )}
+                        </>
                       </div>
                     );
 
