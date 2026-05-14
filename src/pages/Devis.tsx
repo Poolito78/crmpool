@@ -1280,26 +1280,6 @@ export default function Devis() {
                   });
                 })()}
               </div>
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={addLigne}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-border py-2 text-sm text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-                >
-                  <Plus className="w-4 h-4" /> Ajouter une ligne
-                </button>
-                <button
-                  onClick={addGroupe}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/30 py-2 text-sm text-primary/60 hover:text-primary hover:border-primary/60 transition-colors"
-                >
-                  <FolderPlus className="w-4 h-4" /> Ajouter un groupe
-                </button>
-                <button
-                  onClick={addTexte}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-dashed border-amber-400/40 py-2 text-sm text-amber-600/60 hover:text-amber-600 hover:border-amber-400/80 transition-colors"
-                >
-                  <StickyNote className="w-4 h-4" /> Ajouter une note
-                </button>
-              </div>
             </div>
 
             {/* Frais de port */}
