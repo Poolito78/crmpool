@@ -715,6 +715,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <p>Port : 06.31.61.15.96</p>
             <p>E-mail : f.mouhot@isosign.fr</p>
           </div>
+          <div className="mt-4 pt-2 border-t border-border">
+            <p className="text-[9px] text-muted-foreground text-center leading-tight">
+              ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr
+              {' '}SAS au capital de 40 000 € • RCS Chalon-sur-Saône 494922313 • SIRET 4949223130005 • APE 4669B • TVA FR76494922313
+            </p>
+          </div>
         </div>
       </div>{/* fin printAreaRef */}
       </div>{/* fin page A4 */}
