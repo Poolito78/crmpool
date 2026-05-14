@@ -158,11 +158,6 @@ export async function generatePdfFromElement(
       pdf.setTextColor(0, 80, 200);
       pdf.text(opts.devisNumero, pw - 8, 11, { align: 'right' });
     }
-    if (opts?.devisDate) {
-      pdf.setFontSize(7.5);
-      pdf.setTextColor(100, 100, 100);
-      pdf.text(opts.devisDate, pw - 8, headerH - 1, { align: 'right' });
-    }
     pdf.setTextColor(30, 30, 30);
   }
 
