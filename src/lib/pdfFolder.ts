@@ -189,12 +189,25 @@ export async function generatePdfFromElement(
   } else {
     const slices = computePageSlices();
     // Fallback si détection DOM échoue : découpe standard
-    const effectiveSlices = slices.length > 0 ? slices : (() => {
+    let effectiveSlices = slices.length > 0 ? slices : (() => {
       const fallback: number[] = [];
       let y = 0;
       while (y < imgH) { const h = Math.min(contentH, imgH - y); fallback.push(h); y += h; }
       return fallback;
     })();
+
+    // Fusionne les pages de fin qui tiendraient ensemble (évite pages quasi-vides)
+    let merged = true;
+    while (merged && effectiveSlices.length >= 2) {
+      merged = false;
+      const last = effectiveSlices[effectiveSlices.length - 1];
+      const prev = effectiveSlices[effectiveSlices.length - 2];
+      if (prev + last <= contentH) {
+        effectiveSlices = [...effectiveSlices.slice(0, -2), prev + last];
+        merged = true;
+      }
+    }
+
     const totalPages = effectiveSlices.length;
     let yOffsetMm = 0, page = 0;
     for (const sliceH of effectiveSlices) {
