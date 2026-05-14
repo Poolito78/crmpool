@@ -1112,7 +1112,7 @@ export default function Devis() {
                         className={`rounded-lg px-2 py-1.5 border transition-all cursor-grab active:cursor-grabbing
                           ${lineGroup[l.id] ? ' ml-4' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
-                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-muted/60 border-border'}`}>
+                          ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-muted border-border'}`}>
                         {modeCalcul === 'surface' ? (
                           <>
                             <div className="flex items-center justify-between mb-2">
