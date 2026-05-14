@@ -112,6 +112,7 @@ export default function Clients() {
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [iaText, setIaText] = useState('');
+  const [iaImage, setIaImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
   const [iaLoading, setIaLoading] = useState(false);
   const [iaOpen, setIaOpen] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
@@ -205,11 +206,14 @@ export default function Clients() {
     setDialogOpen(true);
   }
 
-  async function extractClientFromIA(text: string) {
-    if (!text.trim()) return;
+  async function extractClientFromIA() {
+    if (!iaText.trim() && !iaImage) return;
     setIaLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('extract-client', { body: { text } });
+      const body = iaImage
+        ? { imageBase64: iaImage.base64, imageMimeType: iaImage.mimeType }
+        : { text: iaText };
+      const { data, error } = await supabase.functions.invoke('extract-client', { body });
       if (error) throw error;
       const r = data as Record<string, string>;
       setForm(prev => ({
@@ -226,12 +230,36 @@ export default function Clients() {
       }));
       setIaOpen(false);
       setIaText('');
+      setIaImage(null);
       toast.success('Coordonnées extraites par IA');
     } catch (e: any) {
       toast.error('Erreur IA : ' + (e.message ?? 'indisponible'));
     } finally {
       setIaLoading(false);
     }
+  }
+
+  function handleIaPaste(e: React.ClipboardEvent) {
+    // Détecter image dans le presse-papier
+    const items = Array.from(e.clipboardData.items);
+    const imgItem = items.find(it => it.type.startsWith('image/'));
+    if (imgItem) {
+      e.preventDefault();
+      const file = imgItem.getAsFile();
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const dataUrl = ev.target?.result as string;
+        const base64 = dataUrl.split(',')[1];
+        setIaImage({ base64, mimeType: file.type, previewUrl: dataUrl });
+        setIaText('');
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+    // Sinon texte normal
+    const text = e.clipboardData.getData('text/plain');
+    if (text?.trim()) setIaText(text.trim());
   }
 
   function save() {
@@ -757,28 +785,52 @@ export default function Clients() {
                 onDragOver={e => e.preventDefault()}
                 onDrop={e => {
                   e.preventDefault();
+                  // Fichier image déposé
+                  const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+                  if (file) {
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      const dataUrl = ev.target?.result as string;
+                      setIaImage({ base64: dataUrl.split(',')[1], mimeType: file.type, previewUrl: dataUrl });
+                      setIaText('');
+                    };
+                    reader.readAsDataURL(file);
+                    return;
+                  }
                   const text = e.dataTransfer.getData('text/plain');
-                  if (text?.trim()) { setIaText(text.trim()); }
+                  if (text?.trim()) { setIaText(text.trim()); setIaImage(null); }
                 }}
               >
-                <p className="text-xs text-muted-foreground">Collez ou glissez un email, une signature, une carte de visite…</p>
-                <textarea
-                  autoFocus
-                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-                  rows={4}
-                  value={iaText}
-                  onChange={e => setIaText(e.target.value)}
-                  onPaste={e => {
-                    const text = e.clipboardData.getData('text/plain');
-                    if (text?.trim()) setIaText(text.trim());
-                  }}
-                  placeholder="Ex: CS ROUTE — Hugo Dias Da Silva&#10;91 Rue de la Madeleine, 22200 Grâces&#10;direction.csroute@gmail.com · 06 12 34 56 78"
-                />
+                <p className="text-xs text-muted-foreground">Collez texte, email, signature — ou capture d'écran (Ctrl+V)</p>
+
+                {iaImage ? (
+                  <div className="relative">
+                    <img src={iaImage.previewUrl} alt="capture" className="w-full max-h-48 object-contain rounded border border-border bg-white" />
+                    <button
+                      type="button"
+                      onClick={() => setIaImage(null)}
+                      className="absolute top-1 right-1 bg-background/80 rounded-full p-0.5 hover:bg-destructive/10 text-destructive"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <textarea
+                    autoFocus
+                    className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                    rows={4}
+                    value={iaText}
+                    onChange={e => setIaText(e.target.value)}
+                    onPaste={handleIaPaste}
+                    placeholder="Ex: CS ROUTE — Hugo Dias Da Silva&#10;91 Rue de la Madeleine, 22200 Grâces&#10;direction.csroute@gmail.com · 06 12 34 56 78"
+                  />
+                )}
+
                 <Button
                   size="sm"
                   className="w-full"
-                  disabled={!iaText.trim() || iaLoading}
-                  onClick={() => extractClientFromIA(iaText)}
+                  disabled={(!iaText.trim() && !iaImage) || iaLoading}
+                  onClick={extractClientFromIA}
                 >
                   {iaLoading ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Extraction…</> : <><Bot className="w-3.5 h-3.5 mr-1.5" /> Extraire les coordonnées</>}
                 </Button>
