@@ -76,6 +76,7 @@ export interface LigneKit {
   unite: string;
   prixUnitaireHT: number;
   remise: number;
+  consommation?: number;  // kg/m² — utilisé en mode calcul surface dans le devis
   note?: string;
 }
 

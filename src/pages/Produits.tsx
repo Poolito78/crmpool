@@ -1549,6 +1549,7 @@ export default function Produits() {
                                 description: p ? p.description : l.description,
                                 unite: p ? p.unite : l.unite,
                                 prixUnitaireHT: p ? p.prixHT : l.prixUnitaireHT,
+                                consommation: p?.consommation ?? l.consommation,
                               }));
                             }}
                             className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground"
@@ -1577,6 +1578,17 @@ export default function Produits() {
                             type="number" min={0.01} step={0.01}
                             value={lk.quantite}
                             onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, quantite: parseFloat(e.target.value) || 1 }))}
+                            className="text-xs h-7"
+                          />
+                        </div>
+                        {/* Consommation */}
+                        <div className="flex flex-col gap-0.5 w-20">
+                          <span className="text-xs text-muted-foreground">Conso kg/m²</span>
+                          <Input
+                            type="number" min={0} step={0.001}
+                            value={lk.consommation ?? ''}
+                            placeholder="—"
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, consommation: parseFloat(e.target.value) || undefined }))}
                             className="text-xs h-7"
                           />
                         </div>

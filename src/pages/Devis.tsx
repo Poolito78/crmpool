@@ -371,6 +371,7 @@ export default function Devis() {
         prixUnitaireHT: lk.prixUnitaireHT,
         tva: 20,
         remise: lk.remise,
+        consommation: lk.consommation || undefined,
         note: lk.note,
       })),
       { id: subId, type: 'soustotal', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
