@@ -436,6 +436,13 @@ export default function Devis() {
 
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
+    if (!p) return;
+    // Si c'est un kit : supprimer la ligne vide et insérer le groupe
+    if (p.typeKit) {
+      setLignes(prev => prev.filter(l => l.id !== ligneId));
+      insertKit(p);
+      return;
+    }
     if (p) {
       const client = clients.find(c => c.id === clientId);
       let prix = p.prixHT;
