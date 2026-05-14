@@ -175,24 +175,6 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Document analysis */}
-      <button
-        onClick={() => setAnalyseOpen(true)}
-        className="bg-card rounded-xl border border-border px-4 py-3 flex items-center gap-4 w-fit hover:bg-muted/50 transition-colors cursor-pointer text-left"
-      >
-        <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-          <ScanText className="w-4 h-4 text-primary" />
-        </div>
-        <div className="min-w-0">
-          <p className="font-semibold text-sm leading-tight">Analyse de document</p>
-          <p className="text-xs text-muted-foreground leading-tight hidden sm:block">Commande · Devis · Facture · BL</p>
-        </div>
-        <span className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground">
-          <ScanText className="w-3.5 h-3.5" />
-          Analyser
-        </span>
-      </button>
-
       <AnalyseDocumentDialog
         open={analyseOpen}
         onOpenChange={(v) => { setAnalyseOpen(v); if (!v) { setDroppedFiles([]); setDroppedText(''); } }}

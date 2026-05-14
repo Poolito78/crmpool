@@ -143,13 +143,23 @@ export default function CRMLayout() {
       {/* Main content */}
       <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
         {/* Top bar */}
-        <header className="sticky top-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border">
+        <header className="sticky top-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
           <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
           </button>
-          <h1 className="font-heading font-semibold text-lg truncate">
+          <h1 className="font-heading font-semibold text-lg truncate flex-1">
             {navItems.find(i => i.path === location.pathname)?.label || 'MonCRM'}
           </h1>
+          {location.pathname === '/' && (
+            <button
+              onClick={() => setAnalyseOpen(true)}
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors"
+            >
+              <ScanText className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Analyser document</span>
+              <span className="sm:hidden">Analyser</span>
+            </button>
+          )}
         </header>
 
         <main className="flex-1 p-4 md:p-6 pb-20 md:pb-6 overflow-x-hidden">
