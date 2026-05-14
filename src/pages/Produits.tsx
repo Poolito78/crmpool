@@ -5,6 +5,7 @@ import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
+import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1538,29 +1539,23 @@ export default function Produits() {
                       >
                         <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing mt-5" />
                         {/* Produit */}
-                        <div className="flex flex-col gap-0.5 min-w-[160px] flex-1">
+                        <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
                           <span className="text-xs text-muted-foreground">Produit</span>
-                          <select
+                          <ProduitCombobox
+                            produits={produits.filter(p => !p.typeKit)}
                             value={lk.produitId || ''}
-                            onChange={e => {
-                              const p = produits.find(pr => pr.id === e.target.value);
+                            onSelect={produitId => {
+                              const p = produits.find(pr => pr.id === produitId);
                               setLignesKit(prev => prev.map((l, i) => i !== idx ? l : {
                                 ...l,
-                                produitId: e.target.value || undefined,
+                                produitId: produitId || undefined,
                                 description: p ? p.description : l.description,
                                 unite: p ? p.unite : l.unite,
                                 prixUnitaireHT: p ? p.prixHT : l.prixUnitaireHT,
                                 consommation: p?.consommation ?? l.consommation,
                               }));
                             }}
-                            className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground"
-                          >
-                            <option value="">— Libre —</option>
-                            {produits.filter(p => !p.typeKit).sort((a, b) => a.reference.localeCompare(b.reference)).map(p => (
-                              <option key={p.id} value={p.id}>{p.reference} — {p.description.slice(0, 40)}</option>
-                            ))}
-                          </select>
-                          {lkProd && <span className="text-xs text-primary truncate">{lkProd.reference}</span>}
+                          />
                         </div>
                         {/* Description */}
                         <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
