@@ -55,9 +55,10 @@ serve(async (req) => {
     }
 
     async function callGroq(): Promise<string> {
+      const trimmedHistory = history.slice(-10);
       const messages = [
         { role: "system", content: systemContent },
-        ...history,
+        ...trimmedHistory,
         { role: "user", content: message },
       ];
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -65,12 +66,15 @@ serve(async (req) => {
         headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           model: "llama-3.3-70b-versatile",
-          max_tokens: 1500,
+          max_tokens: 2000,
           temperature: 0.2,
           messages,
         }),
       });
-      if (!response.ok) throw new Error(`Groq error ${response.status}`);
+      if (!response.ok) {
+        const errBody = await response.text();
+        throw new Error(`Groq error ${response.status}: ${errBody}`);
+      }
       const data = await response.json();
       return data.choices?.[0]?.message?.content ?? '';
     }
@@ -103,11 +107,12 @@ serve(async (req) => {
     let responseText: string;
     try {
       responseText = await callGroq();
-    } catch {
+    } catch (groqErr) {
+      console.error("Groq failed:", groqErr);
       if (geminiKey) {
         responseText = await callGemini();
       } else {
-        throw new Error("AI indisponible");
+        throw new Error(`AI indisponible — ${(groqErr as Error).message}`);
       }
     }
 

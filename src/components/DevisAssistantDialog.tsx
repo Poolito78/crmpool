@@ -120,8 +120,8 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
   }, []);
 
   const produitsCatalog = produits.length > 0
-    ? produits.slice(0, 100).map(p =>
-        `ID:"${p.id}" Réf:"${p.reference}" Desc:"${p.description.slice(0, 60)}" Prix:${p.prixHT} Unité:${p.unite}`
+    ? produits.slice(0, 200).map(p =>
+        `ID:"${p.id}" Réf:"${p.reference}" Cat:"${p.categorie || ''}" Desc:"${p.description.slice(0, 50)}" Prix:${p.prixHT} Unité:${p.unite}`
       ).join('\n')
     : null;
 
@@ -143,7 +143,8 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
     setLoading(true);
 
     try {
-      const history = messages.map(m => ({ role: m.role, content: m.content }));
+      // Garde les 10 derniers messages pour éviter les dépassements de tokens Groq
+      const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke('devis-assistant', {
         body: { message: userContent, history, devisContext, produitsCatalog },
       });
