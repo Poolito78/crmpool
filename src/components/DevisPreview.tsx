@@ -166,21 +166,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         {/* Espace libre en haut pour impression (entête papier à en-tête) */}
         <div style={{ height: '0.75cm' }} />
         {/* Header */}
-        <div className="flex justify-between items-start mb-5">
-          <div>
-            <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
-            <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
-            <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
-            <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
-            <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
-          </div>
-          <div className="text-right">
-            <h1 className="font-heading text-3xl font-bold tracking-tight">DEVIS</h1>
-            <p className="text-lg font-semibold text-primary mt-1">{devis.numero}</p>
-          </div>
-        </div>
-
-        {/* Info grid — 3 colonnes : facturation | livraison | infos devis */}
         {(() => {
           const refDate = devis.dateEnvoi || devis.dateCreation;
           const displayValidite = (() => {
@@ -193,57 +178,80 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             return devis.dateValidite;
           })();
           return (
-            <div className="grid grid-cols-3 gap-4 mb-5">
-              {/* Adresse facturation */}
-              <div className="bg-muted/30 rounded-lg p-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
-                <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
-                {client && <p className="text-muted-foreground">{client.adresse}</p>}
-                {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                {client?.email && <p className="text-muted-foreground">{client.email}</p>}
-              </div>
-              {/* Adresse livraison */}
-              <div className="bg-muted/30 rounded-lg p-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
-                {(() => {
-                  const adresseLivraison = devis.adresseLivraisonId
-                    ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
-                    : null;
-                  if (adresseLivraison) {
-                    return (
-                      <>
-                        <p className="font-semibold">{adresseLivraison.libelle}</p>
-                        <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
-                        <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
-                        {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
-                        {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
-                      </>
-                    );
-                  }
-                  return (
-                    <>
-                      <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                      {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
-                      {client && <p className="text-muted-foreground">{client.adresse}</p>}
-                      {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                    </>
-                  );
-                })()}
-              </div>
-              {/* Infos devis */}
-              <div className="bg-muted/30 rounded-lg p-4">
-                <div className="space-y-1">
-                  <div className="flex justify-between"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
-                  {devis.referenceAffaire && <div className="flex justify-between gap-2"><span className="text-muted-foreground whitespace-nowrap">Réf. affaire :</span><span className="font-medium text-right">{devis.referenceAffaire}</span></div>}
-                  {devis.systeme && <div className="flex justify-between gap-2"><span className="text-muted-foreground whitespace-nowrap">Système :</span><span className="font-medium text-right">{devis.systeme}</span></div>}
-                  {(devis.surfaceGlobaleM2 || 0) > 0 && (
-                    <div className="flex justify-between"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
-                  )}
+            <>
+              {/* Ligne 1 : logo + DEVIS / numéro / date / validité */}
+              <div className="flex justify-between items-start mb-5">
+                <div>
+                  <img src={logoIsofloor} alt="ISOFLOOR" className="h-11 mb-2" />
+                  <p className="text-muted-foreground text-xs">ZA DU MONAY</p>
+                  <p className="text-muted-foreground text-xs">71210 SAINT-EUSEBE</p>
+                  <p className="text-muted-foreground text-xs">Tél : 03 85 77 07 25</p>
+                  <p className="text-muted-foreground text-xs">Mail : contact@isofloor.fr</p>
+                </div>
+                <div className="text-right">
+                  <h1 className="font-heading text-3xl font-bold tracking-tight">DEVIS</h1>
+                  <p className="text-lg font-semibold text-primary mt-1">{devis.numero}</p>
+                  <div className="mt-2 space-y-0.5 text-sm">
+                    <div className="flex justify-end gap-4"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
+                    <div className="flex justify-end gap-4"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
+                  </div>
                 </div>
               </div>
-            </div>
+
+              {/* Ligne 2 : adresses */}
+              <div className="grid grid-cols-2 gap-4 mb-3">
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
+                  <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                  {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                  {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                  {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                  {client?.email && <p className="text-muted-foreground">{client.email}</p>}
+                </div>
+                <div className="bg-muted/30 rounded-lg p-4">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
+                  {(() => {
+                    const adresseLivraison = devis.adresseLivraisonId
+                      ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
+                      : null;
+                    if (adresseLivraison) {
+                      return (
+                        <>
+                          <p className="font-semibold">{adresseLivraison.libelle}</p>
+                          <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
+                          <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
+                          {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
+                          {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                        {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                        {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                        {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Ligne 3 : réf affaire + système (gauche) */}
+              {(devis.referenceAffaire || devis.systeme || (devis.surfaceGlobaleM2 || 0) > 0) && (
+                <div className="flex gap-6 mb-4 text-sm">
+                  {devis.referenceAffaire && (
+                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
+                  )}
+                  {devis.systeme && (
+                    <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">Système :</span><span className="font-medium">{devis.systeme}</span></div>
+                  )}
+                  {(devis.surfaceGlobaleM2 || 0) > 0 && (
+                    <div className="flex gap-2"><span className="text-muted-foreground">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
+                  )}
+                </div>
+              )}
+            </>
           );
         })()}
 
