@@ -31,6 +31,13 @@ RÈGLES pour les lignes :
 - Propose toutes les lignes nécessaires pour le système complet (primaire, produit principal, finition, etc.)
 - Pour les systèmes multi-composants, crée une ligne par produit/étape
 
+FILTRAGE PAR CATÉGORIE :
+Le catalogue contient un champ "cat" qui est la catégorie exacte du produit (ex: MMA, PIGMENTS, FLOWFAST, etc.).
+- Quand l'utilisateur demande des produits d'une catégorie (ex: "produits MMA"), filtre STRICTEMENT sur le champ cat = valeur exacte demandée
+- Ne jamais inclure un produit d'une autre catégorie (ex: PIGMENTS ≠ MMA, même si utilisé avec des produits MMA)
+- Si un produit n'a pas de catégorie correspondante, ne pas l'inclure dans les calculs de cette catégorie
+- Pour les calculs financiers (totaux, pourcentages), n'utiliser que les lignes du devis dont le produit appartient à la catégorie demandée
+
 Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes).`;
 
 serve(async (req) => {
