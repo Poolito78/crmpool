@@ -8,6 +8,7 @@ import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontan
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
+import logoIsofloor from '@/assets/logo-isofloor.png';
 
 interface PjFichier {
   id: string;
@@ -322,7 +323,21 @@ Restant à ta disposition pour tout complément d'information.`
     if (!pdfContainerRef?.current || !devis) return;
     setGenerating(true);
     try {
-      pdfBase64Ref.current = await generatePdfFromElement(pdfContainerRef.current);
+      // Même options que le bouton PDF : logo + numéro + date en entête pages 2+
+      const logoDataUrl: string | null = await fetch(logoIsofloor)
+        .then(r => r.blob())
+        .then(blob => new Promise<string>(res => {
+          const reader = new FileReader();
+          reader.onload = () => res(reader.result as string);
+          reader.readAsDataURL(blob);
+        }))
+        .catch(() => null);
+      const refDate = devis.dateEnvoi || devis.dateCreation;
+      pdfBase64Ref.current = await generatePdfFromElement(pdfContainerRef.current, {
+        devisNumero: devis.numero,
+        devisDate: refDate ? formatDate(refDate) : undefined,
+        logoDataUrl: logoDataUrl ?? undefined,
+      });
       setPdfReady(true);
     } catch (err) {
       console.error('Erreur génération PDF:', err);
