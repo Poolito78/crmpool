@@ -340,7 +340,19 @@ Restant à ta disposition pour tout complément d'information.`
     if (!to || !devis || !pdfBase64Ref.current) return;
     setSending(true);
 
-    const pdfFileName = `Devis_${devis.numero}.pdf`;
+    const accentMap: Record<string, string> = {
+      'é':'e','è':'e','ê':'e','ë':'e','à':'a','â':'a','ä':'a',
+      'ù':'u','û':'u','ü':'u','ô':'o','ö':'o','î':'i','ï':'i','ç':'c',
+      'É':'E','È':'E','Ê':'E','À':'A','Â':'A','Ù':'U','Û':'U','Ô':'O','Î':'I','Ç':'C',
+    };
+    const sanitize = (s: string) =>
+      s.split('').map(c => accentMap[c] ?? c).join('')
+        .replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    const societe = client?.societe || client?.nom || '';
+    const fileNameParts: string[] = ['Devis', devis.numero];
+    if (societe) fileNameParts.push(sanitize(societe));
+    if (devis.referenceAffaire) fileNameParts.push(sanitize(devis.referenceAffaire));
+    const pdfFileName = fileNameParts.join('_') + '.pdf';
     const pdfBytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
 
     // 1. Sauvegarder PDF dans le dossier Préco
