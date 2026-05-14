@@ -978,7 +978,7 @@ export default function Devis() {
 
             {/* Lines */}
             <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
-              <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center justify-between sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border py-2 -mx-1 px-1 mb-2">
                 <Label className="text-base font-semibold">Lignes du devis</Label>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
