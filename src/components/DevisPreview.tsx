@@ -78,6 +78,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
+  // cellulesParLigne : nombre de cellules par ligne (0 = non renseigné)
+  const [cellulesParLigne, setCellulesParLigne] = useState<Record<string, number>>({});
 
   function getSurfaceLigne(ligneId: string): number {
     if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
@@ -86,6 +88,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
+  }
+  function getCellulesLigne(ligneId: string): number {
+    return cellulesParLigne[ligneId] ?? 0;
+  }
+  function setCellules(ligneId: string, val: number) {
+    setCellulesParLigne(prev => ({ ...prev, [ligneId]: val }));
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
@@ -546,9 +554,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {(hideControls || pdfMode) ? (
                           <span className="ml-2 text-xs text-muted-foreground">
                             {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
+                            {getCellulesLigne(l.id) > 0 ? ` · ${getCellulesLigne(l.id)} cell.` : ''}
                           </span>
                         ) : (
-                          <span className="ml-2 print:hidden">
+                          <span className="ml-2 print:hidden inline-flex items-center gap-1.5 flex-wrap">
                             <input
                               type="number" min={0} step={1}
                               value={getSurfaceLigne(l.id) || ''}
@@ -556,7 +565,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
                               placeholder="m²"
                             />
-                            <span className="text-xs text-muted-foreground ml-0.5">m²</span>
+                            <span className="text-xs text-muted-foreground">m²</span>
+                            <input
+                              type="number" min={0} step={1}
+                              value={getCellulesLigne(l.id) || ''}
+                              onChange={e => setCellules(l.id, parseInt(e.target.value) || 0)}
+                              className="w-10 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
+                              placeholder="0"
+                            />
+                            <span className="text-xs text-muted-foreground">cell.</span>
                           </span>
                         )}
                       </td>
