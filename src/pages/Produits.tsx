@@ -1625,6 +1625,15 @@ export default function Produits() {
                         >
                           <Trash className="w-3.5 h-3.5" />
                         </button>
+                        {/* Note */}
+                        <div className="w-full pl-5">
+                          <Input
+                            value={lk.note || ''}
+                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, note: e.target.value || undefined }))}
+                            placeholder="Note (optionnelle)…"
+                            className="h-6 text-xs text-muted-foreground bg-transparent border-transparent hover:border-input focus:border-input"
+                          />
+                        </div>
                       </div>
                     );
                   })}

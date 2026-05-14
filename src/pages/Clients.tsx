@@ -215,7 +215,21 @@ export default function Clients() {
         : { text: iaText };
       const { data, error } = await supabase.functions.invoke('extract-client', { body });
       if (error) throw error;
-      const r = data as Record<string, string>;
+      const r = data as any;
+      // Adresses supplémentaires détectées par l'IA
+      const newAdresses: AdresseLivraison[] = Array.isArray(r.adresses) && r.adresses.length > 0
+        ? r.adresses.map((a: any) => ({
+            id: generateId(),
+            libelle: a.libelle || (a.type === 'facturation' ? 'Facturation' : 'Livraison'),
+            adresse: a.adresse || '',
+            ville: a.ville || '',
+            codePostal: a.codePostal || '',
+            contact: a.contact || '',
+            telephone: a.telephone || '',
+            parDefaut: false,
+            type: (a.type === 'facturation' ? 'facturation' : 'livraison') as 'facturation' | 'livraison',
+          }))
+        : [];
       setForm(prev => ({
         ...prev,
         societe:          r.societe         || prev.societe,
@@ -227,11 +241,15 @@ export default function Clients() {
         ville:            r.ville           || prev.ville,
         codePostal:       r.codePostal      || prev.codePostal,
         notes:            r.notes           ? (prev.notes ? prev.notes + '\n' + r.notes : r.notes) : prev.notes,
+        adressesLivraison: newAdresses.length > 0
+          ? [...(prev.adressesLivraison || []), ...newAdresses]
+          : prev.adressesLivraison,
       }));
       setIaOpen(false);
       setIaText('');
       setIaImage(null);
-      toast.success('Coordonnées extraites par IA');
+      const adresseMsg = newAdresses.length > 0 ? ` + ${newAdresses.length} adresse${newAdresses.length > 1 ? 's' : ''} détectée${newAdresses.length > 1 ? 's' : ''}` : '';
+      toast.success('Coordonnées extraites par IA' + adresseMsg);
     } catch (e: any) {
       toast.error('Erreur IA : ' + (e.message ?? 'indisponible'));
     } finally {
