@@ -122,7 +122,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 min-w-full w-80 rounded-md border border-border bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b border-border px-2">
             <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <input
