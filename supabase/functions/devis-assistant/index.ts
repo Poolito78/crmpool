@@ -48,7 +48,7 @@ serve(async (req) => {
     // Build enriched system prompt with context
     let systemContent = SYSTEM_PROMPT;
     if (produitsCatalog) {
-      systemContent += `\n\n--- CATALOGUE PRODUITS DISPONIBLES ---\n${produitsCatalog}\n---`;
+      systemContent += `\n\n--- CATALOGUE PRODUITS (format: id|ref|cat|desc|prixHT|unite) ---\n${produitsCatalog}\n---`;
     }
     if (devisContext) {
       systemContent += `\n\n--- DEVIS EN COURS ---\n${devisContext}\n---`;

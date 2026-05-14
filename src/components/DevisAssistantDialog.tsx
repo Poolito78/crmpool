@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -119,11 +119,20 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
     setAttachedFile({ name: file.name, content });
   }, []);
 
-  const produitsCatalog = produits.length > 0
-    ? produits.slice(0, 200).map(p =>
-        `ID:"${p.id}" Réf:"${p.reference}" Cat:"${p.categorie || ''}" Desc:"${p.description.slice(0, 50)}" Prix:${p.prixHT} Unité:${p.unite}`
-      ).join('\n')
-    : null;
+  const produitsCatalog = useMemo(() => {
+    if (produits.length === 0) return null;
+    // Format compact : pipe-séparé pour minimiser les tokens
+    const lines: string[] = [];
+    let chars = 0;
+    const MAX_CHARS = 6000;
+    for (const p of produits) {
+      const line = `${p.id}|${p.reference}|${p.categorie || ''}|${p.description.slice(0, 40)}|${p.prixHT}|${p.unite}`;
+      if (chars + line.length > MAX_CHARS) break;
+      lines.push(line);
+      chars += line.length + 1;
+    }
+    return `id|ref|cat|desc|prixHT|unite\n${lines.join('\n')}`;
+  }, [produits]);
 
   async function send() {
     const text = input.trim();
