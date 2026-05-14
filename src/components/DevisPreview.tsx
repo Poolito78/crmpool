@@ -162,7 +162,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       {/* Devis document — effet page A4 */}
       <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
            style={{ width: '100%', maxWidth: '794px' }}>
-      <div className="px-10 py-7 text-sm" id="devis-print" ref={printAreaRef}>
+      <div className="px-10 pb-7 text-sm" style={{ paddingTop: '3.5rem' }} id="devis-print" ref={printAreaRef}>
+        {/* Espace libre en haut pour impression (entête papier à en-tête) */}
+        <div style={{ height: '2.5cm' }} />
         {/* Header */}
         <div className="flex justify-between items-start mb-5">
           <div>

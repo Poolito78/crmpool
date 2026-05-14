@@ -103,9 +103,30 @@ export async function generatePdfFromElement(
   const ph = pdf.internal.pageSize.getHeight();
   const imgH = (canvas.height * pw) / canvas.width;
 
-  // Zone réservée en bas pour le pied de page
-  const footerH = 10;
+  // Zone réservée en bas pour le pied de page (mentions légales + numéro de page)
+  const footerH = 14;
   const contentH = ph - footerH;
+
+  const LEGAL_LINE1 = 'ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr';
+  const LEGAL_LINE2 = 'SAS au capital de 40 000 € • RCS Chalon-sur-Saône 494922313 • SIRET 4949223130005 • APE 4669B • TVA FR76494922313';
+
+  function drawFooter(pageNum: number, totalPages: number) {
+    // Trait de séparation
+    pdf.setDrawColor(200, 200, 200);
+    pdf.setLineWidth(0.2);
+    pdf.line(8, ph - footerH + 1, pw - 8, ph - footerH + 1);
+    // Mentions légales
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(130, 130, 130);
+    pdf.text(LEGAL_LINE1, pw / 2, ph - footerH + 5, { align: 'center' });
+    pdf.text(LEGAL_LINE2, pw / 2, ph - footerH + 9, { align: 'center' });
+    // Numéro de page
+    pdf.setFontSize(8);
+    pdf.text(`Page ${pageNum} / ${totalPages}`, pw / 2, ph - 2, { align: 'center' });
+    if (pageNum > 1 && opts?.devisNumero) {
+      pdf.text(opts.devisNumero, pw - 8, ph - 2, { align: 'right' });
+    }
+  }
 
   // Si le dépassement est inférieur à 100 mm, on réduit pour tenir sur une page
   const overflow = imgH - contentH;
@@ -114,6 +135,7 @@ export async function generatePdfFromElement(
   if (forceSinglePage) {
     // Pleine largeur, légère compression verticale pour tenir sur une page
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH);
+    drawFooter(1, 1);
   } else {
     const totalPages = Math.ceil(imgH / contentH);
     let yOffset = 0, page = 0;
@@ -126,13 +148,7 @@ export async function generatePdfFromElement(
       tmp.width = canvas.width; tmp.height = Math.round(srcH);
       tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
       pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, availH);
-
-      pdf.setFontSize(8);
-      pdf.setTextColor(150, 150, 150);
-      pdf.text(`Page ${page + 1} / ${totalPages}`, pw / 2, ph - 4, { align: 'center' });
-      if (page > 0 && opts?.devisNumero) {
-        pdf.text(opts.devisNumero, pw - 8, ph - 4, { align: 'right' });
-      }
+      drawFooter(page + 1, totalPages);
 
       yOffset += contentH; page++;
     }
