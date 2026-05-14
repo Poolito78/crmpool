@@ -130,7 +130,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     await new Promise(resolve => setTimeout(resolve, 80));
 
     try {
-      const fileName = `Devis_${devis.numero}.pdf`;
+      // Nom du fichier : Devis_NUMERO_Société_RéfAffaire.pdf
+      const sanitize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      const societe = client?.societe || client?.nom || '';
+      const parts = [
+        'Devis',
+        devis.numero,
+        ...(societe ? [sanitize(societe)] : []),
+        ...(devis.referenceAffaire ? [sanitize(devis.referenceAffaire)] : []),
+      ];
+      const fileName = parts.join('_') + '.pdf';
       // Prépare le logo en data URL pour l'entête répété sur pages 2+
       const logoDataUrl: string | null = await fetch(logoIsofloor)
         .then(r => r.blob())
