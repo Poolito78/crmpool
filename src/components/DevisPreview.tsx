@@ -78,9 +78,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
-  // cellulesParLigne : override local (en aperçu interactif) — sinon fallback sur l.cellules stocké
-  const [cellulesParLigne, setCellulesParLigne] = useState<Record<string, number>>({});
-
   function getSurfaceLigne(ligneId: string): number {
     if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
     const ligne = devis.lignes.find(l => l.id === ligneId);
@@ -88,14 +85,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
-  }
-  function getCellulesLigne(ligneId: string): number {
-    if (cellulesParLigne[ligneId] !== undefined) return cellulesParLigne[ligneId];
-    const ligne = devis.lignes.find(l => l.id === ligneId);
-    return ligne?.cellules ?? 0;
-  }
-  function setCellules(ligneId: string, val: number) {
-    setCellulesParLigne(prev => ({ ...prev, [ligneId]: val }));
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
@@ -447,7 +436,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           }
           sumTotalKg = Math.round(sumTotalKg * 100) / 100;
           sumCondKg = Math.round(sumCondKg * 10) / 10;
-          const refSurface = surfaceGlobale > 0 ? surfaceGlobale : null;
+          // refSurface : surface globale du preview en priorité, sinon max des surfaces des lignes
+          const surfacesLignes = allLines.map(ld => getSurfaceLigne(ld.l.id)).filter(s => s > 0);
+          const maxLineSurface = surfacesLignes.length > 0 ? Math.max(...surfacesLignes) : 0;
+          const refSurface = surfaceGlobale > 0 ? surfaceGlobale : maxLineSurface > 0 ? maxLineSurface : null;
           const coutChantierM2 = refSurface && sumCoutConsoHT > 0
             ? Math.round(sumCoutConsoHT / refSurface * 100) / 100 : null;
 
@@ -554,12 +546,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
                         {(hideControls || pdfMode) ? (
-                          <span className="ml-2 text-xs text-muted-foreground">
-                            {getSurfaceLigne(l.id) > 0 ? `${getSurfaceLigne(l.id)} m²` : ''}
-                            {getCellulesLigne(l.id) > 0 ? ` · ${getCellulesLigne(l.id)} cell.` : ''}
-                          </span>
+                          getSurfaceLigne(l.id) > 0 ? (
+                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                          ) : null
                         ) : (
-                          <span className="ml-2 print:hidden inline-flex items-center gap-1.5 flex-wrap">
+                          <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
                             <input
                               type="number" min={0} step={1}
                               value={getSurfaceLigne(l.id) || ''}
@@ -568,14 +559,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               placeholder="m²"
                             />
                             <span className="text-xs text-muted-foreground">m²</span>
-                            <input
-                              type="number" min={0} step={1}
-                              value={getCellulesLigne(l.id) || ''}
-                              onChange={e => setCellules(l.id, parseInt(e.target.value) || 0)}
-                              className="w-10 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                              placeholder="0"
-                            />
-                            <span className="text-xs text-muted-foreground">cell.</span>
                           </span>
                         )}
                       </td>
