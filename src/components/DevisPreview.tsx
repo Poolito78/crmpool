@@ -239,7 +239,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
               {/* Ligne 3 : réf affaire + système (gauche) */}
               {(devis.referenceAffaire || devis.systeme || (devis.surfaceGlobaleM2 || 0) > 0) && (
-                <div className="flex gap-6 mb-4 text-sm">
+                <div className="space-y-0.5 mb-4 text-sm">
                   {devis.referenceAffaire && (
                     <div className="flex gap-2"><span className="text-muted-foreground whitespace-nowrap">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
                   )}
