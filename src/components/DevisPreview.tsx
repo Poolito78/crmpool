@@ -614,12 +614,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         </tr>
                       ) : null
                     )}
-                    {/* Note de ligne â€” colspan toute la table */}
+                    {/* Note de ligne — colspan toute la table */}
                     {l.note && (() => {
                       const ralStyle = getRalStyle(l.note!);
                       return (
-                        <tr className="border-b border-border/60" style={ralStyle ? { backgroundColor: ralStyle.backgroundColor } : {}}>
-                          <td colSpan={9} className="py-1 px-2 text-xs italic" style={ralStyle ? { color: ralStyle.color } : undefined}>{l.note}</td>
+                        <tr className=”border-b border-border/60”>
+                          <td colSpan={9} className=”py-1 px-2 text-xs italic”>
+                            {ralStyle
+                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '1px 8px', borderRadius: '3px', display: 'inline-block' }}>{l.note}</span>
+                              : <span className=”text-muted-foreground”>{l.note}</span>
+                            }
+                          </td>
                         </tr>
                       );
                     })()}
@@ -738,8 +743,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       {l.note && (() => {
                         const ralStyle = getRalStyle(l.note!);
                         return (
-                          <tr className="border-b border-border/60" style={ralStyle ? { backgroundColor: ralStyle.backgroundColor } : {}}>
-                            <td colSpan={colSpan} className="py-1 px-2 text-xs italic" style={ralStyle ? { color: ralStyle.color } : undefined}>{l.note}</td>
+                          <tr className="border-b border-border/60">
+                            <td colSpan={colSpan} className="py-1 px-2 text-xs italic">
+                              {ralStyle
+                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '1px 8px', borderRadius: '3px', display: 'inline-block' }}>{l.note}</span>
+                                : <span className="text-muted-foreground">{l.note}</span>
+                              }
+                            </td>
                           </tr>
                         );
                       })()}
