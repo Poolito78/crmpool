@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
+import { supabase } from '@/integrations/supabase/client';
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
@@ -110,6 +111,9 @@ export default function Clients() {
   const [importMode, setImportMode] = useState<'add' | 'update'>('add');
   const [importMatchKey, setImportMatchKey] = useState<'nom' | 'societe'>('nom');
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [iaText, setIaText] = useState('');
+  const [iaLoading, setIaLoading] = useState(false);
+  const [iaOpen, setIaOpen] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
@@ -199,6 +203,35 @@ export default function Clients() {
     }
     setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts });
     setDialogOpen(true);
+  }
+
+  async function extractClientFromIA(text: string) {
+    if (!text.trim()) return;
+    setIaLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-client', { body: { text } });
+      if (error) throw error;
+      const r = data as Record<string, string>;
+      setForm(prev => ({
+        ...prev,
+        societe:          r.societe         || prev.societe,
+        nom:              r.nom             || prev.nom,
+        email:            r.email           || prev.email,
+        telephone:        r.telephone       || prev.telephone,
+        telephoneMobile:  r.telephoneMobile || prev.telephoneMobile,
+        adresse:          r.adresse         || prev.adresse,
+        ville:            r.ville           || prev.ville,
+        codePostal:       r.codePostal      || prev.codePostal,
+        notes:            r.notes           ? (prev.notes ? prev.notes + '\n' + r.notes : r.notes) : prev.notes,
+      }));
+      setIaOpen(false);
+      setIaText('');
+      toast.success('Coordonnées extraites par IA');
+    } catch (e: any) {
+      toast.error('Erreur IA : ' + (e.message ?? 'indisponible'));
+    } finally {
+      setIaLoading(false);
+    }
   }
 
   function save() {
@@ -700,11 +733,58 @@ export default function Clients() {
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
-          {!editingClient && (
-            <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
-              <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
-            </Button>
-          )}
+
+          {/* Zone IA — extraction automatique des coordonnées */}
+          <div className="space-y-2">
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => { setIaOpen(o => !o); setIaText(''); }}
+              >
+                <Bot className="w-3.5 h-3.5 mr-1.5" /> Claude IA — remplir depuis texte / email
+              </Button>
+              {!editingClient && (
+                <Button variant="outline" size="sm" className="border-dashed text-muted-foreground hover:text-foreground" onClick={() => setEmailDialogOpen(true)}>
+                  <Mail className="w-3.5 h-3.5 mr-1.5" /> Email
+                </Button>
+              )}
+            </div>
+            {iaOpen && (
+              <div
+                className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-3 space-y-2"
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => {
+                  e.preventDefault();
+                  const text = e.dataTransfer.getData('text/plain');
+                  if (text?.trim()) { setIaText(text.trim()); }
+                }}
+              >
+                <p className="text-xs text-muted-foreground">Collez ou glissez un email, une signature, une carte de visite…</p>
+                <textarea
+                  autoFocus
+                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs resize-none focus:outline-none focus:ring-1 focus:ring-primary"
+                  rows={4}
+                  value={iaText}
+                  onChange={e => setIaText(e.target.value)}
+                  onPaste={e => {
+                    const text = e.clipboardData.getData('text/plain');
+                    if (text?.trim()) setIaText(text.trim());
+                  }}
+                  placeholder="Ex: CS ROUTE — Hugo Dias Da Silva&#10;91 Rue de la Madeleine, 22200 Grâces&#10;direction.csroute@gmail.com · 06 12 34 56 78"
+                />
+                <Button
+                  size="sm"
+                  className="w-full"
+                  disabled={!iaText.trim() || iaLoading}
+                  onClick={() => extractClientFromIA(iaText)}
+                >
+                  {iaLoading ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Extraction…</> : <><Bot className="w-3.5 h-3.5 mr-1.5" /> Extraire les coordonnées</>}
+                </Button>
+              </div>
+            )}
+          </div>
           <div className="grid gap-3 py-2">
             {/* Société — identifiant principal */}
             <div>
