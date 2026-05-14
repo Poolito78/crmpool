@@ -6,6 +6,53 @@ import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 
+// ─── Couleurs RAL ─────────────────────────────────────────────────────────────
+const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
+  '1003':{ hex:'#F9A800', dark:false }, '1007':{ hex:'#DCA300', dark:false },
+  '1013':{ hex:'#EAE6CA', dark:false }, '1014':{ hex:'#E1CC4F', dark:false },
+  '1015':{ hex:'#E6D690', dark:false }, '1016':{ hex:'#EDFF21', dark:false },
+  '1018':{ hex:'#F8F32B', dark:false }, '1021':{ hex:'#F3DA0B', dark:false },
+  '1023':{ hex:'#FAD201', dark:false }, '1028':{ hex:'#F4A900', dark:false },
+  '2002':{ hex:'#CB2821', dark:true  }, '2004':{ hex:'#F44611', dark:true  },
+  '2008':{ hex:'#F75E25', dark:true  }, '2011':{ hex:'#EC7C26', dark:false },
+  '3000':{ hex:'#AF2B1E', dark:true  }, '3002':{ hex:'#A2231D', dark:true  },
+  '3020':{ hex:'#CC0605', dark:true  }, '3022':{ hex:'#D95030', dark:true  },
+  '4003':{ hex:'#DE4C8A', dark:true  }, '4005':{ hex:'#6C4675', dark:true  },
+  '5002':{ hex:'#20214F', dark:true  }, '5005':{ hex:'#1E2460', dark:true  },
+  '5010':{ hex:'#0E294B', dark:true  }, '5012':{ hex:'#3B83BD', dark:true  },
+  '5015':{ hex:'#2271B3', dark:true  }, '5017':{ hex:'#063971', dark:true  },
+  '5021':{ hex:'#256D7B', dark:true  }, '5024':{ hex:'#5D9B9B', dark:false },
+  '6002':{ hex:'#2D572C', dark:true  }, '6005':{ hex:'#2F4538', dark:true  },
+  '6010':{ hex:'#35682D', dark:true  }, '6011':{ hex:'#587246', dark:true  },
+  '6018':{ hex:'#4C9141', dark:true  }, '6019':{ hex:'#9ED58C', dark:false },
+  '6024':{ hex:'#354733', dark:true  }, '6029':{ hex:'#20603D', dark:true  },
+  '7016':{ hex:'#293133', dark:true  }, '7021':{ hex:'#23282B', dark:true  },
+  '7035':{ hex:'#D7D7D7', dark:false }, '7037':{ hex:'#7D7D7B', dark:true  },
+  '7040':{ hex:'#9DA1AA', dark:false }, '7042':{ hex:'#8F9695', dark:false },
+  '7047':{ hex:'#D0D0D0', dark:false },
+  '8001':{ hex:'#955F20', dark:true  }, '8003':{ hex:'#734222', dark:true  },
+  '8004':{ hex:'#8E402A', dark:true  }, '8017':{ hex:'#2F1507', dark:true  },
+  '9001':{ hex:'#FDF4E3', dark:false }, '9002':{ hex:'#E7EBDA', dark:false },
+  '9003':{ hex:'#F4F4F4', dark:false }, '9004':{ hex:'#282828', dark:true  },
+  '9005':{ hex:'#0A0A0A', dark:true  }, '9006':{ hex:'#A5A5A5', dark:false },
+  '9007':{ hex:'#8F8F8F', dark:false }, '9010':{ hex:'#FFFFFF', dark:false },
+  '9011':{ hex:'#1C1C1C', dark:true  }, '9016':{ hex:'#F6F6F6', dark:false },
+  '9017':{ hex:'#1E1E1E', dark:true  }, '9018':{ hex:'#D7D7D7', dark:false },
+};
+
+function getRalStyle(note: string): { backgroundColor: string; color: string; border?: string } | undefined {
+  const m = note.match(/RAL\s+(?:[A-Za-zÀ-ÿ]+\s+)*(\d{4})/i);
+  if (!m) return undefined;
+  const c = RAL_COLORS[m[1]];
+  if (!c) return undefined;
+  const isWhite = c.hex === '#FFFFFF' || c.hex === '#F6F6F6' || c.hex === '#F4F4F4';
+  return {
+    backgroundColor: c.hex,
+    color: c.dark ? '#ffffff' : '#1a1a1a',
+    ...(isWhite ? { border: '1px solid #ddd' } : {}),
+  };
+}
+
 interface Props {
   devis: Devis;
   client?: Client;
@@ -550,11 +597,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       ) : null
                     )}
                     {/* Note de ligne — colspan toute la table */}
-                    {l.note && (
-                      <tr className="border-b border-border/60">
-                        <td colSpan={9} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
-                      </tr>
-                    )}
+                    {l.note && (() => {
+                      const ralStyle = getRalStyle(l.note!);
+                      return (
+                        <tr className="border-b border-border/60" style={ralStyle ? { backgroundColor: ralStyle.backgroundColor } : {}}>
+                          <td colSpan={9} className="py-1 px-2 text-xs italic" style={ralStyle ? { color: ralStyle.color } : undefined}>{l.note}</td>
+                        </tr>
+                      );
+                    })()}
                   </Fragment>
                     );
                   });
@@ -667,11 +717,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {l.note && (
-                        <tr className="border-b border-border/60">
-                          <td colSpan={colSpan} className="py-1 px-2 text-xs text-muted-foreground italic">{l.note}</td>
-                        </tr>
-                      )}
+                      {l.note && (() => {
+                        const ralStyle = getRalStyle(l.note!);
+                        return (
+                          <tr className="border-b border-border/60" style={ralStyle ? { backgroundColor: ralStyle.backgroundColor } : {}}>
+                            <td colSpan={colSpan} className="py-1 px-2 text-xs italic" style={ralStyle ? { color: ralStyle.color } : undefined}>{l.note}</td>
+                          </tr>
+                        );
+                      })()}
                     </Fragment>
                   );
                 });
