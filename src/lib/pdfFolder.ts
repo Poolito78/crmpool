@@ -90,7 +90,7 @@ export async function writeFileToFolder(
 
 export async function generatePdfFromElement(
   element: HTMLElement,
-  opts?: { devisNumero?: string },
+  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string },
 ): Promise<string> {
   const canvas = await html2canvas(element, {
     scale: 2,
@@ -105,7 +105,12 @@ export async function generatePdfFromElement(
 
   // Zone réservée en bas pour le pied de page (mentions légales + numéro de page)
   const footerH = 12;
-  const contentH = ph - footerH;
+  // Entête répété sur pages 2+ (logo + DEVIS + numéro + date)
+  const headerH = 14;
+  // Page 1 : hauteur pleine ; pages suivantes : réduite de headerH
+  const contentH1 = ph - footerH;          // page 1
+  const contentHn = ph - footerH - headerH; // pages 2+
+  const contentH = contentH1;              // alias pour calculs globaux
 
   const LEGAL_LINE1 = 'ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr';
   const LEGAL_LINE2 = 'SAS au capital de 40 000 € • RCS Chalon-sur-Saône 494922313 • SIRET 4949223130005 • APE 4669B • TVA FR76494922313';
@@ -127,6 +132,38 @@ export async function generatePdfFromElement(
       pdf.setFontSize(7);
       pdf.text(opts.devisNumero, 8, ph - footerH + 8.5, { align: 'left' });
     }
+  }
+
+  // Entête répété sur pages 2+ : logo + DEVIS + numéro + date
+  function drawPageHeader() {
+    // Ligne de séparation rouge en bas de l'entête
+    pdf.setDrawColor(204, 0, 0);
+    pdf.setLineWidth(0.4);
+    pdf.line(8, headerH, pw - 8, headerH);
+    // Logo
+    if (opts?.logoDataUrl) {
+      try {
+        const logoW = 28; const logoH = 8;
+        pdf.addImage(opts.logoDataUrl, 'PNG', 8, 2, logoW, logoH);
+      } catch { /* ignore si logo indisponible */ }
+    }
+    // DEVIS + numéro + date (droite)
+    pdf.setFontSize(11);
+    pdf.setTextColor(30, 30, 30);
+    pdf.setFont('helvetica', 'bold');
+    pdf.text('DEVIS', pw - 8, 6, { align: 'right' });
+    if (opts?.devisNumero) {
+      pdf.setFontSize(9);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setTextColor(0, 80, 200);
+      pdf.text(opts.devisNumero, pw - 8, 11, { align: 'right' });
+    }
+    if (opts?.devisDate) {
+      pdf.setFontSize(7.5);
+      pdf.setTextColor(100, 100, 100);
+      pdf.text(opts.devisDate, pw - 8, headerH - 1, { align: 'right' });
+    }
+    pdf.setTextColor(30, 30, 30);
   }
 
   // Calcule les positions de saut de page en évitant de couper les <tr>
@@ -160,12 +197,13 @@ export async function generatePdfFromElement(
 
     const slices: number[] = [];
     let consumed = 0;
+    let pageIdx = 0;
     while (consumed < imgH) {
+      const pageContentH = pageIdx === 0 ? contentH1 : contentHn;
       const remaining = imgH - consumed;
-      if (remaining <= contentH) { slices.push(remaining); break; }
-      const naturalBreak = consumed + contentH;
-      // Dernier bord de <tr> qui tient dans la page (au moins 30% de la page doit être remplie)
-      const minBreak = consumed + contentH * 0.3;
+      if (remaining <= pageContentH) { slices.push(remaining); break; }
+      const naturalBreak = consumed + pageContentH;
+      const minBreak = consumed + pageContentH * 0.3;
       let bestBreak = naturalBreak;
       for (let i = rowBottoms.length - 1; i >= 0; i--) {
         if (rowBottoms[i] <= naturalBreak && rowBottoms[i] >= minBreak) {
@@ -176,24 +214,28 @@ export async function generatePdfFromElement(
       if (bestBreak <= consumed) bestBreak = naturalBreak;
       slices.push(bestBreak - consumed);
       consumed = bestBreak;
+      pageIdx++;
     }
     return slices;
   }
 
   // Si le dépassement est inférieur à 150 mm, on compresse pour tenir sur une page
-  const overflow = imgH - contentH;
+  const overflow = imgH - contentH1;
   const forceSinglePage = overflow > 0 && overflow < 150;
 
   if (forceSinglePage) {
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH);
+    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH1);
     drawFooter(1, 1);
   } else {
     const slices = computePageSlices();
     // Fallback si détection DOM échoue : découpe standard
     let effectiveSlices = slices.length > 0 ? slices : (() => {
       const fallback: number[] = [];
-      let y = 0;
-      while (y < imgH) { const h = Math.min(contentH, imgH - y); fallback.push(h); y += h; }
+      let y = 0; let idx = 0;
+      while (y < imgH) {
+        const h = Math.min(idx === 0 ? contentH1 : contentHn, imgH - y);
+        fallback.push(h); y += h; idx++;
+      }
       return fallback;
     })();
 
@@ -203,7 +245,7 @@ export async function generatePdfFromElement(
       merged = false;
       const last = effectiveSlices[effectiveSlices.length - 1];
       const prev = effectiveSlices[effectiveSlices.length - 2];
-      if (prev + last <= contentH) {
+      if (prev + last <= contentHn) {
         effectiveSlices = [...effectiveSlices.slice(0, -2), prev + last];
         merged = true;
       }
@@ -218,7 +260,10 @@ export async function generatePdfFromElement(
       const tmp = document.createElement('canvas');
       tmp.width = canvas.width; tmp.height = Math.max(1, srcH);
       tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, sliceH);
+      // Page 1 : contenu commence à y=0 ; pages suivantes : décalé sous l'entête
+      const yContent = page === 0 ? 0 : headerH;
+      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
+      if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
       yOffsetMm += sliceH; page++;
     }
@@ -231,7 +276,7 @@ export async function generatePdfFromElement(
 export async function savePdfFromElement(
   element: HTMLElement,
   fileName: string,
-  opts?: { devisNumero?: string },
+  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string },
 ): Promise<{ ok: boolean; folderName?: string; blobUrl: string }> {
   const base64 = await generatePdfFromElement(element, opts);
   const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
