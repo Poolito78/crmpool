@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit, type LigneKit } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -105,6 +105,8 @@ export default function Produits() {
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [isTypeKit, setIsTypeKit] = useState(false);
   const [lignesKit, setLignesKit] = useState<LigneKit[]>([]);
+  const [kitDragIdx, setKitDragIdx] = useState<number | null>(null);
+  const [kitDragOverIdx, setKitDragOverIdx] = useState<number | null>(null);
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
 
@@ -1512,7 +1514,28 @@ export default function Produits() {
                   {lignesKit.map((lk, idx) => {
                     const lkProd = lk.produitId ? produits.find(p => p.id === lk.produitId) : null;
                     return (
-                      <div key={idx} className="flex flex-wrap gap-1.5 items-end">
+                      <div
+                        key={idx}
+                        draggable
+                        onDragStart={() => setKitDragIdx(idx)}
+                        onDragOver={e => { e.preventDefault(); setKitDragOverIdx(idx); }}
+                        onDrop={() => {
+                          if (kitDragIdx === null || kitDragIdx === idx) { setKitDragIdx(null); setKitDragOverIdx(null); return; }
+                          setLignesKit(prev => {
+                            const next = [...prev];
+                            const [item] = next.splice(kitDragIdx, 1);
+                            next.splice(idx, 0, item);
+                            return next;
+                          });
+                          setKitDragIdx(null);
+                          setKitDragOverIdx(null);
+                        }}
+                        onDragEnd={() => { setKitDragIdx(null); setKitDragOverIdx(null); }}
+                        className={`flex flex-wrap gap-1.5 items-end rounded-lg p-1 transition-all border
+                          ${kitDragIdx === idx ? 'opacity-40 border-primary/20 bg-primary/5' : ''}
+                          ${kitDragOverIdx === idx && kitDragIdx !== idx ? 'border-primary border-2 shadow-md bg-primary/5' : kitDragIdx === idx ? '' : 'border-transparent'}`}
+                      >
+                        <GripVertical className="w-4 h-4 text-muted-foreground/40 shrink-0 cursor-grab active:cursor-grabbing mt-5" />
                         {/* Produit */}
                         <div className="flex flex-col gap-0.5 min-w-[160px] flex-1">
                           <span className="text-xs text-muted-foreground">Produit</span>
