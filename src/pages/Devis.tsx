@@ -358,7 +358,7 @@ export default function Devis() {
     const grpId = generateId();
     const subId = generateId();
     const newLignes: LigneDevis[] = [
-      { id: grpId, type: 'groupe', description: `${kitProd.reference} — ${kitProd.description}`, quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+      { id: grpId, type: 'groupe', description: kitProd.description, quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
       ...(kitProd.lignesKit || []).map(lk => ({
         id: generateId(),
         produitId: lk.produitId || undefined,
