@@ -130,15 +130,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     await new Promise(resolve => setTimeout(resolve, 80));
 
     try {
-      // Nom du fichier : Devis_NUMERO_Société_RéfAffaire.pdf
-      const sanitize = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9_\-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+      // Nom du fichier : Devis_NUMERO_Societe_RefAffaire.pdf
+      const accentMap: Record<string, string> = {
+        'é':'e','è':'e','ê':'e','ë':'e','à':'a','â':'a','ä':'a',
+        'ù':'u','û':'u','ü':'u','ô':'o','ö':'o','î':'i','ï':'i','ç':'c',
+        'É':'E','È':'E','Ê':'E','À':'A','Â':'A','Ù':'U','Û':'U','Ô':'O','Î':'I','Ç':'C',
+      };
+      const sanitize = (s: string) =>
+        s.split('').map(c => accentMap[c] ?? c).join('')
+          .replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
       const societe = client?.societe || client?.nom || '';
-      const parts = [
-        'Devis',
-        devis.numero,
-        ...(societe ? [sanitize(societe)] : []),
-        ...(devis.referenceAffaire ? [sanitize(devis.referenceAffaire)] : []),
-      ];
+      const parts: string[] = ['Devis', devis.numero];
+      if (societe) parts.push(sanitize(societe));
+      if (devis.referenceAffaire) parts.push(sanitize(devis.referenceAffaire));
       const fileName = parts.join('_') + '.pdf';
       // Prépare le logo en data URL pour l'entête répété sur pages 2+
       const logoDataUrl: string | null = await fetch(logoIsofloor)
