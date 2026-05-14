@@ -22,12 +22,11 @@ import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
 import { supabase } from '@/integrations/supabase/client';
 
-// ── Colonnes supplémentaires (mode surface) ───────────────────────────────────
+// ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
-  { key: 'surface',  label: 'Surface (m²)' },
-  { key: 'conso',    label: 'Conso. (kg/m²)' },
-  { key: 'poids',    label: 'Poids (kg)' },
-  { key: 'cellules', label: 'Nb cellules' },
+  { key: 'surface', label: 'Surface (m²)' },
+  { key: 'conso',   label: 'Conso. (kg/m²)' },
+  { key: 'poids',   label: 'Poids (kg)' },
 ] as const;
 type LigneColKey = typeof LIGNE_COLS[number]['key'];
 const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso'];
@@ -514,11 +513,11 @@ export default function Devis() {
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
-      let quantite = 1;
-      if (modeCalcul === 'surface' && surfaceGlobaleM2 > 0 && p.consommation && p.poids) {
+      let quantite = l.quantite;
+      if (surfaceGlobaleM2 > 0 && p.consommation && p.poids) {
         quantite = calcQuantiteSurface(p, surfaceGlobaleM2);
       }
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: modeCalcul === 'surface' ? quantite : l.quantite, surfaceM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
+      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
     }
   }
 
@@ -552,7 +551,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -563,7 +562,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -586,16 +585,16 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if (clientId && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul, surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined
+          ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
   }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
-  // Recalcul auto des quantités en mode surface — toutes les lignes suivent la surface globale
+  // Recalcul auto des quantités quand surface globale change — s'applique aux lignes ayant surface+conso
   useEffect(() => {
-    if (modeCalcul !== 'surface' || !dialogOpen || surfaceGlobaleM2 <= 0) return;
+    if (!dialogOpen || surfaceGlobaleM2 <= 0) return;
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
@@ -1065,26 +1064,15 @@ export default function Devis() {
               <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
             </div>
 
-            {/* Mode de calcul */}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-              <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold">Mode de calcul</p>
-                <div className="flex gap-2">
-                  <Button variant={modeCalcul === 'standard' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('standard')}>Standard</Button>
-                  <Button variant={modeCalcul === 'surface' ? 'default' : 'outline'} size="sm" onClick={() => setModeCalcul('surface')}>Surface (m²)</Button>
+            {/* Surface globale — si renseignée + conso produit → calcul auto quantité */}
+            <div className="border border-border rounded-lg p-3 bg-muted/30">
+              <div className="flex items-center gap-4">
+                <div className="w-48">
+                  <Label className="text-xs">Surface globale (m²)</Label>
+                  <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" />
                 </div>
+                <p className="text-xs text-muted-foreground mt-4">Si surface + conso. renseignées → quantité calculée automatiquement</p>
               </div>
-              {modeCalcul === 'surface' && (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground">Les quantités sont calculées automatiquement : Surface × Consommation (kg/m²) ÷ Conditionnement (kg) = Nb unités</p>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <Label className="text-xs">Surface globale (m²)</Label>
-                      <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Ex: 50" className="h-8 text-sm" />
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
 
             {/* Lines */}
@@ -1133,39 +1121,37 @@ export default function Devis() {
                     )}
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
-                  {modeCalcul === 'surface' && (
-                    <div ref={colChooserRef} className="relative">
-                      <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Choisir les cellules affichées sur chaque ligne">
-                        <Columns2 className="w-3 h-3 mr-1" /> Colonnes
-                      </Button>
-                      {colChooserOpen && (
-                        <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
-                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Cellules visibles</p>
-                          {LIGNE_COLS.map(col => (
-                            <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
-                              <input
-                                type="checkbox"
-                                checked={visibleLigneCols.has(col.key)}
-                                onChange={() => setVisibleLigneCols(prev => {
-                                  const next = new Set(prev);
-                                  next.has(col.key) ? next.delete(col.key) : next.add(col.key);
-                                  return next;
-                                })}
-                                className="rounded border-input accent-primary"
-                              />
-                              {col.label}
-                            </label>
-                          ))}
-                          <button
-                            className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
-                            onClick={() => setVisibleLigneCols(new Set(DEFAULT_LIGNE_COLS))}
-                          >
-                            Réinitialiser
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <div ref={colChooserRef} className="relative">
+                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Choisir les colonnes optionnelles sur chaque ligne">
+                      <Columns2 className="w-3 h-3 mr-1" /> Colonnes
+                    </Button>
+                    {colChooserOpen && (
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
+                        {LIGNE_COLS.map(col => (
+                          <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
+                            <input
+                              type="checkbox"
+                              checked={visibleLigneCols.has(col.key)}
+                              onChange={() => setVisibleLigneCols(prev => {
+                                const next = new Set(prev);
+                                next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                                return next;
+                              })}
+                              className="rounded border-input accent-primary"
+                            />
+                            {col.label}
+                          </label>
+                        ))}
+                        <button
+                          className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
+                          onClick={() => setVisibleLigneCols(new Set(DEFAULT_LIGNE_COLS))}
+                        >
+                          Réinitialiser
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-2">
@@ -1277,9 +1263,10 @@ export default function Devis() {
                     const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                     const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
                     const consoLigne = l.consommation ?? prod?.consommation;
-                    const kgReel = modeCalcul === 'surface' && surfaceVal > 0 && consoLigne != null && consoLigne > 0
+                    const kgReel = surfaceVal > 0 && consoLigne != null && consoLigne > 0
                       ? Math.round(surfaceVal * consoLigne * 1000) / 1000 : null;
-                    const consoVal = l.consommation ?? prod?.consommation;
+                    // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
+                    const hasAutoCalc = !!(surfaceVal > 0 && consoLigne != null && consoLigne > 0 && prod?.poids && prod.poids > 0);
 
                     const card = (
                       <div
@@ -1316,22 +1303,23 @@ export default function Devis() {
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
                               </div>
-                              {/* Surface m² — surface mode + col visible */}
-                              {modeCalcul === 'surface' && visibleLigneCols.has('surface') && (
+                              {/* Surface m² — col visible */}
+                              {visibleLigneCols.has('surface') && (
                                 <div className="w-24 shrink-0">
                                   <Label className="text-xs">Surface m²</Label>
                                   <div className="flex gap-0.5">
                                     <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
                                       const surface = parseFloat(e.target.value) || 0;
-                                      const quantite = prod && (l.consommation || prod.consommation) && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
+                                      const conso = l.consommation ?? prod?.consommation;
+                                      const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
                                       setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
                                     }} className="h-8 text-sm" placeholder="m²" />
                                     <button type="button" title="IA" onClick={() => setAiCalc({ ligneId: l.id, field: 'surfaceM2', label: `Surface m² — ${l.description || 'ligne'}`, current: l.surfaceM2 })} className="h-8 w-7 shrink-0 flex items-center justify-center rounded-md border border-border hover:bg-accent text-primary"><Bot className="w-3 h-3" /></button>
                                   </div>
                                 </div>
                               )}
-                              {/* Conso kg/m² — surface mode + col visible */}
-                              {modeCalcul === 'surface' && visibleLigneCols.has('conso') && (
+                              {/* Conso. kg/m² — col visible */}
+                              {visibleLigneCols.has('conso') && (
                                 <div className="w-24 shrink-0">
                                   <Label className="text-xs">Conso. kg/m²</Label>
                                   <div className="flex gap-0.5">
@@ -1346,32 +1334,18 @@ export default function Devis() {
                                   </div>
                                 </div>
                               )}
-                              {/* Poids — surface mode + col visible */}
-                              {modeCalcul === 'surface' && visibleLigneCols.has('poids') && (
+                              {/* Poids — col visible */}
+                              {visibleLigneCols.has('poids') && (
                                 <div className="w-16 shrink-0">
                                   <Label className="text-xs text-muted-foreground">Poids kg</Label>
                                   <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
                                 </div>
                               )}
-                              {/* Nb cellules — surface mode + col visible */}
-                              {modeCalcul === 'surface' && visibleLigneCols.has('cellules') && (
-                                <div className="w-16 shrink-0">
-                                  <Label className="text-xs">Cellules</Label>
-                                  <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className="h-8 text-sm" placeholder="0" />
-                                </div>
-                              )}
-                              {/* Qté */}
+                              {/* Qté — auto si surface+conso renseignées */}
                               <div className="w-16 shrink-0">
-                                <Label className="text-xs">{modeCalcul === 'surface' ? 'Qté auto' : 'Qté'}</Label>
-                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={modeCalcul === 'surface' && !!(l.produitId && produits.find(p => p.id === l.produitId)?.consommation)} />
+                                <Label className="text-xs">{hasAutoCalc ? 'Qté auto' : 'Qté'}</Label>
+                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />
                               </div>
-                              {/* Conso. standard (mode standard uniquement) */}
-                              {modeCalcul !== 'surface' && consoVal != null && (
-                                <div className="w-20 shrink-0">
-                                  <Label className="text-xs text-muted-foreground">Conso.</Label>
-                                  <Input type="number" step="0.01" value={consoVal ?? ''} onChange={e => { const v = e.target.value === '' ? undefined : parseFloat(e.target.value); setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: v } : li)); }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : '—'} />
-                                </div>
-                              )}
                               {/* Unité */}
                               <div className="w-14 shrink-0">
                                 <Label className="text-xs">Unité</Label>
