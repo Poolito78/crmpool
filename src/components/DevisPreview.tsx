@@ -78,7 +78,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
-  // cellulesParLigne : nombre de cellules par ligne (0 = non renseigné)
+  // cellulesParLigne : override local (en aperçu interactif) — sinon fallback sur l.cellules stocké
   const [cellulesParLigne, setCellulesParLigne] = useState<Record<string, number>>({});
 
   function getSurfaceLigne(ligneId: string): number {
@@ -90,7 +90,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
   }
   function getCellulesLigne(ligneId: string): number {
-    return cellulesParLigne[ligneId] ?? 0;
+    if (cellulesParLigne[ligneId] !== undefined) return cellulesParLigne[ligneId];
+    const ligne = devis.lignes.find(l => l.id === ligneId);
+    return ligne?.cellules ?? 0;
   }
   function setCellules(ligneId: string, val: number) {
     setCellulesParLigne(prev => ({ ...prev, [ligneId]: val }));

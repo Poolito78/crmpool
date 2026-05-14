@@ -242,6 +242,7 @@ export interface LigneDevis {
   remise: number;
   surfaceM2?: number;
   consommation?: number;
+  cellules?: number;
   note?: string;
 }
 

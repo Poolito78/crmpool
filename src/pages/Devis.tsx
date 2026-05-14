@@ -1259,7 +1259,7 @@ export default function Devis() {
                               <Label className="text-xs text-muted-foreground">Note (optionnelle)</Label>
                               <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Remarque sur cette ligne…" className="h-7 text-xs text-muted-foreground" />
                             </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 bg-accent/30 rounded-md p-2 gap-2">
+                            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 bg-accent/30 rounded-md p-2 gap-2">
                               {(() => {
                                 const consoValue = l.consommation ?? prod?.consommation ?? '';
                                 return (
@@ -1291,6 +1291,10 @@ export default function Devis() {
                                     <div>
                                       <Label className="text-xs text-muted-foreground">Poids (kg)</Label>
                                       <Input value={prod?.poids ? `${prod.poids} kg` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
+                                    </div>
+                                    <div>
+                                      <Label className="text-xs">Nb cellules</Label>
+                                      <Input type="number" min={0} step={1} value={l.cellules ?? ''} onChange={e => setLignes(prev => prev.map(li => li.id === l.id ? { ...li, cellules: parseInt(e.target.value) || undefined } : li))} className="h-8 text-sm" placeholder="0" />
                                     </div>
                                   </>
                                 );
