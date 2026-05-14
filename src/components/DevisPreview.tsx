@@ -164,7 +164,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
            style={{ width: '100%', maxWidth: '794px' }}>
       <div className="px-10 pb-7 text-sm" style={{ paddingTop: '1rem' }} id="devis-print" ref={printAreaRef}>
         {/* Espace libre en haut pour impression (entête papier à en-tête) */}
-        <div style={{ height: '1.5cm' }} />
+        <div style={{ height: '0.75cm' }} />
         {/* Header */}
         <div className="flex justify-between items-start mb-5">
           <div>
