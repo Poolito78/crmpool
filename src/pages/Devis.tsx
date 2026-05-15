@@ -15,6 +15,7 @@ import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
+import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
@@ -189,7 +190,7 @@ export default function Devis() {
     setReferenceAffaire(d.referenceAffaire || '');
     setSysteme(d.systeme || '');
     setNotes(d.notes || '');
-    setConditions(d.conditions || 'Paiement à 30 jours à compter de la date de facturation.');
+    setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
@@ -210,7 +211,7 @@ export default function Devis() {
     setReferenceAffaire('');
     setSysteme('');
     setNotes('');
-    setConditions('Paiement à 30 jours à compter de la date de facturation.');
+    setConditions('Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
@@ -928,7 +929,16 @@ export default function Devis() {
                 <ClientCombobox
                   clients={clients}
                   value={clientId}
-                  onSelect={(id) => { setClientId(id); setContactId(''); }}
+                  onSelect={(id) => {
+                    setClientId(id);
+                    setContactId('');
+                    // Auto-remplir les conditions depuis le délai de règlement du client
+                    if (id) {
+                      const c = clients.find(cl => cl.id === id);
+                      const opt = DELAI_REGLEMENT_OPTIONS.find(o => o.value === c?.delaiReglement);
+                      if (opt) setConditions(opt.conditions);
+                    }
+                  }}
                 />
                 {(() => {
                   const selectedClient = clients.find(c => c.id === clientId);

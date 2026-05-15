@@ -16,8 +16,18 @@ import { exportToExcel } from '@/lib/exportExcel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 import { supabase } from '@/integrations/supabase/client';
 
+const DELAI_REGLEMENT_OPTIONS = [
+  { value: 'Comptant',  label: 'Comptant',        conditions: 'Paiement comptant à réception de facture.' },
+  { value: '30j NET',   label: '30j NET',          conditions: 'Paiement à 30 jours net à compter de la date de facturation.' },
+  { value: '30j FDM',   label: '30j Fin de mois',  conditions: 'Paiement à 30 jours fin de mois à compter de la date de facturation.' },
+  { value: '45j',       label: '45J',              conditions: 'Paiement à 45 jours net à compter de la date de facturation.' },
+  { value: '45j FDM',   label: '45j FDM',          conditions: 'Paiement à 45 jours fin de mois à compter de la date de facturation.' },
+] as const;
+
+export { DELAI_REGLEMENT_OPTIONS };
+
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: []
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: [], francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
 };
 
 // Dérive le nom/email/tel du client depuis le premier contact (contact principal)
@@ -202,7 +212,7 @@ export default function Clients() {
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, francoPort: c.francoPort || 0, coutTransport: c.coutTransport || 0, delaiReglement: c.delaiReglement || '45j FDM' });
     setDialogOpen(true);
   }
 
@@ -896,6 +906,25 @@ export default function Clients() {
                 value={form.notes}
                 onChange={e => setForm(prev => ({ ...prev, notes: e.target.value }))}
               />
+            </div>
+
+            {/* Conditions de règlement */}
+            <div className="border-t border-border pt-3">
+              <Label className="text-sm font-semibold text-muted-foreground">Conditions de règlement</Label>
+              <div className="mt-2">
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-9"
+                  value={(form as any).delaiReglement || '45j FDM'}
+                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                >
+                  {DELAI_REGLEMENT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground italic">
+                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === ((form as any).delaiReglement || '45j FDM'))?.conditions}
+                </p>
+              </div>
             </div>
 
             {/* Catégorie Revendeur */}
