@@ -109,7 +109,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     const conso = l.consommation || prod?.consommation || 0;
     const poids = prod?.poids || 1;
     if (conso && poids) {
-      const newQty = Math.round(surface * conso / poids * 100) / 100;
+      // Math.ceil identique à calcQuantiteSurface dans Devis.tsx → totaux cohérents
+      const newQty = Math.ceil(surface * conso / poids);
       return { ...l, surfaceM2: surface, quantite: newQty > 0 ? newQty : l.quantite };
     }
     return { ...l, surfaceM2: surface };
