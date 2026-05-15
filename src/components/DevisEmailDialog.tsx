@@ -227,6 +227,13 @@ async function openEmlInOutlook(params: {
   return 'eml';
 }
 
+export interface PreviewOptions {
+  showConso: boolean;
+  showRemise: boolean;
+  showComposants: boolean;
+  showKgRecap: boolean;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -235,9 +242,11 @@ interface Props {
   produits?: Produit[];
   onSent: (dateEnvoi: string) => void;
   pdfContainerRef?: React.RefObject<HTMLDivElement | null>;
+  previewOptions: PreviewOptions;
+  onPreviewOptionsChange: (opts: PreviewOptions) => void;
 }
 
-export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], onSent, pdfContainerRef }: Props) {
+export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], onSent, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -250,6 +259,16 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [pjFichiers, setPjFichiers] = useState<PjFichier[]>([]);
   const [selectedPjIds, setSelectedPjIds] = useState<Set<string>>(new Set());
   const pdfBase64Ref = useRef<string | null>(null);
+  const regenTimer = useRef<ReturnType<typeof setTimeout>>();
+
+  // Quand les options d'affichage changent → invalider le PDF et régénérer après rendu DOM
+  function handleOptionChange(opts: PreviewOptions) {
+    onPreviewOptionsChange(opts);
+    setPdfReady(false);
+    pdfBase64Ref.current = null;
+    clearTimeout(regenTimer.current);
+    regenTimer.current = setTimeout(() => generatePdf(), 700);
+  }
 
   useEffect(() => {
     getStoredDirHandle().then(h => setSavedFolder(h?.name ?? null));
@@ -533,9 +552,31 @@ Restant à ta disposition pour tout complément d'information.`
             </div>
           )}
 
-          {/* Statut PDF + dossier */}
+          {/* Statut PDF + options d'affichage + dossier */}
           <div className="rounded-md border px-3 py-2 space-y-2 text-sm">
-            {/* PDF */}
+            {/* Options d'affichage du PDF */}
+            <div className="flex flex-wrap gap-x-4 gap-y-1 pb-2 border-b">
+              <span className="text-xs text-muted-foreground w-full font-medium">Options d'affichage du PDF :</span>
+              {[
+                { key: 'showConso',      label: 'Consommations' },
+                { key: 'showRemise',     label: 'Remises' },
+                { key: 'showComposants', label: 'Composants' },
+                { key: 'showKgRecap',    label: 'Récap. KG' },
+              ].map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded"
+                    checked={previewOptions[key as keyof PreviewOptions]}
+                    onChange={e => handleOptionChange({ ...previewOptions, [key]: e.target.checked })}
+                    disabled={generating}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+
+            {/* PDF statut */}
             <div className="flex items-center gap-2">
               {generating ? (
                 <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" /><span className="text-muted-foreground">Génération du PDF…</span></>
@@ -559,7 +600,7 @@ Restant à ta disposition pour tout complément d'information.`
                   </button>
                 </>
               ) : (
-                <><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" /><span className="text-amber-600">PDF non disponible</span></>
+                <><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" /><span className="text-amber-600">Génération en cours…</span></>
               )}
             </div>
 

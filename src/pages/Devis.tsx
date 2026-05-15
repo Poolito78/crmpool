@@ -14,7 +14,7 @@ import { logHistorique } from '@/lib/historique';
 import DevisPreview from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
-import DevisEmailDialog from '@/components/DevisEmailDialog';
+import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
@@ -56,7 +56,7 @@ export default function Devis() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [previewOptions, setPreviewOptions] = useState({ showConso: false, showRemise: false, showComposants: false, showKgRecap: true });
+  const [previewOptions, setPreviewOptions] = useState<PreviewOptions>({ showConso: false, showRemise: false, showComposants: false, showKgRecap: true });
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
@@ -1632,6 +1632,7 @@ export default function Devis() {
           aria-hidden="true"
         >
           <DevisPreview
+            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}`}
             devis={{ ...emailDevis, statut: 'envoyé' }}
             client={clients.find(c => c.id === emailDevis.clientId)}
             produits={produits}
@@ -1639,6 +1640,7 @@ export default function Devis() {
             initialShowConso={previewOptions.showConso || emailDevis.modeCalcul === 'surface'}
             initialShowRemise={previewOptions.showRemise}
             initialShowComposants={previewOptions.showComposants}
+            initialShowKgRecap={previewOptions.showKgRecap}
           />
         </div>
       )}
@@ -1651,6 +1653,8 @@ export default function Devis() {
         client={emailDevis ? clients.find(c => c.id === emailDevis.clientId) : undefined}
         produits={produits}
         pdfContainerRef={pdfContainerRef}
+        previewOptions={previewOptions}
+        onPreviewOptionsChange={setPreviewOptions}
         onSent={(dateEnvoi) => {
           if (emailDevis) {
             updateDevis(prev => prev.map(d =>
