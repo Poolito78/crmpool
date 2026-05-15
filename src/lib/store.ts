@@ -269,6 +269,16 @@ export interface Devis {
 
 // ---- DB <-> App mapping ----
 
+function normalizeDelaiReglement(v: string): string {
+  const map: Record<string, string> = {
+    '30j NET': '30J', '30j net': '30J', '30J NET': '30J',
+    '30j FDM': '30J FDM', '30j fdm': '30J FDM', '30j Fin de mois': '30J FDM',
+    '45j': '45J', '45j net': '45J',
+    '45j FDM': '45J FDM', '45j fdm': '45J FDM',
+  };
+  return map[v] ?? v;
+}
+
 function dbToClient(r: any): Client {
   return {
     id: r.id,
@@ -324,7 +334,7 @@ function dbToFournisseur(r: any): Fournisseur {
     notes: r.notes || undefined,
     francoPort: Number(r.franco_port) || 0,
     coutTransport: Number(r.cout_transport) || 0,
-    delaiReglement: r.delai_reglement ? String(r.delai_reglement) : '45j FDM',
+    delaiReglement: normalizeDelaiReglement(r.delai_reglement ? String(r.delai_reglement) : '45J FDM'),
     dateCreation: r.date_creation?.split('T')[0] || '',
   };
 }
