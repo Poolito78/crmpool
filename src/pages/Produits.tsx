@@ -840,8 +840,8 @@ export default function Produits() {
                 const prioFournObj = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId) : null;
                 const renderCell = (key: ColKey) => {
                   switch (key) {
-                    case 'reference':    return <td className="px-3 py-3 font-mono text-xs">{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
-                    case 'description':  return <td className="px-3 py-3 font-medium">{p.description}</td>;
+                    case 'reference':    return <td className="px-3 py-3 font-mono text-xs" title={p.reference}>{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
+                    case 'description':  return <td className="px-3 py-3 font-medium max-w-xs truncate" title={`${p.reference} — ${p.description}`}>{p.description}</td>;
                     case 'categorie':    return <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>;
                     case 'fournisseur':  return <td className="px-3 py-3 text-muted-foreground">{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
                     case 'prixAchat':    return <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>;

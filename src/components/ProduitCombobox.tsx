@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Produit } from '@/lib/store';
+import TruncTooltip from '@/components/TruncTooltip';
 
 interface ProduitComboboxProps {
   produits: Produit[];
@@ -115,10 +116,17 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
         type="button"
         onClick={() => { setOpen(!open); setTimeout(() => inputRef.current?.focus(), 50); }}
         className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
+        title={selected ? `${selected.reference} — ${selected.description}` : ''}
       >
-        <span className={cn('truncate', !selected && 'text-muted-foreground')}>
-          {selected ? selected.reference : '— Libre —'}
-        </span>
+        <TruncTooltip
+          content={selected ? `${selected.reference} — ${selected.description}` : ''}
+          className="truncate flex-1 text-left"
+          side="bottom"
+        >
+          <span className={cn(!selected && 'text-muted-foreground')}>
+            {selected ? selected.reference : '— Libre —'}
+          </span>
+        </TruncTooltip>
         <ChevronsUpDown className="ml-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       </button>
 

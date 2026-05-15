@@ -1298,7 +1298,7 @@ export default function Devis() {
                               {/* Description */}
                               <div className="flex-1 min-w-[120px]">
                                 <Label className="text-xs">Description</Label>
-                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" />
+                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />
                               </div>
                               {/* Surface m² — col visible */}
                               {visibleLigneCols.has('surface') && (
