@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet, ExternalLink } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet, ExternalLink, Eye } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
@@ -540,7 +540,24 @@ Restant à ta disposition pour tout complément d'information.`
               {generating ? (
                 <><Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" /><span className="text-muted-foreground">Génération du PDF…</span></>
               ) : pdfReady ? (
-                <><CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /><span className="text-emerald-700 font-medium">PDF prêt</span><span className="text-muted-foreground ml-1">— sera joint automatiquement</span></>
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-emerald-700 font-medium">PDF prêt</span>
+                  <span className="text-muted-foreground ml-1">— sera joint automatiquement</span>
+                  <button
+                    className="ml-auto flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                    onClick={() => {
+                      if (!pdfBase64Ref.current) return;
+                      const bytes = Uint8Array.from(atob(pdfBase64Ref.current), c => c.charCodeAt(0));
+                      const blob = new Blob([bytes], { type: 'application/pdf' });
+                      const url = URL.createObjectURL(blob);
+                      window.open(url, '_blank');
+                      setTimeout(() => URL.revokeObjectURL(url), 60000);
+                    }}
+                  >
+                    <Eye className="w-3.5 h-3.5" /> Aperçu
+                  </button>
+                </>
               ) : (
                 <><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" /><span className="text-amber-600">PDF non disponible</span></>
               )}
