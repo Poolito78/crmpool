@@ -866,11 +866,11 @@ export function generateId() {
 }
 
 export function calculerTotalLigne(ligne: LigneDevis) {
-  const montantBrut = ligne.quantite * ligne.prixUnitaireHT;
-  const remise = montantBrut * (ligne.remise / 100);
-  const totalHT = montantBrut - remise;
-  const totalTVA = totalHT * (ligne.tva / 100);
-  return { totalHT, totalTVA, totalTTC: totalHT + totalTVA };
+  // Arrondir le prix net unitaire à 2 décimales avant multiplication (cohérent avec l'affichage Net HT)
+  const prixNetUnitaire = Math.round(ligne.prixUnitaireHT * (1 - ligne.remise / 100) * 100) / 100;
+  const totalHT = Math.round(prixNetUnitaire * ligne.quantite * 100) / 100;
+  const totalTVA = Math.round(totalHT * (ligne.tva / 100) * 100) / 100;
+  return { totalHT, totalTVA, totalTTC: Math.round((totalHT + totalTVA) * 100) / 100 };
 }
 
 export function calculerTotalDevis(lignes: LigneDevis[], fraisPortHT = 0, fraisPortTVA = 20) {
