@@ -71,31 +71,35 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
 
       {/* ── Adresses ── */}
       <div style={{ display: 'flex', gap: '20px', marginBottom: '18px' }}>
-        {/* ISOSIGN */}
-        <div style={{ flex: 1, padding: '10px 12px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#f9f9f9' }}>
-          <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#999', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Expéditeur</div>
-          {ISOSIGN_ADRESSE.map((l, i) => (
-            <div key={i} style={{ fontWeight: i === 0 ? 'bold' : 'normal', fontSize: i === 0 ? '11px' : '9px' }}>{l}</div>
-          ))}
-        </div>
-
-        {/* Client */}
-        <div style={{ flex: 1.3, padding: '10px 12px', border: '2px solid #CC0000', borderRadius: '4px' }}>
+        {/* Client (facturation) */}
+        <div style={{ flex: 1, padding: '10px 12px', border: '2px solid #CC0000', borderRadius: '4px' }}>
           <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#999', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Client</div>
           {client?.societe && <div style={{ fontWeight: 'bold', fontSize: '11px' }}>{client.societe}</div>}
           <div style={{ fontWeight: client?.societe ? 'normal' : 'bold', fontSize: client?.societe ? '9px' : '11px' }}>{client?.nom || '—'}</div>
-          {(adrLivraison ?? client) && (
-            <>
-              <div style={{ fontSize: '9px', marginTop: '2px' }}>{adrLivraison?.adresse || client?.adresse}</div>
-              <div style={{ fontSize: '9px' }}>
-                {adrLivraison
-                  ? `${adrLivraison.codePostal} ${adrLivraison.ville}`
-                  : `${client?.codePostal} ${client?.ville}`}
-              </div>
-            </>
-          )}
+          <div style={{ fontSize: '9px', marginTop: '2px' }}>{client?.adresse}</div>
+          <div style={{ fontSize: '9px' }}>{client?.codePostal} {client?.ville}</div>
           {client?.email && <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>{client.email}</div>}
           {client?.telephone && <div style={{ fontSize: '9px', color: '#555' }}>{client.telephone}</div>}
+        </div>
+
+        {/* Adresse de livraison */}
+        <div style={{ flex: 1, padding: '10px 12px', border: '1px solid #ddd', borderRadius: '4px', backgroundColor: '#f9f9f9' }}>
+          <div style={{ fontSize: '8px', fontWeight: 'bold', color: '#999', marginBottom: '4px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Adresse de livraison</div>
+          {adrLivraison ? (
+            <>
+              {adrLivraison.libelle && <div style={{ fontWeight: 'bold', fontSize: '10px' }}>{adrLivraison.libelle}</div>}
+              {adrLivraison.contact && <div style={{ fontSize: '9px' }}>{adrLivraison.contact}</div>}
+              <div style={{ fontSize: '9px', marginTop: '2px' }}>{adrLivraison.adresse}</div>
+              <div style={{ fontSize: '9px' }}>{adrLivraison.codePostal} {adrLivraison.ville}</div>
+              {adrLivraison.telephone && <div style={{ fontSize: '9px', color: '#555', marginTop: '2px' }}>{adrLivraison.telephone}</div>}
+            </>
+          ) : (
+            <>
+              {client?.societe && <div style={{ fontWeight: 'bold', fontSize: '10px' }}>{client.societe}</div>}
+              <div style={{ fontSize: '9px', marginTop: '2px' }}>{client?.adresse}</div>
+              <div style={{ fontSize: '9px' }}>{client?.codePostal} {client?.ville}</div>
+            </>
+          )}
         </div>
       </div>
 
