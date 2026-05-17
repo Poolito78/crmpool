@@ -88,9 +88,43 @@ export async function writeFileToFolder(
 
 // ─── Génération PDF depuis un élément DOM ─────────────────────────────────────
 
+// ─── Sauvegarde dans un sous-dossier du dossier mémorisé ────────────────────
+export async function writeFileToSubfolder(
+  subfolderName: string,
+  fileName: string,
+  content: Uint8Array,
+  forcePickFolder = false,
+): Promise<{ ok: boolean; folderName?: string }> {
+  if (!('showDirectoryPicker' in window)) return { ok: false };
+  try {
+    let dirHandle = await getStoredDirHandle();
+    if (!forcePickFolder && dirHandle) {
+      // @ts-expect-error – requestPermission pas encore dans les types DOM
+      const perm = await dirHandle.requestPermission({ mode: 'readwrite' });
+      if (perm !== 'granted') dirHandle = null;
+    }
+    if (!dirHandle || forcePickFolder) {
+      dirHandle = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
+        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+      await storeDirHandle(dirHandle);
+    }
+    // Créer ou ouvrir le sous-dossier
+    const subDir = await dirHandle.getDirectoryHandle(subfolderName, { create: true });
+    const fh = await subDir.getFileHandle(fileName, { create: true });
+    const writable = await fh.createWritable();
+    await writable.write(content);
+    await writable.close();
+    return { ok: true, folderName: `${dirHandle.name}/${subfolderName}` };
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === 'AbortError') return { ok: false };
+    console.error(err);
+    return { ok: false };
+  }
+}
+
 export async function generatePdfFromElement(
   element: HTMLElement,
-  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string },
+  opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string },
 ): Promise<string> {
   const canvas = await html2canvas(element, {
     scale: 2,
@@ -147,11 +181,11 @@ export async function generatePdfFromElement(
         pdf.addImage(opts.logoDataUrl, 'PNG', 8, 2, logoW, logoH);
       } catch { /* ignore si logo indisponible */ }
     }
-    // DEVIS + numéro + date (droite)
+    // DEVIS / AR + numéro + date (droite)
     pdf.setFontSize(11);
     pdf.setTextColor(30, 30, 30);
     pdf.setFont('helvetica', 'bold');
-    pdf.text('DEVIS', pw - 8, 6, { align: 'right' });
+    pdf.text(opts?.docTitle ?? 'DEVIS', pw - 8, 6, { align: 'right' });
     if (opts?.devisNumero) {
       pdf.setFontSize(9);
       pdf.setFont('helvetica', 'normal');

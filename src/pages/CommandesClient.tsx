@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import ClientCombobox from '@/components/ClientCombobox';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import CommandeEmailDialog from '@/components/CommandeEmailDialog';
+import CommandeARDialog from '@/components/CommandeARDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
 export default function CommandesClient() {
@@ -28,11 +29,16 @@ export default function CommandesClient() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [previewCommande, setPreviewCommande] = useState<CommandeClient | null>(null);
 
-  // AR Dialog state
+  // AR Dialog state (dates)
   const [arDialogOpen, setArDialogOpen] = useState(false);
   const [arCommande, setArCommande] = useState<CommandeClient | null>(null);
   const [arDateDepart, setArDateDepart] = useState('');
   const [arDateLivraison, setArDateLivraison] = useState('');
+  // AR PDF + Email dialog
+  const [arPdfDialogOpen, setArPdfDialogOpen] = useState(false);
+  const [arPdfCommande, setArPdfCommande] = useState<CommandeClient | null>(null);
+  const [arPdfDateDepart, setArPdfDateDepart] = useState('');
+  const [arPdfDateLivraison, setArPdfDateLivraison] = useState('');
 
   // Facturer Dialog state
   const [factureDialogOpen, setFactureDialogOpen] = useState(false);
@@ -155,15 +161,29 @@ export default function CommandesClient() {
     if (!arCommande) return;
     if (!arDateDepart) { toast.error('Renseignez la date de départ'); return; }
     if (!arDateLivraison) { toast.error('Renseignez la date de livraison prévue'); return; }
+    // Mettre à jour les dates sur la commande
     updateCommandesClient(prev => prev.map(c => c.id === arCommande.id ? {
       ...c,
-      statut: 'accuse_envoye' as StatutCommandeClient,
       dateDepart: arDateDepart,
       dateLivraisonPrevue: arDateLivraison,
     } : c));
-    toast.success(`AR envoyé — départ ${formatDate(arDateDepart)}, livraison prévue ${formatDate(arDateLivraison)}`);
     setArDialogOpen(false);
+    // Ouvrir le dialog PDF/email pour l'AR
+    setArPdfCommande(arCommande);
+    setArPdfDateDepart(arDateDepart);
+    setArPdfDateLivraison(arDateLivraison);
+    setArPdfDialogOpen(true);
     setArCommande(null);
+  }
+
+  function handleArSent() {
+    // Marquer la commande comme AR envoyé après l'envoi Outlook
+    if (!arPdfCommande) return;
+    updateCommandesClient(prev => prev.map(c => c.id === arPdfCommande.id
+      ? { ...c, statut: 'accuse_envoye' as StatutCommandeClient }
+      : c
+    ));
+    toast.success(`AR envoyé — départ ${formatDate(arPdfDateDepart)}, livraison prévue ${formatDate(arPdfDateLivraison)}`);
   }
 
   // ---- Action: Facturer ----
@@ -686,6 +706,17 @@ export default function CommandesClient() {
         open={!!emailTarget}
         onOpenChange={open => { if (!open) setEmailTarget(null); }}
         target={emailTarget}
+      />
+
+      {/* AR PDF + Email Dialog */}
+      <CommandeARDialog
+        open={arPdfDialogOpen}
+        onOpenChange={v => { setArPdfDialogOpen(v); if (!v) setArPdfCommande(null); }}
+        commande={arPdfCommande}
+        client={arPdfCommande ? clients.find(c => c.id === arPdfCommande.clientId) : undefined}
+        dateDepart={arPdfDateDepart}
+        dateLivraison={arPdfDateLivraison}
+        onSent={handleArSent}
       />
 
       {/* Delete confirmation */}
