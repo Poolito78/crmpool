@@ -288,7 +288,7 @@ export default function CommandesClient() {
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         {allStatuts.map(s => {
           const cmds = commandesClient.filter(c => c.statut === s);
-          const total = cmds.reduce((acc, c) => acc + c.totalTTC, 0);
+          const total = cmds.reduce((acc, c) => acc + c.totalHT, 0);
           return (
             <div key={s} className="rounded-lg border border-border p-3">
               <p className="text-xs text-muted-foreground">{STATUTS_COMMANDE_CLIENT[s].label}</p>
@@ -310,7 +310,7 @@ export default function CommandesClient() {
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Date</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Départ / Livraison</th>
               <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Échéance</th>
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total TTC</th>
+              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total HT</th>
               <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
             </tr>
@@ -380,7 +380,7 @@ export default function CommandesClient() {
                       </span>
                     ) : <span className="text-muted-foreground text-xs">—</span>}
                   </td>
-                  <td className="py-3 px-4 text-right font-medium">{formatMontant(cmd.totalTTC)}</td>
+                  <td className="py-3 px-4 text-right font-medium">{formatMontant(cmd.totalHT)}</td>
                   <td className="py-3 px-4 text-center">
                     <select
                       value={cmd.statut}
