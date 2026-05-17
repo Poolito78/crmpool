@@ -18,6 +18,7 @@ import CalculateurUPS from "@/pages/CalculateurUPS";
 import GED from "@/pages/GED";
 import FacturesClient from "@/pages/FacturesClient";
 import FacturesFournisseur from "@/pages/FacturesFournisseur";
+import CRM from "@/pages/CRM";
 import Auth from "@/pages/Auth";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -69,6 +70,7 @@ function AppRoutes() {
           <Route path="/ged" element={<GED />} />
           <Route path="/factures-client" element={<FacturesClient />} />
           <Route path="/factures-fournisseur" element={<FacturesFournisseur />} />
+          <Route path="/crm" element={<CRM />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />

@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -10,6 +10,7 @@ import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 
 const navItems = [
   { label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
+  { label: 'CRM', icon: Target, path: '/crm' },
   { label: 'Clients', icon: Users, path: '/clients' },
   { label: 'Produits', icon: Package, path: '/produits' },
   { label: 'Stock', icon: BarChart3, path: '/stock' },
@@ -148,7 +149,7 @@ export default function CRMLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="font-heading font-semibold text-lg truncate flex-1">
-            {navItems.find(i => i.path === location.pathname)?.label || 'MonCRM'}
+            {navItems.find(i => i.path === location.pathname)?.label ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM')}
           </h1>
           {location.pathname === '/' && (
             <button

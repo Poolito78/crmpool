@@ -265,7 +265,41 @@ export interface Devis {
   fraisPortTVA?: number;
   modeCalcul?: 'standard' | 'surface';
   surfaceGlobaleM2?: number;
+  raisonRefus?: string;
 }
+
+// ── CRM Actions ─────────────────────────────────────────────────────────────
+export type TypeCrmAction = 'visite' | 'appel' | 'email' | 'tache' | 'rdv';
+export type StatutCrmAction = 'planifiee' | 'realisee' | 'annulee';
+export type PrioriteCrmAction = 'basse' | 'normale' | 'haute';
+
+export interface CrmAction {
+  id: string;
+  clientId?: string;
+  devisId?: string;
+  type: TypeCrmAction;
+  titre: string;
+  description?: string;
+  datePlanifiee?: string;   // ISO date string
+  dateRealisee?: string;
+  statut: StatutCrmAction;
+  priorite: PrioriteCrmAction;
+  createdAt: string;
+}
+
+export const TYPE_CRM_ACTION: Record<TypeCrmAction, { label: string; icon: string; color: string }> = {
+  visite:  { label: 'Visite',    icon: '🏠', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
+  appel:   { label: 'Appel',     icon: '📞', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
+  email:   { label: 'Email',     icon: '✉️',  color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' },
+  tache:   { label: 'Tâche',     icon: '✅', color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400' },
+  rdv:     { label: 'Rendez-vous', icon: '📅', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+};
+
+export const STATUT_CRM_ACTION: Record<StatutCrmAction, { label: string; color: string }> = {
+  planifiee: { label: 'Planifiée',  color: 'bg-info/10 text-info' },
+  realisee:  { label: 'Réalisée',   color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
+  annulee:   { label: 'Annulée',    color: 'bg-muted text-muted-foreground' },
+};
 
 // ---- DB <-> App mapping ----
 
@@ -438,6 +472,7 @@ function dbToDevis(r: any): Devis {
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
+    raisonRefus: r.raison_refus || undefined,
   };
 }
 
@@ -462,7 +497,84 @@ function devisToDb(d: Devis, userId: string) {
     frais_port_tva: d.fraisPortTVA ?? 20,
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,
+    raison_refus: d.raisonRefus || null,
   };
+}
+
+// ── CrmAction DB mapping ────────────────────────────────────────────────────
+function dbToCrmAction(r: any): CrmAction {
+  return {
+    id: r.id,
+    clientId: r.client_id || undefined,
+    devisId: r.devis_id || undefined,
+    type: r.type as TypeCrmAction,
+    titre: r.titre,
+    description: r.description || undefined,
+    datePlanifiee: r.date_planifiee ? r.date_planifiee.split('T')[0] : undefined,
+    dateRealisee: r.date_realisee ? r.date_realisee.split('T')[0] : undefined,
+    statut: r.statut as StatutCrmAction,
+    priorite: r.priorite as PrioriteCrmAction,
+    createdAt: r.created_at?.split('T')[0] || '',
+  };
+}
+
+function crmActionToDb(a: CrmAction, userId: string) {
+  return {
+    id: a.id,
+    user_id: userId,
+    client_id: a.clientId || null,
+    devis_id: a.devisId || null,
+    type: a.type,
+    titre: a.titre,
+    description: a.description || null,
+    date_planifiee: a.datePlanifiee ? `${a.datePlanifiee}T00:00:00` : null,
+    date_realisee: a.dateRealisee ? `${a.dateRealisee}T00:00:00` : null,
+    statut: a.statut,
+    priorite: a.priorite,
+  };
+}
+
+export function useCrmActions() {
+  const [actions, setActions] = useState<CrmAction[]>([]);
+  const [loading, setLoading] = useState(true);
+  const userIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      userIdRef.current = session.user.id;
+      const { data } = await supabase.from('crm_actions').select('*').order('date_planifiee', { ascending: true });
+      if (data) setActions(data.map(dbToCrmAction));
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const addAction = useCallback(async (a: Omit<CrmAction, 'id' | 'createdAt'>) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    const newAction: CrmAction = { ...a, id: crypto.randomUUID(), createdAt: new Date().toISOString().split('T')[0] };
+    const { error } = await supabase.from('crm_actions').insert(crmActionToDb(newAction, userId) as any);
+    if (!error) setActions(prev => [...prev, newAction].sort((a, b) => (a.datePlanifiee || '') > (b.datePlanifiee || '') ? 1 : -1));
+    return error;
+  }, []);
+
+  const updateAction = useCallback(async (a: CrmAction) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    const { error } = await supabase.from('crm_actions').update(crmActionToDb(a, userId) as any).eq('id', a.id);
+    if (!error) setActions(prev => prev.map(x => x.id === a.id ? a : x));
+    return error;
+  }, []);
+
+  const deleteAction = useCallback(async (id: string) => {
+    const { error } = await supabase.from('crm_actions').delete().eq('id', id);
+    if (!error) setActions(prev => prev.filter(x => x.id !== id));
+    return error;
+  }, []);
+
+  return { actions, loading, addAction, updateAction, deleteAction };
 }
 
 // ---- ProduitFournisseur mapping ----
