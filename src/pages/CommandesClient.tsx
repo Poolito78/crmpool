@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
