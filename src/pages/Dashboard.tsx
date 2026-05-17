@@ -1,14 +1,20 @@
 import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis, formatMontant, calculerDateEcheance } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle } from 'lucide-react';
+import { calculerTotalDevis, formatMontant, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { toast } from 'sonner';
 
+const TYPE_ICON: Record<string, any> = {
+  visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
+};
+
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
+  const { actions: crmActions } = useCrmActions();
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -119,6 +125,18 @@ export default function Dashboard() {
   });
   const totalClientFDMCeMois = clientFDMCeMois.reduce((s, cc) => s + cc.totalTTC, 0);
 
+  // ── Commandes client à traiter ──────────────────────────────────────────────
+  const commandesATraiter = commandesClient.filter(c => c.statut === 'a_traiter');
+  const totalCommandesATraiter = commandesATraiter.reduce((s, c) => s + c.totalHT, 0);
+
+  // ── CRM : actions à relancer (planifiées aujourd'hui ou en retard) ──────────
+  const today = formatDateISO(new Date());
+  const actionsUrgentes = crmActions.filter(a =>
+    a.statut === 'planifiee' && a.datePlanifiee && a.datePlanifiee <= today
+  ).sort((a, b) => (a.datePlanifiee || '') > (b.datePlanifiee || '') ? 1 : -1);
+  const actionsEnRetard = actionsUrgentes.filter(a => a.datePlanifiee && a.datePlanifiee < today);
+  const actionsAujourdhui = actionsUrgentes.filter(a => a.datePlanifiee === today);
+
   const stats = [
     { label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
     { label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
@@ -157,6 +175,96 @@ export default function Dashboard() {
             <p className="text-2xl font-bold text-primary">Déposer pour analyser</p>
             <p className="text-sm text-muted-foreground text-center">PDF · Excel · Email (.eml / .msg) · Texte d'email</p>
           </div>
+        </div>
+      )}
+
+      {/* ── Alertes prioritaires ── */}
+      {(commandesATraiter.length > 0 || actionsUrgentes.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+          {/* Commandes client à traiter */}
+          {commandesATraiter.length > 0 && (
+            <Link to="/commandes-client" className="block rounded-xl border-2 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 p-4 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
+                  <ShoppingCart className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-orange-700 dark:text-orange-300">
+                    {commandesATraiter.length} commande{commandesATraiter.length > 1 ? 's' : ''} à traiter
+                  </p>
+                  <p className="text-xs text-orange-600/70 dark:text-orange-400/70">{formatMontant(totalCommandesATraiter)} HT</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {commandesATraiter.slice(0, 4).map(cmd => {
+                  const client = clients.find(c => c.id === cmd.clientId);
+                  return (
+                    <div key={cmd.id} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono font-medium text-orange-700 dark:text-orange-300 shrink-0">{cmd.numero}</span>
+                        <span className="truncate text-orange-600/80 dark:text-orange-400/80">{client?.societe || client?.nom || '—'}</span>
+                      </div>
+                      <span className="font-semibold text-orange-700 dark:text-orange-300 shrink-0 ml-2">{formatMontant(cmd.totalHT)}</span>
+                    </div>
+                  );
+                })}
+                {commandesATraiter.length > 4 && (
+                  <p className="text-xs text-orange-500 dark:text-orange-400 text-right">+{commandesATraiter.length - 4} autres</p>
+                )}
+              </div>
+            </Link>
+          )}
+
+          {/* CRM : relances */}
+          {actionsUrgentes.length > 0 && (
+            <Link to="/crm" className="block rounded-xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-4 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
+                  <Bell className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-violet-700 dark:text-violet-300">
+                    {actionsUrgentes.length} relance{actionsUrgentes.length > 1 ? 's' : ''} CRM
+                    {actionsEnRetard.length > 0 && (
+                      <span className="ml-2 text-xs font-normal text-red-500 dark:text-red-400">
+                        ({actionsEnRetard.length} en retard)
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-violet-600/70 dark:text-violet-400/70">
+                    {actionsAujourdhui.length > 0 && `${actionsAujourdhui.length} aujourd'hui`}
+                    {actionsAujourdhui.length > 0 && actionsEnRetard.length > 0 && ' · '}
+                    {actionsEnRetard.length > 0 && `${actionsEnRetard.length} en retard`}
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {actionsUrgentes.slice(0, 4).map(a => {
+                  const client = clients.find(c => c.id === a.clientId);
+                  const TypeIcon = TYPE_ICON[a.type] || CheckSquare;
+                  const isLate = a.datePlanifiee && a.datePlanifiee < today;
+                  return (
+                    <div key={a.id} className="flex items-center gap-2 text-xs">
+                      <TypeIcon className={cn('w-3.5 h-3.5 shrink-0', isLate ? 'text-red-500' : 'text-violet-500')} />
+                      <span className={cn('truncate flex-1', isLate ? 'text-red-600 dark:text-red-400' : 'text-violet-700 dark:text-violet-300')}>
+                        {a.titre}
+                      </span>
+                      {client && <span className="truncate text-violet-500/70 dark:text-violet-400/70 max-w-[90px]">{client.societe || client.nom}</span>}
+                      {a.datePlanifiee && (
+                        <span className={cn('shrink-0 font-medium', isLate ? 'text-red-500' : 'text-violet-600 dark:text-violet-400')}>
+                          {isLate ? `−${Math.round((new Date(today).getTime() - new Date(a.datePlanifiee).getTime()) / 86400000)}j` : 'auj.'}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+                {actionsUrgentes.length > 4 && (
+                  <p className="text-xs text-violet-500 dark:text-violet-400 text-right">+{actionsUrgentes.length - 4} autres</p>
+                )}
+              </div>
+            </Link>
+          )}
         </div>
       )}
 
