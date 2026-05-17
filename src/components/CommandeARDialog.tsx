@@ -348,21 +348,44 @@ ISOSIGN`
             </div>
 
             {/* Sauvegarde dossier */}
-            <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-border bg-muted/20 text-xs">
-              <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
-              <span className="text-muted-foreground flex-1">
-                {savedFolder
-                  ? <><span className="font-medium text-foreground">{savedFolder}</span> / {SUBFOLDER}</>
-                  : <span>Dossier non sélectionné</span>}
-              </span>
-              <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => handleSaveFolder(false)} disabled={!pdfReady}>
-                <FolderOpen className="w-3 h-3" />Enregistrer
-              </Button>
-              {savedFolder && (
-                <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { clearStoredDirHandle(); setSavedFolder(null); }}>
-                  <X className="w-3 h-3" />
+            <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground flex-1 truncate">
+                  {savedFolder
+                    ? <><span className="font-medium text-foreground">{savedFolder}</span><span className="text-muted-foreground"> / {SUBFOLDER}</span></>
+                    : <span className="italic">Aucun dossier sélectionné</span>}
+                </span>
+                {savedFolder && (
+                  <Button size="sm" variant="ghost" className="h-7 w-7 p-0 shrink-0" title="Effacer le dossier mémorisé" onClick={() => { clearStoredDirHandle(); setSavedFolder(null); }}>
+                    <X className="w-3 h-3" />
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm" variant="outline"
+                  className="flex-1 h-7 text-xs gap-1"
+                  onClick={() => handleSaveFolder(true)}
+                  disabled={!pdfReady}
+                  title="Choisir un dossier différent"
+                >
+                  <FolderOpen className="w-3 h-3" />
+                  {savedFolder ? 'Changer de dossier…' : 'Choisir un dossier…'}
                 </Button>
-              )}
+                {savedFolder && (
+                  <Button
+                    size="sm" variant="default"
+                    className="flex-1 h-7 text-xs gap-1"
+                    onClick={() => handleSaveFolder(false)}
+                    disabled={!pdfReady}
+                    title="Enregistrer dans le dossier mémorisé"
+                  >
+                    <FolderOpen className="w-3 h-3" />
+                    Enregistrer ici
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
 
