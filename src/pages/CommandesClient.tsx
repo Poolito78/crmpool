@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
+import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -58,6 +59,8 @@ export default function CommandesClient() {
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [notes, setNotes] = useState('');
   const [fraisPortHT, setFraisPortHT] = useState(0);
+  const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
+  const [delaiReglement, setDelaiReglement] = useState('');
 
   function resetForm() {
     setClientId('');
@@ -68,6 +71,8 @@ export default function CommandesClient() {
     setReferenceAffaire('');
     setNotes('');
     setFraisPortHT(0);
+    setAdresseLivraisonId('');
+    setDelaiReglement('');
     setEditingId(null);
   }
 
@@ -86,6 +91,8 @@ export default function CommandesClient() {
     setReferenceAffaire(cmd.referenceAffaire || '');
     setNotes(cmd.notes || '');
     setFraisPortHT(cmd.fraisPortHT);
+    setAdresseLivraisonId(cmd.adresseLivraisonId || '');
+    setDelaiReglement(cmd.delaiReglement || '');
     setDialogOpen(true);
   }
 
@@ -98,11 +105,19 @@ export default function CommandesClient() {
       ? calculerTotalDevis(linkedDevis.lignes, fraisPortHT, linkedDevis.fraisPortTVA)
       : { totalHT: 0, totalTVA: 0, totalTTC: 0 };
 
+    // Calculer la date d'échéance à partir du délai de règlement
+    const dateEcheance = delaiReglement
+      ? formatDateISO(calculerDateEcheance(dateCreation, delaiReglement))
+      : undefined;
+
     if (editingId) {
       updateCommandesClient(prev => prev.map(c => c.id === editingId ? {
         ...c, clientId, devisId: devisId || undefined, numero, dateCreation, statut,
         lignes, totalHT: total.totalHT, totalTVA: total.totalTVA, totalTTC: total.totalTTC,
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
+        adresseLivraisonId: adresseLivraisonId || undefined,
+        delaiReglement: delaiReglement || undefined,
+        dateEcheance,
       } : c));
       toast.success('Commande modifiée');
     } else {
@@ -110,6 +125,9 @@ export default function CommandesClient() {
         id: generateId(), clientId, devisId: devisId || undefined, numero, dateCreation, statut,
         lignes, totalHT: total.totalHT, totalTVA: total.totalTVA, totalTTC: total.totalTTC,
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
+        adresseLivraisonId: adresseLivraisonId || undefined,
+        delaiReglement: delaiReglement || undefined,
+        dateEcheance,
       };
       updateCommandesClient(prev => [...prev, newCmd]);
       toast.success('Commande créée');
@@ -449,14 +467,21 @@ export default function CommandesClient() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Modifier la commande' : 'Nouvelle commande client'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Client *</Label>
-              <ClientCombobox clients={clients} value={clientId} onSelect={setClientId} />
+              <ClientCombobox clients={clients} value={clientId} onSelect={id => {
+                setClientId(id);
+                // Pré-remplir délai règlement depuis le client
+                const cl = clients.find(c => c.id === id);
+                if (cl?.delaiReglement) setDelaiReglement(cl.delaiReglement);
+                // Réinitialiser l'adresse de livraison si le client change
+                setAdresseLivraisonId('');
+              }} />
             </div>
             <div>
               <Label>Devis associé</Label>
@@ -467,6 +492,9 @@ export default function CommandesClient() {
                   setClientId(d.clientId);
                   setReferenceAffaire(d.referenceAffaire || '');
                   setFraisPortHT(d.fraisPortHT || 0);
+                  if (d.adresseLivraisonId) setAdresseLivraisonId(d.adresseLivraisonId);
+                  const cl = clients.find(c => c.id === d.clientId);
+                  if (cl?.delaiReglement) setDelaiReglement(cl.delaiReglement);
                 }
               }} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">— Aucun —</option>
@@ -476,6 +504,57 @@ export default function CommandesClient() {
                 })}
               </select>
             </div>
+
+            {/* ── Adresses ── */}
+            {clientId && (() => {
+              const cl = clients.find(c => c.id === clientId);
+              if (!cl) return null;
+              return (
+                <div className="space-y-3 rounded-lg border border-border p-3 bg-muted/20">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Adresses</p>
+                  {/* Facturation — lecture seule */}
+                  <div>
+                    <Label className="text-xs">Adresse de facturation</Label>
+                    <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                      {cl.societe && <div className="font-semibold text-foreground">{cl.societe}</div>}
+                      <div>{cl.nom}</div>
+                      {cl.adresse && <div>{cl.adresse}</div>}
+                      <div>{cl.codePostal} {cl.ville}</div>
+                    </div>
+                  </div>
+                  {/* Livraison — sélectable */}
+                  <div>
+                    <Label className="text-xs">Adresse de livraison</Label>
+                    <select
+                      value={adresseLivraisonId}
+                      onChange={e => setAdresseLivraisonId(e.target.value)}
+                      className="mt-1 w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="">— Même que facturation —</option>
+                      {(cl.adressesLivraison || []).map(a => (
+                        <option key={a.id} value={a.id}>
+                          {a.libelle ? `${a.libelle} — ` : ''}{a.adresse}, {a.codePostal} {a.ville}
+                        </option>
+                      ))}
+                    </select>
+                    {adresseLivraisonId && (() => {
+                      const adr = cl.adressesLivraison?.find(a => a.id === adresseLivraisonId);
+                      if (!adr) return null;
+                      return (
+                        <div className="mt-1 rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground leading-relaxed">
+                          {adr.libelle && <div className="font-semibold text-foreground">{adr.libelle}</div>}
+                          {adr.contact && <div>{adr.contact}</div>}
+                          <div>{adr.adresse}</div>
+                          <div>{adr.codePostal} {adr.ville}</div>
+                          {adr.telephone && <div>{adr.telephone}</div>}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Numéro</Label>
@@ -498,6 +577,37 @@ export default function CommandesClient() {
                 <Input value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
               </div>
             </div>
+
+            {/* ── Conditions de règlement ── */}
+            <div className="space-y-1.5 rounded-lg border border-border p-3 bg-muted/20">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Conditions de règlement</p>
+              <div className="flex items-center gap-3">
+                <select
+                  value={delaiReglement}
+                  onChange={e => setDelaiReglement(e.target.value)}
+                  className="flex-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                >
+                  <option value="">— Non défini —</option>
+                  {DELAI_REGLEMENT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                {delaiReglement && (
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    Échéance :{' '}
+                    <span className="font-semibold text-foreground">
+                      {formatDate(formatDateISO(calculerDateEcheance(dateCreation, delaiReglement)))}
+                    </span>
+                  </span>
+                )}
+              </div>
+              {delaiReglement && (
+                <p className="text-xs text-muted-foreground italic">
+                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === delaiReglement)?.conditions}
+                </p>
+              )}
+            </div>
+
             <div>
               <Label>Frais de port HT</Label>
               <Input type="number" step="0.01" value={fraisPortHT || ''} onChange={e => setFraisPortHT(parseFloat(e.target.value) || 0)} />
