@@ -50,7 +50,7 @@ export default function Dashboard() {
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
-  const caTotal = devisAcceptes.reduce((sum, d) => sum + calculerTotalDevis(d.lignes).totalTTC, 0);
+  const caTotal = devisAcceptes.reduce((sum, d) => sum + calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT, 0);
   const devisEnCours = devis.filter(d => d.statut === 'envoyé');
 
   // Calcul marge : totalHT lignes - coût d'achat
@@ -124,7 +124,7 @@ export default function Dashboard() {
     { label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
     { label: 'Fournisseurs', value: fournisseurs.length, icon: Truck, color: 'text-info', bg: 'bg-info/10', link: '/fournisseurs' },
     { label: 'Devis', value: devis.length, icon: FileText, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
-    { label: 'CA Accepté', value: formatMontant(caTotal), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
+    { label: 'CA Accepté HT', value: formatMontant(caTotal), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
     { label: 'Marge annuelle', value: formatMontant(margeAnnuelle), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10', link: '/devis' },
     { label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
     { label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
@@ -280,18 +280,21 @@ export default function Dashboard() {
           <div className="space-y-3">
             {devis.slice(0, 5).map(d => {
               const client = clients.find(c => c.id === d.clientId);
-              const total = calculerTotalDevis(d.lignes);
+              const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA);
               return (
                 <Link key={d.id} to={`/devis?editDevis=${d.id}`} className="flex items-center justify-between py-2 border-b border-border last:border-0 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors cursor-pointer">
                   <div className="min-w-0">
                     <p className="font-medium text-sm truncate">{d.numero}</p>
-                    <p className="text-xs text-muted-foreground truncate">{client?.nom || 'Client inconnu'}</p>
+                    <p className="text-xs text-muted-foreground truncate">{client?.societe || client?.nom || 'Client inconnu'}</p>
                   </div>
                   <div className="flex items-center gap-3">
                     <span className={`text-xs px-2 py-1 rounded-full font-medium ${statutColors[d.statut]}`}>
                       {d.statut}
                     </span>
-                    <span className="text-sm font-semibold whitespace-nowrap">{formatMontant(total.totalTTC)}</span>
+                    <div className="text-right">
+                      <span className="text-sm font-semibold whitespace-nowrap">{formatMontant(total.totalHT)}</span>
+                      <span className="block text-[10px] text-muted-foreground">HT</span>
+                    </div>
                   </div>
                 </Link>
               );
