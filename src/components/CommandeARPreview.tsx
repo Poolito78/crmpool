@@ -30,7 +30,7 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
     : null;
 
   const lignesVisibles = commande.lignes.filter(
-    l => !l.type || l.type === 'ligne' || l.type === 'groupe' || l.type === 'texte' || l.type === 'soustotal'
+    l => !l.type || l.type === 'ligne' || l.type === 'groupe' || l.type === 'texte'
   );
 
   return (
@@ -135,7 +135,6 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
             <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 'bold', width: '50px' }}>Qté</th>
             <th style={{ textAlign: 'center', padding: '6px 8px', fontWeight: 'bold', width: '40px' }}>Unité</th>
             <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 'bold', width: '80px' }}>PU HT</th>
-            <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 'bold', width: '60px' }}>Rem. %</th>
             <th style={{ textAlign: 'right', padding: '6px 8px', fontWeight: 'bold', width: '85px' }}>Total HT</th>
           </tr>
         </thead>
@@ -149,22 +148,13 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
 
             if (isGroupe) return (
               <tr key={l.id} style={{ backgroundColor: '#e8e8e8' }}>
-                <td colSpan={6} style={{ padding: '5px 8px', fontWeight: 'bold', fontSize: '10px', borderTop: '1px solid #ccc' }}>{l.description}</td>
+                <td colSpan={5} style={{ padding: '5px 8px', fontWeight: 'bold', fontSize: '10px', borderTop: '1px solid #ccc' }}>{l.description}</td>
               </tr>
             );
-            if (isSousTotal) return (
-              <tr key={l.id} style={{ backgroundColor: '#f0f0f0' }}>
-                <td colSpan={5} style={{ padding: '4px 8px', fontStyle: 'italic', textAlign: 'right', fontSize: '9px', borderTop: '1px dashed #ccc' }}>
-                  {l.description || 'Sous-total'}
-                </td>
-                <td style={{ padding: '4px 8px', textAlign: 'right', fontWeight: 'bold', borderTop: '1px dashed #ccc' }}>
-                  {formatMontant(t.totalHT)}
-                </td>
-              </tr>
-            );
+            if (isSousTotal) return null;
             if (isTexte) return (
               <tr key={l.id} style={{ backgroundColor: bg }}>
-                <td colSpan={6} style={{ padding: '4px 8px', fontStyle: 'italic', color: '#555', fontSize: '9px' }}>{l.description}</td>
+                <td colSpan={5} style={{ padding: '4px 8px', fontStyle: 'italic', color: '#555', fontSize: '9px' }}>{l.description}</td>
               </tr>
             );
             return (
@@ -173,9 +163,6 @@ export default function CommandeARPreview({ commande, client, dateDepart, dateLi
                 <td style={{ padding: '5px 8px', textAlign: 'center', borderBottom: '1px solid #eee' }}>{l.quantite}</td>
                 <td style={{ padding: '5px 8px', textAlign: 'center', borderBottom: '1px solid #eee', color: '#555' }}>{l.unite}</td>
                 <td style={{ padding: '5px 8px', textAlign: 'right', borderBottom: '1px solid #eee' }}>{formatMontant(l.prixUnitaireHT)}</td>
-                <td style={{ padding: '5px 8px', textAlign: 'right', borderBottom: '1px solid #eee', color: '#555' }}>
-                  {l.remise > 0 ? `${l.remise}%` : '—'}
-                </td>
                 <td style={{ padding: '5px 8px', textAlign: 'right', fontWeight: 'bold', borderBottom: '1px solid #eee' }}>{formatMontant(t.totalHT)}</td>
               </tr>
             );
