@@ -61,6 +61,7 @@ export default function CommandesClient() {
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
   const [delaiReglement, setDelaiReglement] = useState('');
+  const [dateLivraison, setDateLivraison] = useState('');
 
   function resetForm() {
     setClientId('');
@@ -73,6 +74,7 @@ export default function CommandesClient() {
     setFraisPortHT(0);
     setAdresseLivraisonId('');
     setDelaiReglement('');
+    setDateLivraison('');
     setEditingId(null);
   }
 
@@ -93,6 +95,7 @@ export default function CommandesClient() {
     setFraisPortHT(cmd.fraisPortHT);
     setAdresseLivraisonId(cmd.adresseLivraisonId || '');
     setDelaiReglement(cmd.delaiReglement || '');
+    setDateLivraison(cmd.dateLivraison || '');
     setDialogOpen(true);
   }
 
@@ -105,9 +108,10 @@ export default function CommandesClient() {
       ? calculerTotalDevis(linkedDevis.lignes, fraisPortHT, linkedDevis.fraisPortTVA)
       : { totalHT: 0, totalTVA: 0, totalTTC: 0 };
 
-    // Calculer la date d'échéance à partir du délai de règlement
+    // Calculer la date d'échéance à partir de la date de livraison (ou création si absente)
+    const baseEcheance = dateLivraison || dateCreation;
     const dateEcheance = delaiReglement
-      ? formatDateISO(calculerDateEcheance(dateCreation, delaiReglement))
+      ? formatDateISO(calculerDateEcheance(baseEcheance, delaiReglement))
       : undefined;
 
     if (editingId) {
@@ -117,6 +121,7 @@ export default function CommandesClient() {
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
         adresseLivraisonId: adresseLivraisonId || undefined,
         delaiReglement: delaiReglement || undefined,
+        dateLivraison: dateLivraison || undefined,
         dateEcheance,
       } : c));
       toast.success('Commande modifiée');
@@ -127,6 +132,7 @@ export default function CommandesClient() {
         fraisPortHT, referenceAffaire: referenceAffaire || undefined, notes: notes || undefined,
         adresseLivraisonId: adresseLivraisonId || undefined,
         delaiReglement: delaiReglement || undefined,
+        dateLivraison: dateLivraison || undefined,
         dateEcheance,
       };
       updateCommandesClient(prev => [...prev, newCmd]);
@@ -230,16 +236,24 @@ export default function CommandesClient() {
 
     // Créer une FactureClient liée
     const year = new Date().getFullYear();
+    const today = new Date().toISOString().split('T')[0];
     const nFac = facturesClient.filter(f => f.numero.startsWith(`FAC-${year}`)).length + 1;
     const lignesFacturees = factureCommande.lignes.filter(l => factureLignesSelectees.includes(l.id));
     const total = calculerTotalDevis(lignesFacturees, factureCommande.fraisPortHT, 20);
+
+    // Échéance calculée sur la date de livraison (ou aujourd'hui si absente) + délai de règlement
+    const baseDateEcheance = factureCommande.dateLivraison || factureCommande.dateLivraisonPrevue || today;
+    const dateEcheanceFacture = factureCommande.delaiReglement
+      ? formatDateISO(calculerDateEcheance(baseDateEcheance, factureCommande.delaiReglement))
+      : undefined;
+
     const newFacture: FactureClient = {
       id: generateId(),
       numero: `FAC-${year}-${String(nFac).padStart(3, '0')}`,
       clientId: factureCommande.clientId,
       commandeClientId: factureCommande.id,
       devisId: factureCommande.devisId,
-      dateCreation: new Date().toISOString().split('T')[0],
+      dateCreation: today,
       statut: 'brouillon',
       lignes: lignesFacturees,
       totalHT: total.totalHT,
@@ -247,6 +261,7 @@ export default function CommandesClient() {
       totalTTC: total.totalTTC,
       fraisPortHT: factureCommande.fraisPortHT,
       referenceAffaire: factureCommande.referenceAffaire,
+      dateEcheance: dateEcheanceFacture,
     };
     updateFacturesClient(prev => [...prev, newFacture]);
 
@@ -561,9 +576,14 @@ export default function CommandesClient() {
                 <Input value={numero} onChange={e => setNumero(e.target.value)} />
               </div>
               <div>
-                <Label>Date</Label>
+                <Label>Date commande</Label>
                 <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} />
               </div>
+            </div>
+            <div>
+              <Label>Date de livraison</Label>
+              <Input type="date" value={dateLivraison} onChange={e => setDateLivraison(e.target.value)} />
+              {dateLivraison && <p className="text-xs text-muted-foreground mt-1">Date réelle de livraison — sert de base au calcul de l'échéance paiement</p>}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -596,8 +616,9 @@ export default function CommandesClient() {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     Échéance :{' '}
                     <span className="font-semibold text-foreground">
-                      {formatDate(formatDateISO(calculerDateEcheance(dateCreation, delaiReglement)))}
+                      {formatDate(formatDateISO(calculerDateEcheance(dateLivraison || dateCreation, delaiReglement)))}
                     </span>
+                    {!dateLivraison && <span className="text-[10px] ml-1 italic">(provisoire)</span>}
                   </span>
                 )}
               </div>
@@ -686,6 +707,32 @@ export default function CommandesClient() {
           </DialogHeader>
           {factureCommande && (
             <div className="space-y-4">
+              {/* Récapitulatif dates + échéance */}
+              {(() => {
+                const baseDateEch = factureCommande.dateLivraison || factureCommande.dateLivraisonPrevue;
+                const dateEch = factureCommande.delaiReglement && baseDateEch
+                  ? formatDate(formatDateISO(calculerDateEcheance(baseDateEch, factureCommande.delaiReglement)))
+                  : null;
+                return (
+                  <div className="grid grid-cols-2 gap-2 text-xs rounded-lg border border-border bg-muted/20 p-3">
+                    {factureCommande.dateLivraison && (
+                      <div><span className="text-muted-foreground">Date livraison :</span> <span className="font-semibold">{formatDate(factureCommande.dateLivraison)}</span></div>
+                    )}
+                    {!factureCommande.dateLivraison && factureCommande.dateLivraisonPrevue && (
+                      <div><span className="text-muted-foreground">Livraison prévue :</span> <span className="font-semibold">{formatDate(factureCommande.dateLivraisonPrevue)}</span></div>
+                    )}
+                    {factureCommande.delaiReglement && (
+                      <div><span className="text-muted-foreground">Délai :</span> <span className="font-semibold">{factureCommande.delaiReglement}</span></div>
+                    )}
+                    {dateEch && (
+                      <div className="col-span-2 pt-1 border-t border-border">
+                        <span className="text-muted-foreground">Échéance paiement : </span>
+                        <span className="font-bold text-primary">{dateEch}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               <p className="text-sm text-muted-foreground">
                 Sélectionnez les produits livrés à facturer :
               </p>

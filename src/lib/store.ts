@@ -165,6 +165,7 @@ export interface CommandeClient {
   dateEcheance?: string;
   adresseLivraisonId?: string;
   delaiReglement?: string;
+  dateLivraison?: string;
 }
 
 // ── Facture Client ──────────────────────────────────────────────────────────
@@ -673,6 +674,7 @@ function dbToCommandeClient(r: any): CommandeClient {
     dateEcheance: r.date_echeance || undefined,
     adresseLivraisonId: r.adresse_livraison_id || undefined,
     delaiReglement: r.delai_reglement || undefined,
+    dateLivraison: r.date_livraison || undefined,
   };
 }
 
@@ -697,6 +699,7 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
     date_echeance: cc.dateEcheance || null,
     adresse_livraison_id: cc.adresseLivraisonId || null,
     delai_reglement: cc.delaiReglement || null,
+    date_livraison: cc.dateLivraison || null,
   };
 }
 
