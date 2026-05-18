@@ -143,6 +143,11 @@ const prodList=refs.length?await rpc('product.product','search_read',[[['default
 const prodMap=Object.fromEntries(prodList.map(p=>[p.default_code,p.id]));
 console.log('Produits trouvés:',Object.keys(prodMap).length+'/'+refs.length,prodMap);
 
+// 3b. TVA 20%
+const taxes=await rpc('account.tax','search_read',[[['name','ilike','20'],['type_tax_use','=','sale'],['active','=',true],['company_id','=',${ODOO_COMPANY_ID}]]],{fields:['id','name'],limit:5});
+const tva20Id=taxes.length?taxes[0].id:null;
+console.log('TVA 20%:',tva20Id,taxes[0]?.name);
+
 // 4. Champ Chantier (Studio)
 const allF=await rpc('sale.order','fields_get',[],{attributes:['string','type']});
 const chantierField=Object.keys(allF).find(k=>allF[k].string.toLowerCase().includes('chantier'))||null;
@@ -176,13 +181,15 @@ for(const l of lignes){
       Object.assign(vals,{display_type:'line_note',name:l.desc});
     } else {
       const pid=l.ref?prodMap[l.ref]:null;
-      const netPrice=Math.round((l.pu||0)*(1-((l.rem||0)/100))*100)/100;
+      // Arrondi supérieur à 2 décimales
+      const netPrice=Math.ceil((l.pu||0)*(1-((l.rem||0)/100))*100)/100;
       Object.assign(vals,{
         product_id:pid||${ODOO_FALLBACK_PRODUCT_ID},
         name:l.desc,
         product_uom_qty:l.qty||1,
         price_unit:netPrice,
         discount:0,
+        ...(tva20Id?{tax_id:[[6,0,[tva20Id]]]}:{}),
       });
     }
     await rpc('sale.order.line','create',[vals]);
