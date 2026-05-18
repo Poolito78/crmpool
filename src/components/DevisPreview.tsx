@@ -1,10 +1,11 @@
 import { useState, useRef, Fragment } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer, Pencil, Loader2 } from 'lucide-react';
+import { Printer, Pencil, Loader2, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
+import { genererScriptOdoo } from '@/lib/odooSync';
 
 // â"€â"€â"€ Couleurs RAL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
@@ -219,6 +220,37 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             {onEdit && (
               <Button variant="outline" size="sm" onClick={onEdit}>
                 <Pencil className="w-3.5 h-3.5 mr-1.5" /> Modifier
+              </Button>
+            )}
+            {client && (
+              <Button
+                variant="outline"
+                size="sm"
+                title="Générer le script Odoo et le copier dans le presse-papier"
+                onClick={async () => {
+                  try {
+                    const contact = devis.contactId
+                      ? client.contacts?.find(c => c.id === devis.contactId)
+                      : undefined;
+                    const contactNom = contact
+                      ? [contact.prenom, contact.nom].filter(Boolean).join(' ')
+                      : undefined;
+                    const script = genererScriptOdoo(devis, client, produits, {
+                      surface: surfaceGlobale || devis.surfaceGlobaleM2 || 0,
+                      contactNom,
+                    });
+                    await navigator.clipboard.writeText(script);
+                    toast.success('Script Odoo copié !', {
+                      description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée',
+                      duration: 6000,
+                    });
+                  } catch (err) {
+                    toast.error('Erreur lors de la génération du script');
+                    console.error(err);
+                  }
+                }}
+              >
+                <Send className="w-3.5 h-3.5 mr-1.5" /> Odoo
               </Button>
             )}
             <Button size="sm" onClick={handlePrint} disabled={printing}>
