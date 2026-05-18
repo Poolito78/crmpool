@@ -1287,7 +1287,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="w-20 text-sm"
+                              className="text-sm min-w-[3rem]"
+                              style={{ width: `${Math.max(3, String(comp.poidsKg ?? '').length + 1)}ch` }}
                               placeholder="kg"
                             />
                             <span className="text-xs text-muted-foreground">kg</span>
@@ -1324,7 +1325,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="w-16 text-sm"
+                              className="text-sm min-w-[3rem]"
+                              style={{ width: `${Math.max(3, String(comp.consommationPct ?? '').length + 1)}ch` }}
                               placeholder="%"
                             />
                             <span className="text-xs text-muted-foreground">% ×</span>
@@ -1340,7 +1342,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="w-20 text-sm"
+                              className="text-sm min-w-[3rem]"
+                              style={{ width: `${Math.max(4, String(comp.baseQuantite ?? 'base').length + 1)}ch` }}
                               placeholder="base"
                             />
                             {basesDisponibles.length > 0 && (
@@ -1357,7 +1360,7 @@ export default function Produits() {
                                   setComposants(updated);
                                   recalcPrix(updated);
                                 }}
-                                className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[110px]"
+                                className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[90px]"
                                 title="Lier à un autre composant"
                               >
                                 <option value="">lier…</option>
@@ -1390,7 +1393,8 @@ export default function Produits() {
                                 setComposants(propagated);
                                 recalcPrix(propagated);
                               }}
-                              className="w-20 text-sm"
+                              className="text-sm min-w-[3rem]"
+                              style={{ width: `${Math.max(3, String(comp.quantite).length + 1)}ch` }}
                               placeholder="Qté"
                             />
                             <button type="button" title="Saisir en poids (kg)"
@@ -1413,7 +1417,7 @@ export default function Produits() {
                           </div>
                         )}
 
-                        <span className="text-xs text-muted-foreground w-16 shrink-0 text-right pt-2">
+                        <span className="text-xs text-muted-foreground shrink-0 text-right pt-2 whitespace-nowrap">
                           {compProd ? formatMontant(prixComposant(comp)) : '—'}
                         </span>
                         <button type="button"
