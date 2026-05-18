@@ -1277,7 +1277,7 @@ export default function Produits() {
                           /* ── Mode Poids ── */
                           <div className="flex items-center gap-1 shrink-0 flex-wrap">
                             <Input
-                              type="number" min={0.001} step={0.001}
+                              type="number" min={0} step="any"
                               value={comp.poidsKg ?? ''}
                               onChange={e => {
                                 const kg = parseFloat(e.target.value) || 0;
@@ -1287,8 +1287,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[3rem]"
-                              style={{ width: `${Math.max(3, String(comp.poidsKg ?? '').length + 1)}ch` }}
+                              className="text-sm min-w-[4rem]"
+                              style={{ width: `${Math.max(6, String(comp.poidsKg ?? '').length + 2)}ch` }}
                               placeholder="kg"
                             />
                             <span className="text-xs text-muted-foreground">kg</span>
@@ -1312,38 +1312,38 @@ export default function Produits() {
                           /* ── Mode % ── */
                           <div className="flex items-center gap-1 shrink-0 flex-wrap">
                             <Input
-                              type="number" min={0.01} max={100} step={0.1}
+                              type="number" min={0} max={100} step="any"
                               value={comp.consommationPct ?? ''}
                               onChange={e => {
                                 const pct = parseFloat(e.target.value) || 0;
                                 const baseQty = comp.baseComposantId
                                   ? (composants.find(c => c.produitId === comp.baseComposantId)?.quantite ?? comp.baseQuantite ?? 0)
                                   : (comp.baseQuantite ?? 0);
-                                const newQty = baseQty > 0 ? Math.round(baseQty * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const newQty = baseQty > 0 ? Math.round(baseQty * pct / 100 * 10000000000) / 10000000000 || 0.0000000001 : comp.quantite;
                                 const updated = [...composants];
                                 updated[idx] = { ...updated[idx], consommationPct: pct, quantite: newQty };
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[3rem]"
-                              style={{ width: `${Math.max(3, String(comp.consommationPct ?? '').length + 1)}ch` }}
+                              className="text-sm min-w-[4rem]"
+                              style={{ width: `${Math.max(6, String(comp.consommationPct ?? '').length + 2)}ch` }}
                               placeholder="%"
                             />
                             <span className="text-xs text-muted-foreground">% ×</span>
                             <Input
-                              type="number" min={0.001} step={0.001}
+                              type="number" min={0} step="any"
                               value={comp.baseQuantite ?? ''}
                               onChange={e => {
                                 const baseQty = parseFloat(e.target.value) || 0;
                                 const pct = comp.consommationPct ?? 0;
-                                const newQty = baseQty > 0 && pct > 0 ? Math.round(baseQty * pct / 100 * 10000) / 10000 || 0.0001 : comp.quantite;
+                                const newQty = baseQty > 0 && pct > 0 ? Math.round(baseQty * pct / 100 * 10000000000) / 10000000000 || 0.0000000001 : comp.quantite;
                                 const updated = [...composants];
                                 updated[idx] = { ...updated[idx], baseQuantite: baseQty, baseComposantId: '', quantite: newQty };
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[3rem]"
-                              style={{ width: `${Math.max(4, String(comp.baseQuantite ?? 'base').length + 1)}ch` }}
+                              className="text-sm min-w-[4rem]"
+                              style={{ width: `${Math.max(6, String(comp.baseQuantite ?? 'base').length + 2)}ch` }}
                               placeholder="base"
                             />
                             {basesDisponibles.length > 0 && (
@@ -1384,7 +1384,7 @@ export default function Produits() {
                           /* ── Mode Quantité fixe ── */
                           <div className="flex items-center gap-1 shrink-0">
                             <Input
-                              type="number" min={0.01} step={0.01}
+                              type="number" min={0} step="any"
                               value={comp.quantite}
                               onChange={e => {
                                 const updated = [...composants];
@@ -1393,8 +1393,8 @@ export default function Produits() {
                                 setComposants(propagated);
                                 recalcPrix(propagated);
                               }}
-                              className="text-sm min-w-[3rem]"
-                              style={{ width: `${Math.max(3, String(comp.quantite).length + 1)}ch` }}
+                              className="text-sm min-w-[4rem]"
+                              style={{ width: `${Math.max(6, String(comp.quantite).length + 2)}ch` }}
                               placeholder="Qté"
                             />
                             <button type="button" title="Saisir en poids (kg)"
