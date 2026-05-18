@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send } from 'lucide-react';
-import { genererScriptOdoo } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1606,6 +1606,9 @@ export default function Devis() {
                     save(true);
                     const selectedClient = clients.find(c => c.id === clientId);
                     if (!selectedClient) { toast.error('Client introuvable'); return; }
+                    const defaultName = selectedClient.societe || selectedClient.nom;
+                    const odooNom = promptOdooPartnerName(clientId, defaultName);
+                    if (odooNom === null) return; // annulé
                     const allContacts = selectedClient.contacts || [];
                     const contact = allContacts.find(ct => ct.id === contactId);
                     const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
@@ -1620,6 +1623,7 @@ export default function Devis() {
                     const script = genererScriptOdoo(current, selectedClient, produits, {
                       surface: surfaceGlobaleM2 || 0,
                       contactNom,
+                      odooPartnerName: odooNom,
                     });
                     await navigator.clipboard.writeText(script);
                     toast.success('Script Odoo copié !', {

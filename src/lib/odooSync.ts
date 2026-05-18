@@ -7,6 +7,33 @@
 import type { Devis, Client, Produit } from './store';
 import { calculerTotalDevis } from './store';
 
+// ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
+
+const LS_PREFIX = 'odoo_partner_';
+
+/** Retourne le nom Odoo mémorisé pour ce client, ou le nom par défaut. */
+export function getOdooPartnerName(clientId: string, defaultName: string): string {
+  return localStorage.getItem(LS_PREFIX + clientId) || defaultName;
+}
+
+/** Mémorise le nom Odoo pour ce client. */
+export function setOdooPartnerName(clientId: string, name: string): void {
+  localStorage.setItem(LS_PREFIX + clientId, name);
+}
+
+/**
+ * Ouvre un prompt pour confirmer/corriger le nom Odoo du client.
+ * Retourne le nom confirmé, ou null si l'utilisateur annule.
+ */
+export function promptOdooPartnerName(clientId: string, defaultName: string): string | null {
+  const cached = getOdooPartnerName(clientId, defaultName);
+  const result = window.prompt('Nom du client dans Odoo :', cached);
+  if (result === null) return null; // annulé
+  const trimmed = result.trim() || cached;
+  setOdooPartnerName(clientId, trimmed);
+  return trimmed;
+}
+
 const ODOO_COMPANY_ID = 13;
 // Produit de fallback pour les lignes sans code Odoo (ex: pigment, surcharge, port)
 const ODOO_FALLBACK_PRODUCT_ID = 362577; // FRAIS DE PORT — service générique
@@ -65,6 +92,7 @@ export function genererScriptOdoo(
   options?: {
     surface?: number;
     contactNom?: string;
+    odooPartnerName?: string;
   }
 ): string {
   const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
@@ -88,7 +116,7 @@ export function genererScriptOdoo(
   if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/m²`);
   const noteText = noteLines.join('\n');
 
-  const clientName = client.societe || client.nom;
+  const clientName = options?.odooPartnerName || client.societe || client.nom;
   const contactNom = options?.contactNom ?? '';
   const referenceAffaire = devis.referenceAffaire ?? '';
   const dateValidite = devis.dateValidite ?? '';

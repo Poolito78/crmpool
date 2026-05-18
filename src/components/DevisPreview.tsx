@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 
 // â"€â"€â"€ Couleurs RAL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
 const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
@@ -229,6 +229,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 title="Générer le script Odoo et le copier dans le presse-papier"
                 onClick={async () => {
                   try {
+                    const defaultName = client.societe || client.nom;
+                    const odooNom = promptOdooPartnerName(devis.clientId, defaultName);
+                    if (odooNom === null) return; // annulé
                     const contact = devis.contactId
                       ? client.contacts?.find(c => c.id === devis.contactId)
                       : undefined;
@@ -238,6 +241,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     const script = genererScriptOdoo(devis, client, produits, {
                       surface: surfaceGlobale || devis.surfaceGlobaleM2 || 0,
                       contactNom,
+                      odooPartnerName: odooNom,
                     });
                     await navigator.clipboard.writeText(script);
                     toast.success('Script Odoo copié !', {
