@@ -2,7 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2 } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send } from 'lucide-react';
+import { genererScriptOdoo } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1597,6 +1598,40 @@ export default function Devis() {
                   setEmailDevis(current);
                 }}>
                   <Mail className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Envoyer par mail</span>
+                </Button>
+              )}
+              {editingId && (
+                <Button variant="outline" size="sm" title="Générer le script Odoo et copier dans le presse-papier" onClick={async () => {
+                  try {
+                    save(true);
+                    const selectedClient = clients.find(c => c.id === clientId);
+                    if (!selectedClient) { toast.error('Client introuvable'); return; }
+                    const allContacts = selectedClient.contacts || [];
+                    const contact = allContacts.find(ct => ct.id === contactId);
+                    const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+                    const current: DevisType = {
+                      id: editingId,
+                      numero: devis.find(d => d.id === editingId)?.numero || editingId,
+                      clientId, contactId: contactId || undefined,
+                      dateCreation, dateValidite, statut, lignes, referenceAffaire,
+                      systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                      surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                    };
+                    const script = genererScriptOdoo(current, selectedClient, produits, {
+                      surface: surfaceGlobaleM2 || 0,
+                      contactNom,
+                    });
+                    await navigator.clipboard.writeText(script);
+                    toast.success('Script Odoo copié !', {
+                      description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée',
+                      duration: 6000,
+                    });
+                  } catch (err) {
+                    toast.error('Erreur lors de la génération du script Odoo');
+                    console.error(err);
+                  }
+                }}>
+                  <Send className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Envoyer vers Odoo</span>
                 </Button>
               )}
             </div>
