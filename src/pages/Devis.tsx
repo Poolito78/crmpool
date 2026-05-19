@@ -1386,7 +1386,7 @@ export default function Devis() {
                               {visibleLigneCols.has('surface') && (
                                 <div className="w-20 shrink-0">
                                   <Label className="text-xs">Surface m²</Label>
-                                  <Input type="number" step="0.01" value={l.surfaceM2 || ''} onChange={e => {
+                                  <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                     const surface = parseFloat(e.target.value) || 0;
                                     const conso = l.consommation ?? prod?.consommation;
                                     const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
@@ -1398,7 +1398,7 @@ export default function Devis() {
                               {visibleLigneCols.has('conso') && (
                                 <div className="w-20 shrink-0">
                                   <Label className="text-xs">Conso. kg/m²</Label>
-                                  <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onChange={e => {
+                                  <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onFocus={e => e.target.select()} onChange={e => {
                                     const raw = e.target.value;
                                     const conso = raw === '' ? undefined : parseFloat(raw);
                                     const surface = l.surfaceM2 || surfaceGlobaleM2;
@@ -1417,7 +1417,7 @@ export default function Devis() {
                               {/* Qté — auto si surface+conso renseignées */}
                               <div className="w-16 shrink-0">
                                 <Label className="text-xs">{hasAutoCalc ? 'Qté auto' : 'Qté'}</Label>
-                                <Input type="number" value={l.quantite || ''} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />
+                                <Input type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />
                               </div>
                               {/* Unité */}
                               <div className="w-14 shrink-0">
@@ -1427,17 +1427,17 @@ export default function Devis() {
                               {/* Prix HT */}
                               <div className="w-24 shrink-0">
                                 <Label className="text-xs">Prix HT</Label>
-                                <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
+                                <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
                               </div>
                               {/* Remise % */}
                               <div className="w-16 shrink-0">
                                 <Label className="text-xs">Rem. %</Label>
-                                <Input type="number" value={l.remise || ''} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
+                                <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
                               {/* Net HT */}
                               <div className="w-24 shrink-0">
                                 <Label className="text-xs">Net HT</Label>
-                                <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
+                                <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
                               </div>
                               {/* Total HT + actions */}
                               <div className="shrink-0 flex flex-col items-end">
