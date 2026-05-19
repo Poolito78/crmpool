@@ -1083,31 +1083,39 @@ export default function Produits() {
                 <p className="text-xs text-muted-foreground py-1">Aucun palier — prix fixe pour toutes les quantités.</p>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-xs">
+                  <table className="w-full text-xs table-fixed">
+                    <colgroup>
+                      <col style={{ width: '18%' }} />
+                      <col style={{ width: '20%' }} />
+                      <col style={{ width: '20%' }} />
+                      <col style={{ width: '20%' }} />
+                      <col style={{ width: '14%' }} />
+                      <col style={{ width: '8%' }} />
+                    </colgroup>
                     <thead>
                       <tr className="text-muted-foreground border-b border-border">
-                        <th className="text-left pb-1 pr-2 font-medium">Qté min</th>
-                        <th className="text-right pb-1 px-2 font-medium">Prix Achat HT</th>
-                        <th className="text-right pb-1 px-2 font-medium">Prix Revendeur HT</th>
-                        <th className="text-right pb-1 px-2 font-medium">Prix Public HT</th>
-                        <th className="text-right pb-1 pl-2 font-medium">Marge %</th>
-                        <th className="pb-1 pl-1"></th>
+                        <th className="text-left pb-1 pr-1 font-medium">Qté min</th>
+                        <th className="text-right pb-1 px-1 font-medium">Prix Achat HT</th>
+                        <th className="text-right pb-1 px-1 font-medium">Prix Revendeur HT</th>
+                        <th className="text-right pb-1 px-1 font-medium">Prix Public HT</th>
+                        <th className="text-right pb-1 px-1 font-medium">Marge %</th>
+                        <th className="pb-1"></th>
                       </tr>
                     </thead>
                     <tbody>
                       {paliersPrix.map((palier, idx) => (
                         <tr key={idx} className="border-b border-border/50 last:border-0">
-                          <td className="py-1 pr-2">
+                          <td className="py-1 pr-1">
                             <Input
                               type="number"
                               step="any"
                               min={0}
                               value={palier.qteMin}
                               onChange={e => setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, qteMin: parseFloat(e.target.value) || 0 } : p))}
-                              className="h-7 text-xs w-20"
+                              className="h-7 text-xs w-full"
                             />
                           </td>
-                          <td className="py-1 px-2">
+                          <td className="py-1 px-1">
                             <Input
                               type="number"
                               step="any"
@@ -1119,10 +1127,10 @@ export default function Produits() {
                                 const ph = form.remiseRevendeur < 100 ? Math.round(pr / (1 - form.remiseRevendeur / 100) * 100) / 100 : pr;
                                 setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixAchat: pa, prixRevendeur: pr, prixHT: ph } : p));
                               }}
-                              className="h-7 text-xs w-24 text-right"
+                              className="h-7 text-xs w-full text-right"
                             />
                           </td>
-                          <td className="py-1 px-2">
+                          <td className="py-1 px-1">
                             <Input
                               type="number"
                               step="any"
@@ -1133,17 +1141,17 @@ export default function Produits() {
                                 const ph = form.remiseRevendeur < 100 ? Math.round(pr / (1 - form.remiseRevendeur / 100) * 100) / 100 : pr;
                                 setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixRevendeur: pr, prixHT: ph } : p));
                               }}
-                              className="h-7 text-xs w-24 text-right"
+                              className="h-7 text-xs w-full text-right"
                             />
                           </td>
-                          <td className="py-1 px-2">
+                          <td className="py-1 px-1">
                             <Input
                               type="number"
                               step="any"
                               min={0}
                               value={palier.prixHT}
                               onChange={e => setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixHT: parseFloat(e.target.value) || 0 } : p))}
-                              className="h-7 text-xs w-24 text-right"
+                              className="h-7 text-xs w-full text-right"
                             />
                           </td>
                           <td className="py-1 px-2 text-right text-muted-foreground whitespace-nowrap">
