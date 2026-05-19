@@ -29,6 +29,12 @@ export default defineConfig(({ mode }) => ({
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
   },
+  // BUGFIX: Vite 5 calcule isProduction via process.env.NODE_ENV (pas fiable sur Vercel).
+  // On force jsxDev via le mode Vite (toujours 'production' pour vite build) pour éviter
+  // que esbuild génère des appels jsxDEV() qui crashent avec le runtime React production.
+  esbuild: {
+    jsxDev: mode !== 'production',
+  },
   optimizeDeps: {
     include: ['xlsx'],
     // Force le re-bundling des deps en production (évite le cache Vercel corrompu avec jsxDEV)
