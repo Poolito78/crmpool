@@ -164,6 +164,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
               <button
                 key={p.id}
                 type="button"
+                title={`${p.reference} — ${p.description}${p.categorie ? ` (${p.categorie})` : ''}`}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors',
                   highlightIndex === i + 1 ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
