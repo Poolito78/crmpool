@@ -535,7 +535,14 @@ export default function Devis() {
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
         const palierPrix = getPrixPourQuantite(p, quantite);
         const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
-        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined };
+        // Initialise les variantes : première option de chaque dimension
+        const variantesChoisies: Record<string, string> = {};
+        if (p.variantes) {
+          p.variantes.forEach(dim => {
+            if (dim.options.length > 0) variantesChoisies[dim.id] = dim.options[0].label;
+          });
+        }
+        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
     }
   }
@@ -1340,6 +1347,39 @@ export default function Devis() {
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />
                               </div>
+                              {/* Variantes — dropdowns par dimension si le produit en a */}
+                              {prod?.variantes && prod.variantes.length > 0 && prod.variantes.map(dim => (
+                                <div key={dim.id} className="shrink-0 min-w-[100px] max-w-[160px]">
+                                  <Label className="text-xs truncate block">{dim.nom || 'Variante'}</Label>
+                                  <select
+                                    value={l.variantesChoisies?.[dim.id] || (dim.options[0]?.label ?? '')}
+                                    onChange={e => {
+                                      const label = e.target.value;
+                                      const opt = dim.options.find(o => o.label === label);
+                                      // Recalcule le prix avec l'ajustement de la variante choisie
+                                      setLignes(prev => prev.map(li => {
+                                        if (li.id !== l.id) return li;
+                                        const variantesChoisies = { ...(li.variantesChoisies || {}), [dim.id]: label };
+                                        // Somme des prixDiff de toutes les variantes choisies
+                                        const totalDiff = prod.variantes!.reduce((sum, d) => {
+                                          const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
+                                          const o = d.options.find(x => x.label === chosenLabel);
+                                          return sum + (o?.prixDiff ?? 0);
+                                        }, 0);
+                                        const client = clients.find(c => c.id === clientId);
+                                        const palierPrix = getPrixPourQuantite(prod, li.quantite);
+                                        const basePrix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+                                        return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
+                                      }));
+                                    }}
+                                    className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
+                                  >
+                                    {dim.options.map(opt => (
+                                      <option key={opt.id} value={opt.label}>{opt.label}{opt.prixDiff ? ` (${opt.prixDiff > 0 ? '+' : ''}${opt.prixDiff}€)` : ''}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                              ))}
                               {/* Surface m² — col visible */}
                               {visibleLigneCols.has('surface') && (
                                 <div className="w-20 shrink-0">

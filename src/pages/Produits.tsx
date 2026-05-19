@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, type Produit, type ComposantProduit, type LigneKit, type PrixPalier } from '@/lib/store';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
@@ -111,6 +111,7 @@ export default function Produits() {
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
+  const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
 
   // Persist visible columns
   useEffect(() => {
@@ -324,7 +325,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setEditingStack([]); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setVariantes([]); setEditingStack([]); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -365,6 +366,7 @@ export default function Produits() {
     setIsTypeKit(p.typeKit ?? false);
     setLignesKit(p.lignesKit || []);
     setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
+    setVariantes(p.variantes ? [...p.variantes] : []);
     setDialogOpen(true);
   }
 
@@ -419,12 +421,13 @@ export default function Produits() {
 
     const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
     const paliersPrixToSave = paliersPrix.length > 0 ? paliersPrix : null;
+    const variantesToSave = variantes.length > 0 ? variantes : null;
     if (editing) {
-      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined };
+      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined };
       updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any }).eq('id', editing.id).then(({ error }) => {
-        if (error) console.error('Erreur sauvegarde composants/kit/paliers:', error);
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any }).eq('id', editing.id).then(({ error }) => {
+        if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes:', error);
       });
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -439,12 +442,12 @@ export default function Produits() {
       toast.success('Produit modifié');
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
-      if (composantsToSave || lignesKitToSave || paliersPrixToSave) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any }).eq('id', newId).then(({ error }) => {
-          if (error) console.error('Erreur sauvegarde composants/kit/paliers nouveau produit:', error);
+      if (composantsToSave || lignesKitToSave || paliersPrixToSave || variantesToSave) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any }).eq('id', newId).then(({ error }) => {
+          if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes nouveau produit:', error);
         });
       }
       toast.success('Produit ajouté');
@@ -1179,6 +1182,83 @@ export default function Produits() {
                   <p className="text-xs text-muted-foreground mt-1">
                     Prix de base (qté &lt; {Math.min(...paliersPrix.map(p => p.qteMin))} {form.unite || 'u.'}) : Achat {formatMontant(form.prixAchat)} · Revend. {formatMontant(form.prixRevendeur)} · Public {formatMontant(form.prixHT)}
                   </p>
+                </div>
+              )}
+            </div>
+
+            {/* ─── Variantes produit ─── */}
+            <div className="border border-border rounded-md p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">Variantes (ex : RAL, granulométrie)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setVariantes(prev => [...prev, { id: generateId(), nom: '', options: [] }])}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Ajouter une dimension
+                </Button>
+              </div>
+              {variantes.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1">Aucune variante — produit sans déclinaison.</p>
+              ) : (
+                <div className="space-y-3">
+                  {variantes.map((dim, dIdx) => (
+                    <div key={dim.id} className="border border-border/60 rounded p-2 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Input
+                          value={dim.nom}
+                          onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, nom: e.target.value } : d))}
+                          placeholder="Nom de la dimension (ex : Couleur RAL)"
+                          className="h-7 text-xs flex-1"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setVariantes(prev => prev.filter((_, i) => i !== dIdx))}
+                          className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                          title="Supprimer cette dimension"
+                        >
+                          <Trash className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                      <div className="space-y-1">
+                        {dim.options.map((opt, oIdx) => (
+                          <div key={opt.id} className="flex items-center gap-1.5">
+                            <Input
+                              value={opt.label}
+                              onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, label: e.target.value } : o) } : d))}
+                              placeholder="Option (ex: RAL 9010, 0.5-1mm…)"
+                              className="h-6 text-xs flex-1"
+                            />
+                            <Input
+                              type="number"
+                              step="any"
+                              value={opt.prixDiff ?? ''}
+                              onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, prixDiff: e.target.value === '' ? undefined : parseFloat(e.target.value) } : o) } : d))}
+                              placeholder="±prix"
+                              className="h-6 text-xs w-16 text-right"
+                              title="Ajustement de prix HT (+/-)"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.filter((_, j) => j !== oIdx) } : d))}
+                              className="text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: [...d.options, { id: generateId(), label: '' }] } : d))}
+                          className="text-xs text-primary hover:underline flex items-center gap-0.5 mt-1"
+                        >
+                          <Plus className="h-3 w-3" /> Ajouter une option
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

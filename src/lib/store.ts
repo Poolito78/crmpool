@@ -87,6 +87,18 @@ export interface PrixPalier {
   prixHT: number;        // prix public HT à ce palier
 }
 
+export interface VarianteOption {
+  id: string;
+  label: string;       // ex: "RAL 9010 Blanc pur", "0.5-1 mm"
+  prixDiff?: number;   // ajustement de prix HT (positif ou négatif)
+}
+
+export interface VarianteDimension {
+  id: string;
+  nom: string;         // ex: "Couleur RAL", "Granulométrie"
+  options: VarianteOption[];
+}
+
 export interface Produit {
   id: string;
   reference: string;
@@ -112,7 +124,8 @@ export interface Produit {
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   dateCreation: string;
-  paliersPrix?: PrixPalier[]; // prix évolutifs par palier de quantité/poids
+  paliersPrix?: PrixPalier[];       // prix évolutifs par palier de quantité/poids
+  variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
 }
 
 export interface ProduitFournisseur {
@@ -255,6 +268,7 @@ export interface LigneDevis {
   consommation?: number;
   cellules?: number;
   note?: string;
+  variantesChoisies?: Record<string, string>; // dimensionId -> option.label
 }
 
 export interface Devis {
@@ -431,6 +445,7 @@ function dbToProduit(r: any): Produit {
     ficheLinkLabel: r.fiche_link_label || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
     paliersPrix: r.paliers_prix ? (Array.isArray(r.paliers_prix) ? r.paliers_prix : JSON.parse(r.paliers_prix)) : undefined,
+    variantes: r.variantes ? (Array.isArray(r.variantes) ? r.variantes : JSON.parse(r.variantes)) : undefined,
   };
 }
 
@@ -462,6 +477,7 @@ function produitToDb(p: Produit, userId: string) {
     fiche_link_label: p.ficheLinkLabel || null,
     date_creation: p.dateCreation,
     paliers_prix: p.paliersPrix && p.paliersPrix.length > 0 ? p.paliersPrix : null,
+    variantes: p.variantes && p.variantes.length > 0 ? p.variantes : null,
   };
 }
 
