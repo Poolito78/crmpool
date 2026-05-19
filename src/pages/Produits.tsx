@@ -1129,6 +1129,7 @@ export default function Produits() {
                               }}
                               className="h-7 text-xs w-full text-right"
                             />
+                            {form.poids > 0 && palier.prixAchat > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixAchat / form.poids)}/kg</div>}
                           </td>
                           <td className="py-1 px-1">
                             <Input
@@ -1143,6 +1144,7 @@ export default function Produits() {
                               }}
                               className="h-7 text-xs w-full text-right"
                             />
+                            {form.poids > 0 && palier.prixRevendeur > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixRevendeur / form.poids)}/kg</div>}
                           </td>
                           <td className="py-1 px-1">
                             <Input
@@ -1153,6 +1155,7 @@ export default function Produits() {
                               onChange={e => setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixHT: parseFloat(e.target.value) || 0 } : p))}
                               className="h-7 text-xs w-full text-right"
                             />
+                            {form.poids > 0 && palier.prixHT > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixHT / form.poids)}/kg</div>}
                           </td>
                           <td className="py-1 px-2 text-right text-muted-foreground whitespace-nowrap">
                             {palier.prixRevendeur > 0 && palier.prixAchat > 0
