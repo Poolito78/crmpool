@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, type Produit, type ComposantProduit, type LigneKit } from '@/lib/store';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, type Produit, type ComposantProduit, type LigneKit, type PrixPalier } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
@@ -34,7 +34,7 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: ''
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[]
 };
 
 // Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
@@ -110,6 +110,7 @@ export default function Produits() {
   const [kitDragOverIdx, setKitDragOverIdx] = useState<number | null>(null);
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
+  const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
 
   // Persist visible columns
   useEffect(() => {
@@ -323,7 +324,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setEditingStack([]); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setEditingStack([]); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -363,6 +364,7 @@ export default function Produits() {
     setComposantOpenIdx(null);
     setIsTypeKit(p.typeKit ?? false);
     setLignesKit(p.lignesKit || []);
+    setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
     setDialogOpen(true);
   }
 
@@ -416,12 +418,13 @@ export default function Produits() {
     const composantsToSave = composantsRecalc.length > 0 ? composantsRecalc : null;
 
     const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
+    const paliersPrixToSave = paliersPrix.length > 0 ? paliersPrix : null;
     if (editing) {
-      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined };
+      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined };
       updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any }).eq('id', editing.id).then(({ error }) => {
-        if (error) console.error('Erreur sauvegarde composants/kit:', error);
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any }).eq('id', editing.id).then(({ error }) => {
+        if (error) console.error('Erreur sauvegarde composants/kit/paliers:', error);
       });
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -436,12 +439,12 @@ export default function Produits() {
       toast.success('Produit modifié');
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
-      if (composantsToSave || lignesKitToSave) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any }).eq('id', newId).then(({ error }) => {
-          if (error) console.error('Erreur sauvegarde composants/kit nouveau produit:', error);
+      if (composantsToSave || lignesKitToSave || paliersPrixToSave) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any }).eq('id', newId).then(({ error }) => {
+          if (error) console.error('Erreur sauvegarde composants/kit/paliers nouveau produit:', error);
         });
       }
       toast.success('Produit ajouté');
@@ -1050,6 +1053,122 @@ export default function Produits() {
                     </div>
                   </div>
                 </>
+              )}
+            </div>
+
+            {/* ─── Prix par palier ─── */}
+            <div className="border border-border rounded-md p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-foreground">Prix par palier (quantité / poids)</p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => {
+                    const lastPalier = paliersPrix[paliersPrix.length - 1];
+                    const newQteMin = lastPalier ? lastPalier.qteMin + 10 : 10;
+                    setPaliersPrix(prev => [...prev, {
+                      qteMin: newQteMin,
+                      prixAchat: form.prixAchat,
+                      prixRevendeur: form.prixRevendeur,
+                      prixHT: form.prixHT,
+                    }]);
+                  }}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Ajouter un palier
+                </Button>
+              </div>
+              {paliersPrix.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-1">Aucun palier — prix fixe pour toutes les quantités.</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="text-muted-foreground border-b border-border">
+                        <th className="text-left pb-1 pr-2 font-medium">Qté min</th>
+                        <th className="text-right pb-1 px-2 font-medium">Prix Achat HT</th>
+                        <th className="text-right pb-1 px-2 font-medium">Prix Revendeur HT</th>
+                        <th className="text-right pb-1 px-2 font-medium">Prix Public HT</th>
+                        <th className="text-right pb-1 pl-2 font-medium">Marge %</th>
+                        <th className="pb-1 pl-1"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {paliersPrix.map((palier, idx) => (
+                        <tr key={idx} className="border-b border-border/50 last:border-0">
+                          <td className="py-1 pr-2">
+                            <Input
+                              type="number"
+                              step="any"
+                              min={0}
+                              value={palier.qteMin}
+                              onChange={e => setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, qteMin: parseFloat(e.target.value) || 0 } : p))}
+                              className="h-7 text-xs w-20"
+                            />
+                          </td>
+                          <td className="py-1 px-2">
+                            <Input
+                              type="number"
+                              step="any"
+                              min={0}
+                              value={palier.prixAchat}
+                              onChange={e => {
+                                const pa = parseFloat(e.target.value) || 0;
+                                const pr = Math.round(pa * form.coefficient * 100) / 100;
+                                const ph = form.remiseRevendeur < 100 ? Math.round(pr / (1 - form.remiseRevendeur / 100) * 100) / 100 : pr;
+                                setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixAchat: pa, prixRevendeur: pr, prixHT: ph } : p));
+                              }}
+                              className="h-7 text-xs w-24 text-right"
+                            />
+                          </td>
+                          <td className="py-1 px-2">
+                            <Input
+                              type="number"
+                              step="any"
+                              min={0}
+                              value={palier.prixRevendeur}
+                              onChange={e => {
+                                const pr = parseFloat(e.target.value) || 0;
+                                const ph = form.remiseRevendeur < 100 ? Math.round(pr / (1 - form.remiseRevendeur / 100) * 100) / 100 : pr;
+                                setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixRevendeur: pr, prixHT: ph } : p));
+                              }}
+                              className="h-7 text-xs w-24 text-right"
+                            />
+                          </td>
+                          <td className="py-1 px-2">
+                            <Input
+                              type="number"
+                              step="any"
+                              min={0}
+                              value={palier.prixHT}
+                              onChange={e => setPaliersPrix(prev => prev.map((p, i) => i === idx ? { ...p, prixHT: parseFloat(e.target.value) || 0 } : p))}
+                              className="h-7 text-xs w-24 text-right"
+                            />
+                          </td>
+                          <td className="py-1 px-2 text-right text-muted-foreground whitespace-nowrap">
+                            {palier.prixRevendeur > 0 && palier.prixAchat > 0
+                              ? `${Math.round((palier.prixRevendeur - palier.prixAchat) / palier.prixRevendeur * 100 * 10) / 10}%`
+                              : '—'}
+                          </td>
+                          <td className="py-1 pl-1">
+                            <button
+                              type="button"
+                              onClick={() => setPaliersPrix(prev => prev.filter((_, i) => i !== idx))}
+                              className="text-muted-foreground hover:text-destructive transition-colors"
+                              title="Supprimer ce palier"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Prix de base (qté &lt; {Math.min(...paliersPrix.map(p => p.qteMin))} {form.unite || 'u.'}) : Achat {formatMontant(form.prixAchat)} · Revend. {formatMontant(form.prixRevendeur)} · Public {formatMontant(form.prixHT)}
+                  </p>
+                </div>
               )}
             </div>
 

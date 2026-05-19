@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
@@ -420,7 +420,20 @@ export default function Devis() {
   }
 
   function updateLigne(id: string, field: string, value: any) {
-    setLignes(prev => prev.map(l => l.id === id ? { ...l, [field]: value } : l));
+    setLignes(prev => prev.map(l => {
+      if (l.id !== id) return l;
+      const updated = { ...l, [field]: value };
+      // Recalcule le prix si la quantité change et que le produit a des paliers
+      if (field === 'quantite' && l.produitId) {
+        const p = produits.find(pr => pr.id === l.produitId);
+        if (p && p.paliersPrix && p.paliersPrix.length > 0) {
+          const client = clients.find(c => c.id === clientId);
+          const palierPrix = getPrixPourQuantite(p, value as number);
+          updated.prixUnitaireHT = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+        }
+      }
+      return updated;
+    }));
   }
 
   function removeLigne(id: string) {
@@ -510,7 +523,6 @@ export default function Devis() {
     }
     if (p) {
       const client = clients.find(c => c.id === clientId);
-      let prix = p.prixHT;
       let remise = 0;
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
@@ -518,7 +530,13 @@ export default function Devis() {
       const autoQuantite = (surfaceGlobaleM2 > 0 && p.consommation && p.poids)
         ? calcQuantiteSurface(p, surfaceGlobaleM2)
         : null;
-      setLignes(prev => prev.map(l => l.id === ligneId ? { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite: autoQuantite !== null ? autoQuantite : l.quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined } : l));
+      setLignes(prev => prev.map(l => {
+        if (l.id !== ligneId) return l;
+        const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
+        const palierPrix = getPrixPourQuantite(p, quantite);
+        const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined };
+      }));
     }
   }
 
@@ -535,11 +553,12 @@ export default function Devis() {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
       if (!p) return l;
-      let prix = p.prixHT;
       let remise = 0;
       if (client?.estRevendeur) {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
+      const palierPrix = getPrixPourQuantite(p, l.quantite);
+      const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
       return { ...l, prixUnitaireHT: prix, remise };
     }));
   }, [clientId, dialogOpen, clients, produits]);

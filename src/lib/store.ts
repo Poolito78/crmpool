@@ -80,6 +80,13 @@ export interface LigneKit {
   note?: string;
 }
 
+export interface PrixPalier {
+  qteMin: number;        // quantité/poids minimum pour déclencher ce palier
+  prixAchat: number;     // prix achat HT à ce palier
+  prixRevendeur: number; // prix revendeur HT à ce palier
+  prixHT: number;        // prix public HT à ce palier
+}
+
 export interface Produit {
   id: string;
   reference: string;
@@ -105,6 +112,7 @@ export interface Produit {
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   dateCreation: string;
+  paliersPrix?: PrixPalier[]; // prix évolutifs par palier de quantité/poids
 }
 
 export interface ProduitFournisseur {
@@ -422,6 +430,7 @@ function dbToProduit(r: any): Produit {
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
+    paliersPrix: r.paliers_prix ? (Array.isArray(r.paliers_prix) ? r.paliers_prix : JSON.parse(r.paliers_prix)) : undefined,
   };
 }
 
@@ -452,6 +461,7 @@ function produitToDb(p: Produit, userId: string) {
     fiche_url: p.ficheUrl || null,
     fiche_link_label: p.ficheLinkLabel || null,
     date_creation: p.dateCreation,
+    paliers_prix: p.paliersPrix && p.paliersPrix.length > 0 ? p.paliersPrix : null,
   };
 }
 
@@ -1214,4 +1224,26 @@ export function calculerFournisseurPrioritaire(
   }
 
   return best;
+}
+
+/**
+ * Retourne les prix (achat, revendeur, public) applicables à une quantité donnée,
+ * en tenant compte des paliers définis sur le produit.
+ * Si pas de palier, retourne les prix de base du produit.
+ */
+export function getPrixPourQuantite(
+  produit: Produit,
+  quantite: number
+): { prixAchat: number; prixRevendeur: number; prixHT: number } {
+  if (!produit.paliersPrix || produit.paliersPrix.length === 0) {
+    return { prixAchat: produit.prixAchat, prixRevendeur: produit.prixRevendeur, prixHT: produit.prixHT };
+  }
+  // Tri décroissant par qteMin, on prend le premier palier atteint
+  const sorted = [...produit.paliersPrix].sort((a, b) => b.qteMin - a.qteMin);
+  const palier = sorted.find(p => quantite >= p.qteMin);
+  if (!palier) {
+    // En-dessous de tous les paliers → prix de base
+    return { prixAchat: produit.prixAchat, prixRevendeur: produit.prixRevendeur, prixHT: produit.prixHT };
+  }
+  return { prixAchat: palier.prixAchat, prixRevendeur: palier.prixRevendeur, prixHT: palier.prixHT };
 }
