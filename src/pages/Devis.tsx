@@ -573,7 +573,7 @@ export default function Devis() {
   }, [clientId, dialogOpen, clients, produits]);
 
   function save(silent = false): string | null {
-    if (!clientId) { if (!silent) toast.error('Sélectionnez un client'); return null; }
+    if (!clientId && statut !== 'système') { if (!silent) toast.error('Sélectionnez un client'); return null; }
     if (lignes.length === 0) { if (!silent) toast.error('Ajoutez au moins une ligne'); return null; }
 
     let savedId = editingId;
@@ -612,9 +612,9 @@ export default function Devis() {
     if (!editingId || !dialogOpen) return;
     clearTimeout(autoSaveRef.current);
     autoSaveRef.current = setTimeout(() => {
-      if (clientId && lignes.length > 0) {
+      if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
