@@ -1252,6 +1252,13 @@ export default function Produits() {
                               className="h-6 text-xs flex-1"
                             />
                             <Input
+                              value={opt.imageUrl || ''}
+                              onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, imageUrl: e.target.value || undefined } : o) } : d))}
+                              placeholder="URL image…"
+                              className="h-6 text-xs w-28"
+                              title="URL de l'image de l'option (texture, photo…)"
+                            />
+                            <Input
                               type="number"
                               step="any"
                               value={opt.prixDiff ?? ''}
