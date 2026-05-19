@@ -91,6 +91,8 @@ export interface VarianteOption {
   id: string;
   label: string;       // ex: "RAL 9010 Blanc pur", "0.5-1 mm"
   prixDiff?: number;   // ajustement de prix HT (positif ou négatif)
+  couleur?: string;    // couleur CSS hex (#A3B4C5) pour affichage swatch
+  imageUrl?: string;   // URL vers une image/texture de l'option
 }
 
 export interface VarianteDimension {

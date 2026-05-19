@@ -22,6 +22,7 @@ import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
 import { supabase } from '@/integrations/supabase/client';
+import VarianteSelect from '@/components/VarianteSelect';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -1351,18 +1352,15 @@ export default function Devis() {
                               </div>
                               {/* Variantes — dropdowns par dimension si le produit en a */}
                               {prod?.variantes && prod.variantes.length > 0 && prod.variantes.map(dim => (
-                                <div key={dim.id} className="shrink-0 min-w-[100px] max-w-[160px]">
+                                <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
                                   <Label className="text-xs truncate block">{dim.nom || 'Variante'}</Label>
-                                  <select
+                                  <VarianteSelect
+                                    dimension={dim}
                                     value={l.variantesChoisies?.[dim.id] || (dim.options[0]?.label ?? '')}
-                                    onChange={e => {
-                                      const label = e.target.value;
-                                      const opt = dim.options.find(o => o.label === label);
-                                      // Recalcule le prix avec l'ajustement de la variante choisie
+                                    onChange={label => {
                                       setLignes(prev => prev.map(li => {
                                         if (li.id !== l.id) return li;
                                         const variantesChoisies = { ...(li.variantesChoisies || {}), [dim.id]: label };
-                                        // Somme des prixDiff de toutes les variantes choisies
                                         const totalDiff = prod.variantes!.reduce((sum, d) => {
                                           const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
                                           const o = d.options.find(x => x.label === chosenLabel);
@@ -1374,12 +1372,7 @@ export default function Devis() {
                                         return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
                                       }));
                                     }}
-                                    className="h-8 w-full rounded border border-input bg-background px-2 text-sm"
-                                  >
-                                    {dim.options.map(opt => (
-                                      <option key={opt.id} value={opt.label}>{opt.label}{opt.prixDiff ? ` (${opt.prixDiff > 0 ? '+' : ''}${opt.prixDiff}€)` : ''}</option>
-                                    ))}
-                                  </select>
+                                  />
                                 </div>
                               ))}
                               {/* Surface m² — col visible */}

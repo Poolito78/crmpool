@@ -1230,6 +1230,21 @@ export default function Produits() {
                       <div className="space-y-1">
                         {dim.options.map((opt, oIdx) => (
                           <div key={opt.id} className="flex items-center gap-1.5">
+                            {/* Swatch couleur cliquable */}
+                            <div className="relative shrink-0" title="Couleur du swatch">
+                              <div
+                                className="w-6 h-6 rounded border border-input cursor-pointer"
+                                style={{ backgroundColor: opt.couleur || '#e5e7eb' }}
+                                onClick={() => (document.getElementById(`color-${opt.id}`) as HTMLInputElement)?.click()}
+                              />
+                              <input
+                                id={`color-${opt.id}`}
+                                type="color"
+                                value={opt.couleur || '#e5e7eb'}
+                                onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, couleur: e.target.value } : o) } : d))}
+                                className="absolute inset-0 opacity-0 w-0 h-0"
+                              />
+                            </div>
                             <Input
                               value={opt.label}
                               onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, label: e.target.value } : o) } : d))}
