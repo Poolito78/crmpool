@@ -31,5 +31,7 @@ export default defineConfig(({ mode }) => ({
   },
   optimizeDeps: {
     include: ['xlsx'],
+    // Force le re-bundling des deps en production (évite le cache Vercel corrompu avec jsxDEV)
+    force: mode === 'production',
   },
 }));
