@@ -5,6 +5,8 @@ import { componentTagger } from "lovable-tagger";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
+  // Force fresh cache — busts Vercel's stale build cache (jsxDEV issue)
+  cacheDir: '.vite-cache-v2',
   server: {
     host: "::",
     port: 8080,
