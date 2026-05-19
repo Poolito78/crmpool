@@ -38,6 +38,7 @@ const statutColors: Record<string, string> = {
   accepté: 'bg-success/10 text-success',
   refusé: 'bg-destructive/10 text-destructive',
   expiré: 'bg-muted text-muted-foreground',
+  système: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
 };
 
 export default function Devis() {
@@ -127,6 +128,7 @@ export default function Devis() {
     const client = clients.find(c => c.id === d.clientId);
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
     if (!matchSearch) return false;
+    if (filterStatut === 'tous' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterContact.trim()) {
@@ -701,6 +703,7 @@ export default function Devis() {
             <option value="accepté">Accepté</option>
             <option value="refusé">Refusé</option>
             <option value="expiré">Expiré</option>
+            <option value="système">Système (modèles)</option>
           </select>
           <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact(''); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Tous les clients</option>
@@ -795,6 +798,11 @@ export default function Devis() {
                       </span>
                     )}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
+                    {d.statut === 'système' && (
+                      <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-300 dark:border-violet-700 tracking-wide">
+                        MODÈLE
+                      </span>
+                    )}
                   </div>
                   <p className="text-sm text-muted-foreground">
                     {client ? (
@@ -885,6 +893,7 @@ export default function Devis() {
                       <option value="accepté">Accepté</option>
                       <option value="refusé">Refusé</option>
                       <option value="expiré">Expiré</option>
+                      <option value="système">Système</option>
                     </select>
                     <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
                     <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
@@ -1031,6 +1040,7 @@ export default function Devis() {
                   <option value="accepté">Accepté</option>
                   <option value="refusé">Refusé</option>
                   <option value="expiré">Expiré</option>
+                  <option value="système">Système (modèle)</option>
                 </select>
               </div>
               {(statut === 'envoyé' || statut === 'accepté' || statut === 'refusé') && (

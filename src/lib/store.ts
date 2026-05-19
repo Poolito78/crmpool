@@ -257,7 +257,7 @@ export interface Devis {
   adresseLivraisonId?: string;
   dateCreation: string;
   dateValidite: string;
-  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré';
+  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré' | 'système';
   dateEnvoi?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
