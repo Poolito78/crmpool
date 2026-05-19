@@ -126,7 +126,9 @@ export default function Devis() {
 
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
-    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(search.toLowerCase()));
+    const q = search.toLowerCase();
+    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
+      || d.lignes.some(l => l.variantesChoisies && Object.values(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
     if (filterStatut === 'tous' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;

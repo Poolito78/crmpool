@@ -242,7 +242,12 @@ export default function Produits() {
 
   const filtered = safeProduits.filter(p => {
     // Global search
-    if (search && ![p.description, p.reference, p.categorie].some(v => v?.toLowerCase().includes(search.toLowerCase()))) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      const matchBase = [p.description, p.reference, p.categorie].some(v => v?.toLowerCase().includes(q));
+      const matchVariante = p.variantes?.some(dim => dim.options.some(opt => opt.label.toLowerCase().includes(q)));
+      if (!matchBase && !matchVariante) return false;
+    }
     // Column filters
     for (const [key, val] of Object.entries(columnFilters)) {
       if (!val) continue;

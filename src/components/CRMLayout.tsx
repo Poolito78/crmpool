@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, Layers } from 'lucide-react';
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -22,6 +22,7 @@ const navItems = [
   { label: 'Factures Fourn.', icon: Receipt, path: '/factures-fournisseur' },
   { label: 'Calcul Transport', icon: Calculator, path: '/calculateur-ups' },
   { label: 'Historique GED', icon: History, path: '/ged' },
+  { label: 'Stats Variantes', icon: Layers, path: '/stats-variantes' },
 ];
 
 export default function CRMLayout() {
