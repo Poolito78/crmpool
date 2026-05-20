@@ -359,6 +359,7 @@ export default function Devis() {
       { id: grpId, type: 'groupe',    description: 'Nouveau groupe', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
       { id: subId, type: 'soustotal', description: '',               quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
     ]);
+    setNewLigneId(grpId);
   }
 
   function addTexte() {
@@ -1293,6 +1294,8 @@ export default function Devis() {
                         <GripVertical className="w-4 h-4 text-primary/40 shrink-0" />
                         <FolderPlus className="w-4 h-4 text-primary shrink-0" />
                         <input type="text" value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                          autoFocus={l.id === newLigneId}
+                          onFocus={e => { if (l.id === newLigneId) { e.target.select(); setNewLigneId(null); } }}
                           className="flex-1 font-semibold text-sm bg-transparent border-none outline-none text-primary placeholder:text-primary/50" placeholder="Titre du groupe…" />
                         <div className="flex items-center gap-1">
                           <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-primary/60 hover:text-primary disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
