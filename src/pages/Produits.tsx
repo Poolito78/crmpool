@@ -407,6 +407,19 @@ export default function Produits() {
     });
   }
 
+  function updateFormPrixRevendeur(prixRevendeur: number) {
+    setForm(prev => {
+      const next = { ...prev, prixRevendeur };
+      // Recalcule le coefficient à rebours depuis le prix revendeur saisi
+      if (next.prixAchat > 0) {
+        next.coefficient = Math.round(prixRevendeur / next.prixAchat * 10000) / 10000;
+        next.coeffRevendeur = next.coefficient;
+      }
+      next.prixHT = calcPrixPublicFromRevendeur(prixRevendeur, next.remiseRevendeur);
+      return next;
+    });
+  }
+
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
@@ -1018,7 +1031,7 @@ export default function Produits() {
                 </div>
                 <div>
                   <Label className="text-xs">Prix Revendeur HT</Label>
-                  <Input value={formatMontant(form.prixRevendeur)} readOnly className="bg-muted font-semibold" />
+                  <Input type="number" step="0.01" value={form.prixRevendeur} onChange={e => updateFormPrixRevendeur(parseFloat(e.target.value) || 0)} className="font-semibold" />
                 </div>
                 <div>
                   <Label className="text-xs">Marge brute revend.</Label>
