@@ -433,7 +433,7 @@ export default function Devis() {
         if (p && p.paliersPrix && p.paliersPrix.length > 0) {
           const client = clients.find(c => c.id === clientId);
           const palierPrix = getPrixPourQuantite(p, value as number);
-          updated.prixUnitaireHT = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+          updated.prixUnitaireHT = palierPrix.prixHT;
         }
       }
       return updated;
@@ -538,7 +538,7 @@ export default function Devis() {
         if (l.id !== ligneId) return l;
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
         const palierPrix = getPrixPourQuantite(p, quantite);
-        const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+        const prix = palierPrix.prixHT;
         // Initialise les variantes : première option de chaque dimension
         const variantesChoisies: Record<string, string> = {};
         if (p.variantes) {
@@ -569,7 +569,7 @@ export default function Devis() {
         remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
       }
       const palierPrix = getPrixPourQuantite(p, l.quantite);
-      const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+      const prix = palierPrix.prixHT;
       return { ...l, prixUnitaireHT: prix, remise };
     }));
   }, [clientId, dialogOpen, clients, produits]);
