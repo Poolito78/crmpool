@@ -433,7 +433,7 @@ export default function Devis() {
         if (p && p.paliersPrix && p.paliersPrix.length > 0) {
           const client = clients.find(c => c.id === clientId);
           const palierPrix = getPrixPourQuantite(p, value as number);
-          updated.prixUnitaireHT = palierPrix.prixHT;
+          updated.prixUnitaireHT = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
         }
       }
       return updated;
@@ -527,10 +527,6 @@ export default function Devis() {
     }
     if (p) {
       const client = clients.find(c => c.id === clientId);
-      let remise = 0;
-      if (client?.estRevendeur) {
-        remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
-      }
       const autoQuantite = (surfaceGlobaleM2 > 0 && p.consommation && p.poids)
         ? calcQuantiteSurface(p, surfaceGlobaleM2)
         : null;
@@ -538,7 +534,7 @@ export default function Devis() {
         if (l.id !== ligneId) return l;
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
         const palierPrix = getPrixPourQuantite(p, quantite);
-        const prix = palierPrix.prixHT;
+        const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
         // Initialise les variantes : première option de chaque dimension
         const variantesChoisies: Record<string, string> = {};
         if (p.variantes) {
@@ -546,7 +542,7 @@ export default function Devis() {
             if (dim.options.length > 0) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
-        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
+        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: 0, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
     }
   }
@@ -564,13 +560,9 @@ export default function Devis() {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
       if (!p) return l;
-      let remise = 0;
-      if (client?.estRevendeur) {
-        remise = client.remisesParCategorie?.[p.categorie || ''] ?? 30;
-      }
       const palierPrix = getPrixPourQuantite(p, l.quantite);
-      const prix = palierPrix.prixHT;
-      return { ...l, prixUnitaireHT: prix, remise };
+      const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+      return { ...l, prixUnitaireHT: prix, remise: 0 };
     }));
   }, [clientId, dialogOpen, clients, produits]);
 
