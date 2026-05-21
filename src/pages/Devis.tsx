@@ -1309,7 +1309,8 @@ export default function Devis() {
                     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                     const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
                     const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
-                    const coeff = prod && prod.prixAchat > 0 ? prixNetHT / prod.prixAchat : null;
+                    // Coeff calculé sur le prix unitaire brut (hors remise ligne) pour refléter le coefficient produit réel
+                    const coeff = prod && prod.prixAchat > 0 ? l.prixUnitaireHT / prod.prixAchat : null;
                     const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                     const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
                     const consoLigne = l.consommation ?? prod?.consommation;
