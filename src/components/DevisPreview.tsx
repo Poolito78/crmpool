@@ -176,10 +176,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   const totals = calculerTotalDevis(lignesEffectives, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
   // Fusion : prop lineImages (session courante) + fetchedLineImages (Supabase persisté)
+  // lineImages prend priorité (contient les URLs fraîches de la session)
   const allLineImages: Record<string, { url: string; name: string }[]> = {};
-  for (const [k, v] of Object.entries(fetchedLineImages)) allLineImages[k] = v;
+  for (const [k, v] of Object.entries(fetchedLineImages)) allLineImages[k] = [...v];
   for (const [k, v] of Object.entries(lineImages)) {
-    allLineImages[k] = [...(allLineImages[k] || []), ...v.filter(img => img.url.startsWith('blob:'))];
+    if (v.length > 0) allLineImages[k] = v; // remplace complètement (URLs session = plus à jour)
   }
 
   const poidsTotal = lignesEffectives.reduce((sum, l) => {
