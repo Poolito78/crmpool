@@ -1930,7 +1930,9 @@ export default function Devis() {
                         const pfs = l.produitId ? produitFournisseurs.filter(pf => pf.produitId === l.produitId) : [];
                         const selFournId = selectedFournisseurPerLigne[l.id];
                         const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
-                        const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (selPf?.prixAchat ?? prod?.prixAchat ?? 0);
+                        // prod.prixAchat = prix achat conditionné (référence utilisée dans ProduitFournisseursPanel)
+                        // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
+                        const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod?.prixAchat ?? 0);
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         const totAchat = puAchat * l.quantite;
                         const totVente = puVente * l.quantite;
