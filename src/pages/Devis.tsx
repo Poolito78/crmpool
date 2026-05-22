@@ -1926,6 +1926,31 @@ export default function Devis() {
               return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
             }, 0);
             let totalAchat = 0, totalVente = 0;
+            // ── Transport ──
+            const poidsCompa = lignes.reduce((acc, l) => {
+              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              return acc + (prod?.poids || 0) * l.quantite;
+            }, 0);
+            const hasGranulatCompa = lignes.some(l => {
+              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              return prod?.categorie?.toLowerCase().includes('granulat');
+            });
+            let portAchat = 0;
+            if (fraisPortHT > 0) {
+              if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
+                const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsCompa);
+                portAchat = prix ?? 0;
+              } else {
+                // standard : pas de markup → achat = vente
+                portAchat = calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
+              }
+            }
+            const portVente = fraisPortHT;
+            const portMarge = portVente - portAchat;
+            const portCoeff = portAchat > 0 ? portVente / portAchat : null;
+            const transportLabel = transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]
+              ? `Transport — ${BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].label}${expressJ1 ? ' Express' : ''}`
+              : 'Transport';
             return (
               <div className="flex-1 overflow-y-auto py-2 pr-1">
                 <div className="overflow-x-auto">
@@ -2025,6 +2050,23 @@ export default function Devis() {
                           </tr>
                         );
                       })}
+                      {portVente > 0 && (() => {
+                        const portCoeffColor = portCoeff == null ? '' : portCoeff >= 1.55 ? 'text-emerald-600 dark:text-emerald-400' : portCoeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                        totalAchat += portAchat;
+                        totalVente += portVente;
+                        return (
+                          <tr className="border-b border-border/50 hover:bg-muted/30 bg-blue-50/30 dark:bg-blue-950/20">
+                            <td className="px-2 py-1.5 text-muted-foreground italic" colSpan={3}>{transportLabel}</td>
+                            <td className="px-2 py-1.5 text-right">{portAchat > 0 ? formatMontant(portAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">{portAchat > 0 ? formatMontant(portAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">{formatMontant(portVente)}</td>
+                            <td className="px-2 py-1.5 text-right font-medium">{formatMontant(portVente)}</td>
+                            <td className={`px-2 py-1.5 text-right ${portMarge < 0 ? 'text-destructive' : ''}`}>{portAchat > 0 ? formatMontant(portMarge) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right text-muted-foreground">—</td>
+                            <td className={`px-2 py-1.5 text-right font-semibold ${portCoeffColor}`}>{portCoeff != null ? portCoeff.toFixed(2) : <span className="text-muted-foreground font-normal">—</span>}</td>
+                          </tr>
+                        );
+                      })()}
                     </tbody>
                     {lignesCompa.length > 0 && (() => {
                       const mTotal = totalVente - totalAchat;
