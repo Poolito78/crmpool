@@ -1772,13 +1772,39 @@ export default function Devis() {
                 return acc + (prod?.poids || 0) * l.quantite;
               }, 0);
               const totalAchat = lignes.reduce((acc, l) => {
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                return acc + (prod?.prixAchat || 0) * l.quantite;
+                if (l.type && l.type !== 'ligne') return acc;
+                if (!l.produitId) {
+                  const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+                  if (l.description?.includes('Surcharge énergie MMA'))
+                    return acc + puVente * (SURCHARGE_ENERGIE_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_MMA_VENTE_PCT) * l.quantite;
+                  if (l.description?.includes('Surcharge énergie hors MMA'))
+                    return acc + puVente * (SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) * l.quantite;
+                  return acc + (l.prixAchatLigne ?? 0) * l.quantite;
+                }
+                const prod = produits.find(p => p.id === l.produitId);
+                if (!prod) return acc;
+                const prixAchat = getPrixPourQuantite(prod, l.quantite).prixAchat;
+                return acc + prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
               }, 0);
+              // Inclure transport dans le total achat pour marge/coeff cohérents avec comparatif
+              const portAchatApercu = (() => {
+                if (fraisPortHT <= 0) return 0;
+                if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
+                  const poidsTot = lignes.reduce((acc, l) => {
+                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    return acc + (prod?.poids || 0) * l.quantite;
+                  }, 0);
+                  const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsTot);
+                  return prix ?? 0;
+                }
+                return fraisPortHT;
+              })();
               const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
-              const margeTotal = totalHTLignes - totalAchat;
-              const tauxMarque = totalHTLignes > 0 ? (margeTotal / totalHTLignes) * 100 : 0;
-              const coeffTotal = totalAchat > 0 ? totalHTLignes / totalAchat : null;
+              const totalAchatAvecPort = totalAchat + portAchatApercu;
+              const totalVenteAvecPort = totalHTLignes + fraisPortHT;
+              const margeTotal = totalVenteAvecPort - totalAchatAvecPort;
+              const tauxMarque = totalVenteAvecPort > 0 ? (margeTotal / totalVenteAvecPort) * 100 : 0;
+              const coeffTotal = totalAchatAvecPort > 0 ? totalVenteAvecPort / totalAchatAvecPort : null;
               return (
                 <div className="bg-muted/50 rounded-lg p-4 space-y-1 text-sm">
                   <div className="flex justify-between"><span>Total HT (lignes)</span><span className="font-semibold">{formatMontant(totalHTLignes)}</span></div>
