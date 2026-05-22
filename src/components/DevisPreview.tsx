@@ -787,7 +787,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) return (
                               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginLeft: '8px', verticalAlign: 'middle' }}>
-                                <img src={imgUrl} alt={label} style={{ width: '40px', height: '26px', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.2)', display: 'inline-block', flexShrink: 0 }} />
+                                {/* background-image au lieu de <img objectFit> — html2canvas-safe */}
+                                <span style={{ display: 'inline-block', width: '40px', height: '26px', backgroundImage: `url(${imgUrl})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }} />
                                 <span className="text-xs text-muted-foreground font-normal">{label}</span>
                               </span>
                             );
