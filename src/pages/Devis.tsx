@@ -1961,7 +1961,7 @@ export default function Devis() {
                         const coeff = totAchat > 0 ? totVente / totAchat : null;
                         totalAchat += totAchat;
                         totalVente += totVente;
-                        const coeffColor = coeff == null ? '' : coeff >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                        const coeffColor = coeff == null ? '' : coeff >= 1.55 ? 'text-emerald-600 dark:text-emerald-400' : coeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
                         return (
                           <tr key={l.id} className="border-b border-border/50 hover:bg-muted/30">
                             <td className="px-2 py-1.5 max-w-[220px]">
@@ -2023,7 +2023,7 @@ export default function Devis() {
                       const mTotal = totalVente - totalAchat;
                       const margePctTotal = totalVente > 0 ? (mTotal / totalVente) * 100 : 0;
                       const coeffTotal = totalAchat > 0 ? totalVente / totalAchat : null;
-                      const coeffTotalColor = coeffTotal == null ? '' : coeffTotal >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffTotal >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                      const coeffTotalColor = coeffTotal == null ? '' : coeffTotal >= 1.55 ? 'text-emerald-600 dark:text-emerald-400' : coeffTotal >= 1.43 ? 'text-orange-500' : 'text-destructive';
                       return (
                         <tfoot>
                           <tr className="border-t-2 border-border bg-muted/40 font-semibold">
