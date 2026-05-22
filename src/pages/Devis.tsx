@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -377,6 +377,30 @@ export default function Devis() {
     setLignes(prev => [
       ...prev,
       { id, type: 'texte', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    ]);
+    setNewLigneId(id);
+  }
+
+  // ─── Surcharge énergie MMA ────────────────────────────────────────────────
+  const SURCHARGE_ENERGIE_PCT = 14.8;
+  function addSurchargeEnergie() {
+    // Calcule le total HT des lignes dont le produit est de catégorie MMA
+    const totalMMA = lignes.reduce((acc, l) => {
+      if (!l.produitId) return acc;
+      const prod = produits.find(p => p.id === l.produitId);
+      if (!prod || prod.categorie?.toLowerCase() !== 'mma') return acc;
+      return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+    }, 0);
+    if (totalMMA <= 0) {
+      import('sonner').then(({ toast }) => toast.warning('Aucun produit MMA trouvé dans le devis.'));
+      return;
+    }
+    saveSnapshot();
+    const montant = Math.round(totalMMA * SURCHARGE_ENERGIE_PCT) / 100;
+    const id = generateId();
+    setLignes(prev => [
+      ...prev,
+      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montant, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
   }
@@ -1202,6 +1226,7 @@ export default function Devis() {
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
+                  <Button variant="outline" size="sm" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (${SURCHARGE_ENERGIE_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge</Button>
                   <div ref={kitPickerRef} className="relative">
                     <Button variant="outline" size="sm" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
                       <Layers className="w-3 h-3 mr-1" /> Kit
