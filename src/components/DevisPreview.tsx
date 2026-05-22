@@ -618,8 +618,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             );
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) return (
-                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', marginTop: '-6px', marginBottom: '-6px', verticalAlign: 'middle', lineHeight: 0 }}>
-                                <img src={imgUrl} alt={label} style={{ width: 'auto', height: 'calc(1.5em + 12px)', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'block' }} />
+                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginLeft: '8px', verticalAlign: 'middle' }}>
+                                <img src={imgUrl} alt={label} style={{ width: '40px', height: '26px', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.2)', display: 'inline-block', flexShrink: 0 }} />
                                 <span className="text-xs text-muted-foreground font-normal">{label}</span>
                               </span>
                             );
