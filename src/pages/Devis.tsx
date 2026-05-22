@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,6 +66,7 @@ export default function Devis() {
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
+  const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
@@ -614,6 +615,21 @@ export default function Devis() {
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
   }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+
+  // Chargement pièces jointes pour la sidebar
+  useEffect(() => {
+    if (!editingId || !dialogOpen) { setSidebarPjs([]); return; }
+    supabase.from('devis_pieces_jointes')
+      .select('id, type, contenu, fichier_nom, fichier_url, fichier_taille, fichier_mime, confidentiel, date')
+      .eq('devis_id', editingId)
+      .order('date', { ascending: false })
+      .then(({ data }) => setSidebarPjs((data ?? []).map(r => ({
+        id: r.id, type: r.type, contenu: r.contenu ?? undefined,
+        fichierNom: r.fichier_nom ?? undefined, fichierUrl: r.fichier_url ?? undefined,
+        fichierTaille: r.fichier_taille ?? undefined, fichierMime: r.fichier_mime ?? undefined,
+        confidentiel: r.confidentiel ?? false, date: r.date,
+      }))));
+  }, [editingId, dialogOpen, chatterDevis]); // rechargé quand le chatter se ferme
 
   // Recalcul auto des quantités quand surface globale change — s'applique aux lignes ayant surface+conso
   useEffect(() => {
@@ -1609,11 +1625,43 @@ export default function Devis() {
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
 
+            {/* ── Coût chantier ── */}
+            {(() => {
+              const surfaceRef = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
+              if (surfaceRef <= 0) return null;
+              let sumCout = 0;
+              for (const l of lignes) {
+                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                if (!prod || l.type !== 'produit') continue;
+                const prixNet = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+                if (prod.poids && prod.poids > 0) {
+                  const kgTotal = l.quantite * prod.poids;
+                  sumCout += kgTotal * (prixNet / prod.poids);
+                } else {
+                  sumCout += l.quantite * prixNet;
+                }
+              }
+              const coutM2 = sumCout > 0 ? Math.round(sumCout / surfaceRef * 100) / 100 : null;
+              if (!coutM2) return null;
+              return (
+                <div className="border border-[#CC0000]/30 bg-[#CC0000]/5 rounded-lg px-3 py-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[#CC0000] uppercase tracking-wide">Coût chantier</span>
+                  <span className="font-bold text-[#CC0000]">{coutM2.toFixed(2)} €/m²</span>
+                </div>
+              );
+            })()}
+
             {/* ── Notes & fichiers joints (chatter) ── */}
             {editingId && (
-              <div className="border-t border-border/50 pt-3">
-                <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide mb-2">Notes & pièces jointes</p>
-                <div className="flex gap-2">
+              <div className="border-t border-border/50 pt-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Notes & pièces jointes</p>
+                  {sidebarPjs.length > 0 && (
+                    <span className="text-[10px] bg-muted rounded-full px-2 py-0.5 text-muted-foreground">{sidebarPjs.length}</span>
+                  )}
+                </div>
+                {/* Boutons d'ajout */}
+                <div className="flex gap-2 flex-wrap">
                   <Button size="sm" variant="outline" className="gap-1.5 text-xs"
                     onClick={() => { const d = devis.find(dv => dv.id === editingId); if (d) { setChatterMode('note'); setChatterDevis(d); } }}>
                     <StickyNote className="w-3.5 h-3.5" /> Note
@@ -1622,7 +1670,44 @@ export default function Devis() {
                     onClick={() => { const d = devis.find(dv => dv.id === editingId); if (d) { setChatterMode('fichier'); setChatterDevis(d); } }}>
                     <Paperclip className="w-3.5 h-3.5" /> Joindre un fichier
                   </Button>
+                  {sidebarPjs.length > 0 && (
+                    <Button size="sm" variant="ghost" className="gap-1.5 text-xs ml-auto"
+                      onClick={() => { const d = devis.find(dv => dv.id === editingId); if (d) setChatterDevis(d); }}>
+                      <MessageSquare className="w-3.5 h-3.5" /> Tout voir
+                    </Button>
+                  )}
                 </div>
+                {/* Liste des pièces jointes */}
+                {sidebarPjs.length > 0 && (
+                  <div className="space-y-1">
+                    {sidebarPjs.slice(0, 5).map(pj => (
+                      <div key={pj.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs border ${pj.confidentiel ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20' : 'border-border bg-muted/30'}`}>
+                        {pj.type === 'note'
+                          ? <StickyNote className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+                          : pj.fichierMime?.includes('pdf')
+                            ? <FileText className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                            : <Paperclip className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                        }
+                        <span className="flex-1 truncate text-muted-foreground">
+                          {pj.type === 'note' ? (pj.contenu?.substring(0, 40) + (pj.contenu && pj.contenu.length > 40 ? '…' : '')) : pj.fichierNom}
+                        </span>
+                        {pj.confidentiel && <span className="text-amber-500 shrink-0">🔒</span>}
+                        {pj.fichierUrl && (
+                          <button
+                            onClick={() => window.open(pj.fichierUrl, '_blank')}
+                            className="p-0.5 rounded hover:bg-muted shrink-0"
+                            title="Ouvrir"
+                          >
+                            <Eye className="w-3 h-3 text-primary" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                    {sidebarPjs.length > 5 && (
+                      <p className="text-[10px] text-muted-foreground text-center">+ {sidebarPjs.length - 5} autre{sidebarPjs.length - 5 > 1 ? 's' : ''}…</p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
