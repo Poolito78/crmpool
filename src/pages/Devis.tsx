@@ -1458,7 +1458,19 @@ export default function Devis() {
                             </div>
                             {/* Note */}
                             <div className="flex items-center mt-1 pl-9">
-                              <Input value={l.note || ''} onChange={e => updateLigne(l.id, 'note', e.target.value || undefined)} placeholder="Note (optionnelle)…" className="h-6 text-xs text-muted-foreground bg-transparent border-transparent hover:border-input focus:border-input" />
+                              <textarea
+                                value={l.note || ''}
+                                onChange={e => {
+                                  updateLigne(l.id, 'note', e.target.value || undefined);
+                                  e.target.style.height = 'auto';
+                                  e.target.style.height = e.target.scrollHeight + 'px';
+                                }}
+                                onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                placeholder="Note (optionnelle)…"
+                                rows={1}
+                                style={{ resize: 'none', overflow: 'hidden', minHeight: '1.5rem' }}
+                                className="w-full text-xs text-muted-foreground bg-transparent border border-transparent hover:border-input focus:border-input rounded-md px-3 py-1 outline-none leading-5"
+                              />
                             </div>
                             {/* Infos marges */}
                             {(tauxMarque !== null || coeff !== null || prixKg !== null || kgReel !== null) && (
