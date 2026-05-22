@@ -400,7 +400,7 @@ export default function Devis() {
     const id = generateId();
     setLignes(prev => [
       ...prev,
-      { id, description: `Surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, tva: 20, remise: 0 },
+      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
   }
@@ -426,7 +426,7 @@ export default function Devis() {
       ...prev,
       {
         id,
-        description: `Surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`,
+        description: `Surcharge énergie hors MMA (${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}%)`,
         quantite: 1,
         unite: 'forfait',
         prixUnitaireHT: montantVente,
