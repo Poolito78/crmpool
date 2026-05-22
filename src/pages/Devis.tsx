@@ -67,6 +67,8 @@ export default function Devis() {
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
+  // Images collées dans les notes de ligne : ligneId → [{url, name}]
+  const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
@@ -718,6 +720,32 @@ export default function Devis() {
   }
 
   const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
+
+  /* ── Coller image dans note de ligne ── */
+  async function handleLigneNotePaste(ligneId: string, e: React.ClipboardEvent) {
+    const imageItems = Array.from(e.clipboardData.items).filter(i => i.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user || !editingId) return;
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const ext = file.type.split('/')[1] || 'png';
+      const name = `image_${Date.now()}.${ext}`;
+      const path = `${user.id}/${editingId}/${Date.now()}_${name}`;
+      const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false });
+      if (upErr) { toast.error('Erreur upload image'); continue; }
+      const { data: signed } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      const url = signed?.signedUrl ?? path;
+      await supabase.from('devis_pieces_jointes').insert({
+        user_id: user.id, devis_id: editingId, type: 'fichier',
+        fichier_nom: name, fichier_url: url, fichier_taille: file.size, fichier_mime: file.type,
+      });
+      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url, name }] }));
+    }
+    toast.success('Image(s) ajoutée(s) à la note');
+  }
 
   return (
     <div className="space-y-4">
@@ -1457,7 +1485,7 @@ export default function Devis() {
                               </div>
                             </div>
                             {/* Note */}
-                            <div className="flex items-center mt-1 pl-9">
+                            <div className="mt-1 pl-9">
                               <textarea
                                 value={l.note || ''}
                                 onChange={e => {
@@ -1466,11 +1494,26 @@ export default function Devis() {
                                   e.target.style.height = e.target.scrollHeight + 'px';
                                 }}
                                 onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
-                                placeholder="Note (optionnelle)…"
+                                onPaste={e => handleLigneNotePaste(l.id, e)}
+                                placeholder="Note (optionnelle)… Ctrl+V pour coller une image"
                                 rows={1}
                                 style={{ resize: 'none', overflow: 'hidden', minHeight: '1.5rem' }}
                                 className="w-full text-xs text-muted-foreground bg-transparent border border-transparent hover:border-input focus:border-input rounded-md px-3 py-1 outline-none leading-5"
                               />
+                              {(lineImages[l.id] || []).length > 0 && (
+                                <div className="flex flex-wrap gap-1.5 mt-1">
+                                  {(lineImages[l.id] || []).map((img, i) => (
+                                    <div key={i} className="relative group/img">
+                                      <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => window.open(img.url, '_blank')} />
+                                      <button
+                                        type="button"
+                                        onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== i) }))}
+                                        className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                      >×</button>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                             {/* Infos marges */}
                             {(tauxMarque !== null || coeff !== null || prixKg !== null || kgReel !== null) && (
