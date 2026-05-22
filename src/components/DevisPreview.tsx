@@ -1055,7 +1055,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                             });
                           })()}
-                          {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
+                          {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
                           {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
                           {(l.note || (dataUrlImages[l.id] || []).filter(Boolean).length > 0) && (() => {
                             const rsNote = l.note ? getRalStyle(l.note) : null;
