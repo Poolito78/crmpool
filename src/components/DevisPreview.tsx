@@ -721,19 +721,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* lien site — <div> au lieu de <span class="block"> pour html2canvas */}
                     <div style={{ fontSize: '10px', fontWeight: 'normal', fontStyle: 'italic', opacity: 0.7, marginTop: '2px' }}>Fiches système / Produit : www.isofloor.fr</div>
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20">Conso. Estimée</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Conditionnement</th>
+                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Conso. Est.</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Condit.</th>
                   <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Prix</th>
                 </tr>
                 {/* Ligne 2 : sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  <th className="py-1 px-1 text-right border-l border-white/20">kg/m²</th>
-                  <th className="py-1 px-1 text-right">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20">kg</th>
-                  <th className="py-1 px-1 text-right">Unité</th>
-                  <th className="py-1 px-1 text-right">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20">Unité</th>
-                  <th className="py-1 px-1 text-right">(Kg)</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg/m²</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>Unité</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Unité</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>(Kg)</th>
                   <th className="py-1 px-1 text-right">Total HT</th>
                 </tr>
               </thead>
