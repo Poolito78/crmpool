@@ -76,6 +76,7 @@ export default function VarianteSelect({ dimension, value, onChange, className }
   const selectedOpt = dimension.options.find(o => o.label === value) ?? dimension.options[0];
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
   const hasRal = !hasVisuals && dimension.options.some(o => getRalInfo(o.label));
+  const selectedRal = !selectedOpt?.imageUrl && !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || '') : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -92,14 +93,22 @@ export default function VarianteSelect({ dimension, value, onChange, className }
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="h-8 w-full flex items-center gap-1.5 rounded border border-input bg-background px-2 text-sm hover:bg-accent/50 transition-colors"
+        className="h-8 w-full flex items-center gap-1.5 rounded border px-2 text-sm transition-colors"
+        style={selectedRal ? {
+          backgroundColor: selectedRal.hex,
+          color: selectedRal.dark ? '#ffffff' : '#1a1a1a',
+          borderColor: selectedRal.white ? '#ccc' : 'rgba(0,0,0,0.15)',
+        } : undefined}
       >
-        {selectedOpt && <SwatchPreview opt={selectedOpt} size="sm" />}
-        <span className="flex-1 text-left truncate">
+        {selectedOpt && !selectedRal && <SwatchPreview opt={selectedOpt} size="sm" />}
+        {selectedRal && (
+          <span className="text-[10px] font-bold tracking-wide shrink-0 opacity-80">RAL</span>
+        )}
+        <span className="flex-1 text-left truncate font-medium">
           {selectedOpt?.label ?? '—'}
           {selectedOpt?.prixDiff ? ` (${selectedOpt.prixDiff > 0 ? '+' : ''}${selectedOpt.prixDiff}€)` : ''}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
 
       {/* Menu déroulant */}
@@ -127,14 +136,26 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                   )}
                   title={opt.label}
                 >
-                  {(opt.imageUrl || opt.couleur) && (
-                    <div className="w-12 h-12 rounded overflow-hidden border border-black/10">
-                      {opt.imageUrl
-                        ? <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover" />
-                        : <div className="w-full h-full" style={{ backgroundColor: opt.couleur }} />
-                      }
-                    </div>
-                  )}
+                  {(() => {
+                    const ral = !opt.imageUrl && !opt.couleur ? getRalInfo(opt.label) : undefined;
+                    if (opt.imageUrl) return (
+                      <div className="w-12 h-12 rounded overflow-hidden border border-black/10">
+                        <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover" />
+                      </div>
+                    );
+                    if (opt.couleur) return (
+                      <div className="w-12 h-12 rounded border border-black/10" style={{ backgroundColor: opt.couleur }} />
+                    );
+                    if (ral) return (
+                      <div className="w-12 h-12 rounded border flex items-center justify-center"
+                        style={{ backgroundColor: ral.hex, borderColor: ral.white ? '#ccc' : 'rgba(0,0,0,0.15)' }}>
+                        <span className="text-[9px] font-bold" style={{ color: ral.dark ? '#fff' : '#222' }}>
+                          RAL<br/>{ral.num}
+                        </span>
+                      </div>
+                    );
+                    return <div className="w-12 h-12 rounded bg-muted/40 border border-black/10" />;
+                  })()}
                   <span className="text-[10px] leading-tight line-clamp-2 w-full">
                     {opt.label}
                     {opt.prixDiff ? <span className="text-muted-foreground"> ({opt.prixDiff > 0 ? '+' : ''}{opt.prixDiff}€)</span> : ''}
