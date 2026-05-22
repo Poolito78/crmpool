@@ -777,9 +777,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           return (
                             <div style={{ marginTop: '4px' }}>
                               {imgs.map((img, i) => (
-                                <span key={i} style={{ display: 'inline-block', width: '40px', height: '32px', overflow: 'hidden', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }}>
-                                  <img src={img.url} alt={img.name} width={40} height={32} style={{ display: 'block', width: '40px', height: '32px' }} />
-                                </span>
+                                <span key={i} style={{ display: 'inline-block', width: '40px', height: '32px', backgroundImage: `url(${img.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
                               ))}
                               {l.note && (rsNote
                                 ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
