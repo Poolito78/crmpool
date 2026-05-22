@@ -770,24 +770,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <span className="text-xs text-muted-foreground">m²</span>
                           </span>
                         )}
-                        {/* Note et images intégrées dans la cellule description */}
-                        {l.note && (() => {
-                          const rsNote = getRalStyle(l.note!);
-                          return rsNote ? (
-                            <div style={{ marginTop: '5px' }}>
-                              <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
+                        {/* Note et images : ligne compacte inline */}
+                        {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
+                          const rsNote = l.note ? getRalStyle(l.note) : null;
+                          const imgs = allLineImages[l.id] || [];
+                          return (
+                            <div style={{ marginTop: '4px' }}>
+                              {imgs.map((img, i) => (
+                                <img key={i} src={img.url} alt={img.name} style={{ display: 'inline-block', height: '32px', width: 'auto', maxWidth: '80px', objectFit: 'contain', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
+                              ))}
+                              {l.note && (rsNote
+                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
+                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', verticalAlign: 'middle' }}>{l.note}</span>
+                              )}
                             </div>
-                          ) : (
-                            <div style={{ marginTop: '3px', fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</div>
                           );
                         })()}
-                        {(allLineImages[l.id] || []).length > 0 && (
-                          <div style={{ marginTop: '5px' }}>
-                            {(allLineImages[l.id] || []).map((img, i) => (
-                              <img key={i} src={img.url} alt={img.name} style={{ display: 'inline-block', maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '6px', marginBottom: '4px' }} />
-                            ))}
-                          </div>
-                        )}
                       </td>
                       {isComposite ? (() => {
                         const surfaceLigne = getSurfaceLigne(l.id) || 0;
@@ -964,24 +962,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             });
                           })()}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
-                          {/* Note et images intégrées dans la cellule description */}
-                          {l.note && (() => {
-                            const rsNote = getRalStyle(l.note!);
-                            return rsNote ? (
-                              <div style={{ marginTop: '5px' }}>
-                                <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
+                          {/* Note et images : ligne compacte inline */}
+                          {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
+                            const rsNote = l.note ? getRalStyle(l.note) : null;
+                            const imgs = allLineImages[l.id] || [];
+                            return (
+                              <div style={{ marginTop: '4px' }}>
+                                {imgs.map((img, i) => (
+                                  <img key={i} src={img.url} alt={img.name} style={{ display: 'inline-block', height: '32px', width: 'auto', maxWidth: '80px', objectFit: 'contain', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
+                                ))}
+                                {l.note && (rsNote
+                                  ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
+                                  : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', verticalAlign: 'middle' }}>{l.note}</span>
+                                )}
                               </div>
-                            ) : (
-                              <div style={{ marginTop: '3px', fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</div>
                             );
                           })()}
-                          {(allLineImages[l.id] || []).length > 0 && (
-                            <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                              {(allLineImages[l.id] || []).map((img, i) => (
-                                <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
-                              ))}
-                            </div>
-                          )}
                         </td>
                         <td className="py-2 text-right">{l.quantite || ''}</td>
                         <td className="py-2 text-center">{l.unite || ''}</td>
