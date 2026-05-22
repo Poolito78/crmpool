@@ -1630,38 +1630,25 @@ export default function Devis() {
                       {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%{coeffTotal !== null ? ` · coeff ${coeffTotal.toFixed(2)}` : ''})
                     </span>
                   </div>
+                  {totalHTLignes > 0 && (() => {
+                    const surfaceRef = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
+                    const coutM2 = surfaceRef > 0 ? Math.round(totalHTLignes / surfaceRef * 100) / 100 : null;
+                    return (
+                      <div className="flex justify-between border-t border-[#CC0000]/20 pt-2 mt-1">
+                        <span className="text-xs font-semibold text-[#CC0000] uppercase tracking-wide">Coût chantier</span>
+                        <div className="text-right">
+                          <span className="font-bold text-[#CC0000]">{formatMontant(totalHTLignes)}</span>
+                          {coutM2 && <span className="text-xs text-[#CC0000]/70 ml-2">· {coutM2.toFixed(2)} €/m²</span>}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               );
             })()}
 
             <div><Label>Notes</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={notes} onChange={e => setNotes(e.target.value)} /></div>
             <div><Label>Conditions</Label><textarea className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" rows={2} value={conditions} onChange={e => setConditions(e.target.value)} /></div>
-
-            {/* ── Coût chantier ── */}
-            {(() => {
-              const surfaceRef = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
-              if (surfaceRef <= 0) return null;
-              let sumCout = 0;
-              for (const l of lignes) {
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                if (!prod || l.type !== 'produit') continue;
-                const prixNet = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-                if (prod.poids && prod.poids > 0) {
-                  const kgTotal = l.quantite * prod.poids;
-                  sumCout += kgTotal * (prixNet / prod.poids);
-                } else {
-                  sumCout += l.quantite * prixNet;
-                }
-              }
-              const coutM2 = sumCout > 0 ? Math.round(sumCout / surfaceRef * 100) / 100 : null;
-              if (!coutM2) return null;
-              return (
-                <div className="border border-[#CC0000]/30 bg-[#CC0000]/5 rounded-lg px-3 py-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-[#CC0000] uppercase tracking-wide">Coût chantier</span>
-                  <span className="font-bold text-[#CC0000]">{coutM2.toFixed(2)} €/m²</span>
-                </div>
-              );
-            })()}
 
             {/* ── Notes & fichiers joints (chatter) ── */}
             {editingId && (
