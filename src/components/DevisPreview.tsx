@@ -817,8 +817,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               // Bloc séparé — html2canvas fiable uniquement sur display:block (inline cause chevauchement)
                               const dataUrl = variantImgDataUrls[imgUrl];
                               return (
-                                <div key={i} style={{ display: 'block', marginTop: '3px' }}>
-                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', marginBottom: '1px' }} /> : null}
+                                <div key={i} style={{ display: 'block', marginTop: '8px' }}>
+                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', marginBottom: '2px' }} /> : null}
                                   <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
                                 </div>
                               );
@@ -1034,8 +1034,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 // Bloc séparé — html2canvas fiable sur display:block seulement
                                 const dataUrl = variantImgDataUrls[imgUrl];
                                 return (
-                                  <div key={i} style={{ display: 'block', marginTop: '3px' }}>
-                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', marginBottom: '1px' }} /> : null}
+                                  <div key={i} style={{ display: 'block', marginTop: '8px' }}>
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', marginBottom: '2px' }} /> : null}
                                     <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
                                   </div>
                                 );
