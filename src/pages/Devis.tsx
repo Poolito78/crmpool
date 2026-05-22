@@ -1637,13 +1637,14 @@ export default function Devis() {
                       if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
                       const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                       const conso = l.consommation || prod?.consommation || 0;
-                      const surfLigne = l.surfaceM2 || 0;
+                      // surfaceM2 peut être 0 si saisie uniquement en global (preview stocke en local) → fallback sur surfaceGlobaleM2
+                      const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
                       if (conso > 0 && surfLigne > 0) {
                         const poids = prod?.poids || null;
                         const prixKg = poids && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - (l.remise || 0) / 100) / poids : null;
                         if (prixKg != null) sumCoutConso += surfLigne * conso * prixKg;
-                      } else if (conso === 0 && l.prixUnitaireHT > 0) {
-                        // Produit sans taux de conso (ex: prestation) → coût conditionné
+                      } else if (l.prixUnitaireHT > 0) {
+                        // Produit sans taux de conso ou sans surface → coût conditionné
                         sumCoutConso += l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                       }
                     }
