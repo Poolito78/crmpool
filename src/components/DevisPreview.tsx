@@ -835,29 +835,30 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       ) : null
                     )}
                     {/* Note de ligne — colspan toute la table */}
-                    {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
-                      const ralStyle = l.note ? getRalStyle(l.note!) : null;
-                      const imgs = allLineImages[l.id] || [];
+                    {l.note && (() => {
+                      const ralStyle = getRalStyle(l.note!);
                       return (
-                        <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                          <td colSpan={9} style={{ padding: '4px 8px 8px 40px' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                              {l.note && (ralStyle
-                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
-                                : <span className="text-muted-foreground text-xs italic" style={{ padding: '2px 0' }}>{l.note}</span>
-                              )}
-                              {imgs.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                  {imgs.map((img, i) => (
-                                    <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
-                                  ))}
-                                </div>
-                              )}
-                            </div>
+                        <tr style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
+                          <td colSpan={9} style={{ padding: '3px 8px 3px 40px' }}>
+                            {ralStyle
+                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
+                              : <span className="text-muted-foreground text-xs italic">{l.note}</span>
+                            }
                           </td>
                         </tr>
                       );
                     })()}
+                    {(allLineImages[l.id] || []).length > 0 && (
+                      <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
+                        <td colSpan={9} style={{ padding: '4px 8px 8px 40px' }}>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {(allLineImages[l.id] || []).map((img, i) => (
+                              <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
                   </Fragment>
                     );
                   });
@@ -990,29 +991,30 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
-                        const ralStyle = l.note ? getRalStyle(l.note!) : null;
-                        const imgs = allLineImages[l.id] || [];
+                      {l.note && (() => {
+                        const ralStyle = getRalStyle(l.note!);
                         return (
-                          <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                            <td colSpan={colSpan} style={{ padding: '4px 8px 8px 40px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                                {l.note && (ralStyle
-                                  ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
-                                  : <span className="text-muted-foreground text-xs italic" style={{ padding: '2px 0' }}>{l.note}</span>
-                                )}
-                                {imgs.length > 0 && (
-                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                    {imgs.map((img, i) => (
-                                      <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
+                          <tr style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
+                            <td colSpan={colSpan} style={{ padding: '3px 8px 3px 40px' }}>
+                              {ralStyle
+                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
+                                : <span className="text-muted-foreground text-xs italic">{l.note}</span>
+                              }
                             </td>
                           </tr>
                         );
                       })()}
+                      {(allLineImages[l.id] || []).length > 0 && (
+                        <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
+                          <td colSpan={colSpan} style={{ padding: '4px 8px 8px 40px' }}>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {(allLineImages[l.id] || []).map((img, i) => (
+                                <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      )}
                     </Fragment>
                   );
                 });
