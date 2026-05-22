@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
-import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement } from '@/lib/pdfFolder';
+import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
@@ -221,6 +221,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setPdfDialog(true);
   }
 
+  // Sélectionne le dossier immédiatement depuis le clic (user gesture requis)
+  async function handlePickFolder() {
+    if (!('showDirectoryPicker' in window)) { toast.error('Non supporté par ce navigateur'); return; }
+    try {
+      type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
+      const dirHandle = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
+        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+      await storeDirHandle(dirHandle);
+      setSavedFolderName(dirHandle.name);
+      toast.success(`Dossier sélectionné : ${dirHandle.name}`);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      console.error(err);
+    }
+  }
+
   // Génère et sauvegarde le PDF après confirmation
   async function confirmGeneratePdf(forcePickFolder = false) {
     if (!printAreaRef.current) return;
@@ -300,7 +316,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     : <span className="italic">Aucun dossier sélectionné</span>
                   }
                 </div>
-                <Button variant="outline" size="sm" onClick={() => confirmGeneratePdf(true)}>
+                <Button variant="outline" size="sm" onClick={handlePickFolder}>
                   <FolderOpen className="w-4 h-4 mr-1.5" />
                   Changer
                 </Button>
