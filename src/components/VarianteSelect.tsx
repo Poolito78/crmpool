@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import { getRalInfo } from '@/lib/ralColors';
 
 interface Props {
   dimension: VarianteDimension;
@@ -30,7 +31,40 @@ function SwatchPreview({ opt, size = 'sm' }: { opt: VarianteOption; size?: 'sm' 
       />
     );
   }
+  // Swatch RAL auto-détecté depuis le label
+  const ral = getRalInfo(opt.label);
+  if (ral) {
+    return (
+      <div
+        className={cn(dim, 'rounded shrink-0 border border-black/10')}
+        style={{ backgroundColor: ral.hex }}
+      />
+    );
+  }
   return null;
+}
+
+/** Badge RAL compact (fond coloré + numéro) */
+function RalBadge({ label, selected }: { label: string; selected?: boolean }) {
+  const ral = getRalInfo(label);
+  if (!ral) return null;
+  return (
+    <span
+      style={{
+        backgroundColor: ral.hex,
+        color: ral.dark ? '#fff' : '#1a1a1a',
+        border: ral.white ? '1px solid #ccc' : undefined,
+        padding: '1px 7px',
+        borderRadius: '4px',
+        fontSize: '0.68rem',
+        fontWeight: 700,
+        letterSpacing: '0.04em',
+        flexShrink: 0,
+      }}
+    >
+      RAL {ral.num}
+    </span>
+  );
 }
 
 export default function VarianteSelect({ dimension, value, onChange, className }: Props) {
@@ -41,8 +75,8 @@ export default function VarianteSelect({ dimension, value, onChange, className }
 
   const selectedOpt = dimension.options.find(o => o.label === value) ?? dimension.options[0];
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
+  const hasRal = !hasVisuals && dimension.options.some(o => getRalInfo(o.label));
 
-  // Fermer au clic extérieur
   useEffect(() => {
     if (!open) return;
     function handler(e: MouseEvent) {
@@ -71,7 +105,7 @@ export default function VarianteSelect({ dimension, value, onChange, className }
       {/* Menu déroulant */}
       {open && (
         <div className="absolute z-50 mt-1 bg-background border rounded-lg shadow-xl overflow-hidden"
-          style={{ minWidth: '180px', maxWidth: '320px', left: 0 }}>
+          style={{ minWidth: '200px', maxWidth: '340px', left: 0 }}>
           {hasVisuals ? (
             // Grille de swatches visuels
             <div className="p-2 grid gap-1"
@@ -108,8 +142,42 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                 </button>
               ))}
             </div>
+          ) : hasRal ? (
+            // Liste avec badges RAL colorés
+            <div className="py-1 max-h-72 overflow-y-auto">
+              {dimension.options.map(opt => {
+                const ral = getRalInfo(opt.label);
+                const isSelected = opt.label === value;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => { onChange(opt.label); setOpen(false); }}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left transition-colors',
+                      isSelected ? 'bg-accent/60 font-medium' : 'hover:bg-accent/40'
+                    )}
+                  >
+                    {/* Swatch couleur RAL */}
+                    {ral && (
+                      <span
+                        className="shrink-0 rounded"
+                        style={{
+                          width: 18, height: 18,
+                          backgroundColor: ral.hex,
+                          border: ral.white ? '1px solid #ccc' : '1px solid rgba(0,0,0,0.15)',
+                          display: 'inline-block',
+                        }}
+                      />
+                    )}
+                    <span className="flex-1 truncate">{opt.label}</span>
+                    {opt.prixDiff ? <span className="text-xs text-muted-foreground ml-auto shrink-0">{opt.prixDiff > 0 ? '+' : ''}{opt.prixDiff}€</span> : ''}
+                  </button>
+                );
+              })}
+            </div>
           ) : (
-            // Liste simple si pas de visuels
+            // Liste simple sans visuels
             <div className="py-1">
               {dimension.options.map(opt => (
                 <button

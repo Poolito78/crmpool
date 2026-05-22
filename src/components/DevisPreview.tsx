@@ -6,8 +6,9 @@ import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
+import { getRalInfo } from '@/lib/ralColors';
 
-// ─── Couleurs RAL Classic (215 teintes) ───────────────────────────────────────
+// ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
 const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
   '1000':{ hex:'#CDB77F', dark:false }, '1001':{ hex:'#C8A86B', dark:false }, '1002':{ hex:'#C99840', dark:false }, '1003':{ hex:'#F9A800', dark:false },
   '1004':{ hex:'#E49300', dark:false }, '1005':{ hex:'#CB7B28', dark:true  }, '1006':{ hex:'#E2781E', dark:true  }, '1007':{ hex:'#E7831A', dark:true  },
