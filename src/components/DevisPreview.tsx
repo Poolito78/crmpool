@@ -860,8 +860,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           return (
                             <div style={{ marginTop: '4px' }}>
                               {rsNote
-                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic' }}>{l.note}</span>
-                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</span>
+                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{l.note}</span>
+                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line' }}>{l.note}</span>
                               }
                             </div>
                           );
@@ -1066,8 +1066,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                   <img key={i} src={img.url} alt="" width={48} height={38} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
                                 ))}
                                 {l.note && (rsNote
-                                  ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
-                                  : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', verticalAlign: 'middle' }}>{l.note}</span>
+                                  ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{l.note}</span>
+                                  : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{l.note}</span>
                                 )}
                               </div>
                             );
