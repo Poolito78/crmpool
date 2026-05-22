@@ -731,7 +731,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       </tr>
                     )}
                     {/* Ligne produit principal */}
-                    <tr className={l.note ? '' : 'border-b border-border/60'}>
+                    <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
                         {l.variantesChoisies && (() => {
@@ -769,6 +769,24 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             />
                             <span className="text-xs text-muted-foreground">m²</span>
                           </span>
+                        )}
+                        {/* Note et images intégrées dans la cellule description */}
+                        {l.note && (() => {
+                          const rsNote = getRalStyle(l.note!);
+                          return rsNote ? (
+                            <div style={{ marginTop: '5px' }}>
+                              <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
+                            </div>
+                          ) : (
+                            <div style={{ marginTop: '3px', fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</div>
+                          );
+                        })()}
+                        {(allLineImages[l.id] || []).length > 0 && (
+                          <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                            {(allLineImages[l.id] || []).map((img, i) => (
+                              <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
+                            ))}
+                          </div>
                         )}
                       </td>
                       {isComposite ? (() => {
@@ -833,31 +851,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <td className="py-1 px-1 text-right font-semibold text-foreground">{formatMontant(totalHTComp)}</td>
                         </tr>
                       ) : null
-                    )}
-                    {/* Note de ligne — colspan toute la table */}
-                    {l.note && (() => {
-                      const ralStyle = getRalStyle(l.note!);
-                      return (
-                        <tr style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                          <td colSpan={9} style={{ padding: '3px 8px 3px 40px' }}>
-                            {ralStyle
-                              ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
-                              : <span className="text-muted-foreground text-xs italic">{l.note}</span>
-                            }
-                          </td>
-                        </tr>
-                      );
-                    })()}
-                    {(allLineImages[l.id] || []).length > 0 && (
-                      <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                        <td colSpan={9} style={{ padding: '4px 8px 8px 40px' }}>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                            {(allLineImages[l.id] || []).map((img, i) => (
-                              <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
                     )}
                   </Fragment>
                     );
@@ -971,6 +964,24 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             });
                           })()}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
+                          {/* Note et images intégrées dans la cellule description */}
+                          {l.note && (() => {
+                            const rsNote = getRalStyle(l.note!);
+                            return rsNote ? (
+                              <div style={{ marginTop: '5px' }}>
+                                <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '3px 8px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', display: 'inline-flex', alignItems: 'center' }}>{l.note}</span>
+                              </div>
+                            ) : (
+                              <div style={{ marginTop: '3px', fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</div>
+                            );
+                          })()}
+                          {(allLineImages[l.id] || []).length > 0 && (
+                            <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {(allLineImages[l.id] || []).map((img, i) => (
+                                <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 text-right">{l.quantite || ''}</td>
                         <td className="py-2 text-center">{l.unite || ''}</td>
@@ -991,30 +1002,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {l.note && (() => {
-                        const ralStyle = getRalStyle(l.note!);
-                        return (
-                          <tr style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                            <td colSpan={colSpan} style={{ padding: '3px 8px 3px 40px' }}>
-                              {ralStyle
-                                ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
-                                : <span className="text-muted-foreground text-xs italic">{l.note}</span>
-                              }
-                            </td>
-                          </tr>
-                        );
-                      })()}
-                      {(allLineImages[l.id] || []).length > 0 && (
-                        <tr className="border-b border-border/60" style={{ backgroundColor: 'rgba(0,0,0,0.018)' }}>
-                          <td colSpan={colSpan} style={{ padding: '4px 8px 8px 40px' }}>
-                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                              {(allLineImages[l.id] || []).map((img, i) => (
-                                <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
-                              ))}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
                     </Fragment>
                   );
                 });
