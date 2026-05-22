@@ -1944,12 +1944,26 @@ export default function Devis() {
                         const coeffColor = coeff == null ? '' : coeff >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
                         return (
                           <tr key={l.id} className="border-b border-border/50 hover:bg-muted/30">
-                            <td className="px-2 py-1.5 max-w-[200px] truncate" title={l.description}>{l.description || <span className="text-muted-foreground italic">—</span>}</td>
-                            <td className="px-2 py-1.5 text-right">{l.quantite} {l.unite}</td>
+                            <td className="px-2 py-1.5 max-w-[220px]">
+                              <div className="flex items-center gap-1 min-w-0">
+                                <span className="truncate" title={l.description}>{l.description || <span className="text-muted-foreground italic">—</span>}</span>
+                                {prod && (
+                                  <button
+                                    type="button"
+                                    title="Voir la fiche produit"
+                                    onClick={() => { const savedId = save(true); navigate(`/produits?search=${encodeURIComponent(prod.reference || '')}&highlight=${prod.id}&returnDevis=${savedId || editingId || ''}`); }}
+                                    className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
+                                  >
+                                    <ExternalLink className="w-3 h-3" />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-2 py-1.5 text-right whitespace-nowrap">{l.quantite} {l.unite}</td>
                             <td className="px-2 py-1.5">
                               {pfs.length > 1 ? (
                                 <select
-                                  className="text-xs rounded border border-input bg-background px-1 py-0.5 max-w-[130px]"
+                                  className="text-xs rounded border border-input bg-background px-1 py-0.5 max-w-[140px]"
                                   value={selFournId || ''}
                                   onChange={e => setSelectedFournisseurPerLigne(prev => ({ ...prev, [l.id]: e.target.value }))}
                                 >
@@ -1959,9 +1973,9 @@ export default function Devis() {
                                   })}
                                 </select>
                               ) : pfs.length === 1 ? (
-                                <span className="text-muted-foreground">{fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.societe || fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.nom || '—'}</span>
+                                <span className="text-muted-foreground text-xs">{fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.societe || fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.nom || '—'}</span>
                               ) : (
-                                <span className="text-muted-foreground italic">—</span>
+                                <span className="text-muted-foreground italic text-xs">—</span>
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-right">
