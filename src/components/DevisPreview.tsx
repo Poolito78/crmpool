@@ -113,6 +113,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [pdfDialog, setPdfDialog] = useState(false);
   const [pdfFileName, setPdfFileName] = useState('');
   const [savedFolderName, setSavedFolderName] = useState<string | null>(null);
+  // Ref mis à jour pendant le rendu de la table m²/conso — lu dans la section Totaux
+  const coutChantierRef = useRef<number | null>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
@@ -704,6 +706,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           const refSurface = surfaceGlobale > 0 ? surfaceGlobale : maxLineSurface > 0 ? maxLineSurface : null;
           const coutChantierM2 = refSurface && sumCoutConsoHT > 0
             ? Math.round(sumCoutConsoHT / refSurface * 100) / 100 : null;
+          // Exposer au reste du rendu (section Totaux)
+          coutChantierRef.current = coutChantierM2;
 
           return (
             <table className="w-full mb-6 text-xs border-collapse table-fixed">
@@ -751,9 +755,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(1) : ''}</td>
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : ''}</td>
-                  <td colSpan={3} className="py-1.5 px-1 text-right font-bold text-[#CC0000] not-italic whitespace-nowrap">
-                    {coutChantierM2 != null ? `Coût chantier : ${coutChantierM2.toFixed(2)} €/m²` : ''}
-                  </td>
+                  <td colSpan={3} />
                 </tr>
                 )}
 
@@ -1128,6 +1130,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <div className="text-sm text-muted-foreground space-y-1">
           </div>
           <div className="w-64 space-y-1 ml-auto">
+            {coutChantierRef.current != null && (
+              <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
+                <span>Coût chantier</span>
+                <span>{coutChantierRef.current.toFixed(2)} €/m²</span>
+              </div>
+            )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
             {(devis.fraisPortHT || 0) > 0 && (
               <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>
