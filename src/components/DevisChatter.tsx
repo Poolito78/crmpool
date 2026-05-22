@@ -7,7 +7,7 @@ import { fetchHistorique, type HistoriqueEntry } from '@/lib/historique';
 import {
   MessageSquare, Paperclip, Send, Trash2, Download, FileText,
   FileImage, FileSpreadsheet, File, Clock, Pencil, Mail,
-  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen,
+  Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -84,6 +84,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState('');
   const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
+  const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const fileConfRef = useRef<HTMLInputElement>(null);
@@ -139,13 +140,14 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     }
   }, [open, load, initialMode]);
 
-  /* ── Timeline (notes + fichiers publics + historique) ── */
-  const timeline: EntreeTimeline[] = [
+  /* ── Timeline documents (notes + fichiers publics uniquement) ── */
+  const timelineDocs: EntreeTimeline[] = [
     ...pjs.filter(p => !p.confidentiel).map(p => ({ kind: 'pj' as const, data: p, date: p.date })),
-    ...hist.map(h => ({ kind: 'hist' as const, data: h, date: h.date })),
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const confidentiels = pjs.filter(p => p.confidentiel && p.type === 'fichier');
+  const nbDocs = pjs.length;
+  const nbHist = hist.length;
 
   /* ── Ajouter note ── */
   async function handleAddNote() {
@@ -275,7 +277,6 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     files.forEach(f => handleUpload(f));
   }
 
-  const nbPj = pjs.length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -284,12 +285,26 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
           <DialogTitle className="flex items-center gap-2">
             <MessageSquare className="w-5 h-5 text-primary" />
             Devis {devisNumero}
-            {nbPj > 0 && (
-              <span className="ml-1 text-xs font-normal text-muted-foreground">
-                — {nbPj} pièce{nbPj > 1 ? 's' : ''} jointe{nbPj > 1 ? 's' : ''}
-              </span>
-            )}
           </DialogTitle>
+          {/* Onglets */}
+          <div className="flex gap-1 border-b border-border mt-2 -mb-1">
+            <button
+              onClick={() => setTab('documents')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${tab === 'documents' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            >
+              <Paperclip className="w-3.5 h-3.5" />
+              Documents
+              {nbDocs > 0 && <span className="ml-1 text-xs bg-muted rounded-full px-1.5">{nbDocs}</span>}
+            </button>
+            <button
+              onClick={() => setTab('historique')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium border-b-2 transition-colors ${tab === 'historique' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            >
+              <History className="w-3.5 h-3.5" />
+              Historique
+              {nbHist > 0 && <span className="ml-1 text-xs bg-muted rounded-full px-1.5">{nbHist}</span>}
+            </button>
+          </div>
         </DialogHeader>
 
         {/* ── Zone drag & drop globale ── */}
@@ -308,6 +323,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               <p className="text-xs text-primary/70 mt-1">PDF, images, documents…</p>
             </div>
           )}
+
+        {/* ── Onglet Documents ── */}
+        {tab === 'documents' && <>
 
         {/* ── Zone de saisie ── */}
         <div className="shrink-0 border border-border rounded-xl p-3 space-y-2 bg-muted/20">
@@ -371,7 +389,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
           )}
         </div>
 
-        {/* ── Timeline ── */}
+        {/* ── Timeline documents ── */}
         <div className="flex-1 min-h-0 overflow-y-auto space-y-2 pt-1">
           {loading && (
             <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
@@ -379,91 +397,52 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               <span className="text-sm">Chargement…</span>
             </div>
           )}
-
-          {!loading && timeline.length === 0 && (
+          {!loading && timelineDocs.length === 0 && (
             <div className="text-center py-10 text-muted-foreground text-sm">
               <MessageSquare className="w-8 h-8 mx-auto mb-2 opacity-30" />
               <p>Aucune note ni fichier joint</p>
               <p className="text-xs mt-1 opacity-60">Glissez un fichier ici pour l'ajouter</p>
             </div>
           )}
-
-          {!loading && timeline.map((entry, i) => {
-            if (entry.kind === 'pj') {
-              const pj = entry.data;
-              return (
-                <div key={pj.id} className="flex gap-3 group">
-                  {/* Icône */}
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${pj.type === 'note' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
-                    {pj.type === 'note' ? <StickyNote className="w-4 h-4" /> : <IconFichier mime={pj.fichierMime} />}
-                  </div>
-                  {/* Contenu */}
-                  <div className="flex-1 min-w-0">
-                    {pj.type === 'note' ? (
-                      <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg px-3 py-2">
-                        <p className="text-sm whitespace-pre-wrap break-words">{pj.contenu}</p>
-                      </div>
-                    ) : (
-                      <div className="border border-border rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
-                        <IconFichier mime={pj.fichierMime} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{pj.fichierNom}</p>
-                          {pj.fichierTaille != null && (
-                            <p className="text-[10px] text-muted-foreground">{formatTaille(pj.fichierTaille)}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
-                            <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-muted" title="Afficher">
-                              <Eye className="w-3.5 h-3.5 text-primary" />
-                            </button>
-                          )}
-                          <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted" title="Télécharger">
-                            <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                          </button>
-                          <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-muted" title="Rendre confidentiel">
-                            <Lock className="w-3.5 h-3.5 text-amber-500 opacity-50 hover:opacity-100" />
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                    <p className="text-[10px] text-muted-foreground mt-1">{formatRelative(pj.date)}</p>
-                  </div>
-                  {/* Supprimer */}
-                  <button
-                    onClick={() => handleDelete(pj)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive shrink-0 mt-1"
-                    title="Supprimer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            }
-
-            /* Entrée historique */
-            const h = entry.data;
-            const cfg = actionLabel[h.action] ?? { label: h.action, icon: Clock, color: 'text-muted-foreground' };
-            const Icon = cfg.icon;
+          {!loading && timelineDocs.map((entry) => {
+            const pj = entry.data as PieceJointe;
             return (
-              <div key={h.id} className="flex gap-3 items-start">
-                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
-                  <Icon className={`w-4 h-4 ${cfg.color}`} />
+              <div key={pj.id} className="flex gap-3 group">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${pj.type === 'note' ? 'bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'}`}>
+                  {pj.type === 'note' ? <StickyNote className="w-4 h-4" /> : <IconFichier mime={pj.fichierMime} />}
                 </div>
-                <div className="flex-1 min-w-0 pt-1">
-                  <p className="text-xs text-muted-foreground">
-                    <span className="font-medium text-foreground">{cfg.label}</span>
-                    {h.details?.nouveauStatut ? ` → ${h.details.nouveauStatut}` : ''}
-                    {h.details?.destinataire ? ` à ${h.details.destinataire}` : ''}
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">{formatRelative(h.date)}</p>
+                <div className="flex-1 min-w-0">
+                  {pj.type === 'note' ? (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg px-3 py-2">
+                      <p className="text-sm whitespace-pre-wrap break-words">{pj.contenu}</p>
+                    </div>
+                  ) : (
+                    <div className="border border-border rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
+                      <IconFichier mime={pj.fichierMime} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{pj.fichierNom}</p>
+                        {pj.fichierTaille != null && <p className="text-[10px] text-muted-foreground">{formatTaille(pj.fichierTaille)}</p>}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
+                          <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-muted" title="Afficher"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                        )}
+                        <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted" title="Télécharger"><Download className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                        <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-muted" title="Rendre confidentiel"><Lock className="w-3.5 h-3.5 text-amber-500 opacity-50 hover:opacity-100" /></button>
+                      </div>
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground mt-1">{formatRelative(pj.date)}</p>
                 </div>
+                <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-destructive/10 text-destructive shrink-0 mt-1" title="Supprimer">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             );
           })}
         </div>
 
-        {/* ── Section Documents confidentiels ── */}
+        {/* ── Documents confidentiels ── */}
         {confidentiels.length > 0 && (
           <div className="shrink-0 mt-2 border border-amber-200 dark:border-amber-800 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 p-3 space-y-1.5">
             <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">
@@ -474,29 +453,59 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               <div key={pj.id} className="flex items-center gap-2 group bg-white dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
                 <IconFichier mime={pj.fichierMime} />
                 <span className="text-sm flex-1 truncate">{pj.fichierNom}</span>
-                {pj.fichierTaille != null && (
-                  <span className="text-[10px] text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>
-                )}
+                {pj.fichierTaille != null && <span className="text-[10px] text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>}
                 <div className="flex items-center gap-1 shrink-0">
                   {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
-                    <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Afficher">
-                      <Eye className="w-3.5 h-3.5 text-primary" />
-                    </button>
+                    <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Afficher"><Eye className="w-3.5 h-3.5 text-primary" /></button>
                   )}
-                  <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-amber-100" title="Télécharger">
-                    <Download className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                  <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-amber-100" title="Rendre public">
-                    <LockOpen className="w-3.5 h-3.5 text-amber-600" />
-                  </button>
-                  <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive" title="Supprimer">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-amber-100" title="Télécharger"><Download className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                  <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-amber-100" title="Rendre public"><LockOpen className="w-3.5 h-3.5 text-amber-600" /></button>
+                  <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
                 </div>
               </div>
             ))}
           </div>
         )}
+
+        </>}{/* fin onglet Documents */}
+
+        {/* ── Onglet Historique ── */}
+        {tab === 'historique' && (
+          <div className="flex-1 min-h-0 overflow-y-auto space-y-1 pt-1">
+            {loading && (
+              <div className="flex items-center justify-center py-10 text-muted-foreground gap-2">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span className="text-sm">Chargement…</span>
+              </div>
+            )}
+            {!loading && hist.length === 0 && (
+              <div className="text-center py-10 text-muted-foreground text-sm">
+                <History className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                <p>Aucune modification enregistrée</p>
+              </div>
+            )}
+            {!loading && hist.map(h => {
+              const cfg = actionLabel[h.action] ?? { label: h.action, icon: Clock, color: 'text-muted-foreground' };
+              const Icon = cfg.icon;
+              return (
+                <div key={h.id} className="flex gap-3 items-start py-1.5 border-b border-border/40 last:border-0">
+                  <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
+                    <Icon className={`w-3.5 h-3.5 ${cfg.color}`} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs">
+                      <span className="font-medium text-foreground">{cfg.label}</span>
+                      {h.details?.nouveauStatut ? <span className="text-muted-foreground"> → {h.details.nouveauStatut}</span> : ''}
+                      {h.details?.destinataire ? <span className="text-muted-foreground"> à {h.details.destinataire}</span> : ''}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">{formatRelative(h.date)}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
         </div>{/* fin zone drag & drop */}
       </DialogContent>
     </Dialog>
