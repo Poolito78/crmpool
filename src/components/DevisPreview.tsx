@@ -244,7 +244,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setPdfDialog(false);
     setPrinting(true);
     setPdfMode(true);
-    await new Promise(resolve => setTimeout(resolve, 80));
+    await new Promise(resolve => setTimeout(resolve, 250));
 
     try {
       const fileName = pdfFileName || buildFileName();
@@ -782,9 +782,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           );
                         })()}
                         {(allLineImages[l.id] || []).length > 0 && (
-                          <div style={{ marginTop: '5px', display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          <div style={{ marginTop: '5px' }}>
                             {(allLineImages[l.id] || []).map((img, i) => (
-                              <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
+                              <img key={i} src={img.url} alt={img.name} style={{ display: 'inline-block', maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '6px', marginBottom: '4px' }} />
                             ))}
                           </div>
                         )}
