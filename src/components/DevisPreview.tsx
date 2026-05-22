@@ -183,6 +183,46 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     if (v.length > 0) allLineImages[k] = v; // remplace complètement (URLs session = plus à jour)
   }
 
+  // Images pré-traitées en data URL 48×38px via canvas (html2canvas-safe : taille fixe, pas de CORS)
+  const [dataUrlImages, setDataUrlImages] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    const allEntries = Object.entries(allLineImages);
+    if (allEntries.length === 0) return;
+    let cancelled = false;
+    async function resizeToDataUrl(url: string): Promise<string> {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          try {
+            const W = 48, H = 38;
+            const c = document.createElement('canvas');
+            c.width = W; c.height = H;
+            const ctx = c.getContext('2d')!;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, W, H);
+            const ratio = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+            const nw = img.naturalWidth * ratio, nh = img.naturalHeight * ratio;
+            ctx.drawImage(img, (W - nw) / 2, (H - nh) / 2, nw, nh);
+            resolve(c.toDataURL('image/jpeg', 0.85));
+          } catch { resolve(''); }
+        };
+        img.onerror = () => resolve('');
+        img.src = url;
+      });
+    }
+    (async () => {
+      const result: Record<string, string[]> = {};
+      for (const [ligneId, imgs] of allEntries) {
+        result[ligneId] = await Promise.all(imgs.map(img => resizeToDataUrl(img.url)));
+      }
+      if (!cancelled) setDataUrlImages(result);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(Object.fromEntries(Object.entries(allLineImages).map(([k, v]) => [k, v.map(i => i.url)])))]);
+
+
   const poidsTotal = lignesEffectives.reduce((sum, l) => {
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
     return sum + (prod?.poids || 0) * l.quantite;
@@ -846,12 +886,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         </tr>
                       ) : null
                     )}
-                    {/* Images dans tr séparé pleine largeur (évite l'étroitesse de la colonne description) */}
-                    {(allLineImages[l.id] || []).length > 0 && (
+                    {/* Images dans tr séparé pleine largeur — data URLs 48×38px html2canvas-safe */}
+                    {(dataUrlImages[l.id] || []).filter(Boolean).length > 0 && (
                       <tr className="border-b border-border/60">
                         <td colSpan={9} style={{ padding: '3px 8px 6px 8px' }}>
-                          {(allLineImages[l.id] || []).map((img, i) => (
-                            <span key={i} style={{ display: 'inline-block', width: '48px', height: '38px', backgroundImage: `url(${img.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', marginRight: '6px' }} />
+                          {(dataUrlImages[l.id] || []).filter(Boolean).map((dataUrl, i) => (
+                            <img key={i} src={dataUrl} alt="" width={48} height={38} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', marginRight: '6px', verticalAlign: 'middle' }} />
                           ))}
                         </td>
                       </tr>
@@ -968,14 +1008,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             });
                           })()}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
-                          {/* Note et images : ligne compacte inline */}
-                          {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
+                          {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
+                          {(l.note || (dataUrlImages[l.id] || []).filter(Boolean).length > 0) && (() => {
                             const rsNote = l.note ? getRalStyle(l.note) : null;
-                            const imgs = allLineImages[l.id] || [];
+                            const imgs = (dataUrlImages[l.id] || []).filter(Boolean).map(url => ({ url, name: '' }));
                             return (
                               <div style={{ marginTop: '4px' }}>
                                 {imgs.map((img, i) => (
-                                  <img key={i} src={img.url} alt={img.name} style={{ display: 'inline-block', height: '32px', width: 'auto', maxWidth: '80px', objectFit: 'contain', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
+                                  <img key={i} src={img.url} alt="" width={48} height={38} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
                                 ))}
                                 {l.note && (rsNote
                                   ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
