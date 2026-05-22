@@ -704,8 +704,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <table className="w-full mb-6 text-xs border-collapse table-fixed">
               <colgroup>
                 <col />{/* Désignation : prend tout l'espace restant */}
-                <col style={{ width: '44px' }} />{/* kg/m² */}
-                <col style={{ width: '52px' }} />{/* Total KG conso */}
+                <col style={{ width: '38px' }} />{/* kg/m² */}
+                <col style={{ width: '44px' }} />{/* Total KG conso */}
                 <col style={{ width: '30px' }} />{/* kg cond */}
                 <col style={{ width: '28px' }} />{/* Unité cond */}
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
@@ -743,7 +743,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td />
                   <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(3) : ''}</td>
-                  <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(2) : ''}</td>
+                  <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(1) : ''}</td>
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : ''}</td>
                   <td colSpan={3} className="py-1.5 px-1 text-right font-bold text-[#CC0000] not-italic whitespace-nowrap">
