@@ -846,10 +846,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
                             )}
                             {imgs.length > 0 && (
-                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: l.note ? '4px' : '0' }}>
-                                {imgs.map((img, i) => (
-                                  <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
-                                ))}
+                              <div style={{ display: 'block', marginTop: '6px', paddingLeft: '16px' }}>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                  {imgs.map((img, i) => (
+                                    <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
+                                  ))}
+                                </div>
                               </div>
                             )}
                           </td>
@@ -999,10 +1001,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
                               )}
                               {imgs.length > 0 && (
-                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: l.note ? '4px' : '0' }}>
-                                  {imgs.map((img, i) => (
-                                    <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
-                                  ))}
+                                <div style={{ display: 'block', marginTop: '6px', paddingLeft: '16px' }}>
+                                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                    {imgs.map((img, i) => (
+                                      <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '100px', maxWidth: '200px', objectFit: 'contain', borderRadius: '4px', border: '1px solid rgba(0,0,0,0.12)' }} />
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </td>
