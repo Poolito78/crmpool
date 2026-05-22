@@ -271,6 +271,7 @@ export interface LigneDevis {
   cellules?: number;
   note?: string;
   variantesChoisies?: Record<string, string>; // dimensionId -> option.label
+  prixAchatLigne?: number; // coût achat unitaire pour lignes libres (ex: surcharges énergie)
 }
 
 export interface Devis {

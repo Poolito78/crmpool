@@ -410,10 +410,11 @@ export default function Devis() {
     }
     saveSnapshot();
     const montantVente = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_VENTE_PCT) / 100;
+    const montantAchat = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100;
     const id = generateId();
     setLignes(prev => [
       ...prev,
-      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, tva: 20, remise: 0 },
+      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
   }
@@ -434,6 +435,7 @@ export default function Devis() {
     }
     saveSnapshot();
     const montantVente = Math.round(totalHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) / 100;
+    const montantAchat = Math.round(totalHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100;
     const id = generateId();
     setLignes(prev => [
       ...prev,
@@ -443,6 +445,7 @@ export default function Devis() {
         quantite: 1,
         unite: 'forfait',
         prixUnitaireHT: montantVente,
+        prixAchatLigne: montantAchat,
         tva: 20,
         remise: 0,
       },
@@ -1927,7 +1930,7 @@ export default function Devis() {
                         const pfs = l.produitId ? produitFournisseurs.filter(pf => pf.produitId === l.produitId) : [];
                         const selFournId = selectedFournisseurPerLigne[l.id];
                         const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
-                        const puAchat = selPf?.prixAchat ?? prod?.prixAchat ?? 0;
+                        const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (selPf?.prixAchat ?? prod?.prixAchat ?? 0);
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         const totAchat = puAchat * l.quantite;
                         const totVente = puVente * l.quantite;
