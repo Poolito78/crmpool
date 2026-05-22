@@ -757,6 +757,7 @@ export default function Devis() {
               supabase.from('devis_pieces_jointes').insert({
                 user_id: user.id, devis_id: editingId, type: 'fichier',
                 fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
+                ligne_id: ligneId,
               });
             });
         });

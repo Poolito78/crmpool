@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment, useEffect } from 'react';
+import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfF
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
+import { supabase } from '@/integrations/supabase/client';
 
 // ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
 const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
@@ -115,6 +116,26 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
+  // Images associées aux lignes (fetched depuis Supabase + merged avec lineImages prop)
+  const [fetchedLineImages, setFetchedLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
+  const loadLineImages = useCallback(async () => {
+    if (!devis.id || devis.id === 'preview') return;
+    const { data } = await supabase
+      .from('devis_pieces_jointes')
+      .select('ligne_id, fichier_url, fichier_nom, fichier_mime')
+      .eq('devis_id', devis.id)
+      .eq('type', 'fichier')
+      .not('ligne_id', 'is', null);
+    if (!data) return;
+    const map: Record<string, { url: string; name: string }[]> = {};
+    for (const row of data) {
+      if (!row.ligne_id || !row.fichier_mime?.startsWith('image/')) continue;
+      if (!map[row.ligne_id]) map[row.ligne_id] = [];
+      map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '' });
+    }
+    setFetchedLineImages(map);
+  }, [devis.id]);
+  useEffect(() => { loadLineImages(); }, [loadLineImages]);
   function getSurfaceLigne(ligneId: string): number {
     if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
     const ligne = devis.lignes.find(l => l.id === ligneId);
@@ -154,6 +175,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   });
 
   const totals = calculerTotalDevis(lignesEffectives, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
+  // Fusion : prop lineImages (session courante) + fetchedLineImages (Supabase persisté)
+  const allLineImages: Record<string, { url: string; name: string }[]> = {};
+  for (const [k, v] of Object.entries(fetchedLineImages)) allLineImages[k] = v;
+  for (const [k, v] of Object.entries(lineImages)) {
+    allLineImages[k] = [...(allLineImages[k] || []), ...v.filter(img => img.url.startsWith('blob:'))];
+  }
 
   const poidsTotal = lignesEffectives.reduce((sum, l) => {
     const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -790,9 +817,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       ) : null
                     )}
                     {/* Note de ligne — colspan toute la table */}
-                    {(l.note || (lineImages[l.id] || []).length > 0) && (() => {
+                    {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
                       const ralStyle = l.note ? getRalStyle(l.note!) : null;
-                      const imgs = lineImages[l.id] || [];
+                      const imgs = allLineImages[l.id] || [];
                       return (
                         <tr className="border-b border-border/60">
                           <td colSpan={9} className="py-1 px-2">
@@ -943,9 +970,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {(l.note || (lineImages[l.id] || []).length > 0) && (() => {
+                      {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
                         const ralStyle = l.note ? getRalStyle(l.note!) : null;
-                        const imgs = lineImages[l.id] || [];
+                        const imgs = allLineImages[l.id] || [];
                         return (
                           <tr className="border-b border-border/60">
                             <td colSpan={colSpan} className="py-1 px-2">
