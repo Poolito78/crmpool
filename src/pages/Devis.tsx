@@ -939,8 +939,15 @@ export default function Devis() {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           const totalAchatD = d.lignes.reduce((acc, l) => {
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            return acc + (prod?.prixAchat || 0) * l.quantite;
+            if (l.type && l.type !== 'ligne') return acc;
+            if (!l.produitId) {
+              // ligne libre (ex: surcharge énergie) → prixAchatLigne
+              return acc + (l.prixAchatLigne ?? 0) * l.quantite;
+            }
+            const prod = produits.find(p => p.id === l.produitId);
+            if (!prod) return acc;
+            const prixAchat = getPrixPourQuantite(prod, l.quantite).prixAchat;
+            return acc + prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
           }, 0);
           const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
           const margeD = totalHTD - totalAchatD;
