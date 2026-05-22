@@ -577,6 +577,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className={l.note ? '' : 'border-b border-border/60'}>
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
+                        {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
+                          const rs = getRalStyle(label);
+                          return rs
+                            ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle' }}>{label}</span>
+                            : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
+                        })}
                         {(hideControls || pdfMode) ? (
                           getSurfaceLigne(l.id) > 0 ? (
                             <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
@@ -762,6 +768,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <tr className="border-b border-border">
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
                           {l.description}
+                          {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
+                            const rs = getRalStyle(label);
+                            return rs
+                              ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle' }}>{label}</span>
+                              : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
+                          })}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
                         </td>
                         <td className="py-2 text-right">{l.quantite || ''}</td>
