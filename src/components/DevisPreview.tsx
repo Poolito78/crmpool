@@ -1043,11 +1043,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
-                                // Inline pur (pas de display/verticalAlign explicite) — flux normal, html2canvas-safe
+                                // Même rendu que table m²/conso : display:inline + verticalAlign:top
                                 const dataUrl = variantImgDataUrls[imgUrl];
                                 return (
                                   <span key={i} style={{ marginLeft: '6px' }}>
-                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'inline', width: '40px', height: '26px', borderRadius: '3px', verticalAlign: 'top' }} /> : null}
                                     {' '}<span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
                                   </span>
                                 );
