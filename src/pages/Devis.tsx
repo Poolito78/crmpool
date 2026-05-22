@@ -382,7 +382,8 @@ export default function Devis() {
   }
 
   // ─── Surcharge énergie MMA ────────────────────────────────────────────────
-  const SURCHARGE_ENERGIE_MMA_PCT = 14.8;
+  const SURCHARGE_ENERGIE_MMA_VENTE_PCT = 15;
+  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT = 14.8;
   function addSurchargeEnergie() {
     const totalMMA = lignes.reduce((acc, l) => {
       if (!l.produitId) return acc;
@@ -395,11 +396,11 @@ export default function Devis() {
       return;
     }
     saveSnapshot();
-    const montant = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_PCT) / 100;
+    const montantVente = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_VENTE_PCT) / 100;
     const id = generateId();
     setLignes(prev => [
       ...prev,
-      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montant, tva: 20, remise: 0 },
+      { id, description: `Surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
   }
@@ -1257,7 +1258,7 @@ export default function Devis() {
                   <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
-                  <Button variant="outline" size="sm" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge MMA</Button>
+                  <Button variant="outline" size="sm" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge MMA</Button>
                   <Button variant="outline" size="sm" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge hors MMA</Button>
                   <div ref={kitPickerRef} className="relative">
                     <Button variant="outline" size="sm" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
