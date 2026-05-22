@@ -434,12 +434,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier }); }} className="rounded" />
                   Récap. KG
                 </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked }); }} className="rounded" />
-                  Coût chantier
-                </label>
               </>
             )}
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked }); }} className="rounded" />
+              Coût chantier
+            </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
               Remise
