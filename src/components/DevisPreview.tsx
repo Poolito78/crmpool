@@ -101,9 +101,10 @@ interface Props {
   onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean }) => void;
   onPrint?: () => void;
   lineImages?: Record<string, { url: string; name: string }[]>;
+  onSurfaceChange?: (ligneId: string, val: number) => void;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = true, onOptionsChange, onPrint, lineImages = {} }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = true, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -147,6 +148,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   }
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
+    onSurfaceChange?.(ligneId, val);
   }
   function updateSurfaceGlobale(val: number) {
     setSurfaceGlobale(val);
