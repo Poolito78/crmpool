@@ -119,6 +119,8 @@ export default function Devis() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dragScrollRafRef = useRef<number | null>(null);
   const dragClientYRef = useRef<number>(0);
+  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif'>('devis');
+  const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
@@ -210,6 +212,15 @@ export default function Devis() {
     prevSurfaceGlobaleRef.current = d.surfaceGlobaleM2 || 0;
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
     prevClientIdRef.current = d.clientId;
+    setDialogTab('devis');
+    const fInit: Record<string, string> = {};
+    for (const l of d.lignes) {
+      if (!l.produitId) continue;
+      const pfs = produitFournisseurs.filter(pf => pf.produitId === l.produitId);
+      const prio = pfs.find(pf => pf.estPrioritaire) || pfs[0];
+      if (prio) fInit[l.id] = prio.fournisseurId;
+    }
+    setSelectedFournisseurPerLigne(fInit);
     setUndoStack([]);
   }
 
@@ -237,6 +248,8 @@ export default function Devis() {
     prevSurfaceGlobaleRef.current = 0;
     setSurfaceGlobaleM2(0);
     prevClientIdRef.current = '';
+    setDialogTab('devis');
+    setSelectedFournisseurPerLigne({});
     setAdresseLivraisonId('');
     setUndoStack([]);
     setDialogOpen(true);
@@ -609,6 +622,10 @@ export default function Devis() {
         }
         return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: 0, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
+      // Initialise le fournisseur prioritaire pour cette ligne dans le comparatif
+      const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
+      const prio = pfs.find(pf => pf.estPrioritaire) || pfs[0];
+      if (prio) setSelectedFournisseurPerLigne(prev => ({ ...prev, [ligneId]: prio.fournisseurId }));
     }
   }
 
@@ -1067,7 +1084,12 @@ export default function Devis() {
       <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
-          <div ref={scrollContainerRef} className="space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1" onDragOver={e => { dragClientYRef.current = e.clientY; }}>
+          {/* Onglets */}
+          <div className="flex gap-1 border-b border-border shrink-0">
+            <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
+            <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+          </div>
+          <div ref={scrollContainerRef} className={`space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1 ${dialogTab !== 'devis' ? 'hidden' : ''}`} onDragOver={e => { dragClientYRef.current = e.clientY; }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <div className="flex items-center justify-between">
@@ -1877,6 +1899,101 @@ export default function Devis() {
               </div>
             )}
           </div>
+          {/* ── Onglet Comparatif achat / vente ─────────────────────────────── */}
+          {dialogTab === 'comparatif' && (() => {
+            const lignesCompa = lignes.filter(l => !l.type || l.type === 'ligne');
+            let totalAchat = 0, totalVente = 0;
+            return (
+              <div className="flex-1 overflow-y-auto py-2 pr-1">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50">
+                        <th className="text-left px-2 py-2 font-medium">Désignation</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Qté</th>
+                        <th className="text-left px-2 py-2 font-medium">Fournisseur</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">PU Achat</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Total Achat</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">PU Vente net</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Total Vente</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Marge €</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Marge %</th>
+                        <th className="text-right px-2 py-2 font-medium whitespace-nowrap">Coeff</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {lignesCompa.map(l => {
+                        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                        const pfs = l.produitId ? produitFournisseurs.filter(pf => pf.produitId === l.produitId) : [];
+                        const selFournId = selectedFournisseurPerLigne[l.id];
+                        const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
+                        const puAchat = selPf?.prixAchat ?? prod?.prixAchat ?? 0;
+                        const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+                        const totAchat = puAchat * l.quantite;
+                        const totVente = puVente * l.quantite;
+                        const marge = totVente - totAchat;
+                        const margePct = totVente > 0 ? (marge / totVente) * 100 : 0;
+                        const coeff = totAchat > 0 ? totVente / totAchat : null;
+                        totalAchat += totAchat;
+                        totalVente += totVente;
+                        const coeffColor = coeff == null ? '' : coeff >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeff >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                        return (
+                          <tr key={l.id} className="border-b border-border/50 hover:bg-muted/30">
+                            <td className="px-2 py-1.5 max-w-[200px] truncate" title={l.description}>{l.description || <span className="text-muted-foreground italic">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">{l.quantite} {l.unite}</td>
+                            <td className="px-2 py-1.5">
+                              {pfs.length > 1 ? (
+                                <select
+                                  className="text-xs rounded border border-input bg-background px-1 py-0.5 max-w-[130px]"
+                                  value={selFournId || ''}
+                                  onChange={e => setSelectedFournisseurPerLigne(prev => ({ ...prev, [l.id]: e.target.value }))}
+                                >
+                                  {pfs.map(pf => {
+                                    const f = fournisseurs.find(f => f.id === pf.fournisseurId);
+                                    return <option key={pf.id} value={pf.fournisseurId}>{f?.societe || f?.nom || pf.fournisseurId}{pf.estPrioritaire ? ' ★' : ''}</option>;
+                                  })}
+                                </select>
+                              ) : pfs.length === 1 ? (
+                                <span className="text-muted-foreground">{fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.societe || fournisseurs.find(f => f.id === pfs[0].fournisseurId)?.nom || '—'}</span>
+                              ) : (
+                                <span className="text-muted-foreground italic">—</span>
+                              )}
+                            </td>
+                            <td className="px-2 py-1.5 text-right">{puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">{totAchat > 0 ? formatMontant(totAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">{formatMontant(puVente)}</td>
+                            <td className="px-2 py-1.5 text-right font-medium">{formatMontant(totVente)}</td>
+                            <td className={`px-2 py-1.5 text-right ${marge < 0 ? 'text-destructive' : ''}`}>{totAchat > 0 ? formatMontant(marge) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className={`px-2 py-1.5 text-right ${margePct < 30 && totAchat > 0 ? 'text-orange-500' : ''}`}>{totAchat > 0 ? `${margePct.toFixed(1)}%` : <span className="text-muted-foreground">—</span>}</td>
+                            <td className={`px-2 py-1.5 text-right font-semibold ${coeffColor}`}>{coeff != null ? coeff.toFixed(2) : <span className="text-muted-foreground font-normal">—</span>}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    {lignesCompa.length > 0 && (() => {
+                      const mTotal = totalVente - totalAchat;
+                      const margePctTotal = totalVente > 0 ? (mTotal / totalVente) * 100 : 0;
+                      const coeffTotal = totalAchat > 0 ? totalVente / totalAchat : null;
+                      const coeffTotalColor = coeffTotal == null ? '' : coeffTotal >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffTotal >= 1.43 ? 'text-orange-500' : 'text-destructive';
+                      return (
+                        <tfoot>
+                          <tr className="border-t-2 border-border bg-muted/40 font-semibold">
+                            <td className="px-2 py-2" colSpan={4}>Total</td>
+                            <td className="px-2 py-2 text-right">{totalAchat > 0 ? formatMontant(totalAchat) : '—'}</td>
+                            <td className="px-2 py-2"></td>
+                            <td className="px-2 py-2 text-right">{formatMontant(totalVente)}</td>
+                            <td className={`px-2 py-2 text-right ${mTotal < 0 ? 'text-destructive' : ''}`}>{totalAchat > 0 ? formatMontant(mTotal) : '—'}</td>
+                            <td className={`px-2 py-2 text-right ${margePctTotal < 30 && totalAchat > 0 ? 'text-orange-500' : ''}`}>{totalAchat > 0 ? `${margePctTotal.toFixed(1)}%` : '—'}</td>
+                            <td className={`px-2 py-2 text-right ${coeffTotalColor}`}>{coeffTotal != null ? coeffTotal.toFixed(2) : '—'}</td>
+                          </tr>
+                        </tfoot>
+                      );
+                    })()}
+                  </table>
+                </div>
+              </div>
+            );
+          })()}
           <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => {
