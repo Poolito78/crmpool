@@ -1140,13 +1140,25 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           </div>
         </div>
 
-        {/* Conditions */}
-        {devis.conditions && (
-          <div className="border-t border-border pt-4">
-            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Conditions</p>
-            <p className="text-muted-foreground text-xs">{devis.conditions}</p>
-          </div>
-        )}
+        {/* Conditions — priorité : délai règlement client → devis.conditions */}
+        {(() => {
+          const DELAI_CONDITIONS: Record<string, string> = {
+            'Comptant':  'Paiement comptant à réception de facture.',
+            '30J':       'Paiement à 30 jours net à compter de la date de facturation.',
+            '30J FDM':   'Paiement à 30 jours fin de mois à compter de la date de facturation.',
+            '45J':       'Paiement à 45 jours net à compter de la date de facturation.',
+            '45J FDM':   'Paiement à 45 jours fin de mois à compter de la date de facturation.',
+          };
+          const conditionsTexte = (client?.delaiReglement && DELAI_CONDITIONS[client.delaiReglement])
+            || devis.conditions;
+          if (!conditionsTexte) return null;
+          return (
+            <div className="border-t border-border pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">Conditions</p>
+              <p className="text-muted-foreground text-xs">{conditionsTexte}</p>
+            </div>
+          );
+        })()}
 
         <div className="mt-5 grid grid-cols-2 gap-6">
           <div className="border-t border-border pt-3">
