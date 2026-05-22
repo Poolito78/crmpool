@@ -1905,7 +1905,7 @@ export default function Devis() {
           {/* ── Onglet Comparatif achat / vente ─────────────────────────────── */}
           {dialogTab === 'comparatif' && (() => {
             const lignesCompa = lignes.filter(l => !l.type || l.type === 'ligne');
-            // Totaux pour recalcul automatique des surcharges énergie
+            // Totaux vente HT pour recalcul automatique des surcharges énergie
             const totalMMACompa = lignes.reduce((acc, l) => {
               if (!l.produitId) return acc;
               const p = produits.find(px => px.id === l.produitId);
@@ -1945,12 +1945,14 @@ export default function Devis() {
                         const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
                         // prod.prixAchat = prix achat conditionné (référence utilisée dans ProduitFournisseursPanel)
                         // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
+                        // Paliers : on utilise getPrixPourQuantite pour tenir compte des tarifs par palier
+                        const prixPalier = prod ? getPrixPourQuantite(prod, l.quantite) : null;
                         // Surcharges énergie : recalcul automatique depuis les totaux courants
                         const puAchat = l.description?.includes('Surcharge énergie MMA')
                           ? Math.round(totalMMACompa * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100
                           : l.description?.includes('Surcharge énergie hors MMA')
                             ? Math.round(totalHorsMMACompa * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100
-                            : l.prixAchatLigne != null ? l.prixAchatLigne : (prod?.prixAchat ?? 0);
+                            : l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         const totAchat = puAchat * l.quantite;
                         const totVente = puVente * l.quantite;
