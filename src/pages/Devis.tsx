@@ -60,6 +60,8 @@ export default function Devis() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
+  // Mémorise la valeur précédente de surfaceGlobaleM2 pour éviter de l'écraser à l'ouverture du formulaire
+  const prevSurfaceGlobaleRef = useRef<number>(0);
   const [previewOptions, setPreviewOptions] = useState<PreviewOptions>({ showConso: false, showRemise: false, showComposants: false, showKgRecap: true });
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
@@ -205,6 +207,7 @@ export default function Devis() {
     setFraisPortTVA(d.fraisPortTVA ?? 20);
     setAdresseLivraisonId(d.adresseLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
+    prevSurfaceGlobaleRef.current = d.surfaceGlobaleM2 || 0;
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
     setUndoStack([]);
   }
@@ -230,6 +233,7 @@ export default function Devis() {
     setExpressJ1(false);
     setCoeffExpress(1.8);
     setModeCalcul('standard');
+    prevSurfaceGlobaleRef.current = 0;
     setSurfaceGlobaleM2(0);
     setAdresseLivraisonId('');
     setUndoStack([]);
@@ -634,8 +638,15 @@ export default function Devis() {
   }, [editingId, dialogOpen, chatterDevis]); // rechargé quand le chatter se ferme
 
   // Recalcul auto des quantités quand surface globale change — s'applique aux lignes ayant surface+conso
+  // Ne s'exécute que si surfaceGlobaleM2 a réellement changé (pas à l'ouverture du formulaire)
   useEffect(() => {
-    if (!dialogOpen || surfaceGlobaleM2 <= 0) return;
+    if (!dialogOpen || surfaceGlobaleM2 <= 0) {
+      prevSurfaceGlobaleRef.current = surfaceGlobaleM2;
+      return;
+    }
+    // Évite d'écraser les surfaces individuelles à l'ouverture du formulaire
+    if (prevSurfaceGlobaleRef.current === surfaceGlobaleM2) return;
+    prevSurfaceGlobaleRef.current = surfaceGlobaleM2;
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
