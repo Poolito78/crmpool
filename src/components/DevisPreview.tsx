@@ -605,7 +605,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className={l.note ? '' : 'border-b border-border/60'}>
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
+                        {l.variantesChoisies && [...Object.values(l.variantesChoisies)].sort((a, b) => (getRalStyle(a) ? 1 : 0) - (getRalStyle(b) ? 1 : 0)).map((label, i) => {
                           const rs = getRalStyle(label);
                           return rs
                             ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
@@ -796,7 +796,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <tr className="border-b border-border">
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
                           {l.description}
-                          {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
+                          {l.variantesChoisies && [...Object.values(l.variantesChoisies)].sort((a, b) => (getRalStyle(a) ? 1 : 0) - (getRalStyle(b) ? 1 : 0)).map((label, i) => {
                             const rs = getRalStyle(label);
                             return rs
                               ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
