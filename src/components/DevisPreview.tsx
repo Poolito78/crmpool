@@ -1,5 +1,4 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
-import { flushSync } from 'react-dom';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -222,25 +221,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setPdfDialog(true);
   }
 
-  // Sélectionne le dossier — ferme le dialog d'abord (Radix focus-trap bloque showDirectoryPicker)
-  function handlePickFolder() {
+  // Sélectionne le dossier — appel direct sans délai pour conserver la transient user activation
+  async function handlePickFolder() {
     if (!('showDirectoryPicker' in window)) { toast.error('Non supporté par ce navigateur'); return; }
-    // flushSync ferme le dialog AVANT d'appeler le picker (libère le focus trap Radix)
-    flushSync(() => setPdfDialog(false));
-    type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
-    (window as typeof window & { showDirectoryPicker: ShowDirPicker })
-      .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' })
-      .then(async (dirHandle) => {
-        await storeDirHandle(dirHandle);
-        setSavedFolderName(dirHandle.name);
-        toast.success(`Dossier sélectionné : ${dirHandle.name}`);
-      })
-      .catch((err: unknown) => {
-        if (err instanceof Error && err.name === 'AbortError') return;
-        toast.error(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
-        console.error(err);
-      })
-      .finally(() => setPdfDialog(true)); // Rouvre le dialog après sélection
+    try {
+      const dirHandle = await (window as typeof window & { showDirectoryPicker: (opts?: object) => Promise<FileSystemDirectoryHandle> })
+        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
+      await storeDirHandle(dirHandle);
+      setSavedFolderName(dirHandle.name);
+      toast.success(`Dossier sélectionné : ${dirHandle.name}`);
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      const msg = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+      toast.error(`Erreur dossier: ${msg}`);
+      console.error('showDirectoryPicker error:', err);
+    }
   }
 
   // Génère et sauvegarde le PDF après confirmation
