@@ -98,9 +98,10 @@ interface Props {
   initialShowKgRecap?: boolean;
   onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean }) => void;
   onPrint?: () => void;
+  lineImages?: Record<string, { url: string; name: string }[]>;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, onOptionsChange, onPrint }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, onOptionsChange, onPrint, lineImages = {} }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -789,15 +790,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       ) : null
                     )}
                     {/* Note de ligne — colspan toute la table */}
-                    {l.note && (() => {
-                      const ralStyle = getRalStyle(l.note!);
+                    {(l.note || (lineImages[l.id] || []).length > 0) && (() => {
+                      const ralStyle = l.note ? getRalStyle(l.note!) : null;
+                      const imgs = lineImages[l.id] || [];
                       return (
                         <tr className="border-b border-border/60">
-                          <td colSpan={9} className="py-0 px-2" style={{ lineHeight: 0 }}>
-                            {ralStyle
+                          <td colSpan={9} className="py-1 px-2">
+                            {l.note && (ralStyle
                               ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
                               : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
-                            }
+                            )}
+                            {imgs.length > 0 && (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: l.note ? '4px' : '0' }}>
+                                {imgs.map((img, i) => (
+                                  <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
+                                ))}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
@@ -934,15 +943,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
-                      {l.note && (() => {
-                        const ralStyle = getRalStyle(l.note!);
+                      {(l.note || (lineImages[l.id] || []).length > 0) && (() => {
+                        const ralStyle = l.note ? getRalStyle(l.note!) : null;
+                        const imgs = lineImages[l.id] || [];
                         return (
                           <tr className="border-b border-border/60">
-                            <td colSpan={colSpan} className="py-0 px-2" style={{ lineHeight: 0 }}>
-                              {ralStyle
+                            <td colSpan={colSpan} className="py-1 px-2">
+                              {l.note && (ralStyle
                                 ? <span style={{ backgroundColor: ralStyle.backgroundColor, color: ralStyle.color, padding: '5px 10px', borderRadius: '3px', display: 'inline-flex', alignItems: 'center', lineHeight: 1.4, fontSize: '0.75rem', fontStyle: 'italic' }}>{l.note}</span>
                                 : <span className="text-muted-foreground text-xs italic" style={{ display: 'inline-block', padding: '4px 0' }}>{l.note}</span>
-                              }
+                              )}
+                              {imgs.length > 0 && (
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: l.note ? '4px' : '0' }}>
+                                  {imgs.map((img, i) => (
+                                    <img key={i} src={img.url} alt={img.name} style={{ maxHeight: '80px', maxWidth: '160px', objectFit: 'contain', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.1)' }} />
+                                  ))}
+                                </div>
+                              )}
                             </td>
                           </tr>
                         );
