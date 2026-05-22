@@ -183,44 +183,72 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     if (v.length > 0) allLineImages[k] = v; // remplace complètement (URLs session = plus à jour)
   }
 
-  // Images pré-traitées en data URL 48×38px via canvas (html2canvas-safe : taille fixe, pas de CORS)
+  // ─── Utilitaire : redimensionne une URL image en data URL (canvas) ───────────
+  // W×H = dimensions cibles (contain, fond blanc)
+  function resizeUrlToDataUrl(url: string, W: number, H: number): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const c = document.createElement('canvas');
+          c.width = W; c.height = H;
+          const ctx = c.getContext('2d')!;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, W, H);
+          const ratio = Math.min(W / img.naturalWidth, H / img.naturalHeight);
+          const nw = img.naturalWidth * ratio, nh = img.naturalHeight * ratio;
+          ctx.drawImage(img, (W - nw) / 2, (H - nh) / 2, nw, nh);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        } catch { resolve(''); }
+      };
+      img.onerror = () => resolve('');
+      img.src = url;
+    });
+  }
+
+  // Images pasted pré-traitées en data URL 48×38px via canvas (html2canvas-safe)
   const [dataUrlImages, setDataUrlImages] = useState<Record<string, string[]>>({});
   useEffect(() => {
     const allEntries = Object.entries(allLineImages);
     if (allEntries.length === 0) return;
     let cancelled = false;
-    async function resizeToDataUrl(url: string): Promise<string> {
-      return new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.onload = () => {
-          try {
-            const W = 48, H = 38;
-            const c = document.createElement('canvas');
-            c.width = W; c.height = H;
-            const ctx = c.getContext('2d')!;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, W, H);
-            const ratio = Math.min(W / img.naturalWidth, H / img.naturalHeight);
-            const nw = img.naturalWidth * ratio, nh = img.naturalHeight * ratio;
-            ctx.drawImage(img, (W - nw) / 2, (H - nh) / 2, nw, nh);
-            resolve(c.toDataURL('image/jpeg', 0.85));
-          } catch { resolve(''); }
-        };
-        img.onerror = () => resolve('');
-        img.src = url;
-      });
-    }
     (async () => {
       const result: Record<string, string[]> = {};
       for (const [ligneId, imgs] of allEntries) {
-        result[ligneId] = await Promise.all(imgs.map(img => resizeToDataUrl(img.url)));
+        result[ligneId] = await Promise.all(imgs.map(img => resizeUrlToDataUrl(img.url, 48, 38)));
       }
       if (!cancelled) setDataUrlImages(result);
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(Object.fromEntries(Object.entries(allLineImages).map(([k, v]) => [k, v.map(i => i.url)])))]);
+
+  // Images variantes produit pré-traitées en data URL 40×26px (html2canvas-safe : no CORS, taille exacte)
+  const [variantImgDataUrls, setVariantImgDataUrls] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const urls = new Set<string>();
+    for (const dl of devis.lignes) {
+      if (!dl.produitId || !dl.variantesChoisies) continue;
+      const prod = produits.find(p => p.id === dl.produitId);
+      if (!prod) continue;
+      for (const label of Object.values(dl.variantesChoisies)) {
+        const imgUrl = prod.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
+        if (imgUrl) urls.add(imgUrl);
+      }
+    }
+    if (urls.size === 0) return;
+    let cancelled = false;
+    (async () => {
+      const result: Record<string, string> = {};
+      for (const url of Array.from(urls)) {
+        result[url] = await resizeUrlToDataUrl(url, 40, 26);
+      }
+      if (!cancelled) setVariantImgDataUrls(result);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(devis.lignes.filter(l => l.variantesChoisies).map(l => ({ pid: l.produitId, v: l.variantesChoisies })))]);
 
 
   const poidsTotal = lignesEffectives.reduce((sum, l) => {
@@ -785,13 +813,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                             );
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
-                            if (imgUrl) return (
-                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', marginLeft: '8px', verticalAlign: 'middle' }}>
-                                {/* background-image au lieu de <img objectFit> — html2canvas-safe */}
-                                <span style={{ display: 'inline-block', width: '40px', height: '26px', backgroundImage: `url(${imgUrl})`, backgroundSize: 'cover', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.2)', flexShrink: 0 }} />
-                                <span className="text-xs text-muted-foreground font-normal">{label}</span>
-                              </span>
-                            );
+                            if (imgUrl) {
+                              // data URL pré-calculée 40×26px — pas de CORS, taille exacte, html2canvas-safe
+                              const dataUrl = variantImgDataUrls[imgUrl] || imgUrl;
+                              return (
+                                <span key={i} style={{ display: 'inline-block', marginLeft: '8px', verticalAlign: 'middle' }}>
+                                  <img src={dataUrl} alt={label} width={40} height={26} style={{ display: 'inline-block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.2)', verticalAlign: 'middle' }} />
+                                  {' '}
+                                  <span style={{ fontSize: '0.7rem', color: '#888', verticalAlign: 'middle', display: 'inline-block' }}>{label}</span>
+                                </span>
+                              );
+                            }
                             return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                           });
                         })()}
@@ -999,12 +1031,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
-                              if (imgUrl) return (
-                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', marginTop: '-6px', marginBottom: '-6px', verticalAlign: 'middle', lineHeight: 0 }}>
-                                  <img src={imgUrl} alt={label} style={{ width: 'auto', height: 'calc(1.5em + 12px)', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'block' }} />
-                                  <span className="text-xs text-muted-foreground font-normal">{label}</span>
-                                </span>
-                              );
+                              if (imgUrl) {
+                                // data URL pré-calculée 40×26px — html2canvas-safe (no CORS, taille exacte, no objectFit)
+                                const dataUrl = variantImgDataUrls[imgUrl] || imgUrl;
+                                return (
+                                  <span key={i} style={{ display: 'inline-block', marginLeft: '6px', verticalAlign: 'middle' }}>
+                                    <img src={dataUrl} alt={label} width={40} height={26} style={{ display: 'inline-block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', verticalAlign: 'middle' }} />
+                                    {' '}
+                                    <span style={{ fontSize: '0.7rem', color: '#888', verticalAlign: 'middle', display: 'inline-block' }}>{label}</span>
+                                  </span>
+                                );
+                              }
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                             });
                           })()}
