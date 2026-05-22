@@ -1630,14 +1630,31 @@ export default function Devis() {
                       {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%{coeffTotal !== null ? ` · coeff ${coeffTotal.toFixed(2)}` : ''})
                     </span>
                   </div>
-                  {totalHTLignes > 0 && (() => {
+                  {(() => {
+                    // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg)
+                    let sumCoutConso = 0;
+                    for (const l of lignes) {
+                      if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+                      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                      const conso = l.consommation || prod?.consommation || 0;
+                      const surfLigne = l.surfaceM2 || 0;
+                      if (conso > 0 && surfLigne > 0) {
+                        const poids = prod?.poids || null;
+                        const prixKg = poids && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - (l.remise || 0) / 100) / poids : null;
+                        if (prixKg != null) sumCoutConso += surfLigne * conso * prixKg;
+                      } else if (conso === 0 && l.prixUnitaireHT > 0) {
+                        // Produit sans taux de conso (ex: prestation) → coût conditionné
+                        sumCoutConso += l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+                      }
+                    }
+                    if (sumCoutConso <= 0) return null;
                     const surfaceRef = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
-                    const coutM2 = surfaceRef > 0 ? Math.round(totalHTLignes / surfaceRef * 100) / 100 : null;
+                    const coutM2 = surfaceRef > 0 ? Math.round(sumCoutConso / surfaceRef * 100) / 100 : null;
                     return (
                       <div className="flex justify-between border-t border-[#CC0000]/20 pt-2 mt-1">
                         <span className="text-xs font-semibold text-[#CC0000] uppercase tracking-wide">Coût chantier</span>
                         <div className="text-right">
-                          <span className="font-bold text-[#CC0000]">{formatMontant(totalHTLignes)}</span>
+                          <span className="font-bold text-[#CC0000]">{formatMontant(sumCoutConso)}</span>
                           {coutM2 && <span className="text-xs text-[#CC0000]/70 ml-2">· {coutM2.toFixed(2)} €/m²</span>}
                         </div>
                       </div>
