@@ -1905,6 +1905,19 @@ export default function Devis() {
           {/* ── Onglet Comparatif achat / vente ─────────────────────────────── */}
           {dialogTab === 'comparatif' && (() => {
             const lignesCompa = lignes.filter(l => !l.type || l.type === 'ligne');
+            // Totaux pour recalcul automatique des surcharges énergie
+            const totalMMACompa = lignes.reduce((acc, l) => {
+              if (!l.produitId) return acc;
+              const p = produits.find(px => px.id === l.produitId);
+              if (!p || p.categorie?.toLowerCase() !== 'mma') return acc;
+              return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+            }, 0);
+            const totalHorsMMACompa = lignes.reduce((acc, l) => {
+              if (!l.produitId) return acc;
+              const p = produits.find(px => px.id === l.produitId);
+              if (!p || p.categorie?.toLowerCase() === 'mma') return acc;
+              return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
+            }, 0);
             let totalAchat = 0, totalVente = 0;
             return (
               <div className="flex-1 overflow-y-auto py-2 pr-1">
@@ -1932,7 +1945,12 @@ export default function Devis() {
                         const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
                         // prod.prixAchat = prix achat conditionné (référence utilisée dans ProduitFournisseursPanel)
                         // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
-                        const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod?.prixAchat ?? 0);
+                        // Surcharges énergie : recalcul automatique depuis les totaux courants
+                        const puAchat = l.description?.includes('Surcharge énergie MMA')
+                          ? Math.round(totalMMACompa * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100
+                          : l.description?.includes('Surcharge énergie hors MMA')
+                            ? Math.round(totalHorsMMACompa * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100
+                            : l.prixAchatLigne != null ? l.prixAchatLigne : (prod?.prixAchat ?? 0);
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         const totAchat = puAchat * l.quantite;
                         const totVente = puVente * l.quantite;
