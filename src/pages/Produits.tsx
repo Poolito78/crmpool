@@ -14,6 +14,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
+import { getRalInfo } from '@/lib/ralColors';
 
 const COLUMNS = [
   { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
@@ -1243,11 +1244,11 @@ export default function Produits() {
                       <div className="space-y-1">
                         {dim.options.map((opt, oIdx) => (
                           <div key={opt.id} className="flex items-center gap-1.5">
-                            {/* Swatch couleur cliquable */}
+                            {/* Swatch couleur cliquable (RAL auto-détecté si pas de couleur manuelle) */}
                             <div className="relative shrink-0" title="Couleur du swatch">
                               <div
                                 className="w-6 h-6 rounded border border-input cursor-pointer"
-                                style={{ backgroundColor: opt.couleur || '#e5e7eb' }}
+                                style={{ backgroundColor: opt.couleur || getRalInfo(opt.label)?.hex || '#e5e7eb' }}
                                 onClick={() => (document.getElementById(`color-${opt.id}`) as HTMLInputElement)?.click()}
                               />
                               <input
