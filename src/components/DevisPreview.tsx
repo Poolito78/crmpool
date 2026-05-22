@@ -619,7 +619,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) return (
                               <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', verticalAlign: 'middle' }}>
-                                <img src={imgUrl} alt={label} style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block' }} />
+                                <img src={imgUrl} alt={label} style={{ width: 'auto', height: '1.8em', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block', verticalAlign: 'middle' }} />
                                 <span className="text-xs text-muted-foreground font-normal">{label}</span>
                               </span>
                             );
@@ -824,7 +824,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) return (
                                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', verticalAlign: 'middle' }}>
-                                  <img src={imgUrl} alt={label} style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block' }} />
+                                  <img src={imgUrl} alt={label} style={{ width: 'auto', height: '1.8em', borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block', verticalAlign: 'middle' }} />
                                   <span className="text-xs text-muted-foreground font-normal">{label}</span>
                                 </span>
                               );
