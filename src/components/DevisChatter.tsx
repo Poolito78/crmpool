@@ -83,6 +83,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState('');
+  const [pastedImages, setPastedImages] = useState<{ file: File; preview: string }[]>([]);
   const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
   const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -151,20 +152,62 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
 
   /* ── Ajouter note ── */
   async function handleAddNote() {
-    if (!note.trim()) return;
+    if (!note.trim() && pastedImages.length === 0) return;
     const uid = userId.current;
     if (!uid) return;
-    const { error } = await supabase.from('devis_pieces_jointes').insert({
-      user_id: uid,
-      devis_id: devisId,
-      type: 'note',
-      contenu: note.trim(),
+    setUploading(true);
+    try {
+      if (note.trim()) {
+        const { error } = await supabase.from('devis_pieces_jointes').insert({
+          user_id: uid, devis_id: devisId, type: 'note', contenu: note.trim(),
+        });
+        if (error) { toast.error('Erreur ajout note'); return; }
+      }
+      for (const { file } of pastedImages) {
+        await uploadImageRaw(file);
+      }
+      toast.success(pastedImages.length > 0 ? 'Note et image(s) enregistrées' : 'Note enregistrée');
+      pastedImages.forEach(p => URL.revokeObjectURL(p.preview));
+      setPastedImages([]);
+      setNote('');
+      setMode(null);
+      load();
+    } catch (e: any) {
+      toast.error(e.message || 'Erreur');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  /* ── Upload image collée (sans side-effects) ── */
+  async function uploadImageRaw(file: File): Promise<void> {
+    const uid = userId.current;
+    if (!uid) return;
+    const path = `${uid}/${devisId}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
+    const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false });
+    if (upErr) throw new Error(upErr.message);
+    const { data: signedData } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+    const url = signedData?.signedUrl ?? path;
+    const { error: dbErr } = await supabase.from('devis_pieces_jointes').insert({
+      user_id: uid, devis_id: devisId, type: 'fichier',
+      fichier_nom: file.name, fichier_url: url, fichier_taille: file.size, fichier_mime: file.type,
     });
-    if (error) { toast.error('Erreur ajout note'); return; }
-    toast.success('Note enregistrée');
-    setNote('');
-    setMode(null);
-    load();
+    if (dbErr) throw new Error(dbErr.message);
+  }
+
+  /* ── Coller une image depuis le presse-papiers dans la note ── */
+  function handleNotePaste(e: React.ClipboardEvent) {
+    const imageItems = Array.from(e.clipboardData.items).filter(item => item.type.startsWith('image/'));
+    if (imageItems.length === 0) return;
+    e.preventDefault();
+    for (const item of imageItems) {
+      const file = item.getAsFile();
+      if (!file) continue;
+      const ext = file.type.split('/')[1] || 'png';
+      const named = new File([file], `image_${Date.now()}.${ext}`, { type: file.type });
+      const preview = URL.createObjectURL(named);
+      setPastedImages(prev => [...prev, { file: named, preview }]);
+    }
   }
 
   /* ── Toggle confidentiel ── */
@@ -370,21 +413,36 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
           {mode === 'note' && (
             <div className="space-y-2">
               <Textarea
-                placeholder="Saisissez votre note…"
+                placeholder="Saisissez votre note… (Ctrl+V pour coller une image)"
                 value={note}
                 onChange={e => setNote(e.target.value)}
+                onPaste={handleNotePaste}
                 className="min-h-[80px] text-sm resize-none"
                 autoFocus
                 onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleAddNote(); }}
               />
+              {pastedImages.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {pastedImages.map((img, i) => (
+                    <div key={i} className="relative group/img">
+                      <img src={img.preview} alt="" className="h-20 w-auto rounded border border-border object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => { URL.revokeObjectURL(img.preview); setPastedImages(prev => prev.filter((_, j) => j !== i)); }}
+                        className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                      >×</button>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div className="flex justify-end gap-2">
-                <Button size="sm" variant="ghost" onClick={() => { setMode(null); setNote(''); }}>Annuler</Button>
-                <Button size="sm" onClick={handleAddNote} disabled={!note.trim()} className="gap-1.5">
-                  <Send className="w-3.5 h-3.5" />
+                <Button size="sm" variant="ghost" onClick={() => { setMode(null); setNote(''); pastedImages.forEach(p => URL.revokeObjectURL(p.preview)); setPastedImages([]); }}>Annuler</Button>
+                <Button size="sm" onClick={handleAddNote} disabled={!note.trim() && pastedImages.length === 0} className="gap-1.5">
+                  {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Enregistrer
                 </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground">Ctrl+Entrée pour valider</p>
+              <p className="text-[10px] text-muted-foreground">Ctrl+Entrée pour valider · Ctrl+V pour coller une image</p>
             </div>
           )}
         </div>
@@ -415,6 +473,22 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                   {pj.type === 'note' ? (
                     <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg px-3 py-2">
                       <p className="text-sm whitespace-pre-wrap break-words">{pj.contenu}</p>
+                    </div>
+                  ) : pj.fichierMime?.startsWith('image/') ? (
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <img
+                        src={pj.fichierUrl} alt={pj.fichierNom}
+                        className="max-w-full max-h-48 object-contain cursor-pointer w-full"
+                        onClick={() => handleView(pj)}
+                      />
+                      <div className="px-2.5 py-1.5 flex items-center gap-2 border-t border-border/50 bg-muted/30">
+                        <span className="text-xs text-muted-foreground truncate flex-1">{pj.fichierNom}</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-muted" title="Afficher"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                          <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-muted" title="Télécharger"><Download className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                          <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-muted" title="Rendre confidentiel"><Lock className="w-3.5 h-3.5 text-amber-500 opacity-50 hover:opacity-100" /></button>
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="border border-border rounded-lg px-3 py-2 flex items-center gap-2 min-w-0">
