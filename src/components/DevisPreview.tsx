@@ -1061,6 +1061,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                             });
                           })()}
+                          {/* Surface par ligne — uniquement si différente du global (en lecture/PDF) */}
+                          {(hideControls || pdfMode) ? (
+                            getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
+                              <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                            ) : null
+                          ) : (
+                            <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
+                              <input
+                                type="number" min={0} step={1}
+                                value={getSurfaceLigne(l.id) || ''}
+                                onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
+                                className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
+                                placeholder="m²"
+                              />
+                              <span className="text-xs text-muted-foreground">m²</span>
+                            </span>
+                          )}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
                           {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
                           {(l.note || (dataUrlImages[l.id] || []).filter(Boolean).length > 0) && (() => {
