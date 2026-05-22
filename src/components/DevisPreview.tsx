@@ -7,50 +7,78 @@ import { savePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 
-// â"€â"€â"€ Couleurs RAL â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
-const RAL_COLORS: Record<string, { hex: string; dark: boolean }> = {
-  '1003':{ hex:'#F9A800', dark:false }, '1007':{ hex:'#DCA300', dark:false },
-  '1013':{ hex:'#EAE6CA', dark:false }, '1014':{ hex:'#E1CC4F', dark:false },
-  '1015':{ hex:'#E6D690', dark:false }, '1016':{ hex:'#EDFF21', dark:false },
-  '1018':{ hex:'#F8F32B', dark:false }, '1021':{ hex:'#F3DA0B', dark:false },
-  '1023':{ hex:'#FAD201', dark:false }, '1028':{ hex:'#F4A900', dark:false },
-  '2002':{ hex:'#CB2821', dark:true  }, '2004':{ hex:'#F44611', dark:true  },
-  '2008':{ hex:'#F75E25', dark:true  }, '2011':{ hex:'#EC7C26', dark:false },
-  '3000':{ hex:'#AF2B1E', dark:true  }, '3002':{ hex:'#A2231D', dark:true  },
-  '3020':{ hex:'#CC0605', dark:true  }, '3022':{ hex:'#D95030', dark:true  },
-  '4003':{ hex:'#DE4C8A', dark:true  }, '4005':{ hex:'#6C4675', dark:true  },
-  '5002':{ hex:'#20214F', dark:true  }, '5005':{ hex:'#1E2460', dark:true  },
-  '5010':{ hex:'#0E294B', dark:true  }, '5012':{ hex:'#3B83BD', dark:true  },
-  '5015':{ hex:'#2271B3', dark:true  }, '5017':{ hex:'#063971', dark:true  },
-  '5021':{ hex:'#256D7B', dark:true  }, '5024':{ hex:'#5D9B9B', dark:false },
-  '6002':{ hex:'#2D572C', dark:true  }, '6005':{ hex:'#2F4538', dark:true  },
-  '6010':{ hex:'#35682D', dark:true  }, '6011':{ hex:'#587246', dark:true  },
-  '6018':{ hex:'#4C9141', dark:true  }, '6019':{ hex:'#9ED58C', dark:false },
-  '6024':{ hex:'#354733', dark:true  }, '6029':{ hex:'#20603D', dark:true  },
-  '7016':{ hex:'#293133', dark:true  }, '7021':{ hex:'#23282B', dark:true  },
-  '7035':{ hex:'#D7D7D7', dark:false }, '7037':{ hex:'#7D7D7B', dark:true  },
-  '7040':{ hex:'#9DA1AA', dark:false }, '7042':{ hex:'#8F9695', dark:false },
-  '7047':{ hex:'#D0D0D0', dark:false },
-  '8001':{ hex:'#955F20', dark:true  }, '8003':{ hex:'#734222', dark:true  },
-  '8004':{ hex:'#8E402A', dark:true  }, '8017':{ hex:'#2F1507', dark:true  },
-  '9001':{ hex:'#FDF4E3', dark:false }, '9002':{ hex:'#E7EBDA', dark:false },
-  '9003':{ hex:'#F4F4F4', dark:false }, '9004':{ hex:'#282828', dark:true  },
-  '9005':{ hex:'#0A0A0A', dark:true  }, '9006':{ hex:'#A5A5A5', dark:false },
-  '9007':{ hex:'#8F8F8F', dark:false }, '9010':{ hex:'#FFFFFF', dark:false },
-  '9011':{ hex:'#1C1C1C', dark:true  }, '9016':{ hex:'#F6F6F6', dark:false },
-  '9017':{ hex:'#1E1E1E', dark:true  }, '9018':{ hex:'#D7D7D7', dark:false },
+// ─── Couleurs RAL Classic (215 teintes) ───────────────────────────────────────
+const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
+  '1000':{ hex:'#CDB77F', dark:false }, '1001':{ hex:'#C8A86B', dark:false }, '1002':{ hex:'#C99840', dark:false }, '1003':{ hex:'#F9A800', dark:false },
+  '1004':{ hex:'#E49300', dark:false }, '1005':{ hex:'#CB7B28', dark:true  }, '1006':{ hex:'#E2781E', dark:true  }, '1007':{ hex:'#E7831A', dark:true  },
+  '1011':{ hex:'#AF7C36', dark:true  }, '1012':{ hex:'#E0C12A', dark:false }, '1013':{ hex:'#EDE3CE', dark:false }, '1014':{ hex:'#DED09E', dark:false },
+  '1015':{ hex:'#E6D2AE', dark:false }, '1016':{ hex:'#EACC00', dark:false }, '1017':{ hex:'#F4A100', dark:false }, '1018':{ hex:'#F4DC00', dark:false },
+  '1019':{ hex:'#9E8E78', dark:true  }, '1020':{ hex:'#BAAC74', dark:false }, '1021':{ hex:'#F4CA00', dark:false }, '1023':{ hex:'#FFC000', dark:false },
+  '1024':{ hex:'#B89050', dark:true  }, '1026':{ hex:'#FFFF00', dark:false }, '1027':{ hex:'#A88332', dark:true  }, '1028':{ hex:'#FF9B00', dark:false },
+  '1032':{ hex:'#E4AC00', dark:false }, '1033':{ hex:'#F4800A', dark:true  }, '1034':{ hex:'#EBA850', dark:false }, '1035':{ hex:'#9E8850', dark:true  },
+  '1036':{ hex:'#786030', dark:true  }, '1037':{ hex:'#E88000', dark:true  },
+  '2000':{ hex:'#D46800', dark:true  }, '2001':{ hex:'#BE3C00', dark:true  }, '2002':{ hex:'#CB2A00', dark:true  }, '2003':{ hex:'#E45C20', dark:true  },
+  '2004':{ hex:'#E44800', dark:true  }, '2005':{ hex:'#FF2800', dark:true  }, '2007':{ hex:'#FFA000', dark:false }, '2008':{ hex:'#D04010', dark:true  },
+  '2009':{ hex:'#E04400', dark:true  }, '2010':{ hex:'#D05828', dark:true  }, '2011':{ hex:'#E06000', dark:true  }, '2012':{ hex:'#CC5434', dark:true  },
+  '2013':{ hex:'#983428', dark:true  },
+  '3000':{ hex:'#AA2010', dark:true  }, '3001':{ hex:'#9C1C10', dark:true  }, '3002':{ hex:'#9C1C18', dark:true  }, '3003':{ hex:'#801010', dark:true  },
+  '3004':{ hex:'#701014', dark:true  }, '3005':{ hex:'#5C1014', dark:true  }, '3007':{ hex:'#3C0C10', dark:true  }, '3009':{ hex:'#6C3028', dark:true  },
+  '3011':{ hex:'#782020', dark:true  }, '3012':{ hex:'#C49080', dark:true  }, '3013':{ hex:'#902820', dark:true  }, '3014':{ hex:'#C48080', dark:true  },
+  '3015':{ hex:'#D4A0A0', dark:false }, '3016':{ hex:'#A03428', dark:true  }, '3017':{ hex:'#C44050', dark:true  }, '3018':{ hex:'#C43050', dark:true  },
+  '3020':{ hex:'#CC0000', dark:true  }, '3022':{ hex:'#D46858', dark:true  }, '3024':{ hex:'#FF2020', dark:true  }, '3026':{ hex:'#FF2020', dark:true  },
+  '3027':{ hex:'#AC1440', dark:true  }, '3028':{ hex:'#CC2020', dark:true  }, '3031':{ hex:'#AC3030', dark:true  }, '3032':{ hex:'#701414', dark:true  },
+  '3033':{ hex:'#C44030', dark:true  },
+  '4001':{ hex:'#886090', dark:true  }, '4002':{ hex:'#943054', dark:true  }, '4003':{ hex:'#CE4090', dark:true  }, '4004':{ hex:'#641040', dark:true  },
+  '4005':{ hex:'#8060A0', dark:true  }, '4006':{ hex:'#982070', dark:true  }, '4007':{ hex:'#4C1048', dark:true  }, '4008':{ hex:'#803080', dark:true  },
+  '4009':{ hex:'#A07898', dark:true  }, '4010':{ hex:'#BE3090', dark:true  }, '4011':{ hex:'#806898', dark:true  }, '4012':{ hex:'#6C6080', dark:true  },
+  '5000':{ hex:'#2E4D8C', dark:true  }, '5001':{ hex:'#1C4068', dark:true  }, '5002':{ hex:'#1428A0', dark:true  }, '5003':{ hex:'#1E3060', dark:true  },
+  '5004':{ hex:'#141828', dark:true  }, '5005':{ hex:'#1040A0', dark:true  }, '5007':{ hex:'#3C6090', dark:true  }, '5008':{ hex:'#243040', dark:true  },
+  '5009':{ hex:'#285080', dark:true  }, '5010':{ hex:'#0C4080', dark:true  }, '5011':{ hex:'#1C2444', dark:true  }, '5012':{ hex:'#3478B8', dark:true  },
+  '5013':{ hex:'#1C2C60', dark:true  }, '5014':{ hex:'#6078A8', dark:true  }, '5015':{ hex:'#1470C0', dark:true  }, '5017':{ hex:'#0858A0', dark:true  },
+  '5018':{ hex:'#3C8888', dark:true  }, '5019':{ hex:'#1C5C90', dark:true  }, '5020':{ hex:'#1C3840', dark:true  }, '5021':{ hex:'#287880', dark:true  },
+  '5022':{ hex:'#201C60', dark:true  }, '5023':{ hex:'#3C5888', dark:true  }, '5024':{ hex:'#6090B0', dark:true  }, '5025':{ hex:'#2C6878', dark:true  },
+  '5026':{ hex:'#10304C', dark:true  },
+  '6000':{ hex:'#3C7060', dark:true  }, '6001':{ hex:'#286030', dark:true  }, '6002':{ hex:'#286428', dark:true  }, '6003':{ hex:'#4C5840', dark:true  },
+  '6004':{ hex:'#1C4440', dark:true  }, '6005':{ hex:'#1C3C28', dark:true  }, '6006':{ hex:'#303828', dark:true  }, '6007':{ hex:'#28361C', dark:true  },
+  '6008':{ hex:'#30301C', dark:true  }, '6009':{ hex:'#243018', dark:true  }, '6010':{ hex:'#447828', dark:true  }, '6011':{ hex:'#6C8C50', dark:true  },
+  '6012':{ hex:'#303C34', dark:true  }, '6013':{ hex:'#8C8C60', dark:true  }, '6014':{ hex:'#484840', dark:true  }, '6015':{ hex:'#3C3C30', dark:true  },
+  '6016':{ hex:'#1C7048', dark:true  }, '6017':{ hex:'#487830', dark:true  }, '6018':{ hex:'#5C9030', dark:true  }, '6019':{ hex:'#C0D8A8', dark:false },
+  '6020':{ hex:'#304428', dark:true  }, '6021':{ hex:'#7C9868', dark:true  }, '6022':{ hex:'#3C3018', dark:true  }, '6024':{ hex:'#308050', dark:true  },
+  '6025':{ hex:'#487038', dark:true  }, '6026':{ hex:'#1C5840', dark:true  }, '6027':{ hex:'#80C8C0', dark:false }, '6028':{ hex:'#2C5430', dark:true  },
+  '6029':{ hex:'#1C7830', dark:true  }, '6032':{ hex:'#287850', dark:true  }, '6033':{ hex:'#408880', dark:true  }, '6034':{ hex:'#80C0B8', dark:false },
+  '6035':{ hex:'#1C4A20', dark:true  }, '6036':{ hex:'#1C5048', dark:true  }, '6037':{ hex:'#008040', dark:true  }, '6038':{ hex:'#00C840', dark:false },
+  '7000':{ hex:'#788C90', dark:true  }, '7001':{ hex:'#8C9898', dark:true  }, '7002':{ hex:'#808070', dark:true  }, '7003':{ hex:'#787868', dark:true  },
+  '7004':{ hex:'#989898', dark:true  }, '7005':{ hex:'#686C64', dark:true  }, '7006':{ hex:'#747060', dark:true  }, '7008':{ hex:'#6C6040', dark:true  },
+  '7009':{ hex:'#5C6058', dark:true  }, '7010':{ hex:'#585C54', dark:true  }, '7011':{ hex:'#505860', dark:true  }, '7012':{ hex:'#585C60', dark:true  },
+  '7013':{ hex:'#585448', dark:true  }, '7015':{ hex:'#50545C', dark:true  }, '7016':{ hex:'#383E44', dark:true  }, '7021':{ hex:'#2C3038', dark:true  },
+  '7022':{ hex:'#4C4C48', dark:true  }, '7023':{ hex:'#808078', dark:true  }, '7024':{ hex:'#484C54', dark:true  }, '7026':{ hex:'#384044', dark:true  },
+  '7030':{ hex:'#989080', dark:true  }, '7031':{ hex:'#606870', dark:true  }, '7032':{ hex:'#B8B4A0', dark:false }, '7033':{ hex:'#888C7C', dark:true  },
+  '7034':{ hex:'#908C70', dark:true  }, '7035':{ hex:'#C8C8C0', dark:false }, '7036':{ hex:'#A0949C', dark:true  }, '7037':{ hex:'#7C7C7C', dark:true  },
+  '7038':{ hex:'#B4B4A8', dark:false }, '7039':{ hex:'#6C6860', dark:true  }, '7040':{ hex:'#9898A4', dark:true  }, '7042':{ hex:'#8C8C8C', dark:true  },
+  '7043':{ hex:'#545454', dark:true  }, '7044':{ hex:'#C0BCB0', dark:false }, '7045':{ hex:'#909090', dark:true  }, '7046':{ hex:'#808088', dark:true  },
+  '7047':{ hex:'#C8C8C8', dark:false }, '7048':{ hex:'#888078', dark:true  },
+  '8000':{ hex:'#886040', dark:true  }, '8001':{ hex:'#985028', dark:true  }, '8002':{ hex:'#784848', dark:true  }, '8003':{ hex:'#7C4820', dark:true  },
+  '8004':{ hex:'#8C4830', dark:true  }, '8007':{ hex:'#6C4028', dark:true  }, '8008':{ hex:'#7C5030', dark:true  }, '8009':{ hex:'#604034', dark:true  },
+  '8010':{ hex:'#5C3828', dark:true  }, '8011':{ hex:'#4C2C20', dark:true  }, '8012':{ hex:'#642424', dark:true  }, '8014':{ hex:'#402820', dark:true  },
+  '8015':{ hex:'#602420', dark:true  }, '8016':{ hex:'#482420', dark:true  }, '8017':{ hex:'#402020', dark:true  }, '8019':{ hex:'#382C28', dark:true  },
+  '8022':{ hex:'#201818', dark:true  }, '8023':{ hex:'#A04820', dark:true  }, '8024':{ hex:'#7C5038', dark:true  }, '8025':{ hex:'#7C6050', dark:true  },
+  '8028':{ hex:'#483828', dark:true  }, '8029':{ hex:'#7C3C28', dark:true  },
+  '9001':{ hex:'#ECDCCC', dark:false, white:true }, '9002':{ hex:'#E0D8D0', dark:false }, '9003':{ hex:'#F0EEE8', dark:false, white:true }, '9004':{ hex:'#2C2C2C', dark:true  },
+  '9005':{ hex:'#0C0C0C', dark:true  }, '9006':{ hex:'#A0A0A0', dark:false }, '9007':{ hex:'#888888', dark:true  }, '9010':{ hex:'#F4F0E8', dark:false, white:true },
+  '9011':{ hex:'#1C1C1C', dark:true  }, '9016':{ hex:'#F4F4F0', dark:false, white:true }, '9017':{ hex:'#1C1C1C', dark:true  }, '9018':{ hex:'#D8D8D0', dark:false },
+  '9022':{ hex:'#909088', dark:true  }, '9023':{ hex:'#808080', dark:true  },
 };
 
-function getRalStyle(note: string): { backgroundColor: string; color: string; border?: string } | undefined {
-  const m = note.match(/RAL\s+(?:[^\s\d]+\s+)*(\d{4})/i);
+function getRalStyle(text: string): { backgroundColor: string; color: string; border?: string; ralNum: string } | undefined {
+  const m = text.match(/(\d{4})/);
   if (!m) return undefined;
   const c = RAL_COLORS[m[1]];
   if (!c) return undefined;
-  const isWhite = c.hex === '#FFFFFF' || c.hex === '#F6F6F6' || c.hex === '#F4F4F4';
   return {
     backgroundColor: c.hex,
     color: c.dark ? '#ffffff' : '#1a1a1a',
-    ...(isWhite ? { border: '1px solid #ddd' } : {}),
+    ralNum: m[1],
+    ...(c.white ? { border: '1px solid #ccc' } : {}),
   };
 }
 
@@ -580,7 +608,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
                           const rs = getRalStyle(label);
                           return rs
-                            ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle' }}>{label}</span>
+                            ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                             : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                         })}
                         {(hideControls || pdfMode) ? (
@@ -771,7 +799,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           {l.variantesChoisies && Object.values(l.variantesChoisies).map((label, i) => {
                             const rs = getRalStyle(label);
                             return rs
-                              ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 6px', borderRadius: '3px', fontSize: '0.65rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle' }}>{label}</span>
+                              ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                           })}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
