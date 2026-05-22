@@ -1,4 +1,5 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
+import { flushSync } from 'react-dom';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -221,20 +222,25 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setPdfDialog(true);
   }
 
-  // Sélectionne le dossier immédiatement depuis le clic (user gesture requis)
-  async function handlePickFolder() {
+  // Sélectionne le dossier — ferme le dialog d'abord (Radix focus-trap bloque showDirectoryPicker)
+  function handlePickFolder() {
     if (!('showDirectoryPicker' in window)) { toast.error('Non supporté par ce navigateur'); return; }
-    try {
-      type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
-      const dirHandle = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
-        .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' });
-      await storeDirHandle(dirHandle);
-      setSavedFolderName(dirHandle.name);
-      toast.success(`Dossier sélectionné : ${dirHandle.name}`);
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      console.error(err);
-    }
+    // flushSync ferme le dialog AVANT d'appeler le picker (libère le focus trap Radix)
+    flushSync(() => setPdfDialog(false));
+    type ShowDirPicker = (opts?: object) => Promise<FileSystemDirectoryHandle>;
+    (window as typeof window & { showDirectoryPicker: ShowDirPicker })
+      .showDirectoryPicker({ mode: 'readwrite', startIn: 'documents' })
+      .then(async (dirHandle) => {
+        await storeDirHandle(dirHandle);
+        setSavedFolderName(dirHandle.name);
+        toast.success(`Dossier sélectionné : ${dirHandle.name}`);
+      })
+      .catch((err: unknown) => {
+        if (err instanceof Error && err.name === 'AbortError') return;
+        toast.error(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+        console.error(err);
+      })
+      .finally(() => setPdfDialog(true)); // Rouvre le dialog après sélection
   }
 
   // Génère et sauvegarde le PDF après confirmation
