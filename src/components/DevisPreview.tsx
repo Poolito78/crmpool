@@ -853,11 +853,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                           });
                         })()}
-                        {(hideControls || pdfMode) ? (
+                        {surfaceGlobale > 0 ? (
                           getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
                             <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
                           ) : null
-                        ) : surfaceGlobale === 0 ? (
+                        ) : (hideControls || pdfMode) ? null : (
                           <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
                             <input
                               type="number" min={0} step={1}
@@ -868,7 +868,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             />
                             <span className="text-xs text-muted-foreground">m²</span>
                           </span>
-                        ) : null}
+                        )}
                         {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
                         {l.note && (() => {
                           const rsNote = getRalStyle(l.note!);
@@ -1070,12 +1070,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
                             });
                           })()}
-                          {/* Surface par ligne — masquée en impression si surface globale définie */}
-                          {(hideControls || pdfMode) ? (
+                          {/* Surface par ligne — affichée si différente du global, input si pas de global */}
+                          {surfaceGlobale > 0 ? (
                             getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
                               <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
                             ) : null
-                          ) : surfaceGlobale === 0 ? (
+                          ) : (hideControls || pdfMode) ? null : (
                             <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
                               <input
                                 type="number" min={0} step={1}
@@ -1086,7 +1086,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               />
                               <span className="text-xs text-muted-foreground">m²</span>
                             </span>
-                          ) : null}
+                          )}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
                           {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
                           {(l.note || (dataUrlImages[l.id] || []).filter(Boolean).length > 0) && (() => {
