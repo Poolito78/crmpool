@@ -209,6 +209,7 @@ export default function Devis() {
     setModeCalcul(d.modeCalcul || 'standard');
     prevSurfaceGlobaleRef.current = d.surfaceGlobaleM2 || 0;
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
+    prevClientIdRef.current = d.clientId;
     setUndoStack([]);
   }
 
@@ -235,6 +236,7 @@ export default function Devis() {
     setModeCalcul('standard');
     prevSurfaceGlobaleRef.current = 0;
     setSurfaceGlobaleM2(0);
+    prevClientIdRef.current = '';
     setAdresseLivraisonId('');
     setUndoStack([]);
     setDialogOpen(true);
