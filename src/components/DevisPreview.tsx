@@ -701,7 +701,18 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             ? Math.round(sumCoutConsoHT / refSurface * 100) / 100 : null;
 
           return (
-            <table className="w-full mb-6 text-xs border-collapse">
+            <table className="w-full mb-6 text-xs border-collapse table-fixed">
+              <colgroup>
+                <col />{/* Désignation : prend tout l'espace restant */}
+                <col style={{ width: '44px' }} />{/* kg/m² */}
+                <col style={{ width: '52px' }} />{/* Total KG conso */}
+                <col style={{ width: '36px' }} />{/* kg cond */}
+                <col style={{ width: '36px' }} />{/* Unité cond */}
+                <col style={{ width: '50px' }} />{/* Total KG cond */}
+                <col style={{ width: '72px' }} />{/* Unité prix */}
+                <col style={{ width: '58px' }} />{/* (Kg) */}
+                <col style={{ width: '72px' }} />{/* Total HT */}
+              </colgroup>
               <thead>
                 {/* Ligne 1 : groupes */}
                 <tr className="bg-[#CC0000] text-white">
@@ -716,14 +727,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </tr>
                 {/* Ligne 2 : sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  <th className="py-1 px-1 text-right border-l border-white/20 w-14">kg/m²</th>
-                  <th className="py-1 px-1 text-right w-16">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20 w-12">kg</th>
-                  <th className="py-1 px-1 text-right w-12">Unité</th>
-                  <th className="py-1 px-1 text-right w-16">Total KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20 w-20">Unité</th>
-                  <th className="py-1 px-1 text-right w-16">(Kg)</th>
-                  <th className="py-1 px-1 text-right w-20">Total HT</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20">kg/m²</th>
+                  <th className="py-1 px-1 text-right">Total KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20">kg</th>
+                  <th className="py-1 px-1 text-right">Unité</th>
+                  <th className="py-1 px-1 text-right">Total KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20">Unité</th>
+                  <th className="py-1 px-1 text-right">(Kg)</th>
+                  <th className="py-1 px-1 text-right">Total HT</th>
                 </tr>
               </thead>
               <tbody>
