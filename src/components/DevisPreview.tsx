@@ -814,14 +814,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             );
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) {
-                              // data URL pré-calculée 40×26px — pas de CORS, taille exacte, html2canvas-safe
-                              const dataUrl = variantImgDataUrls[imgUrl] || imgUrl;
+                              // Bloc séparé — html2canvas fiable uniquement sur display:block (inline cause chevauchement)
+                              const dataUrl = variantImgDataUrls[imgUrl];
                               return (
-                                <span key={i} style={{ display: 'inline-block', marginLeft: '8px', verticalAlign: 'middle' }}>
-                                  <img src={dataUrl} alt={label} width={40} height={26} style={{ display: 'inline-block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.2)', verticalAlign: 'middle' }} />
-                                  {' '}
-                                  <span style={{ fontSize: '0.7rem', color: '#888', verticalAlign: 'middle', display: 'inline-block' }}>{label}</span>
-                                </span>
+                                <div key={i} style={{ display: 'block', marginTop: '3px' }}>
+                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', marginBottom: '1px' }} /> : null}
+                                  <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
+                                </div>
                               );
                             }
                             return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
@@ -1032,14 +1031,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
-                                // data URL pré-calculée 40×26px — html2canvas-safe (no CORS, taille exacte, no objectFit)
-                                const dataUrl = variantImgDataUrls[imgUrl] || imgUrl;
+                                // Bloc séparé — html2canvas fiable sur display:block seulement
+                                const dataUrl = variantImgDataUrls[imgUrl];
                                 return (
-                                  <span key={i} style={{ display: 'inline-block', marginLeft: '6px', verticalAlign: 'middle' }}>
-                                    <img src={dataUrl} alt={label} width={40} height={26} style={{ display: 'inline-block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', verticalAlign: 'middle' }} />
-                                    {' '}
-                                    <span style={{ fontSize: '0.7rem', color: '#888', verticalAlign: 'middle', display: 'inline-block' }}>{label}</span>
-                                  </span>
+                                  <div key={i} style={{ display: 'block', marginTop: '3px' }}>
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.15)', marginBottom: '1px' }} /> : null}
+                                    <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
+                                  </div>
                                 );
                               }
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
