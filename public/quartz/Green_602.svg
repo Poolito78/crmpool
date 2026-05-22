@@ -1,34 +1,74 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80" viewBox="0 0 120 80">
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100" viewBox="0 0 200 100">
   <defs>
-    <!-- Texture granulat simulée -->
-    <filter id="grain" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.75" numOctaves="4" seed="3" result="noise"/>
-      <feColorMatrix type="saturate" values="0" in="noise" result="grey"/>
-      <feBlend in="SourceGraphic" in2="grey" mode="soft-light" result="blend"/>
-      <feComposite in="blend" in2="SourceGraphic" operator="in"/>
+    <!-- Bruit de base pour simuler granulat -->
+    <filter id="f1" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <!-- Turbulence fine pour grain de quartz -->
+      <feTurbulence type="fractalNoise" baseFrequency="0.65 0.7" numOctaves="4" seed="12" result="noise1"/>
+      <!-- Turbulence grossière pour particules visibles -->
+      <feTurbulence type="turbulence" baseFrequency="0.12 0.14" numOctaves="2" seed="5" result="noise2"/>
+      <!-- Mélange des deux niveaux de bruit -->
+      <feMerge result="combinedNoise">
+        <feMergeNode in="noise1"/>
+        <feMergeNode in="noise2"/>
+      </feMerge>
+      <!-- Éclairage directionnel pour effet 3D granulat -->
+      <feDiffuseLighting in="noise1" lighting-color="white" diffuseConstant="1.2" surfaceScale="4" result="light">
+        <feDistantLight azimuth="225" elevation="55"/>
+      </feDiffuseLighting>
+      <!-- Colorer le bruit avec la couleur de base -->
+      <feColorMatrix type="matrix" in="noise2"
+        values="0 0 0 0 0.361
+                0 0 0 0 0.494
+                0 0 0 0 0.267
+                0 0 0 1 0" result="coloredNoise"/>
+      <!-- Blend lumière + couleur -->
+      <feBlend in="coloredNoise" in2="light" mode="multiply" result="litColor"/>
+      <!-- Ajuste contraste -->
+      <feComponentTransfer in="litColor" result="contrast">
+        <feFuncR type="gamma" amplitude="1.1" exponent="0.9" offset="-0.02"/>
+        <feFuncG type="gamma" amplitude="1.1" exponent="0.9" offset="-0.02"/>
+        <feFuncB type="gamma" amplitude="1.1" exponent="0.9" offset="-0.02"/>
+      </feComponentTransfer>
+      <feComposite in="contrast" in2="SourceGraphic" operator="in"/>
     </filter>
-    <filter id="speckle" x="0%" y="0%" width="100%" height="100%">
-      <feTurbulence type="turbulence" baseFrequency="0.9 0.9" numOctaves="3" seed="7" result="t"/>
-      <feDisplacementMap in="SourceGraphic" in2="t" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+
+    <!-- Filtre pour les particules distinctes -->
+    <filter id="f2" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="turbulence" baseFrequency="0.25 0.28" numOctaves="1" seed="9" result="t"/>
+      <feColorMatrix type="matrix" in="t"
+        values="0 0 0 0 0.518
+                0 0 0 0 0.643
+                0 0 0 0 0.404
+                0 0 3 -1.2 0" result="particles"/>
+      <feComposite in="particles" in2="SourceGraphic" operator="in"/>
     </filter>
-    <radialGradient id="vignette" cx="50%" cy="50%" r="70%">
-      <stop offset="0%" stop-color="#75975D" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#43652B" stop-opacity="0.6"/>
-    </radialGradient>
+
+    <filter id="f3" x="-5%" y="-5%" width="110%" height="110%" color-interpolation-filters="sRGB">
+      <feTurbulence type="turbulence" baseFrequency="0.3 0.32" numOctaves="1" seed="17" result="t"/>
+      <feColorMatrix type="matrix" in="t"
+        values="0 0 0 0 0.224
+                0 0 0 0 0.357
+                0 0 0 0 0.129
+                0 0 3 -1.5 0" result="dark_particles"/>
+      <feComposite in="dark_particles" in2="SourceGraphic" operator="in"/>
+    </filter>
+
+    <clipPath id="clip"><rect width="200" height="100" rx="6"/></clipPath>
   </defs>
 
   <!-- Fond de couleur de base -->
-  <rect width="120" height="80" fill="#5C7E44" rx="4"/>
+  <rect width="200" height="100" fill="rgb(92,126,68)" rx="6"/>
 
-  <!-- Couche texture granulat -->
-  <rect width="120" height="80" fill="#5C7E44" filter="url(#grain)" rx="4" opacity="0.9"/>
+  <!-- Couche texture principale (grain fin + éclairage) -->
+  <rect width="200" height="100" fill="rgb(92,126,68)" filter="url(#f1)" clip-path="url(#clip)" opacity="0.95"/>
 
-  <!-- Vignette légère -->
-  <rect width="120" height="80" fill="url(#vignette)" rx="4"/>
+  <!-- Particules claires (granulats brillants) -->
+  <rect width="200" height="100" fill="white" filter="url(#f2)" clip-path="url(#clip)" opacity="0.25"/>
 
-  <!-- Étiquette en bas -->
-  <rect x="0" y="58" width="120" height="22" fill="rgba(0,0,0,0.45)" rx="0"/>
-  <rect x="0" y="58" width="120" height="22" fill="rgba(0,0,0,0)" rx="4"/>
-  <text x="60" y="72" font-family="Arial, sans-serif" font-size="9.5" font-weight="600"
-        text-anchor="middle" fill="#FFFFFF" opacity="0.95">Green 602</text>
+  <!-- Particules sombres (granulats foncés) -->
+  <rect width="200" height="100" fill="black" filter="url(#f3)" clip-path="url(#clip)" opacity="0.2"/>
+
+  <!-- Léger vignettage sur les bords -->
+  <rect width="200" height="100" rx="6"
+    fill="none" stroke="rgba(0,0,0,0.2)" stroke-width="2"/>
 </svg>
