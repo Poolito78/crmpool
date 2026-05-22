@@ -1,9 +1,12 @@
-import { useState, useRef, Fragment } from 'react';
+import { useState, useRef, Fragment, useEffect } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer, Pencil, Loader2, Send } from 'lucide-react';
+import { Printer, Pencil, Loader2, Send, FolderOpen, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
-import { savePdfFromElement } from '@/lib/pdfFolder';
+import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
@@ -105,6 +108,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
+  const [pdfDialog, setPdfDialog] = useState(false);
+  const [pdfFileName, setPdfFileName] = useState('');
+  const [savedFolderName, setSavedFolderName] = useState<string | null>(null);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
@@ -153,28 +159,49 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     return sum + (prod?.poids || 0) * l.quantite;
   }, 0);
 
+  const accentMap: Record<string, string> = {
+    'é':'e','è':'e','ê':'e','ë':'e','à':'a','â':'a','ä':'a',
+    'ù':'u','û':'u','ü':'u','ô':'o','ö':'o','î':'i','ï':'i','ç':'c',
+    'É':'E','È':'E','Ê':'E','À':'A','Â':'A','Ù':'U','Û':'U','Ô':'O','Î':'I','Ç':'C',
+  };
+  const sanitize = (s: string) =>
+    s.split('').map(c => accentMap[c] ?? c).join('')
+      .replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+
+  function buildFileName() {
+    const societe = client?.societe || client?.nom || '';
+    const parts: string[] = ['Devis', devis.numero];
+    if (societe) parts.push(sanitize(societe));
+    if (devis.referenceAffaire) parts.push(sanitize(devis.referenceAffaire));
+    return parts.join('_') + '.pdf';
+  }
+
+  // Ouvre la dialog de confirmation PDF
   async function handlePrint() {
+    const folderHandle = await getStoredDirHandle();
+    let folderName: string | null = null;
+    if (folderHandle) {
+      try {
+        // @ts-expect-error – requestPermission pas encore dans les types DOM
+        const perm = await folderHandle.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') folderName = folderHandle.name;
+      } catch { /* ignore */ }
+    }
+    setSavedFolderName(folderName);
+    setPdfFileName(buildFileName());
+    setPdfDialog(true);
+  }
+
+  // Génère et sauvegarde le PDF après confirmation
+  async function confirmGeneratePdf(forcePickFolder = false) {
     if (!printAreaRef.current) return;
+    setPdfDialog(false);
     setPrinting(true);
     setPdfMode(true);
     await new Promise(resolve => setTimeout(resolve, 80));
 
     try {
-      // Nom du fichier : Devis_NUMERO_Societe_RefAffaire.pdf
-      const accentMap: Record<string, string> = {
-        'é':'e','è':'e','ê':'e','ë':'e','à':'a','â':'a','ä':'a',
-        'ù':'u','û':'u','ü':'u','ô':'o','ö':'o','î':'i','ï':'i','ç':'c',
-        'É':'E','È':'E','Ê':'E','À':'A','Â':'A','Ù':'U','Û':'U','Ô':'O','Î':'I','Ç':'C',
-      };
-      const sanitize = (s: string) =>
-        s.split('').map(c => accentMap[c] ?? c).join('')
-          .replace(/[^a-zA-Z0-9-]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-      const societe = client?.societe || client?.nom || '';
-      const parts: string[] = ['Devis', devis.numero];
-      if (societe) parts.push(sanitize(societe));
-      if (devis.referenceAffaire) parts.push(sanitize(devis.referenceAffaire));
-      const fileName = parts.join('_') + '.pdf';
-      // Prépare le logo en data URL pour l'entête répété sur pages 2+
+      const fileName = pdfFileName || buildFileName();
       const logoDataUrl: string | null = await fetch(logoIsofloor)
         .then(r => r.blob())
         .then(blob => new Promise<string>(res => {
@@ -184,15 +211,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         }))
         .catch(() => null);
       const refDate = devis.dateEnvoi || devis.dateCreation;
-      const res = await savePdfFromElement(printAreaRef.current, fileName, {
+
+      const base64 = await generatePdfFromElement(printAreaRef.current, {
         devisNumero: devis.numero,
         devisDate: refDate ? formatDate(refDate) : undefined,
         logoDataUrl: logoDataUrl ?? undefined,
       });
-      window.open(res.blobUrl, '_blank');
-      setTimeout(() => URL.revokeObjectURL(res.blobUrl), 60000);
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+
+      const res = await writeFileToFolder(fileName, bytes, forcePickFolder);
       if (res.ok) {
         toast.success(`PDF sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
+        setSavedFolderName(res.folderName ?? null);
       } else {
         toast.success('PDF généré', { description: fileName, duration: 4000 });
       }
@@ -209,6 +243,54 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   return (
     <div className="flex flex-col min-h-0">
+
+      {/* ── Dialog confirmation PDF ── */}
+      <Dialog open={pdfDialog} onOpenChange={setPdfDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              Générer le PDF
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Nom du fichier</Label>
+              <Input
+                value={pdfFileName}
+                onChange={e => setPdfFileName(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+            <div>
+              <Label className="text-xs text-muted-foreground mb-1 block">Dossier d'enregistrement</Label>
+              <div className="flex items-center gap-2">
+                <div className="flex-1 h-9 rounded-md border border-input bg-muted/40 px-3 flex items-center text-sm text-muted-foreground truncate">
+                  {savedFolderName
+                    ? <><FolderOpen className="w-4 h-4 mr-2 shrink-0 text-amber-500" />{savedFolderName}</>
+                    : <span className="italic">Aucun dossier sélectionné</span>
+                  }
+                </div>
+                <Button variant="outline" size="sm" onClick={() => confirmGeneratePdf(true)}>
+                  <FolderOpen className="w-4 h-4 mr-1.5" />
+                  Changer
+                </Button>
+              </div>
+              {!savedFolderName && (
+                <p className="text-xs text-muted-foreground mt-1">Un sélecteur de dossier s'ouvrira lors de la génération.</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPdfDialog(false)}>Annuler</Button>
+            <Button onClick={() => confirmGeneratePdf(false)}>
+              <Printer className="w-4 h-4 mr-1.5" />
+              Générer
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Barre de contrôles — masquée pour la génération PDF */}
       {!hideControls && (
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
