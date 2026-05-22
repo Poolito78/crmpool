@@ -770,19 +770,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <span className="text-xs text-muted-foreground">m²</span>
                           </span>
                         )}
-                        {/* Note et images : ligne compacte inline */}
-                        {(l.note || (allLineImages[l.id] || []).length > 0) && (() => {
-                          const rsNote = l.note ? getRalStyle(l.note) : null;
-                          const imgs = allLineImages[l.id] || [];
+                        {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
+                        {l.note && (() => {
+                          const rsNote = getRalStyle(l.note!);
                           return (
                             <div style={{ marginTop: '4px' }}>
-                              {imgs.map((img, i) => (
-                                <span key={i} style={{ display: 'inline-block', width: '40px', height: '32px', backgroundImage: `url(${img.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
-                              ))}
-                              {l.note && (rsNote
-                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', verticalAlign: 'middle' }}>{l.note}</span>
-                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', verticalAlign: 'middle' }}>{l.note}</span>
-                              )}
+                              {rsNote
+                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic' }}>{l.note}</span>
+                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888' }}>{l.note}</span>
+                              }
                             </div>
                           );
                         })()}
@@ -849,6 +845,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <td className="py-1 px-1 text-right font-semibold text-foreground">{formatMontant(totalHTComp)}</td>
                         </tr>
                       ) : null
+                    )}
+                    {/* Images dans tr séparé pleine largeur (évite l'étroitesse de la colonne description) */}
+                    {(allLineImages[l.id] || []).length > 0 && (
+                      <tr className="border-b border-border/60">
+                        <td colSpan={9} style={{ padding: '3px 8px 6px 8px' }}>
+                          {(allLineImages[l.id] || []).map((img, i) => (
+                            <span key={i} style={{ display: 'inline-block', width: '48px', height: '38px', backgroundImage: `url(${img.url})`, backgroundSize: 'contain', backgroundRepeat: 'no-repeat', backgroundPosition: 'center', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', marginRight: '6px' }} />
+                          ))}
+                        </td>
+                      </tr>
                     )}
                   </Fragment>
                     );
