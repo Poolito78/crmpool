@@ -704,8 +704,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <table className="w-full mb-6 text-xs border-collapse table-fixed">
               <colgroup>
                 <col />{/* Désignation : prend tout l'espace restant */}
-                <col style={{ width: '38px' }} />{/* kg/m² */}
-                <col style={{ width: '44px' }} />{/* Total KG conso */}
+                <col style={{ width: '32px' }} />{/* kg/m² */}
+                <col style={{ width: '38px' }} />{/* Total KG conso */}
                 <col style={{ width: '30px' }} />{/* kg cond */}
                 <col style={{ width: '28px' }} />{/* Unité cond */}
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
@@ -742,7 +742,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {showKgRecap && (
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td />
-                  <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(3) : ''}</td>
+                  <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(1) : ''}</td>
                   <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(1) : ''}</td>
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : ''}</td>
@@ -876,7 +876,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const prixKgComp = poidsComp && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsComp * 100) / 100 : null;
                         return (
                           <>
-                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(3) : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(1) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? totalKgConso.toFixed(2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? ''}</td>
