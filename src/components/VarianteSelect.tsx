@@ -76,7 +76,8 @@ export default function VarianteSelect({ dimension, value, onChange, className }
   const selectedOpt = dimension.options.find(o => o.label === value) ?? dimension.options[0];
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
   const hasRal = !hasVisuals && dimension.options.some(o => getRalInfo(o.label));
-  const selectedRal = !selectedOpt?.imageUrl && !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || '') : undefined;
+  // RAL détecté depuis le label (prioritaire sur imageUrl qui peut être cassée)
+  const selectedRal = !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || '') : undefined;
 
   useEffect(() => {
     if (!open) return;
@@ -138,11 +139,16 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                 >
                   {(() => {
                     const ral = !opt.imageUrl && !opt.couleur ? getRalInfo(opt.label) : undefined;
-                    if (opt.imageUrl) return (
-                      <div className="w-12 h-12 rounded overflow-hidden border border-black/10">
-                        <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover" />
-                      </div>
-                    );
+                    if (opt.imageUrl) {
+                      const ralBg = getRalInfo(opt.label);
+                      return (
+                        <div className="w-12 h-12 rounded overflow-hidden border border-black/10"
+                          style={ralBg ? { backgroundColor: ralBg.hex } : undefined}>
+                          <img src={opt.imageUrl} alt={opt.label} className="w-full h-full object-cover"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        </div>
+                      );
+                    }
                     if (opt.couleur) return (
                       <div className="w-12 h-12 rounded border border-black/10" style={{ backgroundColor: opt.couleur }} />
                     );
