@@ -574,9 +574,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <div><span className="text-muted-foreground whitespace-nowrap mr-1">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
                   )}
                   {devis.systeme && (
-                    <div><span className="text-muted-foreground whitespace-nowrap mr-1">Système :</span><span className="font-medium">{devis.systeme}</span></div>
+                    <div className="flex items-baseline gap-3">
+                      <span><span className="text-muted-foreground whitespace-nowrap mr-1">Système :</span><span className="font-medium">{devis.systeme}</span></span>
+                      {(devis.surfaceGlobaleM2 || 0) > 0 && (
+                        <span className="text-muted-foreground font-medium whitespace-nowrap">{devis.surfaceGlobaleM2} m²</span>
+                      )}
+                    </div>
                   )}
-                  {(devis.surfaceGlobaleM2 || 0) > 0 && (
+                  {!devis.systeme && (devis.surfaceGlobaleM2 || 0) > 0 && (
                     <div><span className="text-muted-foreground mr-1">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
                   )}
                 </div>
@@ -839,7 +844,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           });
                         })()}
                         {(hideControls || pdfMode) ? (
-                          getSurfaceLigne(l.id) > 0 ? (
+                          // N'afficher le m² par ligne que s'il diffère de la surface globale
+                          getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
                             <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
                           ) : null
                         ) : (
