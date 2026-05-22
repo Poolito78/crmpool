@@ -1962,7 +1962,17 @@ export default function Devis() {
                                 <span className="text-muted-foreground italic">—</span>
                               )}
                             </td>
-                            <td className="px-2 py-1.5 text-right">{puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              {!l.produitId ? (
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  value={l.prixAchatLigne ?? ''}
+                                  onChange={e => updateLigne(l.id, 'prixAchatLigne', parseFloat(e.target.value) || 0)}
+                                  className="w-20 text-right border border-border rounded px-1 py-0 text-xs bg-background"
+                                  placeholder="0,00"
+                                />
+                              ) : puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}
+                            </td>
                             <td className="px-2 py-1.5 text-right">{totAchat > 0 ? formatMontant(totAchat) : <span className="text-muted-foreground">—</span>}</td>
                             <td className="px-2 py-1.5 text-right">{formatMontant(puVente)}</td>
                             <td className="px-2 py-1.5 text-right font-medium">{formatMontant(totVente)}</td>
