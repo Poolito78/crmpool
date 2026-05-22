@@ -722,29 +722,47 @@ export default function Devis() {
   const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
 
   /* ── Coller image dans note de ligne ── */
-  async function handleLigneNotePaste(ligneId: string, e: React.ClipboardEvent) {
+  function handleLigneNotePaste(ligneId: string, e: React.ClipboardEvent) {
     const imageItems = Array.from(e.clipboardData.items).filter(i => i.type.startsWith('image/'));
     if (imageItems.length === 0) return;
     e.preventDefault();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user || !editingId) return;
     for (const item of imageItems) {
+      if (item.kind !== 'file') continue;
       const file = item.getAsFile();
       if (!file) continue;
       const ext = file.type.split('/')[1] || 'png';
       const name = `image_${Date.now()}.${ext}`;
-      const path = `${user.id}/${editingId}/${Date.now()}_${name}`;
-      const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false });
-      if (upErr) { toast.error('Erreur upload image'); continue; }
-      const { data: signed } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
-      const url = signed?.signedUrl ?? path;
-      await supabase.from('devis_pieces_jointes').insert({
-        user_id: user.id, devis_id: editingId, type: 'fichier',
-        fichier_nom: name, fichier_url: url, fichier_taille: file.size, fichier_mime: file.type,
-      });
-      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url, name }] }));
+      // Aperçu immédiat avec URL blob locale
+      const preview = URL.createObjectURL(file);
+      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name }] }));
+      // Upload en arrière-plan
+      if (editingId) {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+          if (!user) return;
+          const path = `${user.id}/${editingId}/${Date.now()}_${name}`;
+          supabase.storage.from('devis-pj').upload(path, file, { upsert: false })
+            .then(({ error: upErr }) => {
+              if (upErr) { toast.error('Erreur upload image'); return; }
+              return supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+            })
+            .then(res => {
+              if (!res?.data) return;
+              const signedUrl = res.data.signedUrl;
+              // Remplace l'URL blob par l'URL signée Supabase
+              setLineImages(prev => ({
+                ...prev,
+                [ligneId]: (prev[ligneId] || []).map(img => img.url === preview ? { ...img, url: signedUrl } : img),
+              }));
+              URL.revokeObjectURL(preview);
+              supabase.from('devis_pieces_jointes').insert({
+                user_id: user.id, devis_id: editingId, type: 'fichier',
+                fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
+              });
+            });
+        });
+      }
     }
-    toast.success('Image(s) ajoutée(s) à la note');
+    toast.success('Image(s) collée(s)');
   }
 
   return (
