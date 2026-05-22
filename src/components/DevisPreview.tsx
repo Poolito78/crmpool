@@ -825,13 +825,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             );
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) {
-                              // Bloc séparé — html2canvas fiable uniquement sur display:block (inline cause chevauchement)
+                              // Inline pur (pas de display/verticalAlign explicite) — flux normal, html2canvas-safe
                               const dataUrl = variantImgDataUrls[imgUrl];
                               return (
-                                <div key={i} style={{ display: 'block', marginTop: '8px' }}>
-                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', marginBottom: '2px' }} /> : null}
-                                  <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
-                                </div>
+                                <span key={i} style={{ marginLeft: '6px' }}>
+                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
+                                  {' '}<span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
+                                </span>
                               );
                             }
                             return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
@@ -1042,13 +1042,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
-                                // Bloc séparé — html2canvas fiable sur display:block seulement
+                                // Inline pur (pas de display/verticalAlign explicite) — flux normal, html2canvas-safe
                                 const dataUrl = variantImgDataUrls[imgUrl];
                                 return (
-                                  <div key={i} style={{ display: 'block', marginTop: '8px' }}>
-                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px', marginBottom: '2px' }} /> : null}
-                                    <span style={{ fontSize: '0.7rem', color: '#555', display: 'block' }}>{label}</span>
-                                  </div>
+                                  <span key={i} style={{ marginLeft: '6px' }}>
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
+                                    {' '}<span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
+                                  </span>
                                 );
                               }
                               return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
