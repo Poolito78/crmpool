@@ -706,9 +706,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col />{/* Désignation : prend tout l'espace restant */}
                 <col style={{ width: '44px' }} />{/* kg/m² */}
                 <col style={{ width: '52px' }} />{/* Total KG conso */}
-                <col style={{ width: '36px' }} />{/* kg cond */}
-                <col style={{ width: '36px' }} />{/* Unité cond */}
-                <col style={{ width: '50px' }} />{/* Total KG cond */}
+                <col style={{ width: '30px' }} />{/* kg cond */}
+                <col style={{ width: '28px' }} />{/* Unité cond */}
+                <col style={{ width: '42px' }} />{/* Total KG cond */}
                 <col style={{ width: '72px' }} />{/* Unité prix */}
                 <col style={{ width: '58px' }} />{/* (Kg) */}
                 <col style={{ width: '72px' }} />{/* Total HT */}
