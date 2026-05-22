@@ -97,16 +97,18 @@ interface Props {
   initialShowRemise?: boolean;
   initialShowComposants?: boolean;
   initialShowKgRecap?: boolean;
-  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean }) => void;
+  initialShowCoutChantier?: boolean;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean }) => void;
   onPrint?: () => void;
   lineImages?: Record<string, { url: string; name: string }[]>;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, onOptionsChange, onPrint, lineImages = {} }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = true, onOptionsChange, onPrint, lineImages = {} }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
+  const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -412,7 +414,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap }); }} className="rounded" />
+              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
               m²/conso
             </label>
             {showConso && (
@@ -429,17 +431,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   m²
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked }); }} className="rounded" />
+                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier }); }} className="rounded" />
                   Récap. KG
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+                  <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked }); }} className="rounded" />
+                  Coût chantier
                 </label>
               </>
             )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap }); }} className="rounded" />
+              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
               Remise
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap }); }} className="rounded" />
+              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier }); }} className="rounded" />
               Composants
             </label>
           </div>
@@ -1130,7 +1136,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <div className="text-sm text-muted-foreground space-y-1">
           </div>
           <div className="w-64 space-y-1 ml-auto">
-            {coutChantierRef.current != null && (
+            {showCoutChantier && coutChantierRef.current != null && (
               <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
                 <span>Coût chantier</span>
                 <span>{coutChantierRef.current.toFixed(2)} €/m²</span>
