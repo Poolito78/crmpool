@@ -606,15 +606,26 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className={l.note ? '' : 'border-b border-border/60'}>
                       <td className="py-1.5 px-2 font-medium">
                         {l.description}
-                        {l.variantesChoisies && [...Object.values(l.variantesChoisies)].sort((a, b) => {
-                          const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
-                          return rank(a) - rank(b);
-                        }).map((label, i) => {
-                          const rs = getRalStyle(label);
-                          return rs
-                            ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
-                            : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
-                        })}
+                        {l.variantesChoisies && (() => {
+                          const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                          return [...Object.values(l.variantesChoisies)].sort((a, b) => {
+                            const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
+                            return rank(a) - rank(b);
+                          }).map((label, i) => {
+                            const rs = getRalStyle(label);
+                            if (rs) return (
+                              <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                            );
+                            const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
+                            if (imgUrl) return (
+                              <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', verticalAlign: 'middle' }}>
+                                <img src={imgUrl} alt={label} style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block' }} />
+                                <span className="text-xs text-muted-foreground font-normal">{label}</span>
+                              </span>
+                            );
+                            return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
+                          });
+                        })()}
                         {(hideControls || pdfMode) ? (
                           getSurfaceLigne(l.id) > 0 ? (
                             <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
@@ -800,15 +811,26 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <tr className="border-b border-border">
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
                           {l.description}
-                          {l.variantesChoisies && [...Object.values(l.variantesChoisies)].sort((a, b) => {
-                            const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
-                            return rank(a) - rank(b);
-                          }).map((label, i) => {
-                            const rs = getRalStyle(label);
-                            return rs
-                              ? <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
-                              : <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
-                          })}
+                          {l.variantesChoisies && (() => {
+                            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                            return [...Object.values(l.variantesChoisies)].sort((a, b) => {
+                              const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
+                              return rank(a) - rank(b);
+                            }).map((label, i) => {
+                              const rs = getRalStyle(label);
+                              if (rs) return (
+                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                              );
+                              const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
+                              if (imgUrl) return (
+                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', marginLeft: '6px', verticalAlign: 'middle' }}>
+                                  <img src={imgUrl} alt={label} style={{ width: 20, height: 20, borderRadius: 3, objectFit: 'cover', border: '1px solid rgba(0,0,0,0.15)', display: 'inline-block' }} />
+                                  <span className="text-xs text-muted-foreground font-normal">{label}</span>
+                                </span>
+                              );
+                              return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
+                            });
+                          })()}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5">{prod.descriptionDetaillee}</p>}
                         </td>
                         <td className="py-2 text-right">{l.quantite || ''}</td>
