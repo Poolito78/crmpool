@@ -1681,7 +1681,7 @@ export default function Devis() {
                 {sidebarPjs.length > 0 && (
                   <div className="space-y-1">
                     {sidebarPjs.slice(0, 5).map(pj => (
-                      <div key={pj.id} className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-xs border ${pj.confidentiel ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20' : 'border-border bg-muted/30'}`}>
+                      <div key={pj.id} className={`group flex items-center gap-2 rounded-md px-2 py-1.5 text-xs border ${pj.confidentiel ? 'border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20' : 'border-border bg-muted/30'}`}>
                         {pj.type === 'note'
                           ? <StickyNote className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                           : pj.fichierMime?.includes('pdf')
@@ -1701,6 +1701,22 @@ export default function Devis() {
                             <Eye className="w-3 h-3 text-primary" />
                           </button>
                         )}
+                        <button
+                          onClick={async () => {
+                            if (!confirm('Supprimer cet élément ?')) return;
+                            if (pj.type === 'fichier' && pj.fichierUrl) {
+                              const pathMatch = pj.fichierUrl.match(/\/devis-pj\/([^?]+)/);
+                              if (pathMatch) await supabase.storage.from('devis-pj').remove([decodeURIComponent(pathMatch[1])]);
+                            }
+                            await supabase.from('devis_pieces_jointes').delete().eq('id', pj.id);
+                            setSidebarPjs(prev => prev.filter(p => p.id !== pj.id));
+                            toast.success('Supprimé');
+                          }}
+                          className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-destructive/10 text-destructive shrink-0"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     ))}
                     {sidebarPjs.length > 5 && (
