@@ -36,7 +36,8 @@ These are the only places that touch raw DB column names.
 
 | Type | Notes |
 |---|---|
-| `Produit` | `prixAchat` = prix achat conditionné (unit cost). `paliersPrix?: PrixPalier[]` = tiered pricing by quantity. `prixHT` = public price. Distinct from `ProduitFournisseur.prixAchat` (catalog price/kg). |
+| `Produit` | `prixAchat` = prix achat conditionné (unit cost). `paliersPrix?: PrixPalier[]` = tiered pricing by quantity. `prixHT` = public price. `ficheUrl?` + `ficheLinkLabel?` = product sheet URL + display label injected into devis emails. Distinct from `ProduitFournisseur.prixAchat` (catalog price/kg). |
+| `ComposantProduit` | Three quantity modes: plain `quantite`, `poidsKg` (weight → qty via `produit.poids`), or `consommationPct` (% of a base component/qty). All three modes must be handled wherever composant cost is calculated — see `calcPrixAchatCompose` and `openEdit` in `Produits.tsx`. |
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`. Only `'ligne'` rows count in totals. `prixAchatLigne` = free-line purchase cost (e.g. energy surcharges). |
 | `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is a **different field** (price per kg from supplier catalog) — do NOT confuse with `Produit.prixAchat`. |
 | `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation` to auto-compute quantities. |
@@ -65,7 +66,7 @@ These are the only places that touch raw DB column names.
 
 - `DevisPreview.tsx` — Read-only devis renderer, used for both on-screen preview and PDF generation. Receives `onSurfaceChange` callback for persisting per-line m² edits.
 - `ProduitFournisseursPanel.tsx` — Supplier pricing panel inside the product form; uses `prixAchatConditionne` (= `prod.prixAchat`) for unit cost calculations.
-- `DevisEmailDialog.tsx`, `CommandeEmailDialog.tsx` — Email composition with PDF attachment.
+- `DevisEmailDialog.tsx`, `CommandeEmailDialog.tsx` — Email composition with PDF attachment. Generate RFC 822 `.eml` files (MIME multipart/mixed, `X-Unsent: 1` for Outlook compose mode, HTML body for correct signature placement, base64 PDF + extra attachments). On mobile: Web Share API with `File[]` array; fallback to download + `mailto:`. Product sheet links (`ficheLinks`) are injected as HTML `<a>` in the `.eml` (desktop) and as plain `label : url` text in the mobile body.
 - `CommandeARDialog.tsx` / `CommandeARPreview.tsx` — Order acknowledgement (AR) document.
 
 ### PDF generation (`src/lib/pdfFolder.ts`)
@@ -86,7 +87,11 @@ The same logic must be applied consistently in: the comparatif IIFE, the devis c
 
 ### Supabase migrations (`supabase/migrations/`)
 
-SQL migrations are numbered by timestamp. Apply new migrations via the Supabase CLI or the Supabase dashboard. The `src/integrations/supabase/types.ts` file is auto-generated from the DB schema.
+SQL migrations are numbered by timestamp. Apply new migrations via the Supabase CLI (`supabase db push`) or the Supabase dashboard SQL editor. The `src/integrations/supabase/types.ts` file is auto-generated from the DB schema — regenerate with `supabase gen types typescript`.
+
+When adding a new field to a domain type: update **both** `dbToXxx` (read) and `xxxToDb` (write) in `store.ts`, create a migration file, and apply it. Forgetting any one of these three causes silent data loss on non-desktop platforms.
+
+To apply a migration programmatically (e.g. from the browser), use the Supabase Management API with the session token from `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/{ref}/database/query`.
 
 ### Environment variables
 
@@ -99,4 +104,5 @@ VITE_SUPABASE_PUBLISHABLE_KEY
 
 - Repo: `Poolito78/crmpool` on GitHub
 - Auto-deployed to Vercel on push to `main`
-- **Never push automatically** — always ask for confirmation first
+- **Never push automatically** — always ask for confirmation first (user preference stored in memory)
+- Supabase project ref: `qkjxcfosutclnahvxflf`
