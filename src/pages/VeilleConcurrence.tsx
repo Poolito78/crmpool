@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
-  Building2, Package, FileText, Plus, Trash2, Pencil, Search, Download,
+  Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download,
   Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -142,6 +142,8 @@ export function VeilleContent() {
   const [sortProduit, setSortProduit] = useState<'nom' | 'categorie' | 'prix'>('categorie');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
+  const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
+  const [editingProduitForm, setEditingProduitForm] = useState({ nom: '', reference: '', categorie: '', prixHT: '', description: '' });
 
   const createurs = useMemo(() => [...new Set([
     ...concurrents.map(c => c.createdByEmail),
@@ -410,6 +412,9 @@ export function VeilleContent() {
             </div>
           ) : (
             <div className="rounded-lg border overflow-hidden">
+              <datalist id="veille-categories-list">
+                {categories.map(c => <option key={c} value={c} />)}
+              </datalist>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -421,13 +426,85 @@ export function VeilleContent() {
                     <TableHead>Description</TableHead>
                     <TableHead>Saisi par</TableHead>
                     <TableHead>Date</TableHead>
+                    <TableHead className="w-16" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredProduits.map(p => {
                     const conc = concurrents.find(c => c.id === p.concurrentId);
+                    const isEditing = editingProduitId === p.id;
+                    if (isEditing) {
+                      return (
+                        <TableRow key={p.id} className="bg-muted/20">
+                          <TableCell className="font-medium text-sm">{conc?.nom || '—'}</TableCell>
+                          <TableCell>
+                            <Input
+                              value={editingProduitForm.nom}
+                              onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))}
+                              className="h-7 text-sm w-32"
+                              autoFocus
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={editingProduitForm.reference}
+                              onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))}
+                              className="h-7 text-sm w-24 font-mono"
+                              placeholder="REF"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              list="veille-categories-list"
+                              value={editingProduitForm.categorie}
+                              onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))}
+                              className="h-7 text-sm w-36"
+                              placeholder="Catégorie"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              type="number"
+                              value={editingProduitForm.prixHT}
+                              onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))}
+                              className="h-7 text-sm w-20 text-right"
+                              placeholder="0.00"
+                              step="0.01"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              value={editingProduitForm.description}
+                              onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))}
+                              className="h-7 text-sm w-44"
+                              placeholder="Description..."
+                            />
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{formatCreateur(p.createdByEmail)}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" title="Enregistrer"
+                                onClick={async () => {
+                                  if (!editingProduitForm.nom.trim()) return;
+                                  const prixHT = editingProduitForm.prixHT ? parseFloat(editingProduitForm.prixHT.replace(',', '.')) : undefined;
+                                  await updateProduit({ ...p, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, prixHT, description: editingProduitForm.description || undefined });
+                                  setEditingProduitId(null);
+                                  toast.success('Produit mis à jour');
+                                }}>
+                                <Save className="w-3 h-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" title="Annuler"
+                                onClick={() => setEditingProduitId(null)}>
+                                <X className="w-3 h-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }
                     return (
-                      <TableRow key={p.id}>
+                      <TableRow key={p.id} className="group">
                         <TableCell className="font-medium">{conc?.nom || '—'}</TableCell>
                         <TableCell>{p.nom}</TableCell>
                         <TableCell className="font-mono text-xs">{p.reference || '—'}</TableCell>
@@ -436,6 +513,25 @@ export function VeilleContent() {
                         <TableCell className="text-sm text-muted-foreground max-w-48 truncate">{p.description || '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{formatCreateur(p.createdByEmail)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="icon" variant="ghost" className="h-6 w-6"
+                              onClick={() => {
+                                setEditingProduitId(p.id);
+                                setEditingProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '' });
+                              }}>
+                              <Pencil className="w-3 h-3" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive"
+                              onClick={async () => {
+                                if (!confirm(`Supprimer "${p.nom}" ?`)) return;
+                                await deleteProduit(p.id);
+                                toast.success('Produit supprimé');
+                              }}>
+                              <Trash2 className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
                       </TableRow>
                     );
                   })}
