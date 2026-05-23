@@ -1379,7 +1379,7 @@ export default function Clients() {
         clients={clients}
         produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         defaultClientId={editingClient?.id}
-        onSave={async (a) => { await addCrmAction(a); setCrmActionDialogOpen(false); }}
+        onSave={async (a) => { const err = await addCrmAction(a); return err ?? null; }}
       />
     </div>
   );

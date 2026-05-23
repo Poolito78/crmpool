@@ -103,9 +103,9 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
       ...form,
       concurrents: form.concurrents?.filter(c => c.nomConcurrent?.trim()) || undefined,
     };
-    await onSave(cleaned);
+    const err = await onSave(cleaned);
     setSaving(false);
-    onOpenChange(false);
+    if (!err) onOpenChange(false);
   }
 
   const hasConcurrents = (form.concurrents?.length ?? 0) > 0;

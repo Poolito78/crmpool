@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { toast } from 'sonner';
 import { useCRM } from '@/lib/StoreContext';
 import {
   calculerTotalDevis, formatMontant, formatDate, formatDateISO,
@@ -170,13 +171,16 @@ export default function CRM() {
     setRaisonDialog({ devisId: '', open: false, raison: '' });
   }
 
-  async function handleSaveAction(a: Omit<CrmAction, 'id' | 'createdAt'>) {
-    if (editingAction) {
-      await updateAction({ ...editingAction, ...a });
-    } else {
-      await addAction(a);
+  async function handleSaveAction(a: Omit<CrmAction, 'id' | 'createdAt'>): Promise<any> {
+    const err = editingAction
+      ? await updateAction({ ...editingAction, ...a })
+      : await addAction(a);
+    if (err) {
+      toast.error('Erreur lors de l\'enregistrement : ' + (err.message || JSON.stringify(err)));
+      return err;
     }
     setEditingAction(null);
+    return null;
   }
 
   function openNewAction() {
