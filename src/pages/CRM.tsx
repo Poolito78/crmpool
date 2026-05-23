@@ -233,7 +233,7 @@ export default function CRM() {
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-border">
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm flex gap-1 border-b border-border">
         {([
           { key: 'pipeline', label: 'Pipeline commercial', icon: BarChart3 },
           { key: 'actions',  label: 'Actions',             icon: CheckSquare },
@@ -830,7 +830,7 @@ export default function CRM() {
         return (
           <div className="space-y-3">
             {/* ── Bandeau KPI sticky ──────────────────────────────────── */}
-            <div className="sticky top-0 z-10 -mx-1 px-1 pb-1 pt-0.5 bg-background/95 backdrop-blur-sm">
+            <div className="sticky top-[45px] z-10 -mx-1 px-1 pb-1 pt-0.5 bg-background/95 backdrop-blur-sm">
               <div className="grid grid-cols-4 gap-3 rounded-xl border border-border bg-card shadow-sm px-4 py-3">
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground mb-0.5">Devis envoyés</p>
