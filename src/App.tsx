@@ -39,6 +39,7 @@ import FacturesClient from "@/pages/FacturesClient";
 import FacturesFournisseur from "@/pages/FacturesFournisseur";
 import CRM from "@/pages/CRM";
 import StatsVariantes from "@/pages/StatsVariantes";
+import VeilleConcurrence from "@/pages/VeilleConcurrence";
 import Auth from "@/pages/Auth";
 import ResetPassword from "@/pages/ResetPassword";
 import NotFound from "./pages/NotFound";
@@ -92,6 +93,7 @@ function AppRoutes() {
           <Route path="/factures-fournisseur" element={<FacturesFournisseur />} />
           <Route path="/crm" element={<CRM />} />
           <Route path="/stats-variantes" element={<StatsVariantes />} />
+          <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
         </Route>
         <Route path="/auth" element={<Navigate to="/" replace />} />
         <Route path="*" element={<NotFound />} />
