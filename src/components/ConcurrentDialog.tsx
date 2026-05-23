@@ -54,7 +54,10 @@ export default function ConcurrentDialog({
   const [editingNote, setEditingNote] = useState<ConcurrentNote | null>(null);
   const [showNoteForm, setShowNoteForm] = useState(false);
 
-  const categories = [...new Set(produitsCatalogue.map(p => p.categorie).filter(Boolean))].sort() as string[];
+  const categories = [...new Set([
+    ...produitsCatalogue.map(p => p.categorie),
+    ...produits.map(p => p.categorie),
+  ].filter(Boolean))].sort() as string[];
 
   const concurrentId = concurrent?.id ?? savedId;
   const localProduits = produits.filter(p => p.concurrentId === concurrentId);
