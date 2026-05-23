@@ -91,17 +91,20 @@ export default function Devis() {
     return new Set(DEFAULT_LIGNE_COLS);
   });
 
-  // Auto-open devis editor when returning from product page
+  // Auto-open devis editor via ?editDevis=<id> URL param
+  const editDevisHandledRef = useRef(false);
   useEffect(() => {
+    if (editDevisHandledRef.current) return;
     const editDevisId = searchParams.get('editDevis');
-    if (editDevisId) {
-      const d = devis.find(dv => dv.id === editDevisId);
-      if (d) {
-        openEdit(d);
-      }
+    if (!editDevisId) return;
+    if (devis.length === 0) return; // wait for data
+    const d = devis.find(dv => dv.id === editDevisId);
+    if (d) {
+      openEdit(d);
+      editDevisHandledRef.current = true;
       setSearchParams({}, { replace: true });
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [devis]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
   const [contactId, setContactId] = useState('');
