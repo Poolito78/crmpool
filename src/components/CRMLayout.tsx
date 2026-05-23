@@ -1,6 +1,6 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, Layers, Shield } from 'lucide-react';
-import { useState } from 'react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis } from '@/lib/store';
@@ -8,29 +8,132 @@ import { exportMultiSheet } from '@/lib/exportExcel';
 import { supabase } from '@/integrations/supabase/client';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 
-const navItems = [
-  { label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
-  { label: 'CRM', icon: Target, path: '/crm' },
-  { label: 'Clients', icon: Users, path: '/clients' },
-  { label: 'Produits', icon: Package, path: '/produits' },
-  { label: 'Stock', icon: BarChart3, path: '/stock' },
-  { label: 'Devis', icon: FileText, path: '/devis' },
-  { label: 'Commandes Client', icon: ClipboardList, path: '/commandes-client' },
-  { label: 'Fournisseurs', icon: Truck, path: '/fournisseurs' },
-  { label: 'Cmd Fournisseur', icon: ShoppingCart, path: '/commandes' },
-  { label: 'Factures Client', icon: Receipt, path: '/factures-client' },
-  { label: 'Factures Fourn.', icon: Receipt, path: '/factures-fournisseur' },
-  { label: 'Calcul Transport', icon: Calculator, path: '/calculateur-ups' },
-  { label: 'Historique GED', icon: History, path: '/ged' },
-  { label: 'Stats Variantes', icon: Layers, path: '/stats-variantes' },
-  { label: 'Veille Concurrence', icon: Shield, path: '/veille-concurrence' },
+type NavLink = { type: 'link'; label: string; icon: any; path: string };
+type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
+type NavEntry = NavLink | NavGroup;
+
+const NAV: NavEntry[] = [
+  { type: 'link',  label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
+  { type: 'link',  label: 'CRM',              icon: Target,          path: '/crm' },
+  {
+    type: 'group', label: 'Vente', icon: TrendingUp,
+    items: [
+      { type: 'link', label: 'Clients',           icon: Users,       path: '/clients' },
+      { type: 'link', label: 'Produits',           icon: Package,     path: '/produits' },
+      { type: 'link', label: 'Devis',              icon: FileText,    path: '/devis' },
+      { type: 'link', label: 'Commandes Client',   icon: ClipboardList, path: '/commandes-client' },
+      { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
+    ],
+  },
+  { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
+  {
+    type: 'group', label: 'Achat', icon: TrendingDown,
+    items: [
+      { type: 'link', label: 'Fournisseurs',       icon: Truck,       path: '/fournisseurs' },
+      { type: 'link', label: 'Cmd Fournisseur',    icon: ShoppingCart, path: '/commandes' },
+      { type: 'link', label: 'Factures Fourn.',    icon: Receipt,     path: '/factures-fournisseur' },
+    ],
+  },
+  { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
+  { type: 'link',  label: 'Historique GED',   icon: History,         path: '/ged' },
 ];
+
+// Flat list for mobile bottom nav and top-bar title
+const NAV_FLAT: NavLink[] = NAV.flatMap(e => e.type === 'group' ? e.items : [e]);
 
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const location = useLocation();
   const { clients, produits, fournisseurs, devis } = useCRM();
+
+  // Auto-open groups containing the active route
+  const initialOpen = NAV
+    .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => i.path === location.pathname))
+    .map(e => e.label);
+  const [openGroups, setOpenGroups] = useState<string[]>(initialOpen);
+
+  // Keep groups open when navigating into them
+  useEffect(() => {
+    const active = NAV
+      .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => i.path === location.pathname))
+      .map(e => e.label);
+    setOpenGroups(prev => Array.from(new Set([...prev, ...active])));
+  }, [location.pathname]);
+
+  function toggleGroup(label: string) {
+    setOpenGroups(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]);
+  }
+
+  function renderNavEntries(entries: NavEntry[], onLinkClick?: () => void) {
+    return entries.map(entry => {
+      if (entry.type === 'link') {
+        const active = location.pathname === entry.path;
+        return (
+          <Link
+            key={entry.path}
+            to={entry.path}
+            onClick={onLinkClick}
+            className={cn(
+              'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              active
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+            )}
+          >
+            <entry.icon className="w-5 h-5 shrink-0" />
+            {entry.label}
+          </Link>
+        );
+      }
+
+      // NavGroup
+      const isOpen = openGroups.includes(entry.label);
+      const hasActive = entry.items.some(i => i.path === location.pathname);
+      return (
+        <div key={entry.label}>
+          <button
+            onClick={() => toggleGroup(entry.label)}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
+              hasActive
+                ? 'text-sidebar-foreground'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+            )}
+          >
+            <entry.icon className="w-5 h-5 shrink-0" />
+            <span className="flex-1 text-left">{entry.label}</span>
+            {isOpen
+              ? <ChevronDown className="w-4 h-4 shrink-0 opacity-60" />
+              : <ChevronRight className="w-4 h-4 shrink-0 opacity-60" />}
+          </button>
+          {isOpen && (
+            <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border/50 pl-3">
+              {entry.items.map(item => {
+                const active = location.pathname === item.path;
+                return (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={onLinkClick}
+                    className={cn(
+                      'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150',
+                      active
+                        ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                        : 'text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    )}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    });
+  }
 
   function exportGlobal() {
     const sheets = [
@@ -41,6 +144,9 @@ export default function CRMLayout() {
     ];
     exportMultiSheet(sheets, `MonCRM_Export_${new Date().toISOString().split('T')[0]}`);
   }
+
+  const currentLabel = NAV_FLAT.find(i => i.path === location.pathname)?.label
+    ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
 
   return (
     <div className="min-h-screen flex bg-background">
@@ -53,24 +159,7 @@ export default function CRMLayout() {
           <span className="font-heading font-bold text-lg tracking-tight">MonCRM</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {navItems.map(item => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
-                  active
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                )}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
+          {renderNavEntries(NAV)}
           <button
             onClick={() => setAnalyseOpen(true)}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
@@ -113,26 +202,8 @@ export default function CRMLayout() {
             <X className="w-5 h-5" />
           </button>
         </div>
-        <nav className="px-3 py-4 space-y-1">
-          {navItems.map(item => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                  active
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground'
-                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent'
-                )}
-              >
-                <item.icon className="w-5 h-5 shrink-0" />
-                {item.label}
-              </Link>
-            );
-          })}
+        <nav className="px-3 py-4 space-y-1 overflow-y-auto max-h-[calc(100vh-4rem)]">
+          {renderNavEntries(NAV, () => setSidebarOpen(false))}
           <button
             onClick={() => { setAnalyseOpen(true); setSidebarOpen(false); }}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors"
@@ -151,7 +222,7 @@ export default function CRMLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="font-heading font-semibold text-lg truncate flex-1">
-            {navItems.find(i => i.path === location.pathname)?.label ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM')}
+            {currentLabel}
           </h1>
           {location.pathname === '/' && (
             <button
@@ -172,9 +243,9 @@ export default function CRMLayout() {
 
       <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
 
-      {/* Mobile bottom nav */}
+      {/* Mobile bottom nav — show first 5 flat items */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-30 flex justify-around py-2">
-        {navItems.slice(0, 6).map(item => {
+        {NAV_FLAT.slice(0, 5).map(item => {
           const active = location.pathname === item.path;
           return (
             <Link
