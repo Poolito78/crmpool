@@ -25,7 +25,6 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
     ],
   },
-  { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   {
     type: 'group', label: 'Achat', icon: TrendingDown,
     items: [
@@ -34,6 +33,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Factures Fourn.',    icon: Receipt,     path: '/factures-fournisseur' },
     ],
   },
+  { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
   { type: 'link',  label: 'Historique GED',   icon: History,         path: '/ged' },
 ];
