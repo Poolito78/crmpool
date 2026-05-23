@@ -374,8 +374,8 @@ export function VeilleContent() {
         <TabsContent value="produits" className="space-y-3 pt-3">
           <div className="flex gap-2 flex-wrap">
             <Select value={filterConcProduit || '_all'} onValueChange={v => setFilterConcProduit(v === '_all' ? '' : v)}>
-              <SelectTrigger className="w-48">
-                <Building2 className="w-4 h-4 mr-1 text-muted-foreground" />
+              <SelectTrigger className="min-w-fit w-auto">
+                <Building2 className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="Tous les concurrents" />
               </SelectTrigger>
               <SelectContent>
@@ -384,8 +384,8 @@ export function VeilleContent() {
               </SelectContent>
             </Select>
             <Select value={filterCategorie || '_all'} onValueChange={v => setFilterCategorie(v === '_all' ? '' : v)}>
-              <SelectTrigger className="w-48">
-                <Filter className="w-4 h-4 mr-1 text-muted-foreground" />
+              <SelectTrigger className="min-w-fit w-auto">
+                <Filter className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
                 <SelectValue placeholder="Toutes les catégories" />
               </SelectTrigger>
               <SelectContent>
@@ -394,8 +394,8 @@ export function VeilleContent() {
               </SelectContent>
             </Select>
             <Select value={sortProduit} onValueChange={v => setSortProduit(v as any)}>
-              <SelectTrigger className="w-44">
-                <ArrowUpDown className="w-4 h-4 mr-1 text-muted-foreground" />
+              <SelectTrigger className="min-w-fit w-auto">
+                <ArrowUpDown className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
