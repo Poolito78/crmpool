@@ -18,8 +18,9 @@ import {
   TrendingUp, TrendingDown, Clock, BarChart3,
   Plus, Pencil, Trash2, CheckCircle2, XCircle, ChevronLeft, ChevronRight,
   Phone, Mail, Calendar, MapPin, CheckSquare, Star, AlertCircle, Filter,
-  FileText,
+  FileText, PieChart, Users,
 } from 'lucide-react';
+import { RAISON_ARCHIVE } from '@/lib/store';
 
 // ── Statut devis ──────────────────────────────────────────────────────────
 const STATUT_DEVIS: Record<string, { label: string; color: string; icon?: any }> = {
@@ -28,6 +29,7 @@ const STATUT_DEVIS: Record<string, { label: string; color: string; icon?: any }>
   accepté:   { label: 'Gagné ✓',   color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400' },
   refusé:    { label: 'Perdu ✗',   color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
   expiré:    { label: 'Expiré',     color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+  archivé:   { label: 'Archivé',    color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
 
 // ── Calendar helpers ──────────────────────────────────────────────────────
@@ -47,11 +49,11 @@ const TYPE_ICON: Record<string, any> = {
 };
 
 export default function CRM() {
-  const { clients, devis, updateDevis } = useCRM();
+  const { clients, devis, produits, updateDevis } = useCRM();
   const { actions, loading: actionsLoading, addAction, updateAction, deleteAction } = useCrmActions();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier'>('pipeline');
+  const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier' | 'analyse'>('pipeline');
 
   // ── Pipeline ──────────────────────────────────────────────────────────
   const [filterStatut, setFilterStatut] = useState('tous');
@@ -219,6 +221,7 @@ export default function CRM() {
           { key: 'pipeline', label: 'Pipeline commercial', icon: BarChart3 },
           { key: 'actions',  label: 'Actions',             icon: CheckSquare },
           { key: 'calendrier', label: 'Calendrier',        icon: Calendar },
+          { key: 'analyse',  label: 'Analyse',             icon: PieChart },
         ] as const).map(t => (
           <button
             key={t.key}
@@ -684,6 +687,177 @@ export default function CRM() {
           )}
         </div>
       )}
+
+      {/* ── Onglet Analyse ────────────────────────────────────────────── */}
+      {tab === 'analyse' && (() => {
+        const today = new Date().toISOString().split('T')[0];
+        const devisActifs = devis.filter(d => d.statut !== 'système');
+
+        // Par client
+        const parClient = clients.map(c => {
+          const cd = devisActifs.filter(d => d.clientId === c.id);
+          const acceptes = cd.filter(d => d.statut === 'accepté');
+          const archives = cd.filter(d => d.statut === 'archivé');
+          const enCours = cd.filter(d => ['brouillon', 'envoyé'].includes(d.statut));
+          const total = acceptes.length + archives.length;
+          const taux = total > 0 ? Math.round(acceptes.length / total * 100) : null;
+          const ca = acceptes.reduce((s, d) => s + calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT, 0);
+          return { client: c, acceptes: acceptes.length, archives: archives.length, enCours: enCours.length, taux, ca, total: cd.length };
+        }).filter(r => r.total > 0).sort((a, b) => b.ca - a.ca);
+
+        // Par produit
+        const parProduit: Record<string, { gains: number; pertes: number; ca: number }> = {};
+        devisActifs.forEach(d => {
+          const isGagne = d.statut === 'accepté';
+          const isPerdu = d.statut === 'archivé';
+          d.lignes.filter(l => l.produitId && (!l.type || l.type === 'ligne')).forEach(l => {
+            if (!parProduit[l.produitId!]) parProduit[l.produitId!] = { gains: 0, pertes: 0, ca: 0 };
+            if (isGagne) { parProduit[l.produitId!].gains++; parProduit[l.produitId!].ca += l.prixUnitaireHT * l.quantite * (1 - (l.remise || 0) / 100); }
+            if (isPerdu) parProduit[l.produitId!].pertes++;
+          });
+        });
+        const produitRows = Object.entries(parProduit).map(([produitId, stats]) => {
+          const prod = produits.find(p => p.id === produitId);
+          const total = stats.gains + stats.pertes;
+          return { prod, ...stats, taux: total > 0 ? Math.round(stats.gains / total * 100) : null };
+        }).filter(r => r.prod).sort((a, b) => b.ca - a.ca);
+
+        // Raisons de refus globales
+        const raisonsGlobal: Record<string, number> = {};
+        devisActifs.filter(d => d.statut === 'archivé').forEach(d => {
+          if (d.archiveRaison) raisonsGlobal[d.archiveRaison] = (raisonsGlobal[d.archiveRaison] || 0) + 1;
+        });
+
+        // Concurrents
+        const concurrentsMap: Record<string, { count: number; prixTotal: number; prixCount: number; produits: Set<string> }> = {};
+        devisActifs.filter(d => d.statut === 'archivé' && d.archiveConcurrents).forEach(d => {
+          d.archiveConcurrents!.forEach(c => {
+            const nom = c.nomConcurrent?.trim() || 'Inconnu';
+            if (!concurrentsMap[nom]) concurrentsMap[nom] = { count: 0, prixTotal: 0, prixCount: 0, produits: new Set() };
+            concurrentsMap[nom].count++;
+            if (c.prixConcurrent) { concurrentsMap[nom].prixTotal += c.prixConcurrent; concurrentsMap[nom].prixCount++; }
+          });
+        });
+        const concurrentsRows = Object.entries(concurrentsMap).sort((a, b) => b[1].count - a[1].count);
+
+        return (
+          <div className="space-y-6">
+            {/* Bloc 1 — Par client */}
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2"><Users className="w-4 h-4" /> Analyse par client</h3>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Envoyés</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acceptés</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Archivés</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA accepté HT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parClient.map(({ client, acceptes, archives, enCours, taux, ca, total }) => (
+                      <tr key={client.id} className="border-t border-border hover:bg-muted/20">
+                        <td className="px-3 py-2 font-medium">{client.societe || client.nom}</td>
+                        <td className="px-3 py-2 text-right text-muted-foreground">{total}</td>
+                        <td className="px-3 py-2 text-right text-success font-medium">{acceptes}</td>
+                        <td className="px-3 py-2 text-right text-destructive">{archives}</td>
+                        <td className="px-3 py-2 text-right">
+                          {taux !== null ? (
+                            <span className={`font-semibold ${taux >= 50 ? 'text-success' : taux >= 25 ? 'text-amber-500' : 'text-destructive'}`}>{taux}%</span>
+                          ) : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {parClient.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
+              </div>
+            </div>
+
+            {/* Bloc 2 — Par produit */}
+            <div>
+              <h3 className="font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Analyse par produit</h3>
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Devis gagnés</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Devis perdus</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux win</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA HT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {produitRows.map(({ prod, gains, pertes, taux, ca }) => (
+                      <tr key={prod!.id} className="border-t border-border hover:bg-muted/20">
+                        <td className="px-3 py-2">
+                          <p className="font-medium truncate max-w-xs">{prod!.description}</p>
+                          <p className="text-xs text-muted-foreground font-mono">{prod!.reference}</p>
+                        </td>
+                        <td className="px-3 py-2 text-right text-success font-medium">{gains}</td>
+                        <td className="px-3 py-2 text-right text-destructive">{pertes}</td>
+                        <td className="px-3 py-2 text-right">
+                          {taux !== null ? <span className={`font-semibold ${taux >= 50 ? 'text-success' : 'text-amber-500'}`}>{taux}%</span> : '—'}
+                        </td>
+                        <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {produitRows.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
+              </div>
+            </div>
+
+            {/* Bloc 3 — Raisons d'archivage */}
+            {Object.keys(raisonsGlobal).length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Raisons d'archivage</h3>
+                <div className="flex flex-wrap gap-2">
+                  {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
+                    <span key={raison} className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-2 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
+                      {RAISON_ARCHIVE[raison]?.label} <span className="font-bold bg-white/30 rounded-full px-1.5">×{count}</span>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Bloc 4 — Concurrents */}
+            {concurrentsRows.length > 0 && (
+              <div>
+                <h3 className="font-semibold mb-3 flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Concurrents identifiés</h3>
+                <div className="overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Cité</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Prix moyen renseigné</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {concurrentsRows.map(([nom, stats]) => (
+                        <tr key={nom} className="border-t border-border hover:bg-muted/20">
+                          <td className="px-3 py-2 font-medium">{nom}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{stats.count}×</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">
+                            {stats.prixCount > 0 ? formatMontant(Math.round(stats.prixTotal / stats.prixCount)) : '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Dialog action ─────────────────────────────────────────────── */}
       <CRMActionDialog

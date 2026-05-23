@@ -274,6 +274,33 @@ export interface LigneDevis {
   prixAchatLigne?: number; // coût achat unitaire pour lignes libres (ex: surcharges énergie)
 }
 
+export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';
+
+export const RAISON_ARCHIVE: Record<RaisonArchive, { label: string; color: string; messageDefaut: string }> = {
+  doublon:          { label: 'Doublon',              color: 'bg-muted text-muted-foreground',            messageDefaut: 'Devis doublon — remplacé ou annulé.' },
+  concurrent_prix:  { label: 'Concurrent — prix',    color: 'bg-destructive/10 text-destructive',         messageDefaut: 'Perdu face à la concurrence sur le prix. Client a choisi un concurrent moins cher.' },
+  concurrent_delai: { label: 'Concurrent — délais',  color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', messageDefaut: 'Perdu face à la concurrence sur les délais de livraison.' },
+  budget:           { label: 'Budget insuffisant',   color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',     messageDefaut: 'Projet annulé ou reporté — budget insuffisant.' },
+  injoignable:      { label: 'Client injoignable',   color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400', messageDefaut: 'Client injoignable. Devis expiré sans retour.' },
+  autre:            { label: 'Autre',                color: 'bg-muted text-muted-foreground',            messageDefaut: '' },
+};
+
+export interface ConcurrentProduit {
+  produitId?: string;
+  nomConcurrent?: string;
+  prixConcurrent?: number;
+  delaiConcurrent?: number;
+  note?: string;
+}
+
+export interface DevisMessageTemplate {
+  id: string;
+  nom: string;
+  contenu: string;
+  raisonArchive?: RaisonArchive;
+  createdAt: string;
+}
+
 export interface Devis {
   id: string;
   numero: string;
@@ -282,7 +309,7 @@ export interface Devis {
   adresseLivraisonId?: string;
   dateCreation: string;
   dateValidite: string;
-  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré' | 'système';
+  statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré' | 'système' | 'archivé';
   dateEnvoi?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
@@ -294,6 +321,11 @@ export interface Devis {
   modeCalcul?: 'standard' | 'surface';
   surfaceGlobaleM2?: number;
   raisonRefus?: string;
+  // Champs archivage
+  archiveDate?: string;
+  archiveRaison?: RaisonArchive;
+  archiveCommentaire?: string;
+  archiveConcurrents?: ConcurrentProduit[];
 }
 
 // ── CRM Actions ─────────────────────────────────────────────────────────────
@@ -505,6 +537,10 @@ function dbToDevis(r: any): Devis {
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
     raisonRefus: r.raison_refus || undefined,
+    archiveDate: r.archive_date || undefined,
+    archiveRaison: r.archive_raison as RaisonArchive || undefined,
+    archiveCommentaire: r.archive_commentaire || undefined,
+    archiveConcurrents: r.archive_concurrents as ConcurrentProduit[] || undefined,
   };
 }
 
@@ -530,6 +566,10 @@ function devisToDb(d: Devis, userId: string) {
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,
     raison_refus: d.raisonRefus || null,
+    archive_date: d.archiveDate || null,
+    archive_raison: d.archiveRaison || null,
+    archive_commentaire: d.archiveCommentaire || null,
+    archive_concurrents: d.archiveConcurrents || null,
   };
 }
 
@@ -607,6 +647,50 @@ export function useCrmActions() {
   }, []);
 
   return { actions, loading, addAction, updateAction, deleteAction };
+}
+
+// ── Message Templates ────────────────────────────────────────────────────────
+function dbToTemplate(r: any): DevisMessageTemplate {
+  return {
+    id: r.id,
+    nom: r.nom,
+    contenu: r.contenu,
+    raisonArchive: r.raison_archive as RaisonArchive || undefined,
+    createdAt: r.created_at?.split('T')[0] || '',
+  };
+}
+
+export function useDevisMessageTemplates() {
+  const [templates, setTemplates] = useState<DevisMessageTemplate[]>([]);
+  const userIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      userIdRef.current = session.user.id;
+      const { data } = await supabase.from('devis_message_templates').select('*').order('created_at', { ascending: false });
+      if (data) setTemplates(data.map(dbToTemplate));
+    }
+    load();
+  }, []);
+
+  const addTemplate = useCallback(async (t: Omit<DevisMessageTemplate, 'id' | 'createdAt'>) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    const newT: DevisMessageTemplate = { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString().split('T')[0] };
+    const { error } = await supabase.from('devis_message_templates').insert({ id: newT.id, user_id: userId, nom: newT.nom, contenu: newT.contenu, raison_archive: newT.raisonArchive || null });
+    if (!error) setTemplates(prev => [newT, ...prev]);
+    return error;
+  }, []);
+
+  const deleteTemplate = useCallback(async (id: string) => {
+    const { error } = await supabase.from('devis_message_templates').delete().eq('id', id);
+    if (!error) setTemplates(prev => prev.filter(t => t.id !== id));
+    return error;
+  }, []);
+
+  return { templates, addTemplate, deleteTemplate };
 }
 
 // ---- ProduitFournisseur mapping ----

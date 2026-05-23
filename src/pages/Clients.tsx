@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerTotalDevis, formatDate, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2 } from 'lucide-react';
+import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
+import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 
 const DELAI_REGLEMENT_OPTIONS = [
@@ -127,6 +128,9 @@ export default function Clients() {
   const [iaOpen, setIaOpen] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm'>('infos');
+  const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
+  const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
 
   function toggleSort(col: typeof sortCol) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -185,6 +189,7 @@ export default function Clients() {
   function openNew() {
     setEditingClient(null);
     setForm(emptyClient);
+    setClientDialogTab('infos');
     setDialogOpen(true);
   }
 
@@ -790,6 +795,134 @@ export default function Clients() {
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
 
+          {/* Onglets (visible seulement en mode édition) */}
+          {editingClient && (
+            <div className="flex gap-1 border-b border-border -mt-2 mb-2">
+              <button type="button" onClick={() => setClientDialogTab('infos')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'infos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Infos</button>
+              <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>
+            </div>
+          )}
+
+          {/* ── Onglet CRM ──────────────────────────────────────────────────── */}
+          {editingClient && clientDialogTab === 'crm' && (() => {
+            const clientDevis = devis.filter(d => d.clientId === editingClient.id);
+            const acceptes = clientDevis.filter(d => d.statut === 'accepté');
+            const archives = clientDevis.filter(d => d.statut === 'archivé');
+            const enCours = clientDevis.filter(d => ['brouillon', 'envoyé'].includes(d.statut));
+            const total = acceptes.length + archives.length;
+            const tauxTransfo = total > 0 ? Math.round(acceptes.length / total * 100) : null;
+            const clientActions = crmActions.filter(a => a.clientId === editingClient.id).sort((a, b) => (b.datePlanifiee || b.createdAt) > (a.datePlanifiee || a.createdAt) ? 1 : -1);
+
+            // Agrégation raisons d'archivage
+            const raisonsCount: Record<string, number> = {};
+            archives.forEach(d => { if (d.archiveRaison) raisonsCount[d.archiveRaison] = (raisonsCount[d.archiveRaison] || 0) + 1; });
+
+            // Produits dans les devis acceptés vs archivés
+            const produitsAcceptes: Record<string, number> = {};
+            const produitsArchives: Record<string, number> = {};
+            acceptes.forEach(d => d.lignes.filter(l => l.produitId && (!l.type || l.type === 'ligne')).forEach(l => { produitsAcceptes[l.produitId!] = (produitsAcceptes[l.produitId!] || 0) + 1; }));
+            archives.forEach(d => d.lignes.filter(l => l.produitId && (!l.type || l.type === 'ligne')).forEach(l => { produitsArchives[l.produitId!] = (produitsArchives[l.produitId!] || 0) + 1; }));
+
+            return (
+              <div className="space-y-5 py-2">
+                {/* Actions CRM */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold text-sm">Actions CRM</h3>
+                    <Button size="sm" variant="outline" onClick={() => setCrmActionDialogOpen(true)}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Nouvelle action
+                    </Button>
+                  </div>
+                  {clientActions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Aucune action CRM pour ce client.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {clientActions.map(action => (
+                        <div key={action.id} className="flex items-start gap-2 p-2.5 rounded-lg border border-border bg-card">
+                          <span className="text-base">{TYPE_CRM_ACTION[action.type]?.icon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <p className="text-sm font-medium">{action.titre}</p>
+                              <span className={`text-xs px-1.5 py-0.5 rounded-full ${STATUT_CRM_ACTION[action.statut]?.color}`}>{STATUT_CRM_ACTION[action.statut]?.label}</span>
+                            </div>
+                            {action.datePlanifiee && <p className="text-xs text-muted-foreground flex items-center gap-1"><CalendarClock className="w-3 h-3" />{formatDate(action.datePlanifiee)}</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Historique devis */}
+                <div>
+                  <h3 className="font-semibold text-sm mb-2">Historique devis</h3>
+                  <div className="flex gap-3 mb-3 flex-wrap">
+                    <div className="flex items-center gap-1.5 text-sm"><CheckCircle2 className="w-4 h-4 text-success" /><span>{acceptes.length} accepté(s)</span></div>
+                    <div className="flex items-center gap-1.5 text-sm"><Clock className="w-4 h-4 text-info" /><span>{enCours.length} en cours</span></div>
+                    <div className="flex items-center gap-1.5 text-sm"><XCircle className="w-4 h-4 text-destructive" /><span>{archives.length} archivé(s)</span></div>
+                    {tauxTransfo !== null && (
+                      <div className="flex items-center gap-1.5 text-sm font-semibold"><TrendingUp className="w-4 h-4 text-primary" /><span className="text-primary">{tauxTransfo}% de transformation</span></div>
+                    )}
+                  </div>
+                  <div className="space-y-1 max-h-40 overflow-y-auto">
+                    {clientDevis.filter(d => d.statut !== 'système').sort((a, b) => b.dateCreation.localeCompare(a.dateCreation)).map(d => {
+                      const tot = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
+                      const statutColor = d.statut === 'accepté' ? 'text-success' : d.statut === 'archivé' ? 'text-muted-foreground' : d.statut === 'envoyé' ? 'text-info' : 'text-muted-foreground';
+                      return (
+                        <div key={d.id} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                          <span className="font-mono">{d.numero}</span>
+                          <span className="text-muted-foreground">{formatDate(d.dateCreation)}</span>
+                          <span className={`font-medium ${statutColor}`}>{d.statut}</span>
+                          {d.statut === 'archivé' && d.archiveRaison && <span className="text-muted-foreground">· {RAISON_ARCHIVE[d.archiveRaison]?.label}</span>}
+                          <span className="font-semibold">{formatMontant(tot.totalHT)}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Raisons de refus */}
+                {Object.keys(raisonsCount).length > 0 && (
+                  <div>
+                    <h3 className="font-semibold text-sm mb-2">Raisons d'archivage</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {(Object.entries(raisonsCount) as [import('@/lib/store').RaisonArchive, number][]).map(([raison, count]) => (
+                        <span key={raison} className={`text-xs px-2 py-1 rounded-full font-medium flex items-center gap-1 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
+                          {RAISON_ARCHIVE[raison]?.label} <span className="font-bold">×{count}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Produits devisés vs commandés */}
+                {(Object.keys(produitsAcceptes).length > 0 || Object.keys(produitsArchives).length > 0) && (
+                  <div>
+                    <h3 className="font-semibold text-sm mb-2">Produits devisés</h3>
+                    <div className="space-y-1 max-h-36 overflow-y-auto">
+                      {[...new Set([...Object.keys(produitsAcceptes), ...Object.keys(produitsArchives)])].map(produitId => {
+                        const prod = produits.find(p => p.id === produitId);
+                        if (!prod) return null;
+                        const gains = produitsAcceptes[produitId] || 0;
+                        const pertes = produitsArchives[produitId] || 0;
+                        return (
+                          <div key={produitId} className="flex items-center gap-2 text-xs py-1">
+                            <span className="flex-1 truncate font-medium">{prod.description}</span>
+                            {gains > 0 && <span className="text-success flex items-center gap-0.5"><CheckCircle2 className="w-3 h-3" />{gains}</span>}
+                            {pertes > 0 && <span className="text-destructive flex items-center gap-0.5"><XCircle className="w-3 h-3" />{pertes}</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}
+          <div className={editingClient && clientDialogTab !== 'infos' ? 'hidden' : ''}>
+
           {/* Zone IA — extraction automatique des coordonnées */}
           <div className="space-y-2">
             <div className="flex gap-2">
@@ -1135,9 +1268,10 @@ export default function Clients() {
               )}
             </div>
           </div>
+          </div>{/* end infos tab wrapper */}
           <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
+            {clientDialogTab === 'infos' && <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>}
           </div>
         </DialogContent>
       </Dialog>
@@ -1236,6 +1370,16 @@ export default function Clients() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* CRM Action Dialog (from client CRM tab) */}
+      <CRMActionDialog
+        open={crmActionDialogOpen}
+        onOpenChange={setCrmActionDialogOpen}
+        action={null}
+        clients={clients}
+        defaultClientId={editingClient?.id}
+        onSave={async (a) => { await addCrmAction(a); setCrmActionDialogOpen(false); }}
+      />
     </div>
   );
 }

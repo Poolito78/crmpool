@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap } from 'lucide-react';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,8 @@ import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
+import DevisArchiveDialog from '@/components/DevisArchiveDialog';
+import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import VarianteSelect from '@/components/VarianteSelect';
 
@@ -40,6 +42,7 @@ const statutColors: Record<string, string> = {
   refusé: 'bg-destructive/10 text-destructive',
   expiré: 'bg-muted text-muted-foreground',
   système: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  archivé: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
 
 export default function Devis() {
@@ -119,7 +122,7 @@ export default function Devis() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const dragScrollRafRef = useRef<number | null>(null);
   const dragClientYRef = useRef<number>(0);
-  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif'>('devis');
+  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'crm'>('devis');
   const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
@@ -132,12 +135,24 @@ export default function Devis() {
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
 
+  // Archive
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiveTarget, setArchiveTarget] = useState<DevisType | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  // CRM tab in devis dialog
+  const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
+  const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
+  const [editingCrmAction, setEditingCrmAction] = useState<import('@/lib/store').CrmAction | null>(null);
+
   const filtered = devis.filter(d => {
     const client = clients.find(c => c.id === d.clientId);
     const q = search.toLowerCase();
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
       || d.lignes.some(l => l.variantesChoisies && Object.values(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
+    // Archivés masqués par défaut sauf si showArchived ou filtre explicite
+    if (!showArchived && filterStatut !== 'archivé' && d.statut === 'archivé') return false;
     if (filterStatut === 'tous' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
@@ -758,8 +773,33 @@ export default function Devis() {
     }
   }, [lignes, fraisPortAuto, dialogOpen, produits, transporteur, coeffTransport, expressJ1, coeffExpress]);
 
+  function openArchiveDialog(d: DevisType) {
+    setArchiveTarget(d);
+    setArchiveDialogOpen(true);
+  }
+
+  function confirmArchive(d: DevisType, data: { archiveRaison: RaisonArchive; archiveCommentaire: string; archiveConcurrents: ConcurrentProduit[] }) {
+    updateDevis(prev => prev.map(dv => dv.id === d.id ? {
+      ...dv,
+      statut: 'archivé' as DevisType['statut'],
+      archiveDate: new Date().toISOString().split('T')[0],
+      archiveRaison: data.archiveRaison,
+      archiveCommentaire: data.archiveCommentaire,
+      archiveConcurrents: data.archiveConcurrents.length > 0 ? data.archiveConcurrents : undefined,
+    } : dv));
+    logHistorique({ entiteType: 'devis', entiteId: d.id, entiteNumero: d.numero, action: 'statut', details: { ancienStatut: d.statut, nouveauStatut: 'archivé', raison: data.archiveRaison } });
+    toast.success(`Devis ${d.numero} archivé`);
+    setArchiveDialogOpen(false);
+    setArchiveTarget(null);
+  }
+
   function updateStatut(id: string, newStatut: DevisType['statut']) {
     const d = devis.find(dv => dv.id === id);
+    // Ouvrir le dialog d'archivage si passage à 'archivé' ou 'refusé'
+    if ((newStatut === 'archivé' || newStatut === 'refusé') && d) {
+      openArchiveDialog({ ...d, statut: newStatut });
+      return;
+    }
     updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
     toast.success('Statut mis à jour');
     logHistorique({ entiteType: 'devis', entiteId: id, entiteNumero: d?.numero ?? id, action: 'statut', details: { ancienStatut: d?.statut, nouveauStatut: newStatut } });
@@ -870,15 +910,25 @@ export default function Devis() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+          <select value={filterStatut} onChange={e => { setFilterStatut(e.target.value); if (e.target.value === 'archivé') setShowArchived(true); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Tous les statuts</option>
             <option value="brouillon">Brouillon</option>
             <option value="envoyé">Envoyé</option>
             <option value="accepté">Accepté</option>
             <option value="refusé">Refusé</option>
             <option value="expiré">Expiré</option>
+            <option value="archivé">🗄 Archivés</option>
             <option value="système">Système (modèles)</option>
           </select>
+          <button
+            type="button"
+            onClick={() => { setShowArchived(v => !v); if (filterStatut === 'archivé') setFilterStatut('tous'); }}
+            className={`flex items-center gap-1.5 text-sm rounded-md border px-3 py-1.5 transition-colors ${showArchived ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300' : 'border-input bg-background text-muted-foreground hover:text-foreground'}`}
+            title={showArchived ? 'Masquer les archivés' : 'Afficher les archivés'}
+          >
+            <Archive className="w-3.5 h-3.5" />
+            {showArchived ? 'Masquer archivés' : 'Voir archivés'}
+          </button>
           <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact(''); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
             <option value="tous">Tous les clients</option>
             {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
@@ -990,7 +1040,15 @@ export default function Devis() {
                         MODÈLE
                       </span>
                     )}
+                    {d.statut === 'archivé' && d.archiveRaison && (
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RAISON_ARCHIVE[d.archiveRaison]?.color || 'bg-muted text-muted-foreground'}`}>
+                        {RAISON_ARCHIVE[d.archiveRaison]?.label}
+                      </span>
+                    )}
                   </div>
+                  {d.statut === 'archivé' && d.archiveCommentaire && (
+                    <p className="text-xs text-muted-foreground mt-0.5 italic">{d.archiveCommentaire}</p>
+                  )}
                   <p className="text-sm text-muted-foreground">
                     {client ? (
                       <button
@@ -1080,8 +1138,10 @@ export default function Devis() {
                       <option value="accepté">Accepté</option>
                       <option value="refusé">Refusé</option>
                       <option value="expiré">Expiré</option>
+                      <option value="archivé">🗄 Archivé</option>
                       <option value="système">Système</option>
                     </select>
+                    <button onClick={() => openArchiveDialog(d)} className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-muted-foreground" title="Archiver ce devis"><Archive className="w-4 h-4" /></button>
                     <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
                     <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
                     <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
@@ -1104,6 +1164,7 @@ export default function Devis() {
           <div className="flex gap-1 border-b border-border shrink-0">
             <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
             <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+            {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
           </div>
           <div ref={scrollContainerRef} className={`space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1 ${dialogTab !== 'devis' ? 'hidden' : ''}`} onDragOver={e => { dragClientYRef.current = e.clientY; }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2119,6 +2180,47 @@ export default function Devis() {
               </div>
             );
           })()}
+          {/* ── Onglet CRM ──────────────────────────────────────────────────────── */}
+          {dialogTab === 'crm' && editingId && (() => {
+            const devisActions = crmActions.filter(a => a.devisId === editingId);
+            const currentDevis = devis.find(d => d.id === editingId);
+            return (
+              <div className="flex-1 overflow-y-auto py-3 space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm">Actions CRM liées à ce devis</h3>
+                  <Button size="sm" variant="outline" onClick={() => { setEditingCrmAction(null); setCrmActionDialogOpen(true); }}>
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Nouvelle action
+                  </Button>
+                </div>
+                {devisActions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6">Aucune action CRM pour ce devis.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {devisActions.sort((a, b) => (b.datePlanifiee || '') > (a.datePlanifiee || '') ? 1 : -1).map(action => (
+                      <div key={action.id} className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card">
+                        <span className="text-lg">{TYPE_CRM_ACTION[action.type]?.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm">{action.titre}</p>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${STATUT_CRM_ACTION[action.statut]?.color}`}>{STATUT_CRM_ACTION[action.statut]?.label}</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${TYPE_CRM_ACTION[action.type]?.color}`}>{TYPE_CRM_ACTION[action.type]?.label}</span>
+                          </div>
+                          {action.description && <p className="text-xs text-muted-foreground mt-1">{action.description}</p>}
+                          {action.datePlanifiee && (
+                            <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                              <CalendarClock className="w-3 h-3" /> {formatDate(action.datePlanifiee)}
+                              {action.dateRealisee && ` → réalisée le ${formatDate(action.dateRealisee)}`}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
             <div className="flex gap-2">
               <Button variant="outline" size="sm" onClick={() => {
@@ -2331,6 +2433,26 @@ export default function Devis() {
           initialMode={chatterMode}
         />
       )}
+
+      {/* Archive Dialog */}
+      <DevisArchiveDialog
+        devis={archiveTarget}
+        open={archiveDialogOpen}
+        onOpenChange={(open) => { setArchiveDialogOpen(open); if (!open) setArchiveTarget(null); }}
+        onConfirm={(data) => archiveTarget && confirmArchive(archiveTarget, data)}
+        produits={produits}
+      />
+
+      {/* CRM Action Dialog (from devis CRM tab) */}
+      <CRMActionDialog
+        open={crmActionDialogOpen}
+        onOpenChange={setCrmActionDialogOpen}
+        action={editingCrmAction}
+        clients={clients}
+        defaultDevisId={editingId || undefined}
+        defaultClientId={clientId || undefined}
+        onSave={async (a) => { await addCrmAction(a); setCrmActionDialogOpen(false); }}
+      />
 
       <DevisAssistantDialog
         open={assistantOpen}
