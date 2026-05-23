@@ -17,7 +17,7 @@ import CRMActionDialog from '@/components/CRMActionDialog';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Clock, BarChart3,
-  Plus, Pencil, Trash2, CheckCircle2, XCircle, ChevronLeft, ChevronRight,
+  Plus, Pencil, Trash2, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Phone, Mail, Calendar, MapPin, CheckSquare, Star, AlertCircle, Filter,
   FileText, PieChart, Users,
 } from 'lucide-react';
@@ -55,6 +55,19 @@ export default function CRM() {
   const navigate = useNavigate();
 
   const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier' | 'analyse'>('pipeline');
+
+  // ── Analyse — sections ouvertes/fermées ───────────────────────────────
+  const [analyseSections, setAnalyseSections] = useState<Record<string, boolean>>({
+    clients: true,
+    produits: true,
+    raisons: true,
+    concurrentsDevis: false,
+    prixConcurrents: true,
+    historique: false,
+  });
+  function toggleSection(key: string) {
+    setAnalyseSections(prev => ({ ...prev, [key]: !prev[key] }));
+  }
 
   // ── Pipeline ──────────────────────────────────────────────────────────
   const [filterStatut, setFilterStatut] = useState('tous');
@@ -707,6 +720,13 @@ export default function CRM() {
           return { client: c, acceptes: acceptes.length, archives: archives.length, taux, ca, total: cd.length };
         }).filter(r => r.total > 0).sort((a, b) => b.ca - a.ca);
 
+        // KPIs globaux pour le bandeau sticky
+        const totalDevisEnvoyes = devisActifs.filter(d => d.statut !== 'brouillon').length;
+        const totalAcceptes = devisActifs.filter(d => d.statut === 'accepté').length;
+        const totalArchives = devisActifs.filter(d => d.statut === 'archivé').length;
+        const tauxGlobal = (totalAcceptes + totalArchives) > 0 ? Math.round(totalAcceptes / (totalAcceptes + totalArchives) * 100) : null;
+        const caTotal = devisActifs.filter(d => d.statut === 'accepté').reduce((s, d) => s + calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT, 0);
+
         // Par produit
         const parProduit: Record<string, { gains: number; pertes: number; ca: number }> = {};
         devisActifs.forEach(d => {
@@ -787,191 +807,243 @@ export default function CRM() {
         });
         const prixRows = Object.values(prixParConcProd).sort((a, b) => b.mentions - a.mentions);
 
+        // Helper : en-tête de section repliable
+        const SectionHeader = ({ sectionKey, icon: Icon, label, count, iconColor }: { sectionKey: string; icon: any; label: string; count?: number; iconColor?: string }) => (
+          <button
+            type="button"
+            onClick={() => toggleSection(sectionKey)}
+            className="w-full flex items-center justify-between px-4 py-3 bg-muted/30 hover:bg-muted/50 rounded-lg border border-border transition-colors text-left"
+          >
+            <span className="flex items-center gap-2 font-semibold text-sm">
+              <Icon className={cn('w-4 h-4', iconColor || 'text-muted-foreground')} />
+              {label}
+              {count !== undefined && (
+                <span className="text-xs bg-muted text-muted-foreground px-1.5 py-0.5 rounded-full font-normal">{count}</span>
+              )}
+            </span>
+            {analyseSections[sectionKey]
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+          </button>
+        );
+
         return (
-          <div className="space-y-6">
-            {/* Bloc 1 — Par client */}
-            <div>
-              <h3 className="font-semibold mb-3 flex items-center gap-2"><Users className="w-4 h-4" /> Analyse par client</h3>
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total devis</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acceptés</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Archivés</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA accepté HT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {parClient.map(({ client, acceptes, archives, taux, ca, total }) => (
-                      <tr key={client.id} className="border-t border-border hover:bg-muted/20">
-                        <td className="px-3 py-2 font-medium">{client.societe || client.nom}</td>
-                        <td className="px-3 py-2 text-right text-muted-foreground">{total}</td>
-                        <td className="px-3 py-2 text-right text-success font-medium">{acceptes}</td>
-                        <td className="px-3 py-2 text-right text-destructive">{archives}</td>
-                        <td className="px-3 py-2 text-right">
-                          {taux !== null ? (
-                            <span className={`font-semibold ${taux >= 50 ? 'text-success' : taux >= 25 ? 'text-amber-500' : 'text-destructive'}`}>{taux}%</span>
-                          ) : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {parClient.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
+          <div className="space-y-3">
+            {/* ── Bandeau KPI sticky ──────────────────────────────────── */}
+            <div className="sticky top-0 z-10 -mx-1 px-1 pb-1 pt-0.5 bg-background/95 backdrop-blur-sm">
+              <div className="grid grid-cols-4 gap-3 rounded-xl border border-border bg-card shadow-sm px-4 py-3">
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">Devis envoyés</p>
+                  <p className="text-xl font-bold">{totalDevisEnvoyes}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">Acceptés</p>
+                  <p className="text-xl font-bold text-success">{totalAcceptes}</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">Taux transfo</p>
+                  <p className={cn('text-xl font-bold', tauxGlobal === null ? 'text-muted-foreground' : tauxGlobal >= 50 ? 'text-success' : tauxGlobal >= 25 ? 'text-amber-500' : 'text-destructive')}>
+                    {tauxGlobal !== null ? `${tauxGlobal}%` : '—'}
+                  </p>
+                </div>
+                <div className="text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">CA accepté HT</p>
+                  <p className="text-xl font-bold text-primary">{caTotal > 0 ? formatMontant(caTotal) : '—'}</p>
+                </div>
               </div>
             </div>
 
-            {/* Bloc 2 — Par produit */}
+            {/* ── Bloc 1 — Par client ─────────────────────────────────── */}
             <div>
-              <h3 className="font-semibold mb-3 flex items-center gap-2"><BarChart3 className="w-4 h-4" /> Analyse par produit</h3>
-              <div className="overflow-x-auto rounded-lg border border-border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Devis gagnés</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Devis perdus</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux win</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA HT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {produitRows.map(({ prod, gains, pertes, taux, ca }) => (
-                      <tr key={prod!.id} className="border-t border-border hover:bg-muted/20">
-                        <td className="px-3 py-2">
-                          <p className="font-medium truncate max-w-xs">{prod!.description}</p>
-                          <p className="text-xs text-muted-foreground font-mono">{prod!.reference}</p>
-                        </td>
-                        <td className="px-3 py-2 text-right text-success font-medium">{gains}</td>
-                        <td className="px-3 py-2 text-right text-destructive">{pertes}</td>
-                        <td className="px-3 py-2 text-right">
-                          {taux !== null ? <span className={`font-semibold ${taux >= 50 ? 'text-success' : 'text-amber-500'}`}>{taux}%</span> : '—'}
-                        </td>
-                        <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
+              <SectionHeader sectionKey="clients" icon={Users} label="Analyse par client" count={parClient.length} />
+              {analyseSections.clients && (
+                <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acceptés</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Archivés</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA HT</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {produitRows.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
-              </div>
+                    </thead>
+                    <tbody>
+                      {parClient.map(({ client, acceptes, archives, taux, ca, total }) => (
+                        <tr key={client.id} className="border-t border-border hover:bg-muted/20">
+                          <td className="px-3 py-2 font-medium">{client.societe || client.nom}</td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">{total}</td>
+                          <td className="px-3 py-2 text-right text-success font-medium">{acceptes}</td>
+                          <td className="px-3 py-2 text-right text-destructive">{archives}</td>
+                          <td className="px-3 py-2 text-right">
+                            {taux !== null ? <span className={`font-semibold ${taux >= 50 ? 'text-success' : taux >= 25 ? 'text-amber-500' : 'text-destructive'}`}>{taux}%</span> : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {parClient.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
+                </div>
+              )}
             </div>
 
-            {/* Bloc 3 — Raisons d'archivage */}
+            {/* ── Bloc 2 — Par produit ─────────────────────────────────── */}
+            <div>
+              <SectionHeader sectionKey="produits" icon={BarChart3} label="Analyse par produit" count={produitRows.length} />
+              {analyseSections.produits && (
+                <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Gagnés</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Perdus</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux win</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">CA HT</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {produitRows.map(({ prod, gains, pertes, taux, ca }) => (
+                        <tr key={prod!.id} className="border-t border-border hover:bg-muted/20">
+                          <td className="px-3 py-2">
+                            <p className="font-medium truncate max-w-xs">{prod!.description}</p>
+                            <p className="text-xs text-muted-foreground font-mono">{prod!.reference}</p>
+                          </td>
+                          <td className="px-3 py-2 text-right text-success font-medium">{gains}</td>
+                          <td className="px-3 py-2 text-right text-destructive">{pertes}</td>
+                          <td className="px-3 py-2 text-right">
+                            {taux !== null ? <span className={`font-semibold ${taux >= 50 ? 'text-success' : 'text-amber-500'}`}>{taux}%</span> : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right font-semibold">{ca > 0 ? formatMontant(ca) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {produitRows.length === 0 && <p className="text-center py-6 text-muted-foreground text-sm">Aucune donnée</p>}
+                </div>
+              )}
+            </div>
+
+            {/* ── Bloc 3 — Raisons d'archivage ────────────────────────── */}
             {Object.keys(raisonsGlobal).length > 0 && (
               <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Raisons d'archivage</h3>
-                <div className="flex flex-wrap gap-2">
-                  {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
-                    <span key={raison} className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-2 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
-                      {RAISON_ARCHIVE[raison]?.label} <span className="font-bold bg-white/30 rounded-full px-1.5">×{count}</span>
-                    </span>
-                  ))}
-                </div>
+                <SectionHeader sectionKey="raisons" icon={XCircle} label="Raisons d'archivage" count={Object.keys(raisonsGlobal).length} />
+                {analyseSections.raisons && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
+                      <span key={raison} className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-2 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
+                        {RAISON_ARCHIVE[raison]?.label} <span className="font-bold bg-white/30 rounded-full px-1.5">×{count}</span>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Bloc 4 — Concurrents depuis devis archivés */}
+            {/* ── Bloc 4 — Concurrents devis archivés ─────────────────── */}
             {concurrentsDevisRows.length > 0 && (
               <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Concurrents (devis archivés)</h3>
-                <div className="overflow-x-auto rounded-lg border border-border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Cité</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Prix moyen renseigné</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {concurrentsDevisRows.map(([nom, stats]) => (
-                        <tr key={nom} className="border-t border-border hover:bg-muted/20">
-                          <td className="px-3 py-2 font-medium">{nom}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{stats.count}×</td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">
-                            {stats.prixCount > 0 ? formatMontant(Math.round(stats.prixTotal / stats.prixCount)) : '—'}
-                          </td>
+                <SectionHeader sectionKey="concurrentsDevis" icon={TrendingDown} label="Concurrents (devis archivés)" count={concurrentsDevisRows.length} />
+                {analyseSections.concurrentsDevis && (
+                  <div className="mt-2 overflow-x-auto rounded-lg border border-border">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Cité</th>
+                          <th className="text-right px-3 py-2 font-medium text-muted-foreground">Prix moyen</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {concurrentsDevisRows.map(([nom, stats]) => (
+                          <tr key={nom} className="border-t border-border hover:bg-muted/20">
+                            <td className="px-3 py-2 font-medium">{nom}</td>
+                            <td className="px-3 py-2 text-right font-semibold">{stats.count}×</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground">
+                              {stats.prixCount > 0 ? formatMontant(Math.round(stats.prixTotal / stats.prixCount)) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
-            {/* Bloc 5 — Analyse de prix concurrents (depuis actions CRM) */}
+            {/* ── Bloc 5 — Analyse de prix concurrents (actions CRM) ───── */}
             <div>
-              <h3 className="font-semibold mb-1 flex items-center gap-2"><PieChart className="w-4 h-4 text-violet-500" /> Analyse de prix concurrents</h3>
-              <p className="text-xs text-muted-foreground mb-3">Tarifs et délais collectés lors des visites, appels et rendez-vous.</p>
-
-              {prixRows.length > 0 && (
-                <div className="overflow-x-auto rounded-lg border border-border mb-4">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
-                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit / Réf.</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tarif moyen</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Délai moy.</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Mentions</th>
-                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Dernière info</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {prixRows.map((r, i) => (
-                        <tr key={i} className="border-t border-border hover:bg-muted/20">
-                          <td className="px-3 py-2 font-medium">{r.nom}</td>
-                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.produit}</td>
-                          <td className="px-3 py-2 text-right font-semibold text-destructive">
-                            {r.tarifsCount > 0 ? formatMontant(Math.round(r.tarifsTotal / r.tarifsCount)) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-muted-foreground">
-                            {r.delaisCount > 0 ? `${Math.round(r.delaisTotal / r.delaisCount)} j` : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right">{r.mentions}×</td>
-                          <td className="px-3 py-2 text-right text-xs text-muted-foreground">{formatDate(r.derniereDate)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Détail des entrées */}
-              {prixEntries.length > 0 && (
-                <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Historique détaillé</p>
-                  <div className="space-y-1.5">
-                    {prixEntries.slice(0, 30).map((e, i) => (
-                      <div key={i} className="flex items-start gap-3 rounded-lg border border-border bg-muted/10 px-3 py-2 text-sm">
-                        <span className="font-medium text-destructive min-w-[120px] truncate">{e.nomConcurrent}</span>
-                        <span className="font-mono text-xs text-muted-foreground min-w-[80px]">{e.produitRef}</span>
-                        <span className="font-semibold min-w-[70px]">{e.tarif ? formatMontant(e.tarif) : '—'}</span>
-                        {e.delai && <span className="text-muted-foreground">{e.delai} j</span>}
-                        <span className="text-muted-foreground flex-1 truncate">{e.clientNom}</span>
-                        <span className="text-xs text-muted-foreground shrink-0">{formatDate(e.date)}</span>
-                        {e.note && <span className="text-xs italic text-muted-foreground truncate max-w-[150px]">{e.note}</span>}
-                      </div>
-                    ))}
-                    {prixEntries.length > 30 && (
-                      <p className="text-xs text-muted-foreground text-center py-1">… et {prixEntries.length - 30} autres entrées</p>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {prixEntries.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border py-8 text-center">
-                  <TrendingDown className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Aucune info concurrence saisie</p>
-                  <p className="text-xs text-muted-foreground mt-1">Renseignez les tarifs concurrents dans les actions CRM (visite, appel, RDV)</p>
+              <SectionHeader sectionKey="prixConcurrents" icon={PieChart} label="Analyse de prix concurrents" count={prixRows.length} iconColor="text-violet-500" />
+              {analyseSections.prixConcurrents && (
+                <div className="mt-2 space-y-3">
+                  {prixRows.length > 0 ? (
+                    <div className="overflow-x-auto rounded-lg border border-border">
+                      <table className="w-full text-sm">
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
+                            <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit / Réf.</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tarif moyen</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Délai moy.</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Mentions</th>
+                            <th className="text-right px-3 py-2 font-medium text-muted-foreground">Dernière info</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {prixRows.map((r, i) => (
+                            <tr key={i} className="border-t border-border hover:bg-muted/20">
+                              <td className="px-3 py-2 font-medium">{r.nom}</td>
+                              <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.produit}</td>
+                              <td className="px-3 py-2 text-right font-semibold text-destructive">
+                                {r.tarifsCount > 0 ? formatMontant(Math.round(r.tarifsTotal / r.tarifsCount)) : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right text-muted-foreground">
+                                {r.delaisCount > 0 ? `${Math.round(r.delaisTotal / r.delaisCount)} j` : '—'}
+                              </td>
+                              <td className="px-3 py-2 text-right">{r.mentions}×</td>
+                              <td className="px-3 py-2 text-right text-xs text-muted-foreground">{formatDate(r.derniereDate)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                      <TrendingDown className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">Aucune info concurrence saisie</p>
+                      <p className="text-xs text-muted-foreground mt-1">Renseignez les tarifs dans les actions CRM (visite, appel, RDV)</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
+
+            {/* ── Bloc 6 — Historique détaillé ────────────────────────── */}
+            {prixEntries.length > 0 && (
+              <div>
+                <SectionHeader sectionKey="historique" icon={FileText} label="Historique détaillé concurrence" count={prixEntries.length} />
+                {analyseSections.historique && (
+                  <div className="mt-2 space-y-1.5">
+                    {prixEntries.slice(0, 50).map((e, i) => (
+                      <div key={i} className="flex items-center gap-3 rounded-lg border border-border bg-muted/10 px-3 py-2 text-sm flex-wrap">
+                        <span className="font-medium text-destructive min-w-[110px]">{e.nomConcurrent}</span>
+                        <span className="font-mono text-xs text-muted-foreground min-w-[70px]">{e.produitRef}</span>
+                        <span className="font-semibold min-w-[65px]">{e.tarif ? formatMontant(e.tarif) : '—'}</span>
+                        {e.delai && <span className="text-muted-foreground text-xs">{e.delai} j</span>}
+                        <span className="text-muted-foreground flex-1 min-w-[80px] truncate">{e.clientNom}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatDate(e.date)}</span>
+                        {e.note && <span className="text-xs italic text-muted-foreground w-full pl-0">{e.note}</span>}
+                      </div>
+                    ))}
+                    {prixEntries.length > 50 && (
+                      <p className="text-xs text-muted-foreground text-center py-1">… et {prixEntries.length - 50} autres entrées</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })()}
