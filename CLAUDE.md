@@ -124,6 +124,16 @@ When adding a new field to a domain type: update **both** `dbToXxx` (read) and `
 
 To apply a migration programmatically (e.g. from the browser), use the Supabase Management API with the session token from `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/{ref}/database/query`.
 
+### TypeScript conventions
+
+- **Never use `enum`** — always prefer string literal unions instead:
+  ```ts
+  // ✅ correct
+  type Status = 'draft' | 'sent' | 'signed';
+  // ❌ never
+  enum Status { Draft = 'draft', Sent = 'sent', Signed = 'signed' }
+  ```
+
 ### Environment variables
 
 ```
