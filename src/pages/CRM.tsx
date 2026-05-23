@@ -300,7 +300,7 @@ export default function CRM() {
           </div>
 
           {/* Filtres */}
-          <div className="flex flex-wrap gap-2 items-center">
+          <div className="sticky top-[calc(4rem+45px)] z-10 bg-background/95 backdrop-blur-sm -mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border flex flex-wrap gap-2 items-center">
             <Input
               placeholder="Rechercher…"
               value={searchDevis}
@@ -333,7 +333,7 @@ export default function CRM() {
           <div className="rounded-lg border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b border-border">
+                <thead className="sticky top-[calc(4rem+45px+44px)] z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Devis</th>
                     <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Client</th>
