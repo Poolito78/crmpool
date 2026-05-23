@@ -82,6 +82,7 @@ export default function CRM() {
   const [filterStatut, setFilterStatut] = useState('tous');
   const [filterClientId, setFilterClientId] = useState('');
   const [searchDevis, setSearchDevis] = useState('');
+  const [pipelineSort, setPipelineSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'date', dir: 'desc' });
   const [raisonDialog, setRaisonDialog] = useState<{ devisId: string; open: boolean; raison: string }>({ devisId: '', open: false, raison: '' });
 
   // ── Actions ───────────────────────────────────────────────────────────
@@ -120,7 +121,7 @@ export default function CRM() {
 
   // ── Devis filtrés ─────────────────────────────────────────────────────
   const devisFiltres = useMemo(() => {
-    return devis
+    const filtered = devis
       .filter(d => {
         if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
         if (filterClientId && d.clientId !== filterClientId) return false;
@@ -134,8 +135,21 @@ export default function CRM() {
         }
         return true;
       })
-      .sort((a, b) => b.dateCreation.localeCompare(a.dateCreation));
-  }, [devis, filterStatut, filterClientId, searchDevis, clients]);
+      .map(d => ({ ...d, _total: calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT }));
+
+    const { col, dir } = pipelineSort;
+    const sign = dir === 'asc' ? 1 : -1;
+    filtered.sort((a, b) => {
+      if (col === 'numero')   return sign * a.numero.localeCompare(b.numero);
+      if (col === 'client')   { const ca = clients.find(c => c.id === a.clientId); const cb = clients.find(c => c.id === b.clientId); return sign * (ca?.societe || ca?.nom || '').localeCompare(cb?.societe || cb?.nom || ''); }
+      if (col === 'ref')      return sign * (a.referenceAffaire || '').localeCompare(b.referenceAffaire || '');
+      if (col === 'montant')  return sign * (a._total - b._total);
+      if (col === 'statut')   return sign * a.statut.localeCompare(b.statut);
+      if (col === 'date')     return sign * a.dateCreation.localeCompare(b.dateCreation);
+      return 0;
+    });
+    return filtered;
+  }, [devis, filterStatut, filterClientId, searchDevis, clients, pipelineSort]);
 
   // ── Actions filtrées ──────────────────────────────────────────────────
   const actionsFiltrees = useMemo(() => {
@@ -342,12 +356,35 @@ export default function CRM() {
               <table className="w-full text-sm">
                 <thead className="sticky top-[44px] z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
                   <tr>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Devis</th>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Client</th>
-                    <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs hidden md:table-cell">Réf. affaire</th>
-                    <th className="text-right px-3 py-2.5 font-semibold text-muted-foreground text-xs">Montant HT</th>
-                    <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-xs">Statut</th>
-                    <th className="text-center px-3 py-2.5 font-semibold text-muted-foreground text-xs hidden lg:table-cell">Date</th>
+                    {[
+                      { col: 'numero',  label: 'Devis',      align: 'left',   cls: '' },
+                      { col: 'client',  label: 'Client',     align: 'left',   cls: '' },
+                      { col: 'ref',     label: 'Réf. affaire', align: 'left', cls: 'hidden md:table-cell' },
+                      { col: 'montant', label: 'Montant HT', align: 'right',  cls: '' },
+                      { col: 'statut',  label: 'Statut',     align: 'center', cls: '' },
+                      { col: 'date',    label: 'Date',       align: 'center', cls: 'hidden lg:table-cell' },
+                    ].map(({ col, label, align, cls }) => {
+                      const active = pipelineSort.col === col;
+                      return (
+                        <th
+                          key={col}
+                          onClick={() => setPipelineSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' })}
+                          className={cn(
+                            'px-3 py-2.5 font-semibold text-xs cursor-pointer select-none whitespace-nowrap',
+                            `text-${align}`,
+                            cls,
+                            active ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                          )}
+                        >
+                          <span className="inline-flex items-center gap-1">
+                            {label}
+                            <span className="text-[10px] leading-none">
+                              {active ? (pipelineSort.dir === 'asc' ? '▲' : '▼') : '⇅'}
+                            </span>
+                          </span>
+                        </th>
+                      );
+                    })}
                     <th className="px-3 py-2.5 font-semibold text-muted-foreground text-xs">Actions</th>
                   </tr>
                 </thead>
@@ -357,7 +394,6 @@ export default function CRM() {
                   )}
                   {devisFiltres.map(d => {
                     const client = clients.find(c => c.id === d.clientId);
-                    const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA);
                     const st = STATUT_DEVIS[d.statut];
                     return (
                       <tr key={d.id} className="hover:bg-muted/30 transition-colors">
@@ -379,7 +415,7 @@ export default function CRM() {
                           )}
                         </td>
                         <td className="px-3 py-2.5 hidden md:table-cell text-muted-foreground">{d.referenceAffaire || '—'}</td>
-                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatMontant(total.totalHT)}</td>
+                        <td className="px-3 py-2.5 text-right font-medium tabular-nums">{formatMontant(d._total)}</td>
                         <td className="px-3 py-2.5 text-center">
                           <Badge className={cn('text-xs', st?.color)}>{st?.label}</Badge>
                         </td>
