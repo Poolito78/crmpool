@@ -85,6 +85,37 @@ The **comparatif achat/vente** tab in `Devis.tsx` uses these rules for `puAchat`
 
 The same logic must be applied consistently in: the comparatif IIFE, the devis card list (`totalAchatD`), and the aperçu summary (`totalAchat`). If you add a new context that shows marge/coeff, replicate this pattern.
 
+### Odoo sync (`src/lib/odooSync.ts`)
+
+Generates a self-contained JavaScript script to be pasted into the Odoo browser console (F12) to create a `sale.order` from a crmpool devis.
+
+**Entry point:** `genererScriptOdoo(devis, client, produits, options?)` — returns a string of JS code ready to paste.
+
+**`options` fields:**
+- `surface?` — m² override (falls back to `devis.surfaceGlobaleM2`)
+- `contactNom?` — contact person name for `x_studio_contact_de_laffaire`
+- `odooPartnerName?` — Odoo partner display name (may differ from crmpool `client.societe`)
+
+**Partner name mismatch:** crmpool client names often differ from Odoo partner names. Use `promptOdooPartnerName(clientId, defaultName)` to show a browser `prompt()` pre-filled from `localStorage` (`odoo_partner_<clientId>`). The confirmed name is stored via `setOdooPartnerName()` for future calls.
+
+**Generated script steps:**
+1. Finds Odoo partner by `ilike` search on partner name
+2. Finds contact under that company
+3. Batch-looks up products by `default_code` (= crmpool `produit.reference`)
+4. Dynamically discovers the custom Studio "Chantier" field (`x_studio_*` containing "chantier")
+5. Creates `sale.order` header (partner, validity_date, chantier, contact de l'affaire)
+6. Adds system note line at `sequence=5` (Système / Surface / Coût €/m²)
+7. Creates all lines: `line_section` for `groupe`, `line_note` for `texte`, product lines for `ligne`
+8. Price on product lines = `Math.ceil(prixUnitaireHT × (1 − remise/100) × 100) / 100` (ceiling, discount=0 in Odoo)
+9. Sets TVA 20% (`tax_id: [[6,0,[tvaId]]]`) on all product lines
+10. Lines without a matching product use fallback product ID `362577` (FRAIS DE PORT service)
+
+**Constants in odooSync.ts:**
+- `ODOO_COMPANY_ID = 13`
+- `ODOO_FALLBACK_PRODUCT_ID = 362577`
+
+**UI entry points:** button "→ Odoo" / "Envoyer vers Odoo" in `DevisPreview.tsx` (preview bar) and `Devis.tsx` (edit dialog, next to "Envoyer par mail").
+
 ### Supabase migrations (`supabase/migrations/`)
 
 SQL migrations are numbered by timestamp. Apply new migrations via the Supabase CLI (`supabase db push`) or the Supabase dashboard SQL editor. The `src/integrations/supabase/types.ts` file is auto-generated from the DB schema — regenerate with `supabase gen types typescript`.
