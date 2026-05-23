@@ -22,7 +22,11 @@ All application state lives in a single large hook `src/lib/store.ts → useStor
 
 `useStore` holds: `clients`, `fournisseurs`, `produits`, `devis`, `produitFournisseurs`, `commandesFournisseur`, `commandesClient`, `facturesClient`, `facturesFournisseur`.
 
-Each collection has an `updateXxx(fn: prev => next)` callback that applies the mutation locally **and** diffs against the previous state to fire the correct Supabase inserts/updates/deletes. This means there is **no separate API layer** — mutations go through the updater callbacks.
+Each collection has an `updateXxx(fn: prev => next)` callback that applies the mutation locally **and** diffs against the previous state to fire the correct Supabase inserts/updates/deletes. There is **no separate API layer** — mutations go through the updater callbacks.
+
+Two additional hooks live outside `useStore` and manage their own Supabase sync:
+- `useCrmActions()` — CRM actions (table `crm_actions`). Returns `{ actions, addAction, updateAction, deleteAction }`.
+- `useDevisMessageTemplates()` — archive comment templates (table `devis_message_templates`). Returns `{ templates, addTemplate, deleteTemplate }`.
 
 ### DB ↔ App mapping convention
 
@@ -30,108 +34,113 @@ Every entity has a pair of private functions in `store.ts`:
 - `dbToXxx(row)` — snake_case DB row → camelCase TS interface
 - `xxxToDb(obj, userId)` — reverse, adds `user_id`
 
-These are the only places that touch raw DB column names.
+These are the only places that touch raw DB column names. When adding a new optional field to a domain type, use spread to conditionally include it in `xxxToDb` to avoid PostgREST rejecting inserts when the column doesn't exist yet:
+```ts
+...(a.newField !== undefined ? { new_field: a.newField } : {}),
+```
+
+When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, create a migration file, and apply it. Forgetting any one of these three causes silent data loss.
 
 ### Key domain types (`src/lib/store.ts`)
 
 | Type | Notes |
 |---|---|
-| `Produit` | `prixAchat` = prix achat conditionné (unit cost). `paliersPrix?: PrixPalier[]` = tiered pricing by quantity. `prixHT` = public price. `ficheUrl?` + `ficheLinkLabel?` = product sheet URL + display label injected into devis emails. Distinct from `ProduitFournisseur.prixAchat` (catalog price/kg). |
-| `ComposantProduit` | Three quantity modes: plain `quantite`, `poidsKg` (weight → qty via `produit.poids`), or `consommationPct` (% of a base component/qty). All three modes must be handled wherever composant cost is calculated — see `calcPrixAchatCompose` and `openEdit` in `Produits.tsx`. |
+| `Produit` | `prixAchat` = prix achat conditionné (unit cost). `paliersPrix?: PrixPalier[]` = tiered pricing by quantity. `prixHT` = public price. `ficheUrl?` + `ficheLinkLabel?` = product sheet URL injected into devis emails. Distinct from `ProduitFournisseur.prixAchat` (catalog price/kg). |
+| `ComposantProduit` | Three quantity modes: plain `quantite`, `poidsKg` (weight → qty via `produit.poids`), or `consommationPct` (% of a base component). All three modes must be handled wherever composant cost is calculated. |
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`. Only `'ligne'` rows count in totals. `prixAchatLigne` = free-line purchase cost (e.g. energy surcharges). |
-| `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is a **different field** (price per kg from supplier catalog) — do NOT confuse with `Produit.prixAchat`. |
-| `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation` to auto-compute quantities. |
+| `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is price per kg from supplier catalog — **different** from `Produit.prixAchat`. |
+| `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation`. `statut` includes `'archivé'` in addition to the standard statuses. Archived devis carry: `archiveDate?`, `archiveRaison?`, `archiveCommentaire?`, `archiveConcurrents?`. |
+| `CrmAction` | Has `concurrents?: CrmActionConcurrent[]` for recording competitor prices observed during visits/calls. Only include in DB payload when defined (column may not exist yet). |
+| `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constant `RAISON_ARCHIVE` holds label/color/messageDefaut per key. |
 
 ### Key utility functions (`src/lib/store.ts`)
 
 - `getPrixPourQuantite(produit, quantite)` — returns `{ prixAchat, prixRevendeur, prixHT }` from the correct price tier. **Always use this instead of `produit.prixAchat` directly** when the quantity matters.
 - `calculerTotalLigne(ligne)` — line total after remise + TVA.
 - `calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA)` — full devis totals.
-- `calculerFraisPort(poidsKg, hasGranulat)` — standard transport barème (fixed tiers).
+- `calculerFraisPort(poidsKg, hasGranulat)` — standard transport barème.
 - `calculerFraisPortBareme(bareme, poidsKg)` — generic barème (UPS / messagerie / GLS).
 
 ### Pages (`src/pages/`)
 
 | Page | Role |
 |---|---|
-| `Devis.tsx` | Largest file. Full devis lifecycle: list, create/edit dialog, comparatif achat/vente tab, PDF generation, email. |
-| `Produits.tsx` | Product catalog with tiered pricing, variants, kit composition, supplier links. |
-| `Clients.tsx` / `Fournisseurs.tsx` | CRM contacts with delivery addresses, per-category discounts. |
+| `Devis.tsx` | Largest file. Full devis lifecycle: list, create/edit dialog (tabs: Devis / Comparatif / CRM), archive dialog, PDF, email. |
+| `CRM.tsx` | 4-tab page: Pipeline / Actions / Calendrier / Analyse. Uses its own scroll container (see below). |
+| `Produits.tsx` | Product catalog with tiered pricing, variants, kit composition, supplier links, qteVendue column. |
+| `Clients.tsx` | CRM contacts. Edit dialog has tabs: Infos / CRM (actions + devis history + win/loss). |
+| `Fournisseurs.tsx` | Supplier contacts with delivery addresses, per-category discounts. |
 | `Commandes.tsx` / `CommandesClient.tsx` | Purchase & sales order management. |
 | `FacturesClient.tsx` / `FacturesFournisseur.tsx` | Invoice tracking. |
 | `GED.tsx` | Document management (pieces jointes per devis line via `devis_pieces_jointes` table). |
 | `Dashboard.tsx` | KPI summary. |
 
+### CRM page scroll architecture
+
+`CRM.tsx` uses a self-contained scroll container to keep the tab bar always visible regardless of content length:
+
+```
+<div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
+  <div className="flex-none">   ← alert bar (when actions overdue)
+  <div className="flex-none">   ← tab bar (Pipeline / Actions / Calendrier / Analyse) — NEVER scrolls
+  <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">  ← all tab content scrolls here
+```
+
+Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern avoids the CSS bug where `overflow-x: hidden` on a parent breaks `position: sticky`.
+
 ### Key components (`src/components/`)
 
-- `DevisPreview.tsx` — Read-only devis renderer, used for both on-screen preview and PDF generation. Receives `onSurfaceChange` callback for persisting per-line m² edits.
-- `ProduitFournisseursPanel.tsx` — Supplier pricing panel inside the product form; uses `prixAchatConditionne` (= `prod.prixAchat`) for unit cost calculations.
-- `DevisEmailDialog.tsx`, `CommandeEmailDialog.tsx` — Email composition with PDF attachment. Generate RFC 822 `.eml` files (MIME multipart/mixed, `X-Unsent: 1` for Outlook compose mode, HTML body for correct signature placement, base64 PDF + extra attachments). On mobile: Web Share API with `File[]` array; fallback to download + `mailto:`. Product sheet links (`ficheLinks`) are injected as HTML `<a>` in the `.eml` (desktop) and as plain `label : url` text in the mobile body.
-- `CommandeARDialog.tsx` / `CommandeARPreview.tsx` — Order acknowledgement (AR) document.
+- `DevisPreview.tsx` — Read-only devis renderer for on-screen preview and PDF generation.
+- `DevisArchiveDialog.tsx` — Dialog for archiving a devis: raison select, pre-filled editable comment, competitor entries (nom/prix/délai), saveable message templates.
+- `CRMActionDialog.tsx` — Create/edit CRM action with collapsible "Infos concurrence" section (competitor name, product ref, tarif, délai, note). Auto-opens for Visite/Appel/RDV types. Accepts optional `produits` prop for product dropdown.
+- `DevisEmailDialog.tsx`, `CommandeEmailDialog.tsx` — Email composition with PDF attachment. Generate RFC 822 `.eml` files (MIME multipart/mixed, `X-Unsent: 1` for Outlook). On mobile: Web Share API; fallback to download + `mailto:`.
+- `CommandeARDialog.tsx` / `CommandeARPreview.tsx` — Order acknowledgement document.
+- `ProduitFournisseursPanel.tsx` — Supplier pricing panel inside the product form.
 
 ### PDF generation (`src/lib/pdfFolder.ts`)
 
-- `generatePdfFromElement(element, opts)` — renders a DOM element to multi-page PDF via `html2canvas` + `jsPDF`. Handles smart page-break detection on `<tr>` boundaries and repeating headers.
-- `savePdfFromElement(...)` — wraps the above + saves to a user-selected folder via the File System Access API (persisted in IndexedDB).
+- `generatePdfFromElement(element, opts)` — renders a DOM element to multi-page PDF via `html2canvas` + `jsPDF`. Smart page-break detection on `<tr>` boundaries with repeating headers.
+- `savePdfFromElement(...)` — wraps above + saves via File System Access API (persisted in IndexedDB).
 - `writeFileToSubfolder(subfolderName, fileName, content)` — saves to a named subfolder within the memorised directory.
 
 ### Devis — purchase/sale margin logic
 
-The **comparatif achat/vente** tab in `Devis.tsx` uses these rules for `puAchat` per line:
-1. `Surcharge énergie MMA` lines → `puVente × (14.8 / 15)` (fixed ratio, independent of current product mix)
+The **comparatif achat/vente** tab uses these rules for `puAchat` per line:
+1. `Surcharge énergie MMA` lines → `puVente × (14.8 / 15)`
 2. `Surcharge énergie hors MMA` lines → `puVente × (4.8 / 5)`
 3. Free lines with `prixAchatLigne` set → use that value
 4. Product lines → `getPrixPourQuantite(prod, quantite).prixAchat`
 
-The same logic must be applied consistently in: the comparatif IIFE, the devis card list (`totalAchatD`), and the aperçu summary (`totalAchat`). If you add a new context that shows marge/coeff, replicate this pattern.
+Replicate this pattern consistently in: the comparatif IIFE, devis card list (`totalAchatD`), and aperçu summary (`totalAchat`).
 
 ### Odoo sync (`src/lib/odooSync.ts`)
 
-Generates a self-contained JavaScript script to be pasted into the Odoo browser console (F12) to create a `sale.order` from a crmpool devis.
+Generates a JS script to paste into the Odoo browser console to create a `sale.order` from a devis. Entry point: `genererScriptOdoo(devis, client, produits, options?)`.
 
-**Entry point:** `genererScriptOdoo(devis, client, produits, options?)` — returns a string of JS code ready to paste.
+Constants: `ODOO_COMPANY_ID = 13`, `ODOO_FALLBACK_PRODUCT_ID = 362577`.
 
-**`options` fields:**
-- `surface?` — m² override (falls back to `devis.surfaceGlobaleM2`)
-- `contactNom?` — contact person name for `x_studio_contact_de_laffaire`
-- `odooPartnerName?` — Odoo partner display name (may differ from crmpool `client.societe`)
-
-**Partner name mismatch:** crmpool client names often differ from Odoo partner names. Use `promptOdooPartnerName(clientId, defaultName)` to show a browser `prompt()` pre-filled from `localStorage` (`odoo_partner_<clientId>`). The confirmed name is stored via `setOdooPartnerName()` for future calls.
-
-**Generated script steps:**
-1. Finds Odoo partner by `ilike` search on partner name
-2. Finds contact under that company
-3. Batch-looks up products by `default_code` (= crmpool `produit.reference`)
-4. Dynamically discovers the custom Studio "Chantier" field (`x_studio_*` containing "chantier")
-5. Creates `sale.order` header (partner, validity_date, chantier, contact de l'affaire)
-6. Adds system note line at `sequence=5` (Système / Surface / Coût €/m²)
-7. Creates all lines: `line_section` for `groupe`, `line_note` for `texte`, product lines for `ligne`
-8. Price on product lines = `Math.ceil(prixUnitaireHT × (1 − remise/100) × 100) / 100` (ceiling, discount=0 in Odoo)
-9. Sets TVA 20% (`tax_id: [[6,0,[tvaId]]]`) on all product lines
-10. Lines without a matching product use fallback product ID `362577` (FRAIS DE PORT service)
-
-**Constants in odooSync.ts:**
-- `ODOO_COMPANY_ID = 13`
-- `ODOO_FALLBACK_PRODUCT_ID = 362577`
-
-**UI entry points:** button "→ Odoo" / "Envoyer vers Odoo" in `DevisPreview.tsx` (preview bar) and `Devis.tsx` (edit dialog, next to "Envoyer par mail").
+Partner name mismatch: use `promptOdooPartnerName(clientId, defaultName)` — shows a `prompt()` pre-filled from `localStorage` (`odoo_partner_<clientId>`).
 
 ### Supabase migrations (`supabase/migrations/`)
 
-SQL migrations are numbered by timestamp. Apply new migrations via the Supabase CLI (`supabase db push`) or the Supabase dashboard SQL editor. The `src/integrations/supabase/types.ts` file is auto-generated from the DB schema — regenerate with `supabase gen types typescript`.
+SQL migrations are numbered by timestamp. Apply via Supabase dashboard SQL editor or CLI (`supabase db push`). `src/integrations/supabase/types.ts` is auto-generated — regenerate with `supabase gen types typescript`.
 
-When adding a new field to a domain type: update **both** `dbToXxx` (read) and `xxxToDb` (write) in `store.ts`, create a migration file, and apply it. Forgetting any one of these three causes silent data loss on non-desktop platforms.
+To apply programmatically from the browser, use the Supabase Management API with `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/qkjxcfosutclnahvxflf/database/query`.
 
-To apply a migration programmatically (e.g. from the browser), use the Supabase Management API with the session token from `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/{ref}/database/query`.
+### localStorage column visibility (table pages)
+
+Pages like `Produits.tsx` persist visible columns in localStorage. When adding a new default-visible column, merge the saved set with the new defaults on load — otherwise new columns are invisible for existing users:
+```ts
+const saved = JSON.parse(localStorage.getItem(KEY) || '[]');
+const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_COLS.includes(k))])];
+```
 
 ### TypeScript conventions
 
-- **Never use `enum`** — always prefer string literal unions instead:
+- **Never use `enum`** — always prefer string literal unions:
   ```ts
-  // ✅ correct
-  type Status = 'draft' | 'sent' | 'signed';
-  // ❌ never
-  enum Status { Draft = 'draft', Sent = 'sent', Signed = 'signed' }
+  type Status = 'draft' | 'sent' | 'signed'; // ✅
+  enum Status { ... }                          // ❌
   ```
 
 ### Environment variables
