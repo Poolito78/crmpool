@@ -613,7 +613,7 @@ function crmActionToDb(a: CrmAction, userId: string) {
     date_realisee: a.dateRealisee ? `${a.dateRealisee}T00:00:00` : null,
     statut: a.statut,
     priorite: a.priorite,
-    concurrents: a.concurrents || null,
+    ...(a.concurrents !== undefined ? { concurrents: a.concurrents } : {}),
   };
 }
 
