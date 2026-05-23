@@ -69,6 +69,14 @@ export default function CRM() {
     setAnalyseSections(prev => ({ ...prev, [key]: !prev[key] }));
   }
 
+  // ── Analyse archives — tri & filtre ──────────────────────────────────
+  const [archivesSort, setArchivesSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'date', dir: 'desc' });
+  const [archivesFilterClient, setArchivesFilterClient] = useState('');
+  const [archivesFilterRaison, setArchivesFilterRaison] = useState('');
+  function sortArchives(col: string) {
+    setArchivesSort(prev => prev.col === col ? { col, dir: prev.dir === 'asc' ? 'desc' : 'asc' } : { col, dir: 'asc' });
+  }
+
   // ── Pipeline ──────────────────────────────────────────────────────────
   const [filterStatut, setFilterStatut] = useState('tous');
   const [filterClientId, setFilterClientId] = useState('');
@@ -928,38 +936,106 @@ export default function CRM() {
 
             {/* ── Bloc 3 — Raisons d'archivage ────────────────────────── */}
             {(() => {
-              const devisArchives = devisActifs
-                .filter(d => d.statut === 'archivé')
-                .sort((a, b) => (b.archiveDate || b.dateCreation || '').localeCompare(a.archiveDate || a.dateCreation || ''));
-              if (devisArchives.length === 0) return null;
+              const allArchives = devisActifs.filter(d => d.statut === 'archivé');
+              if (allArchives.length === 0) return null;
+
+              // Filtres
+              let filtered = allArchives.filter(d => {
+                const client = clients.find(c => c.id === d.clientId);
+                const clientNom = (client?.societe || client?.nom || '').toLowerCase();
+                if (archivesFilterClient && !clientNom.includes(archivesFilterClient.toLowerCase()) && !d.numero.toLowerCase().includes(archivesFilterClient.toLowerCase())) return false;
+                if (archivesFilterRaison && d.archiveRaison !== archivesFilterRaison) return false;
+                return true;
+              });
+
+              // Tri
+              filtered = [...filtered].sort((a, b) => {
+                const clientA = clients.find(c => c.id === a.clientId);
+                const clientB = clients.find(c => c.id === b.clientId);
+                let va = '', vb = '';
+                if (archivesSort.col === 'date') { va = a.archiveDate || a.dateCreation || ''; vb = b.archiveDate || b.dateCreation || ''; }
+                else if (archivesSort.col === 'numero') { va = a.numero; vb = b.numero; }
+                else if (archivesSort.col === 'client') { va = clientA?.societe || clientA?.nom || ''; vb = clientB?.societe || clientB?.nom || ''; }
+                else if (archivesSort.col === 'raison') { va = a.archiveRaison || ''; vb = b.archiveRaison || ''; }
+                else if (archivesSort.col === 'montant') {
+                  const ma = calculerTotalDevis(a.lignes, a.fraisPortHT, a.fraisPortTVA).totalHT;
+                  const mb = calculerTotalDevis(b.lignes, b.fraisPortHT, b.fraisPortTVA).totalHT;
+                  return archivesSort.dir === 'asc' ? ma - mb : mb - ma;
+                }
+                return archivesSort.dir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+              });
+
+              const SortIcon = ({ col }: { col: string }) => (
+                <span className={cn('ml-1 text-xs', archivesSort.col === col ? 'text-primary' : 'text-muted-foreground/40')}>
+                  {archivesSort.col === col ? (archivesSort.dir === 'asc' ? '↑' : '↓') : '↕'}
+                </span>
+              );
+
               return (
                 <div>
-                  <SectionHeader sectionKey="raisons" icon={XCircle} label="Raisons d'archivage" count={devisArchives.length} />
+                  <SectionHeader sectionKey="raisons" icon={XCircle} label="Raisons d'archivage" count={allArchives.length} />
                   {analyseSections.raisons && (
                     <div className="mt-2 space-y-2">
                       {/* Résumé badges */}
                       <div className="flex flex-wrap gap-2 px-1">
                         {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
-                          <span key={raison} className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
+                          <button
+                            key={raison}
+                            onClick={() => setArchivesFilterRaison(archivesFilterRaison === raison ? '' : raison)}
+                            className={cn(
+                              'text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 transition-all',
+                              RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground',
+                              archivesFilterRaison === raison ? 'ring-2 ring-primary ring-offset-1' : ''
+                            )}
+                          >
                             {RAISON_ARCHIVE[raison]?.label} <span className="font-bold">×{count}</span>
-                          </span>
+                          </button>
                         ))}
+                        {archivesFilterRaison && (
+                          <button onClick={() => setArchivesFilterRaison('')} className="text-xs text-muted-foreground underline">Tout afficher</button>
+                        )}
                       </div>
-                      {/* Tableau détaillé */}
+
+                      {/* Barre de filtre */}
+                      <div className="flex gap-2 items-center">
+                        <Input
+                          placeholder="Filtrer par client ou n° devis…"
+                          value={archivesFilterClient}
+                          onChange={e => setArchivesFilterClient(e.target.value)}
+                          className="h-8 text-sm max-w-xs"
+                        />
+                        {(archivesFilterClient || archivesFilterRaison) && (
+                          <button onClick={() => { setArchivesFilterClient(''); setArchivesFilterRaison(''); }} className="text-xs text-muted-foreground underline">Effacer</button>
+                        )}
+                        <span className="text-xs text-muted-foreground ml-auto">{filtered.length} / {allArchives.length}</span>
+                      </div>
+
+                      {/* Tableau */}
                       <div className="overflow-x-auto rounded-lg border border-border">
                         <table className="w-full text-sm">
                           <thead className="bg-muted/50">
                             <tr>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Devis</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
-                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Raison</th>
+                              {[
+                                { col: 'date', label: 'Date' },
+                                { col: 'numero', label: 'Devis' },
+                                { col: 'client', label: 'Client' },
+                                { col: 'raison', label: 'Raison' },
+                              ].map(({ col, label }) => (
+                                <th key={col} className="text-left px-3 py-2 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground" onClick={() => sortArchives(col)}>
+                                  {label}<SortIcon col={col} />
+                                </th>
+                              ))}
                               <th className="text-left px-3 py-2 font-medium text-muted-foreground">Commentaire</th>
-                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Montant HT</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground" onClick={() => sortArchives('montant')}>
+                                Montant HT<SortIcon col="montant" />
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
-                            {devisArchives.map(d => {
+                            {filtered.length === 0 && (
+                              <tr><td colSpan={6} className="text-center py-6 text-muted-foreground text-sm">Aucun résultat</td></tr>
+                            )}
+                            {filtered.map(d => {
                               const client = clients.find(c => c.id === d.clientId);
                               const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
                               return (
