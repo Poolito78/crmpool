@@ -44,6 +44,7 @@ export interface ConcurrentProduit {
   categorie?: string;
   prixHT?: number;
   description?: string;
+  clientId?: string;
   createdBy?: string;
   createdByEmail?: string;
   createdAt: string;
@@ -100,6 +101,7 @@ function dbToConcurrentProduit(r: any): ConcurrentProduit {
     categorie: r.categorie || undefined,
     prixHT: r.prix_ht != null ? Number(r.prix_ht) : undefined,
     description: r.description || undefined,
+    clientId: r.client_id || undefined,
     createdBy: r.created_by || undefined,
     createdByEmail: r.created_by_email || undefined,
     createdAt: r.created_at?.split('T')[0] || '',
@@ -115,6 +117,7 @@ function concurrentProduitToDb(p: ConcurrentProduit) {
     categorie: p.categorie || null,
     prix_ht: p.prixHT ?? null,
     description: p.description || null,
+    client_id: p.clientId || null,
     created_by: p.createdBy || null,
     created_by_email: p.createdByEmail || null,
   };

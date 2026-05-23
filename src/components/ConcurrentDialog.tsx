@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Pencil, Save, X, Building2, Package, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Concurrent, ConcurrentProduit, ConcurrentNote } from '@/lib/concurrents';
-import type { Produit } from '@/lib/store';
+import type { Produit, Client } from '@/lib/store';
 import { formatMontant } from '@/lib/store';
 
 interface Props {
@@ -19,6 +19,7 @@ interface Props {
   produits: ConcurrentProduit[];
   notes: ConcurrentNote[];
   produitsCatalogue: Produit[];
+  clients?: Client[];
   onSaveConcurrent: (c: Omit<Concurrent, 'id' | 'createdAt' | 'updatedAt' | 'createdBy' | 'createdByEmail'>) => Promise<Concurrent | null>;
   onUpdateConcurrent: (c: Concurrent) => Promise<any>;
   onAddProduit: (p: Omit<ConcurrentProduit, 'id' | 'createdAt' | 'createdBy' | 'createdByEmail'>) => Promise<ConcurrentProduit | null>;
@@ -30,12 +31,12 @@ interface Props {
 }
 
 const emptyForm = { nom: '', siteWeb: '', email: '', telephone: '', notes: '' };
-const emptyProduit = { nom: '', reference: '', categorie: '', prixHT: '', description: '' };
+const emptyProduit = { nom: '', reference: '', categorie: '', prixHT: '', description: '', clientId: '' };
 const emptyNote = { titre: '', contenu: '', source: '', dateNote: new Date().toISOString().split('T')[0] };
 
 export default function ConcurrentDialog({
   open, onClose, concurrent,
-  produits, notes, produitsCatalogue,
+  produits, notes, produitsCatalogue, clients = [],
   onSaveConcurrent, onUpdateConcurrent,
   onAddProduit, onUpdateProduit, onDeleteProduit,
   onAddNote, onUpdateNote, onDeleteNote,
@@ -98,9 +99,9 @@ export default function ConcurrentDialog({
     if (!concurrentId) { toast.error('Enregistrez d\'abord les infos du concurrent'); return; }
     const prixHT = produitForm.prixHT ? parseFloat(produitForm.prixHT.replace(',', '.')) : undefined;
     if (editingProduit) {
-      await onUpdateProduit({ ...editingProduit, nom: produitForm.nom, reference: produitForm.reference || undefined, categorie: produitForm.categorie || undefined, prixHT, description: produitForm.description || undefined });
+      await onUpdateProduit({ ...editingProduit, nom: produitForm.nom, reference: produitForm.reference || undefined, categorie: produitForm.categorie || undefined, prixHT, description: produitForm.description || undefined, clientId: produitForm.clientId || undefined });
     } else {
-      await onAddProduit({ concurrentId: concurrentId!, nom: produitForm.nom, reference: produitForm.reference || undefined, categorie: produitForm.categorie || undefined, prixHT, description: produitForm.description || undefined });
+      await onAddProduit({ concurrentId: concurrentId!, nom: produitForm.nom, reference: produitForm.reference || undefined, categorie: produitForm.categorie || undefined, prixHT, description: produitForm.description || undefined, clientId: produitForm.clientId || undefined });
     }
     setProduitForm(emptyProduit);
     setEditingProduit(null);
@@ -109,7 +110,7 @@ export default function ConcurrentDialog({
 
   function startEditProduit(p: ConcurrentProduit) {
     setEditingProduit(p);
-    setProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '' });
+    setProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '' });
     setShowProduitForm(true);
   }
 
@@ -227,6 +228,19 @@ export default function ConcurrentDialog({
                     <Label>Description / commentaire</Label>
                     <Input value={produitForm.description} onChange={e => setProduitForm(f => ({ ...f, description: e.target.value }))} placeholder="Caractéristiques, différences clés..." />
                   </div>
+                  {clients.length > 0 && (
+                    <div className="col-span-2 space-y-1">
+                      <Label>Client source (qui a fourni l'info)</Label>
+                      <select
+                        className="w-full h-9 rounded-md border border-input bg-background px-3 text-sm"
+                        value={produitForm.clientId}
+                        onChange={e => setProduitForm(f => ({ ...f, clientId: e.target.value }))}
+                      >
+                        <option value="">— Aucun client —</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" onClick={handleSaveProduit}><Save className="w-3 h-3 mr-1" /> Enregistrer</Button>
