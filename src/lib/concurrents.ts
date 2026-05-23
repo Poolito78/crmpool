@@ -1,6 +1,26 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
+// ── Nom d'affichage créateur ───────────────────────────────────────────────
+// Stocké dans localStorage : { "email@example.com": "f.mouhot" }
+const LS_KEY = 'crm_creator_names';
+
+export function getCreatorNames(): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch { return {}; }
+}
+
+export function setCreatorName(email: string, displayName: string) {
+  const map = getCreatorNames();
+  map[email] = displayName;
+  localStorage.setItem(LS_KEY, JSON.stringify(map));
+}
+
+export function formatCreateur(emailOrName: string | undefined): string {
+  if (!emailOrName) return '—';
+  const map = getCreatorNames();
+  return map[emailOrName] || emailOrName;
+}
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export interface Concurrent {

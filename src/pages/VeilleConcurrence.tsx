@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,15 +8,16 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, Search, Download,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { useConcurrents } from '@/lib/concurrents';
+import { useConcurrents, formatCreateur, setCreatorName } from '@/lib/concurrents';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant } from '@/lib/store';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
 import type { Concurrent } from '@/lib/concurrents';
+import { supabase } from '@/integrations/supabase/client';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -114,6 +115,24 @@ export function VeilleContent() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConcurrent, setEditingConcurrent] = useState<Concurrent | undefined>(undefined);
 
+  // Nom d'affichage
+  const [myEmail, setMyEmail] = useState<string>('');
+  const [nameEditOpen, setNameEditOpen] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user?.email) setMyEmail(session.user.email);
+    });
+  }, []);
+
+  function saveDisplayName() {
+    if (!myEmail || !nameInput.trim()) return;
+    setCreatorName(myEmail, nameInput.trim());
+    setNameEditOpen(false);
+    toast.success(`Nom d'affichage mis à jour : ${nameInput.trim()}`);
+  }
+
   const [searchConc, setSearchConc] = useState('');
   const [filterCreateur, setFilterCreateur] = useState('');
   const [filterConcProduit, setFilterConcProduit] = useState('');
@@ -204,7 +223,30 @@ export function VeilleContent() {
         <p className="text-sm text-muted-foreground">
           {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
         </p>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap items-center">
+          {myEmail && (
+            nameEditOpen ? (
+              <div className="flex items-center gap-1.5">
+                <Input
+                  value={nameInput}
+                  onChange={e => setNameInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveDisplayName(); if (e.key === 'Escape') setNameEditOpen(false); }}
+                  placeholder="Votre nom affiché..."
+                  className="h-8 text-sm w-36"
+                  autoFocus
+                />
+                <Button size="sm" className="h-8" onClick={saveDisplayName}>OK</Button>
+                <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setNameEditOpen(false)}>✕</Button>
+              </div>
+            ) : (
+              <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5 h-8"
+                title="Modifier mon nom d'affichage"
+                onClick={() => { setNameInput(formatCreateur(myEmail)); setNameEditOpen(true); }}>
+                <Settings className="w-3.5 h-3.5" />
+                <span className="text-xs">{formatCreateur(myEmail)}</span>
+              </Button>
+            )
+          )}
           <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
             <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
@@ -248,7 +290,7 @@ export function VeilleContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_all">Tous les créateurs</SelectItem>
-                {createurs.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                {createurs.map(e => <SelectItem key={e} value={e}>{formatCreateur(e)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -283,7 +325,7 @@ export function VeilleContent() {
                         {c.siteWeb && <a href={c.siteWeb.startsWith('http') ? c.siteWeb : `https://${c.siteWeb}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-700"><Globe className="w-4 h-4" /></a>}
                         {c.email && <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-muted-foreground hover:text-foreground"><Mail className="w-4 h-4" /></a>}
                         {c.telephone && <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="text-muted-foreground hover:text-foreground"><Phone className="w-4 h-4" /></a>}
-                        <span className="text-xs text-muted-foreground hidden sm:block">{c.createdByEmail}</span>
+                        <span className="text-xs text-muted-foreground hidden sm:block">{formatCreateur(c.createdByEmail)}</span>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c)}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
@@ -392,7 +434,7 @@ export function VeilleContent() {
                         <TableCell>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
                         <TableCell className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-48 truncate">{p.description || '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.createdByEmail || '—'}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{formatCreateur(p.createdByEmail)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
                       </TableRow>
                     );
@@ -423,7 +465,7 @@ export function VeilleContent() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="_all">Tous les créateurs</SelectItem>
-                {createurs.map(e => <SelectItem key={e} value={e}>{e}</SelectItem>)}
+                {createurs.map(e => <SelectItem key={e} value={e}>{formatCreateur(e)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -451,7 +493,7 @@ export function VeilleContent() {
                       </Button>
                     </div>
                     {n.contenu && <p className="text-muted-foreground whitespace-pre-wrap">{n.contenu}</p>}
-                    <p className="text-xs text-muted-foreground">Par {n.createdByEmail || '—'} · {n.createdAt}</p>
+                    <p className="text-xs text-muted-foreground">Par {formatCreateur(n.createdByEmail)} · {n.createdAt}</p>
                   </div>
                 );
               })}
