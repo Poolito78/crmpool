@@ -927,20 +927,70 @@ export default function CRM() {
             </div>
 
             {/* ── Bloc 3 — Raisons d'archivage ────────────────────────── */}
-            {Object.keys(raisonsGlobal).length > 0 && (
-              <div>
-                <SectionHeader sectionKey="raisons" icon={XCircle} label="Raisons d'archivage" count={Object.keys(raisonsGlobal).length} />
-                {analyseSections.raisons && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
-                      <span key={raison} className={`text-sm px-3 py-1.5 rounded-full font-medium flex items-center gap-2 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
-                        {RAISON_ARCHIVE[raison]?.label} <span className="font-bold bg-white/30 rounded-full px-1.5">×{count}</span>
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {(() => {
+              const devisArchives = devisActifs
+                .filter(d => d.statut === 'archivé')
+                .sort((a, b) => (b.archiveDate || b.dateCreation || '').localeCompare(a.archiveDate || a.dateCreation || ''));
+              if (devisArchives.length === 0) return null;
+              return (
+                <div>
+                  <SectionHeader sectionKey="raisons" icon={XCircle} label="Raisons d'archivage" count={devisArchives.length} />
+                  {analyseSections.raisons && (
+                    <div className="mt-2 space-y-2">
+                      {/* Résumé badges */}
+                      <div className="flex flex-wrap gap-2 px-1">
+                        {(Object.entries(raisonsGlobal) as [import('@/lib/store').RaisonArchive, number][]).sort((a, b) => b[1] - a[1]).map(([raison, count]) => (
+                          <span key={raison} className={`text-xs px-2.5 py-1 rounded-full font-medium flex items-center gap-1.5 ${RAISON_ARCHIVE[raison]?.color || 'bg-muted text-muted-foreground'}`}>
+                            {RAISON_ARCHIVE[raison]?.label} <span className="font-bold">×{count}</span>
+                          </span>
+                        ))}
+                      </div>
+                      {/* Tableau détaillé */}
+                      <div className="overflow-x-auto rounded-lg border border-border">
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted/50">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Date</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Devis</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Raison</th>
+                              <th className="text-left px-3 py-2 font-medium text-muted-foreground">Commentaire</th>
+                              <th className="text-right px-3 py-2 font-medium text-muted-foreground">Montant HT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {devisArchives.map(d => {
+                              const client = clients.find(c => c.id === d.clientId);
+                              const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
+                              return (
+                                <tr key={d.id} className="border-t border-border hover:bg-muted/20 align-top">
+                                  <td className="px-3 py-2 text-xs text-muted-foreground whitespace-nowrap">
+                                    {d.archiveDate ? formatDate(d.archiveDate) : d.dateCreation ? formatDate(d.dateCreation) : '—'}
+                                  </td>
+                                  <td className="px-3 py-2 font-mono text-xs font-medium">{d.numero}</td>
+                                  <td className="px-3 py-2 font-medium">{client?.societe || client?.nom || '—'}</td>
+                                  <td className="px-3 py-2">
+                                    {d.archiveRaison ? (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RAISON_ARCHIVE[d.archiveRaison]?.color || 'bg-muted text-muted-foreground'}`}>
+                                        {RAISON_ARCHIVE[d.archiveRaison]?.label}
+                                      </span>
+                                    ) : <span className="text-muted-foreground text-xs">—</span>}
+                                  </td>
+                                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-xs">
+                                    <p className="truncate">{d.archiveCommentaire || '—'}</p>
+                                  </td>
+                                  <td className="px-3 py-2 text-right text-xs font-semibold">{total > 0 ? formatMontant(total) : '—'}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* ── Bloc 4 — Concurrents devis archivés ─────────────────── */}
             {concurrentsDevisRows.length > 0 && (
