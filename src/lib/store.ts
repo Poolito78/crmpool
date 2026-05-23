@@ -333,6 +333,14 @@ export type TypeCrmAction = 'visite' | 'appel' | 'email' | 'tache' | 'rdv';
 export type StatutCrmAction = 'planifiee' | 'realisee' | 'annulee';
 export type PrioriteCrmAction = 'basse' | 'normale' | 'haute';
 
+export interface CrmActionConcurrent {
+  produitRef?: string;      // référence ou nom du produit concerné
+  nomConcurrent: string;
+  tarif?: number;           // tarif concurrent (€)
+  delai?: number;           // délai concurrent (jours)
+  note?: string;
+}
+
 export interface CrmAction {
   id: string;
   clientId?: string;
@@ -344,6 +352,7 @@ export interface CrmAction {
   dateRealisee?: string;
   statut: StatutCrmAction;
   priorite: PrioriteCrmAction;
+  concurrents?: CrmActionConcurrent[];
   createdAt: string;
 }
 
@@ -586,6 +595,7 @@ function dbToCrmAction(r: any): CrmAction {
     dateRealisee: r.date_realisee ? r.date_realisee.split('T')[0] : undefined,
     statut: r.statut as StatutCrmAction,
     priorite: r.priorite as PrioriteCrmAction,
+    concurrents: r.concurrents || undefined,
     createdAt: r.created_at?.split('T')[0] || '',
   };
 }
@@ -603,6 +613,7 @@ function crmActionToDb(a: CrmAction, userId: string) {
     date_realisee: a.dateRealisee ? `${a.dateRealisee}T00:00:00` : null,
     statut: a.statut,
     priorite: a.priorite,
+    concurrents: a.concurrents || null,
   };
 }
 

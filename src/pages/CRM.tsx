@@ -690,7 +690,6 @@ export default function CRM() {
 
       {/* ── Onglet Analyse ────────────────────────────────────────────── */}
       {tab === 'analyse' && (() => {
-        const today = new Date().toISOString().split('T')[0];
         const devisActifs = devis.filter(d => d.statut !== 'système');
 
         // Par client
@@ -698,11 +697,10 @@ export default function CRM() {
           const cd = devisActifs.filter(d => d.clientId === c.id);
           const acceptes = cd.filter(d => d.statut === 'accepté');
           const archives = cd.filter(d => d.statut === 'archivé');
-          const enCours = cd.filter(d => ['brouillon', 'envoyé'].includes(d.statut));
           const total = acceptes.length + archives.length;
           const taux = total > 0 ? Math.round(acceptes.length / total * 100) : null;
           const ca = acceptes.reduce((s, d) => s + calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT, 0);
-          return { client: c, acceptes: acceptes.length, archives: archives.length, enCours: enCours.length, taux, ca, total: cd.length };
+          return { client: c, acceptes: acceptes.length, archives: archives.length, taux, ca, total: cd.length };
         }).filter(r => r.total > 0).sort((a, b) => b.ca - a.ca);
 
         // Par produit
@@ -728,17 +726,62 @@ export default function CRM() {
           if (d.archiveRaison) raisonsGlobal[d.archiveRaison] = (raisonsGlobal[d.archiveRaison] || 0) + 1;
         });
 
-        // Concurrents
-        const concurrentsMap: Record<string, { count: number; prixTotal: number; prixCount: number; produits: Set<string> }> = {};
+        // Concurrents depuis devis archivés
+        const concurrentsDevisMap: Record<string, { count: number; prixTotal: number; prixCount: number }> = {};
         devisActifs.filter(d => d.statut === 'archivé' && d.archiveConcurrents).forEach(d => {
           d.archiveConcurrents!.forEach(c => {
             const nom = c.nomConcurrent?.trim() || 'Inconnu';
-            if (!concurrentsMap[nom]) concurrentsMap[nom] = { count: 0, prixTotal: 0, prixCount: 0, produits: new Set() };
-            concurrentsMap[nom].count++;
-            if (c.prixConcurrent) { concurrentsMap[nom].prixTotal += c.prixConcurrent; concurrentsMap[nom].prixCount++; }
+            if (!concurrentsDevisMap[nom]) concurrentsDevisMap[nom] = { count: 0, prixTotal: 0, prixCount: 0 };
+            concurrentsDevisMap[nom].count++;
+            if (c.prixConcurrent) { concurrentsDevisMap[nom].prixTotal += c.prixConcurrent; concurrentsDevisMap[nom].prixCount++; }
           });
         });
-        const concurrentsRows = Object.entries(concurrentsMap).sort((a, b) => b[1].count - a[1].count);
+        const concurrentsDevisRows = Object.entries(concurrentsDevisMap).sort((a, b) => b[1].count - a[1].count);
+
+        // ── Analyse de prix depuis actions CRM ────────────────────────
+        // Collect all concurrent entries from CRM actions
+        interface PrixEntry {
+          nomConcurrent: string;
+          produitRef: string;
+          tarif?: number;
+          delai?: number;
+          note?: string;
+          clientNom: string;
+          date: string;
+          actionTitre: string;
+        }
+        const prixEntries: PrixEntry[] = [];
+        actions.forEach(a => {
+          if (!a.concurrents?.length) return;
+          const clientNom = a.clientId ? (clients.find(c => c.id === a.clientId)?.societe || clients.find(c => c.id === a.clientId)?.nom || '—') : '—';
+          a.concurrents.forEach(c => {
+            if (!c.nomConcurrent?.trim()) return;
+            prixEntries.push({
+              nomConcurrent: c.nomConcurrent.trim(),
+              produitRef: c.produitRef?.trim() || '—',
+              tarif: c.tarif,
+              delai: c.delai,
+              note: c.note,
+              clientNom,
+              date: a.dateRealisee || a.datePlanifiee || a.createdAt,
+              actionTitre: a.titre,
+            });
+          });
+        });
+        // Sort by date desc
+        prixEntries.sort((a, b) => b.date.localeCompare(a.date));
+
+        // Aggregate by concurrent+produit
+        const prixParConcProd: Record<string, { nom: string; produit: string; tarifsTotal: number; tarifsCount: number; delaisTotal: number; delaisCount: number; mentions: number; derniereDate: string }> = {};
+        prixEntries.forEach(e => {
+          const key = `${e.nomConcurrent}||${e.produitRef}`;
+          if (!prixParConcProd[key]) prixParConcProd[key] = { nom: e.nomConcurrent, produit: e.produitRef, tarifsTotal: 0, tarifsCount: 0, delaisTotal: 0, delaisCount: 0, mentions: 0, derniereDate: e.date };
+          prixParConcProd[key].mentions++;
+          if (e.tarif) { prixParConcProd[key].tarifsTotal += e.tarif; prixParConcProd[key].tarifsCount++; }
+          if (e.delai) { prixParConcProd[key].delaisTotal += e.delai; prixParConcProd[key].delaisCount++; }
+          if (e.date > prixParConcProd[key].derniereDate) prixParConcProd[key].derniereDate = e.date;
+        });
+        const prixRows = Object.values(prixParConcProd).sort((a, b) => b.mentions - a.mentions);
 
         return (
           <div className="space-y-6">
@@ -750,7 +793,7 @@ export default function CRM() {
                   <thead className="bg-muted/50">
                     <tr>
                       <th className="text-left px-3 py-2 font-medium text-muted-foreground">Client</th>
-                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Envoyés</th>
+                      <th className="text-right px-3 py-2 font-medium text-muted-foreground">Total devis</th>
                       <th className="text-right px-3 py-2 font-medium text-muted-foreground">Acceptés</th>
                       <th className="text-right px-3 py-2 font-medium text-muted-foreground">Archivés</th>
                       <th className="text-right px-3 py-2 font-medium text-muted-foreground">Taux</th>
@@ -758,7 +801,7 @@ export default function CRM() {
                     </tr>
                   </thead>
                   <tbody>
-                    {parClient.map(({ client, acceptes, archives, enCours, taux, ca, total }) => (
+                    {parClient.map(({ client, acceptes, archives, taux, ca, total }) => (
                       <tr key={client.id} className="border-t border-border hover:bg-muted/20">
                         <td className="px-3 py-2 font-medium">{client.societe || client.nom}</td>
                         <td className="px-3 py-2 text-right text-muted-foreground">{total}</td>
@@ -827,10 +870,10 @@ export default function CRM() {
               </div>
             )}
 
-            {/* Bloc 4 — Concurrents */}
-            {concurrentsRows.length > 0 && (
+            {/* Bloc 4 — Concurrents depuis devis archivés */}
+            {concurrentsDevisRows.length > 0 && (
               <div>
-                <h3 className="font-semibold mb-3 flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Concurrents identifiés</h3>
+                <h3 className="font-semibold mb-3 flex items-center gap-2"><TrendingDown className="w-4 h-4" /> Concurrents (devis archivés)</h3>
                 <div className="overflow-x-auto rounded-lg border border-border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50">
@@ -841,7 +884,7 @@ export default function CRM() {
                       </tr>
                     </thead>
                     <tbody>
-                      {concurrentsRows.map(([nom, stats]) => (
+                      {concurrentsDevisRows.map(([nom, stats]) => (
                         <tr key={nom} className="border-t border-border hover:bg-muted/20">
                           <td className="px-3 py-2 font-medium">{nom}</td>
                           <td className="px-3 py-2 text-right font-semibold">{stats.count}×</td>
@@ -855,6 +898,76 @@ export default function CRM() {
                 </div>
               </div>
             )}
+
+            {/* Bloc 5 — Analyse de prix concurrents (depuis actions CRM) */}
+            <div>
+              <h3 className="font-semibold mb-1 flex items-center gap-2"><PieChart className="w-4 h-4 text-violet-500" /> Analyse de prix concurrents</h3>
+              <p className="text-xs text-muted-foreground mb-3">Tarifs et délais collectés lors des visites, appels et rendez-vous.</p>
+
+              {prixRows.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-border mb-4">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Concurrent</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Produit / Réf.</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Tarif moyen</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Délai moy.</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Mentions</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground">Dernière info</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {prixRows.map((r, i) => (
+                        <tr key={i} className="border-t border-border hover:bg-muted/20">
+                          <td className="px-3 py-2 font-medium">{r.nom}</td>
+                          <td className="px-3 py-2 font-mono text-xs text-muted-foreground">{r.produit}</td>
+                          <td className="px-3 py-2 text-right font-semibold text-destructive">
+                            {r.tarifsCount > 0 ? formatMontant(Math.round(r.tarifsTotal / r.tarifsCount)) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-muted-foreground">
+                            {r.delaisCount > 0 ? `${Math.round(r.delaisTotal / r.delaisCount)} j` : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right">{r.mentions}×</td>
+                          <td className="px-3 py-2 text-right text-xs text-muted-foreground">{formatDate(r.derniereDate)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Détail des entrées */}
+              {prixEntries.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Historique détaillé</p>
+                  <div className="space-y-1.5">
+                    {prixEntries.slice(0, 30).map((e, i) => (
+                      <div key={i} className="flex items-start gap-3 rounded-lg border border-border bg-muted/10 px-3 py-2 text-sm">
+                        <span className="font-medium text-destructive min-w-[120px] truncate">{e.nomConcurrent}</span>
+                        <span className="font-mono text-xs text-muted-foreground min-w-[80px]">{e.produitRef}</span>
+                        <span className="font-semibold min-w-[70px]">{e.tarif ? formatMontant(e.tarif) : '—'}</span>
+                        {e.delai && <span className="text-muted-foreground">{e.delai} j</span>}
+                        <span className="text-muted-foreground flex-1 truncate">{e.clientNom}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{formatDate(e.date)}</span>
+                        {e.note && <span className="text-xs italic text-muted-foreground truncate max-w-[150px]">{e.note}</span>}
+                      </div>
+                    ))}
+                    {prixEntries.length > 30 && (
+                      <p className="text-xs text-muted-foreground text-center py-1">… et {prixEntries.length - 30} autres entrées</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {prixEntries.length === 0 && (
+                <div className="rounded-lg border border-dashed border-border py-8 text-center">
+                  <TrendingDown className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Aucune info concurrence saisie</p>
+                  <p className="text-xs text-muted-foreground mt-1">Renseignez les tarifs concurrents dans les actions CRM (visite, appel, RDV)</p>
+                </div>
+              )}
+            </div>
           </div>
         );
       })()}
@@ -865,6 +978,7 @@ export default function CRM() {
         onOpenChange={v => { setActionDialogOpen(v); if (!v) setEditingAction(null); }}
         action={editingAction}
         clients={clients}
+        produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         onSave={handleSaveAction}
       />
 

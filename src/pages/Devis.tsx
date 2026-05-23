@@ -2449,6 +2449,7 @@ export default function Devis() {
         onOpenChange={setCrmActionDialogOpen}
         action={editingCrmAction}
         clients={clients}
+        produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         defaultDevisId={editingId || undefined}
         defaultClientId={clientId || undefined}
         onSave={async (a) => { await addCrmAction(a); setCrmActionDialogOpen(false); }}

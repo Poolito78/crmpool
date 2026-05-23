@@ -1377,6 +1377,7 @@ export default function Clients() {
         onOpenChange={setCrmActionDialogOpen}
         action={null}
         clients={clients}
+        produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         defaultClientId={editingClient?.id}
         onSave={async (a) => { await addCrmAction(a); setCrmActionDialogOpen(false); }}
       />
