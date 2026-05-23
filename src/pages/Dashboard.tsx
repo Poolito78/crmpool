@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar } from 'lucide-react';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { toast } from 'sonner';
+import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -15,6 +16,7 @@ const TYPE_ICON: Record<string, any> = {
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
   const { actions: crmActions } = useCrmActions();
+  const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -146,6 +148,7 @@ export default function Dashboard() {
     { label: 'Marge annuelle', value: formatMontant(margeAnnuelle), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10', link: '/devis' },
     { label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
     { label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
+    { label: 'Concurrents suivis', value: concurrentsList.length, icon: Eye, color: 'text-rose-500', bg: 'bg-rose-500/10', link: '/veille-concurrence' },
   ];
 
   const statutColors: Record<string, string> = {
@@ -432,6 +435,54 @@ export default function Dashboard() {
             ))}
             {produitsStockBas.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">✅ Stock OK</p>}
           </div>
+        </div>
+
+        {/* Veille Concurrence */}
+        <div className="bg-card rounded-xl border border-rose-200 dark:border-rose-900 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+              <Eye className="w-5 h-5 text-rose-500" />
+              Veille concurrence
+            </h2>
+            <Link to="/veille-concurrence" className="text-sm text-rose-500 hover:underline">Voir tout</Link>
+          </div>
+          {concurrentsList.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 gap-3">
+              <p className="text-sm text-muted-foreground text-center">Aucun concurrent suivi pour l'instant.</p>
+              <Link to="/veille-concurrence">
+                <Button size="sm" variant="outline" className="border-rose-300 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950">
+                  <Eye className="w-4 h-4 mr-2" />
+                  Ajouter un concurrent
+                </Button>
+              </Link>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-3 p-2 rounded-lg bg-rose-50 dark:bg-rose-950/30">
+                <span className="text-2xl font-bold font-heading text-rose-600">{concurrentsList.length}</span>
+                <span className="text-sm text-rose-600/70">concurrent{concurrentsList.length > 1 ? 's' : ''} suivi{concurrentsList.length > 1 ? 's' : ''}</span>
+              </div>
+              <div className="space-y-2">
+                {concurrentNotes.slice(0, 4).map(n => {
+                  const concurrent = concurrentsList.find(c => c.id === n.concurrentId);
+                  return (
+                    <Link key={n.id} to="/veille-concurrence" className="flex items-start gap-2 py-2 border-b border-border last:border-0 hover:bg-muted/50 rounded-lg px-2 -mx-2 transition-colors">
+                      <Eye className="w-3.5 h-3.5 text-rose-400 mt-0.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-medium text-sm truncate">{n.titre}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {concurrent?.nom || '—'} · {n.dateNote} · {formatCreateur(n.createdByEmail)}
+                        </p>
+                      </div>
+                    </Link>
+                  );
+                })}
+                {concurrentNotes.length === 0 && (
+                  <p className="text-xs text-muted-foreground text-center py-2">Aucune note récente</p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
