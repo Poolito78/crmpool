@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import { VeilleContent } from '@/pages/VeilleConcurrence';
+import DevisPreview from '@/components/DevisPreview';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Clock, BarChart3,
@@ -84,6 +85,7 @@ export default function CRM() {
   const [searchDevis, setSearchDevis] = useState('');
   const [pipelineSort, setPipelineSort] = useState<{ col: string; dir: 'asc' | 'desc' }>({ col: 'date', dir: 'desc' });
   const [raisonDialog, setRaisonDialog] = useState<{ devisId: string; open: boolean; raison: string }>({ devisId: '', open: false, raison: '' });
+  const [previewDevisId, setPreviewDevisId] = useState<string | null>(null);
 
   // ── Actions ───────────────────────────────────────────────────────────
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
@@ -399,7 +401,7 @@ export default function CRM() {
                       <tr key={d.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-3 py-2.5">
                           <button
-                            onClick={() => navigate('/devis')}
+                            onClick={() => setPreviewDevisId(d.id)}
                             className="font-medium text-primary hover:underline flex items-center gap-1"
                           >
                             <FileText className="w-3.5 h-3.5" />
@@ -1235,6 +1237,43 @@ export default function CRM() {
         produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         onSave={handleSaveAction}
       />
+
+      {/* ── Dialog aperçu devis ──────────────────────────────────────── */}
+      {(() => {
+        const d = previewDevisId ? devis.find(x => x.id === previewDevisId) : null;
+        const client = d ? clients.find(c => c.id === d.clientId) : undefined;
+        return (
+          <Dialog open={!!previewDevisId} onOpenChange={v => { if (!v) setPreviewDevisId(null); }}>
+            <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto p-0">
+              <DialogHeader className="flex-row items-center gap-3 px-5 pt-4 pb-0">
+                <DialogTitle className="text-base font-semibold flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  {d?.numero} — {client?.societe || client?.nom || '—'}
+                </DialogTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto mr-8 text-xs"
+                  onClick={() => { setPreviewDevisId(null); navigate('/devis'); }}
+                >
+                  <Pencil className="w-3 h-3 mr-1" /> Modifier dans Devis
+                </Button>
+              </DialogHeader>
+              {d && (
+                <div className="px-2 pb-4">
+                  <DevisPreview
+                    devis={d}
+                    client={client}
+                    produits={produits}
+                    onEdit={() => { setPreviewDevisId(null); navigate('/devis'); }}
+                    hideControls={false}
+                  />
+                </div>
+              )}
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* ── Dialog raison refus ───────────────────────────────────────── */}
       <Dialog open={raisonDialog.open} onOpenChange={v => setRaisonDialog(p => ({ ...p, open: v }))}>
