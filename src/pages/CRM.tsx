@@ -1254,7 +1254,7 @@ export default function CRM() {
                   size="sm"
                   variant="outline"
                   className="ml-auto mr-8 text-xs"
-                  onClick={() => { setPreviewDevisId(null); navigate('/devis'); }}
+                  onClick={() => { const id = previewDevisId; setPreviewDevisId(null); navigate(`/devis?editDevis=${id}`); }}
                 >
                   <Pencil className="w-3 h-3 mr-1" /> Modifier dans Devis
                 </Button>
@@ -1265,7 +1265,7 @@ export default function CRM() {
                     devis={d}
                     client={client}
                     produits={produits}
-                    onEdit={() => { setPreviewDevisId(null); navigate('/devis'); }}
+                    onEdit={() => { const id = d.id; setPreviewDevisId(null); navigate(`/devis?editDevis=${id}`); }}
                     hideControls={false}
                   />
                 </div>
