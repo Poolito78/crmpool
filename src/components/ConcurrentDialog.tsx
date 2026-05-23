@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Plus, Trash2, Pencil, Save, X, Building2, Package, FileText } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Concurrent, ConcurrentProduit, ConcurrentNote } from '@/lib/concurrents';
+import { formatCreateur } from '@/lib/concurrents';
 import type { Produit, Client } from '@/lib/store';
 import { formatMontant } from '@/lib/store';
 
@@ -261,7 +262,7 @@ export default function ConcurrentDialog({
                       {p.prixHT != null && <span className="text-green-700 font-semibold">{formatMontant(p.prixHT)} €</span>}
                     </div>
                     {p.description && <div className="text-muted-foreground text-xs">{p.description}</div>}
-                    {p.createdByEmail && <div className="text-muted-foreground text-xs">Par {p.createdByEmail} · {p.createdAt}</div>}
+                    {p.createdByEmail && <div className="text-muted-foreground text-xs">Par {formatCreateur(p.createdByEmail)} · {p.createdAt}</div>}
                   </div>
                   <div className="flex gap-1 shrink-0 ml-2">
                     <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEditProduit(p)}><Pencil className="w-3 h-3" /></Button>
@@ -317,7 +318,7 @@ export default function ConcurrentDialog({
                         <span className="text-muted-foreground text-xs">{n.dateNote}</span>
                       </div>
                       {n.contenu && <div className="text-muted-foreground whitespace-pre-wrap">{n.contenu}</div>}
-                      {n.createdByEmail && <div className="text-muted-foreground text-xs">Par {n.createdByEmail} · {n.createdAt}</div>}
+                      {n.createdByEmail && <div className="text-muted-foreground text-xs">Par {formatCreateur(n.createdByEmail)} · {n.createdAt}</div>}
                     </div>
                     <div className="flex gap-1 shrink-0 ml-2">
                       <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => startEditNote(n)}><Pencil className="w-3 h-3" /></Button>
