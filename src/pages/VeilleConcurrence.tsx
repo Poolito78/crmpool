@@ -30,8 +30,7 @@ export function exportVeilleExcel(
   const concMap = Object.fromEntries(concurrents.map(c => [c.id, c.nom]));
 
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(concurrents.map(c => ({
-    'Nom': c.nom, 'Site web': c.siteWeb || '', 'Email': c.email || '',
-    'Téléphone': c.telephone || '', 'Notes': c.notes || '',
+    'Nom': c.nom, 'Site web': c.siteWeb || '', 'Notes': c.notes || '',
     'Créé par': c.createdByEmail || '', 'Date': c.createdAt,
   }))), 'Concurrents');
 
@@ -156,7 +155,7 @@ export function VeilleContent() {
 
   const filteredConcurrents = useMemo(() => {
     let list = concurrents;
-    if (searchConc) list = list.filter(c => c.nom.toLowerCase().includes(searchConc.toLowerCase()) || c.email?.toLowerCase().includes(searchConc.toLowerCase()));
+    if (searchConc) list = list.filter(c => c.nom.toLowerCase().includes(searchConc.toLowerCase()));
     if (filterCreateur) list = list.filter(c => c.createdByEmail === filterCreateur);
     return list;
   }, [concurrents, searchConc, filterCreateur]);
@@ -325,8 +324,6 @@ export function VeilleContent() {
                       </button>
                       <div className="flex items-center gap-3 shrink-0">
                         {c.siteWeb && <a href={c.siteWeb.startsWith('http') ? c.siteWeb : `https://${c.siteWeb}`} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} className="text-blue-500 hover:text-blue-700"><Globe className="w-4 h-4" /></a>}
-                        {c.email && <a href={`mailto:${c.email}`} onClick={e => e.stopPropagation()} className="text-muted-foreground hover:text-foreground"><Mail className="w-4 h-4" /></a>}
-                        {c.telephone && <a href={`tel:${c.telephone}`} onClick={e => e.stopPropagation()} className="text-muted-foreground hover:text-foreground"><Phone className="w-4 h-4" /></a>}
                         <span className="text-xs text-muted-foreground hidden sm:block">{formatCreateur(c.createdByEmail)}</span>
                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => openEdit(c)}><Pencil className="w-3.5 h-3.5" /></Button>
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c)}><Trash2 className="w-3.5 h-3.5" /></Button>
