@@ -10,6 +10,7 @@ import {
   CrmAction, CrmActionConcurrent, TypeCrmAction, StatutCrmAction, PrioriteCrmAction,
   TYPE_CRM_ACTION, STATUT_CRM_ACTION, Client,
 } from '@/lib/store';
+import { useConcurrents } from '@/lib/concurrents';
 
 interface Props {
   open: boolean;
@@ -50,6 +51,7 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
   const [form, setForm] = useState<Omit<CrmAction, 'id' | 'createdAt'>>(empty());
   const [saving, setSaving] = useState(false);
   const [concurrentsOpen, setConcurrentsOpen] = useState(false);
+  const { concurrents: concurrentsDB } = useConcurrents();
 
   useEffect(() => {
     if (open) {
@@ -285,12 +287,35 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
                 {(form.concurrents || []).map((c, i) => (
                   <div key={i} className="rounded-md border border-border bg-background p-2 space-y-2">
                     <div className="grid grid-cols-[1fr_auto] gap-2 items-start">
-                      <Input
-                        placeholder="Nom du concurrent *"
-                        value={c.nomConcurrent || ''}
-                        onChange={e => updateConcurrent(i, { nomConcurrent: e.target.value })}
-                        className="h-8 text-sm"
-                      />
+                      <div className="space-y-1">
+                        {concurrentsDB.length > 0 ? (
+                          <select
+                            className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm"
+                            value={concurrentsDB.find(x => x.nom === c.nomConcurrent)?.id || '__new__'}
+                            onChange={e => {
+                              if (e.target.value === '__new__') {
+                                updateConcurrent(i, { nomConcurrent: '' });
+                              } else {
+                                const found = concurrentsDB.find(x => x.id === e.target.value);
+                                if (found) updateConcurrent(i, { nomConcurrent: found.nom });
+                              }
+                            }}
+                          >
+                            <option value="__new__">— Nouveau concurrent —</option>
+                            {concurrentsDB.map(conc => (
+                              <option key={conc.id} value={conc.id}>{conc.nom}</option>
+                            ))}
+                          </select>
+                        ) : null}
+                        {(concurrentsDB.length === 0 || !concurrentsDB.find(x => x.nom === c.nomConcurrent)) && (
+                          <Input
+                            placeholder="Nom du concurrent *"
+                            value={c.nomConcurrent || ''}
+                            onChange={e => updateConcurrent(i, { nomConcurrent: e.target.value })}
+                            className="h-8 text-sm"
+                          />
+                        )}
+                      </div>
                       <button
                         type="button"
                         onClick={() => removeConcurrent(i)}
