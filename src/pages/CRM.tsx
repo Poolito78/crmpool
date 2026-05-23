@@ -230,23 +230,25 @@ export default function CRM() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-4">
-      {/* Header avec alerte retard */}
+    // Hauteur = 100vh − header layout (4rem). Annule le padding du <main>.
+    <div className="flex flex-col -m-4 md:-m-6" style={{ height: 'calc(100vh - 4rem)' }}>
+
+      {/* Alerte retard — flex-none, toujours visible */}
       {actionsEnRetard.length > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2.5 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-lg text-sm text-orange-700 dark:text-orange-300">
+        <div className="flex-none flex items-center gap-2 px-4 md:px-6 py-2 bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 text-sm text-orange-700 dark:text-orange-300">
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span><strong>{actionsEnRetard.length} action{actionsEnRetard.length > 1 ? 's' : ''}</strong> en retard</span>
           <button onClick={() => { setTab('actions'); setActionFilterStatut('planifiee'); }} className="ml-auto text-xs underline">Voir</button>
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="sticky top-16 z-20 bg-background/95 backdrop-blur-sm flex gap-1 border-b border-border">
+      {/* Barre d'onglets — flex-none, ne scroll JAMAIS */}
+      <div className="flex-none flex gap-1 border-b border-border bg-background px-4 md:px-6">
         {([
-          { key: 'pipeline', label: 'Pipeline commercial', icon: BarChart3 },
-          { key: 'actions',  label: 'Actions',             icon: CheckSquare },
-          { key: 'calendrier', label: 'Calendrier',        icon: Calendar },
-          { key: 'analyse',  label: 'Analyse',             icon: PieChart },
+          { key: 'pipeline',    label: 'Pipeline commercial', icon: BarChart3 },
+          { key: 'actions',     label: 'Actions',             icon: CheckSquare },
+          { key: 'calendrier',  label: 'Calendrier',          icon: Calendar },
+          { key: 'analyse',     label: 'Analyse',             icon: PieChart },
         ] as const).map(t => (
           <button
             key={t.key}
@@ -263,6 +265,9 @@ export default function CRM() {
           </button>
         ))}
       </div>
+
+      {/* Zone scrollable — tout le contenu des onglets */}
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
 
       {/* ══════════════════════════ PIPELINE ══════════════════════════ */}
       {tab === 'pipeline' && (
@@ -300,7 +305,7 @@ export default function CRM() {
           </div>
 
           {/* Filtres */}
-          <div className="sticky top-[calc(4rem+45px)] z-10 bg-background/95 backdrop-blur-sm -mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border flex flex-wrap gap-2 items-center">
+          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm -mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border flex flex-wrap gap-2 items-center">
             <Input
               placeholder="Rechercher…"
               value={searchDevis}
@@ -333,7 +338,7 @@ export default function CRM() {
           <div className="rounded-lg border border-border overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="sticky top-[calc(4rem+45px+44px)] z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
+                <thead className="sticky top-[44px] z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
                   <tr>
                     <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Devis</th>
                     <th className="text-left px-3 py-2.5 font-semibold text-muted-foreground text-xs">Client</th>
@@ -838,7 +843,7 @@ export default function CRM() {
         return (
           <div className="space-y-3">
             {/* ── Bandeau KPI sticky ──────────────────────────────────── */}
-            <div className="sticky top-[calc(4rem+45px)] z-10 -mx-1 px-1 pb-1 pt-0.5 bg-background/95 backdrop-blur-sm">
+            <div className="sticky top-0 z-10 -mx-1 px-1 pb-1 pt-0.5 bg-background/95 backdrop-blur-sm">
               <div className="grid grid-cols-4 gap-3 rounded-xl border border-border bg-card shadow-sm px-4 py-3">
                 <div className="text-center">
                   <p className="text-xs text-muted-foreground mb-0.5">Devis envoyés</p>
@@ -1173,6 +1178,8 @@ export default function CRM() {
           </div>
         );
       })()}
+
+      </div>{/* fin zone scrollable */}
 
       {/* ── Dialog action ─────────────────────────────────────────────── */}
       <CRMActionDialog
