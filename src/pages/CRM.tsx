@@ -1250,14 +1250,6 @@ export default function CRM() {
                   <FileText className="w-4 h-4 text-primary" />
                   {d?.numero} — {client?.societe || client?.nom || '—'}
                 </DialogTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="ml-auto mr-8 text-xs"
-                  onClick={() => { const id = previewDevisId; setPreviewDevisId(null); navigate(`/devis?editDevis=${id}`); }}
-                >
-                  <Pencil className="w-3 h-3 mr-1" /> Modifier dans Devis
-                </Button>
               </DialogHeader>
               {d && (
                 <div className="px-2 pb-4">
