@@ -18,97 +18,73 @@ import { formatMontant } from '@/lib/store';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
 import type { Concurrent } from '@/lib/concurrents';
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Export helpers ────────────────────────────────────────────────────────────
 
-function exportVeilleExcel(
-  concurrents: ReturnType<typeof useConcurrents>['concurrents'],
+export function exportVeilleExcel(
+  concurrents: Concurrent[],
   produits: ReturnType<typeof useConcurrents>['produits'],
   notes: ReturnType<typeof useConcurrents>['notes'],
 ) {
   const wb = XLSX.utils.book_new();
-
-  const sheetConcurrents = XLSX.utils.json_to_sheet(concurrents.map(c => ({
-    'Nom': c.nom,
-    'Site web': c.siteWeb || '',
-    'Email': c.email || '',
-    'Téléphone': c.telephone || '',
-    'Notes': c.notes || '',
-    'Créé par': c.createdByEmail || '',
-    'Date': c.createdAt,
-  })));
-  XLSX.utils.book_append_sheet(wb, sheetConcurrents, 'Concurrents');
-
   const concMap = Object.fromEntries(concurrents.map(c => [c.id, c.nom]));
-  const sheetProduits = XLSX.utils.json_to_sheet(produits.map(p => ({
-    'Concurrent': concMap[p.concurrentId] || '',
-    'Produit': p.nom,
-    'Référence': p.reference || '',
-    'Catégorie': p.categorie || '',
-    'Prix HT': p.prixHT != null ? p.prixHT : '',
-    'Description': p.description || '',
-    'Saisi par': p.createdByEmail || '',
-    'Date': p.createdAt,
-  })));
-  XLSX.utils.book_append_sheet(wb, sheetProduits, 'Produits concurrents');
 
-  const sheetNotes = XLSX.utils.json_to_sheet(notes.map(n => ({
-    'Concurrent': concMap[n.concurrentId] || '',
-    'Date note': n.dateNote,
-    'Titre': n.titre,
-    'Contenu': n.contenu || '',
-    'Source': n.source || '',
-    'Saisi par': n.createdByEmail || '',
-  })));
-  XLSX.utils.book_append_sheet(wb, sheetNotes, 'Notes');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(concurrents.map(c => ({
+    'Nom': c.nom, 'Site web': c.siteWeb || '', 'Email': c.email || '',
+    'Téléphone': c.telephone || '', 'Notes': c.notes || '',
+    'Créé par': c.createdByEmail || '', 'Date': c.createdAt,
+  }))), 'Concurrents');
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(produits.map(p => ({
+    'Concurrent': concMap[p.concurrentId] || '', 'Produit': p.nom,
+    'Référence': p.reference || '', 'Catégorie': p.categorie || '',
+    'Prix HT': p.prixHT != null ? p.prixHT : '', 'Description': p.description || '',
+    'Saisi par': p.createdByEmail || '', 'Date': p.createdAt,
+  }))), 'Produits concurrents');
+
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(notes.map(n => ({
+    'Concurrent': concMap[n.concurrentId] || '', 'Date note': n.dateNote,
+    'Titre': n.titre, 'Contenu': n.contenu || '',
+    'Source': n.source || '', 'Saisi par': n.createdByEmail || '',
+  }))), 'Notes');
 
   XLSX.writeFile(wb, `VeilleConcurrence_${new Date().toISOString().split('T')[0]}.xlsx`);
 }
 
-function exportByEmail(
-  concurrents: ReturnType<typeof useConcurrents>['concurrents'],
+export function exportByEmail(
+  concurrents: Concurrent[],
   produits: ReturnType<typeof useConcurrents>['produits'],
   notes: ReturnType<typeof useConcurrents>['notes'],
 ) {
   const wb = XLSX.utils.book_new();
   const concMap = Object.fromEntries(concurrents.map(c => [c.id, c.nom]));
 
-  const sheetC = XLSX.utils.json_to_sheet(concurrents.map(c => ({
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(concurrents.map(c => ({
     'Nom': c.nom, 'Site web': c.siteWeb || '', 'Créé par': c.createdByEmail || '',
-  })));
-  XLSX.utils.book_append_sheet(wb, sheetC, 'Concurrents');
-
-  const sheetP = XLSX.utils.json_to_sheet(produits.map(p => ({
-    'Concurrent': concMap[p.concurrentId] || '', 'Produit': p.nom, 'Catégorie': p.categorie || '',
-    'Prix HT': p.prixHT != null ? p.prixHT : '', 'Saisi par': p.createdByEmail || '',
-  })));
-  XLSX.utils.book_append_sheet(wb, sheetP, 'Produits');
+  }))), 'Concurrents');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(produits.map(p => ({
+    'Concurrent': concMap[p.concurrentId] || '', 'Produit': p.nom,
+    'Catégorie': p.categorie || '', 'Prix HT': p.prixHT != null ? p.prixHT : '',
+    'Saisi par': p.createdByEmail || '',
+  }))), 'Produits');
 
   const xlsxData = XLSX.write(wb, { type: 'base64', bookType: 'xlsx' });
   const fileName = `VeilleConcurrence_${new Date().toISOString().split('T')[0]}.xlsx`;
-  const mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
   const boundary = `----=_Part_${Date.now()}`;
   const subject = `Veille Concurrence — Export ${new Date().toLocaleDateString('fr-FR')}`;
-  const bodyText = `Bonjour,\n\nVeuillez trouver ci-joint l'export de la veille concurrence au ${new Date().toLocaleDateString('fr-FR')}.\n\nCordialement`;
 
   const emlContent = [
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
-    `Subject: ${subject}`,
-    'X-Unsent: 1',
+    `Subject: ${subject}`, 'X-Unsent: 1', '',
+    `--${boundary}`,
+    'Content-Type: text/plain; charset=UTF-8', '',
+    `Bonjour,\n\nVeuillez trouver ci-joint l'export de la veille concurrence au ${new Date().toLocaleDateString('fr-FR')}.\n\nCordialement`,
     '',
     `--${boundary}`,
-    'Content-Type: text/plain; charset=UTF-8',
-    '',
-    bodyText,
-    '',
-    `--${boundary}`,
-    `Content-Type: ${mimeType}; name="${fileName}"`,
+    `Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet; name="${fileName}"`,
     'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${fileName}"`,
-    '',
-    xlsxData,
-    '',
+    `Content-Disposition: attachment; filename="${fileName}"`, '',
+    xlsxData, '',
     `--${boundary}--`,
   ].join('\r\n');
 
@@ -122,9 +98,10 @@ function exportByEmail(
   toast.success('Fichier email généré — ouvrez-le avec Outlook ou Thunderbird');
 }
 
-// ── Page principale ──────────────────────────────────────────────────────────
+// ── Composant principal (sans wrapper de scroll) ──────────────────────────────
+// Utilisé tel quel dans CRM.tsx ; wrappé dans un scroll container pour la page dédiée.
 
-export default function VeilleConcurrence() {
+export function VeilleContent() {
   const {
     concurrents, produits, notes, loading,
     addConcurrent, updateConcurrent, deleteConcurrent,
@@ -137,7 +114,6 @@ export default function VeilleConcurrence() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConcurrent, setEditingConcurrent] = useState<Concurrent | undefined>(undefined);
 
-  // Filters
   const [searchConc, setSearchConc] = useState('');
   const [filterCreateur, setFilterCreateur] = useState('');
   const [filterConcProduit, setFilterConcProduit] = useState('');
@@ -146,8 +122,6 @@ export default function VeilleConcurrence() {
   const [filterCreateurNote, setFilterCreateurNote] = useState('');
   const [sortProduit, setSortProduit] = useState<'nom' | 'categorie' | 'prix'>('categorie');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
-  // Pivot sort
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
 
   const createurs = useMemo(() => [...new Set([
@@ -155,9 +129,10 @@ export default function VeilleConcurrence() {
     ...produits.map(p => p.createdByEmail),
   ].filter(Boolean) as string[])].sort(), [concurrents, produits]);
 
-  const categories = useMemo(() => [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort(), [produits]);
+  const categories = useMemo(() =>
+    [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort()
+  , [produits]);
 
-  // Filtered concurrents
   const filteredConcurrents = useMemo(() => {
     let list = concurrents;
     if (searchConc) list = list.filter(c => c.nom.toLowerCase().includes(searchConc.toLowerCase()) || c.email?.toLowerCase().includes(searchConc.toLowerCase()));
@@ -165,7 +140,6 @@ export default function VeilleConcurrence() {
     return list;
   }, [concurrents, searchConc, filterCreateur]);
 
-  // Filtered products
   const filteredProduits = useMemo(() => {
     let list = produits;
     if (filterConcProduit) list = list.filter(p => p.concurrentId === filterConcProduit);
@@ -177,7 +151,6 @@ export default function VeilleConcurrence() {
     });
   }, [produits, filterConcProduit, filterCategorie, sortProduit]);
 
-  // Filtered notes
   const filteredNotes = useMemo(() => {
     let list = notes;
     if (filterConcNote) list = list.filter(n => n.concurrentId === filterConcNote);
@@ -185,7 +158,6 @@ export default function VeilleConcurrence() {
     return list;
   }, [notes, filterConcNote, filterCreateurNote]);
 
-  // Pivot table data
   const pivotData = useMemo(() => {
     const concMap = Object.fromEntries(concurrents.map(c => [c.id, c.nom]));
     if (pivotMode === 'categorie') {
@@ -194,10 +166,7 @@ export default function VeilleConcurrence() {
       return {
         rows: cats,
         cols: concIds.map(id => ({ id, label: concMap[id] || id })),
-        getCell: (cat: string, concId: string) => {
-          const ps = produits.filter(p => p.concurrentId === concId && p.categorie === cat);
-          return ps;
-        },
+        getCell: (cat: string, concId: string) => produits.filter(p => p.concurrentId === concId && p.categorie === cat),
       };
     } else {
       const concIds = [...new Set(produits.map(p => p.concurrentId))];
@@ -205,9 +174,9 @@ export default function VeilleConcurrence() {
       return {
         rows: concIds.map(id => ({ id, label: concMap[id] || id })),
         cols: cats.map(c => ({ id: c, label: c })),
-        getCell: (concId: string | { id: string }, cat: string | { id: string }) => {
-          const cId = typeof concId === 'string' ? concId : concId.id;
-          const cCat = typeof cat === 'string' ? cat : cat.id;
+        getCell: (row: any, col: any) => {
+          const cId = typeof row === 'string' ? row : row.id;
+          const cCat = typeof col === 'string' ? col : col.id;
           return produits.filter(p => p.concurrentId === cId && p.categorie === cCat);
         },
       };
@@ -229,17 +198,12 @@ export default function VeilleConcurrence() {
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
-      {/* Header fixe */}
-      <div className="flex-none px-4 md:px-6 py-4 border-b bg-background flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
-          </p>
-        </div>
+    <div className="space-y-4">
+      {/* Barre d'actions */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <p className="text-sm text-muted-foreground">
+          {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
+        </p>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
             <Download className="w-4 h-4 mr-1" /> Excel
@@ -253,28 +217,25 @@ export default function VeilleConcurrence() {
         </div>
       </div>
 
-      {/* Tabs + contenu scrollable */}
-      <Tabs defaultValue="fiches" className="flex flex-col flex-1 min-h-0">
-        <div className="flex-none px-4 md:px-6 pt-3">
-          <TabsList className="grid grid-cols-4 w-full max-w-lg">
-            <TabsTrigger value="fiches" className="flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5" /> Fiches
-            </TabsTrigger>
-            <TabsTrigger value="produits" className="flex items-center gap-1">
-              <Package className="w-3.5 h-3.5" /> Produits
-            </TabsTrigger>
-            <TabsTrigger value="notes" className="flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" /> Notes
-            </TabsTrigger>
-            <TabsTrigger value="analyse" className="flex items-center gap-1">
-              <BarChart3 className="w-3.5 h-3.5" /> Analyse
-            </TabsTrigger>
-          </TabsList>
-        </div>
+      {/* Sous-onglets */}
+      <Tabs defaultValue="fiches">
+        <TabsList className="grid grid-cols-4 w-full max-w-lg">
+          <TabsTrigger value="fiches" className="flex items-center gap-1">
+            <Building2 className="w-3.5 h-3.5" /> Fiches
+          </TabsTrigger>
+          <TabsTrigger value="produits" className="flex items-center gap-1">
+            <Package className="w-3.5 h-3.5" /> Produits
+          </TabsTrigger>
+          <TabsTrigger value="notes" className="flex items-center gap-1">
+            <FileText className="w-3.5 h-3.5" /> Notes
+          </TabsTrigger>
+          <TabsTrigger value="analyse" className="flex items-center gap-1">
+            <BarChart3 className="w-3.5 h-3.5" /> Analyse
+          </TabsTrigger>
+        </TabsList>
 
-        {/* ── Onglet Fiches Concurrents ── */}
-        <TabsContent value="fiches" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3">
-          {/* Filtres */}
+        {/* ── Fiches Concurrents ── */}
+        <TabsContent value="fiches" className="space-y-3 pt-3">
           <div className="flex gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
@@ -292,7 +253,6 @@ export default function VeilleConcurrence() {
             </Select>
           </div>
 
-          {/* Liste */}
           {filteredConcurrents.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Building2 className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -328,7 +288,6 @@ export default function VeilleConcurrence() {
                         <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(c)}><Trash2 className="w-3.5 h-3.5" /></Button>
                       </div>
                     </div>
-
                     {isOpen && (
                       <div className="px-4 pb-3 border-t pt-3 space-y-3">
                         {c.notes && <p className="text-sm text-muted-foreground">{c.notes}</p>}
@@ -338,9 +297,7 @@ export default function VeilleConcurrence() {
                             <div className="flex flex-wrap gap-1">
                               {cProduits.map(p => (
                                 <Badge key={p.id} variant="secondary" className="text-xs">
-                                  {p.nom}
-                                  {p.categorie && ` · ${p.categorie}`}
-                                  {p.prixHT != null && ` · ${formatMontant(p.prixHT)} €`}
+                                  {p.nom}{p.categorie && ` · ${p.categorie}`}{p.prixHT != null && ` · ${formatMontant(p.prixHT)} €`}
                                 </Badge>
                               ))}
                             </div>
@@ -369,8 +326,8 @@ export default function VeilleConcurrence() {
           )}
         </TabsContent>
 
-        {/* ── Onglet Produits Concurrents ── */}
-        <TabsContent value="produits" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3">
+        {/* ── Produits Concurrents ── */}
+        <TabsContent value="produits" className="space-y-3 pt-3">
           <div className="flex gap-2 flex-wrap">
             <Select value={filterConcProduit || '_all'} onValueChange={v => setFilterConcProduit(v === '_all' ? '' : v)}>
               <SelectTrigger className="w-48">
@@ -404,7 +361,6 @@ export default function VeilleConcurrence() {
               </SelectContent>
             </Select>
           </div>
-
           {filteredProduits.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -433,12 +389,8 @@ export default function VeilleConcurrence() {
                         <TableCell className="font-medium">{conc?.nom || '—'}</TableCell>
                         <TableCell>{p.nom}</TableCell>
                         <TableCell className="font-mono text-xs">{p.reference || '—'}</TableCell>
-                        <TableCell>
-                          {p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}
-                        </TableCell>
+                        <TableCell>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
+                        <TableCell className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-48 truncate">{p.description || '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{p.createdByEmail || '—'}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
@@ -451,8 +403,8 @@ export default function VeilleConcurrence() {
           )}
         </TabsContent>
 
-        {/* ── Onglet Notes ── */}
-        <TabsContent value="notes" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3">
+        {/* ── Notes ── */}
+        <TabsContent value="notes" className="space-y-3 pt-3">
           <div className="flex gap-2 flex-wrap">
             <Select value={filterConcNote || '_all'} onValueChange={v => setFilterConcNote(v === '_all' ? '' : v)}>
               <SelectTrigger className="w-48">
@@ -475,7 +427,6 @@ export default function VeilleConcurrence() {
               </SelectContent>
             </Select>
           </div>
-
           {filteredNotes.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
@@ -494,10 +445,8 @@ export default function VeilleConcurrence() {
                         {n.source && <Badge variant="outline" className="text-xs">{n.source}</Badge>}
                         <span className="text-muted-foreground text-xs">{n.dateNote}</span>
                       </div>
-                      <Button
-                        size="sm" variant="outline" className="text-xs h-6 shrink-0"
-                        onClick={() => { setEditingConcurrent(conc); setDialogOpen(true); }}
-                      >
+                      <Button size="sm" variant="outline" className="text-xs h-6 shrink-0"
+                        onClick={() => { setEditingConcurrent(conc); setDialogOpen(true); }}>
                         <Pencil className="w-3 h-3 mr-1" /> Modifier
                       </Button>
                     </div>
@@ -510,39 +459,28 @@ export default function VeilleConcurrence() {
           )}
         </TabsContent>
 
-        {/* ── Onglet Analyse (Pivot) ── */}
-        <TabsContent value="analyse" className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div className="flex gap-2">
-              <Button
-                size="sm"
-                variant={pivotMode === 'categorie' ? 'default' : 'outline'}
-                onClick={() => setPivotMode('categorie')}
-              >
-                Catégories × Concurrents
-              </Button>
-              <Button
-                size="sm"
-                variant={pivotMode === 'concurrent' ? 'default' : 'outline'}
-                onClick={() => setPivotMode('concurrent')}
-              >
-                Concurrents × Catégories
-              </Button>
-            </div>
+        {/* ── Analyse Pivot ── */}
+        <TabsContent value="analyse" className="space-y-4 pt-3">
+          <div className="flex gap-2">
+            <Button size="sm" variant={pivotMode === 'categorie' ? 'default' : 'outline'} onClick={() => setPivotMode('categorie')}>
+              Catégories × Concurrents
+            </Button>
+            <Button size="sm" variant={pivotMode === 'concurrent' ? 'default' : 'outline'} onClick={() => setPivotMode('concurrent')}>
+              Concurrents × Catégories
+            </Button>
           </div>
 
           {produits.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <BarChart3 className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>Ajoutez des produits concurrents pour afficher le tableau de bord</p>
+              <p>Ajoutez des produits concurrents pour afficher l'analyse</p>
             </div>
           ) : (
             <>
-              {/* Tableau pivot */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-sm font-medium text-muted-foreground">
-                    {pivotMode === 'categorie' ? 'Prix par catégorie et concurrent' : 'Prix par concurrent et catégorie'}
+                    {pivotMode === 'categorie' ? 'Prix moyen par catégorie et concurrent' : 'Prix moyen par concurrent et catégorie'}
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="overflow-x-auto p-0">
@@ -562,7 +500,8 @@ export default function VeilleConcurrence() {
                             <td className="px-3 py-2 font-medium sticky left-0 bg-background">{row}</td>
                             {pivotData.cols.map((col: any) => {
                               const ps = pivotData.getCell(row, col.id);
-                              const avg = ps.length > 0 ? ps.reduce((s: number, p: any) => s + (p.prixHT ?? 0), 0) / ps.filter((p: any) => p.prixHT != null).length : null;
+                              const withPrice = ps.filter((p: any) => p.prixHT != null);
+                              const avg = withPrice.length > 0 ? withPrice.reduce((s: number, p: any) => s + p.prixHT, 0) / withPrice.length : null;
                               return (
                                 <td key={col.id} className="px-3 py-2 text-center">
                                   {ps.length === 0 ? <span className="text-muted-foreground">—</span> : (
@@ -583,7 +522,7 @@ export default function VeilleConcurrence() {
                       <thead>
                         <tr className="border-b bg-muted/40">
                           <th className="px-3 py-2 text-left font-medium sticky left-0 bg-muted/40 min-w-36">Concurrent</th>
-                          {(pivotData.cols as any[]).map((col) => (
+                          {(pivotData.cols as any[]).map(col => (
                             <th key={col.id} className="px-3 py-2 text-center font-medium min-w-28">{col.label}</th>
                           ))}
                         </tr>
@@ -592,11 +531,10 @@ export default function VeilleConcurrence() {
                         {(pivotData.rows as any[]).map(row => (
                           <tr key={row.id} className="border-b hover:bg-muted/20">
                             <td className="px-3 py-2 font-medium sticky left-0 bg-background">{row.label}</td>
-                            {(pivotData.cols as any[]).map((col) => {
-                              const ps = pivotData.getCell(row.id, col.id);
-                              const avg = ps.filter((p: any) => p.prixHT != null).length > 0
-                                ? ps.filter((p: any) => p.prixHT != null).reduce((s: number, p: any) => s + p.prixHT, 0) / ps.filter((p: any) => p.prixHT != null).length
-                                : null;
+                            {(pivotData.cols as any[]).map(col => {
+                              const ps = pivotData.getCell(row, col);
+                              const withPrice = ps.filter((p: any) => p.prixHT != null);
+                              const avg = withPrice.length > 0 ? withPrice.reduce((s: number, p: any) => s + p.prixHT, 0) / withPrice.length : null;
                               return (
                                 <td key={col.id} className="px-3 py-2 text-center">
                                   {ps.length === 0 ? <span className="text-muted-foreground">—</span> : (
@@ -616,7 +554,6 @@ export default function VeilleConcurrence() {
                 </CardContent>
               </Card>
 
-              {/* Cartes récap par concurrent */}
               <div>
                 <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-2">Récapitulatif par concurrent</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -639,7 +576,7 @@ export default function VeilleConcurrence() {
                           </div>
                           {cats.length > 0 && (
                             <div className="flex flex-wrap gap-1">
-                              {cats.slice(0, 3).map(cat => <Badge key={cat} variant="outline" className="text-xs h-4">{cat}</Badge>)}
+                              {cats.slice(0, 3).map(cat => <Badge key={cat} variant="outline" className="text-xs h-4">{cat as string}</Badge>)}
                               {cats.length > 3 && <Badge variant="secondary" className="text-xs h-4">+{cats.length - 3}</Badge>}
                             </div>
                           )}
@@ -654,7 +591,6 @@ export default function VeilleConcurrence() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog création/édition */}
       <ConcurrentDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -671,6 +607,25 @@ export default function VeilleConcurrence() {
         onUpdateNote={updateNote}
         onDeleteNote={deleteNote}
       />
+    </div>
+  );
+}
+
+// ── Page dédiée (avec wrapper scroll) ─────────────────────────────────────────
+
+export default function VeilleConcurrence() {
+  return (
+    <div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
+      <div className="flex-none px-4 md:px-6 py-4 border-b bg-background flex items-center gap-3">
+        <div>
+          <h1 className="text-xl font-bold flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
+          </h1>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
+        <VeilleContent />
+      </div>
     </div>
   );
 }
