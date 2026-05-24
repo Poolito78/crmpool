@@ -24,6 +24,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { StoreProvider } from "@/lib/StoreContext";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import CRMLayout from "@/components/CRMLayout";
 import Dashboard from "@/pages/Dashboard";
 import Clients from "@/pages/Clients";
@@ -47,7 +48,7 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { session, loading, authEvent } = useAuth();
+  const { session, loading, authEvent, crmAccess } = useAuth();
 
   if (loading) {
     return (
@@ -72,6 +73,34 @@ function AppRoutes() {
         <Route path="/auth" element={<Auth />} />
         <Route path="*" element={<Navigate to="/auth" replace />} />
       </Routes>
+    );
+  }
+
+  // Vérification accès CRM en cours
+  if (crmAccess === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  // Accès CRM refusé
+  if (!crmAccess) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 text-center px-4">
+        <div className="text-5xl">🔒</div>
+        <h1 className="text-xl font-semibold">Accès refusé</h1>
+        <p className="text-muted-foreground max-w-sm">
+          Votre compte n'a pas accès à cette application. Contactez un administrateur pour obtenir les droits CRM.
+        </p>
+        <button
+          onClick={() => supabase.auth.signOut()}
+          className="mt-2 text-sm text-primary underline underline-offset-4"
+        >
+          Se déconnecter
+        </button>
+      </div>
     );
   }
 
