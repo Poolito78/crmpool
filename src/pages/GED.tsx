@@ -5,19 +5,26 @@ import { formatDate } from '@/lib/store';
 import {
   FileText, ShoppingCart, Users, Package, ClipboardList, Truck,
   Plus, Pencil, Trash2, Mail, ArrowRightLeft, PackageCheck, Warehouse,
-  RefreshCw, Search, Filter, ChevronDown, ChevronRight, ExternalLink
+  RefreshCw, Search, Filter, ChevronDown, ChevronRight, ExternalLink,
+  Building2, Tag, StickyNote
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
 // ── Config visuelle par type d'entité ──────────────────────────
+const VEILLE_TYPES = ['concurrent', 'concurrent_produit', 'concurrent_note'] as const;
+
 const entiteConfig: Record<EntiteType, { label: string; icon: typeof FileText; color: string; route: string }> = {
-  devis:                { label: 'Devis',              icon: FileText,      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',       route: '/devis' },
-  commande_fournisseur: { label: 'Cmd Fournisseur',    icon: ShoppingCart,  color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',    route: '/commandes' },
-  commande_client:      { label: 'Cmd Client',         icon: ClipboardList, color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400', route: '/commandes-client' },
+  devis:                { label: 'Devis',              icon: FileText,      color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',         route: '/devis' },
+  commande_fournisseur: { label: 'Cmd Fournisseur',    icon: ShoppingCart,  color: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',      route: '/commandes' },
+  commande_client:      { label: 'Cmd Client',         icon: ClipboardList, color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',  route: '/commandes-client' },
   client:               { label: 'Client',             icon: Users,         color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400', route: '/clients' },
-  produit:              { label: 'Produit',             icon: Package,       color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',       route: '/produits' },
-  fournisseur:          { label: 'Fournisseur',         icon: Truck,         color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400', route: '/fournisseurs' },
+  produit:              { label: 'Produit',            icon: Package,       color: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',         route: '/produits' },
+  fournisseur:          { label: 'Fournisseur',        icon: Truck,         color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',  route: '/fournisseurs' },
+  // ── Veille (depuis app Veille) ──
+  concurrent:           { label: 'Concurrent',         icon: Building2,     color: 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',          route: '/crm' },
+  concurrent_produit:   { label: 'Prix concurrent',    icon: Tag,           color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',          route: '/crm' },
+  concurrent_note:      { label: 'Note concurrence',   icon: StickyNote,    color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',  route: '/crm' },
 };
 
 // ── Config visuelle par action ──────────────────────────────────
@@ -60,6 +67,9 @@ function DetailsPanel({ details }: { details?: Record<string, unknown> }) {
           dateEnvoi: 'Date d\'envoi', destinataire: 'Destinataire',
           montant: 'Montant TTC', client: 'Client', fournisseur: 'Fournisseur',
           dateReception: 'Date réception', lignes: 'Lignes', nbProduits: 'Produits',
+          // Veille
+          concurrent: 'Concurrent', prixHT: 'Prix HT', reference: 'Référence',
+          categorie: 'Catégorie', informateur: 'Saisi par',
         };
         return (
           <div key={k} className="contents">
@@ -102,7 +112,11 @@ function EntryRow({ entry }: { entry: HistoriqueEntry }) {
               <span className="text-muted-foreground text-sm">·</span>
               <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ec.color}`}>{ec.label}</span>
               <button
-                onClick={() => navigate(`${ec.route}?search=${encodeURIComponent(entry.entiteNumero)}`)}
+                onClick={() => navigate(
+                  VEILLE_TYPES.includes(entry.entiteType as typeof VEILLE_TYPES[number])
+                    ? ec.route
+                    : `${ec.route}?search=${encodeURIComponent(entry.entiteNumero)}`
+                )}
                 className="font-mono text-sm font-semibold text-primary hover:underline flex items-center gap-1"
               >
                 {entry.entiteNumero}
@@ -147,7 +161,8 @@ function groupByDay(entries: HistoriqueEntry[]): [string, HistoriqueEntry[]][] {
   return Array.from(map.entries());
 }
 
-const ALL_TYPES: EntiteType[] = ['devis', 'commande_fournisseur', 'commande_client', 'client', 'produit', 'fournisseur'];
+const CRM_TYPES: EntiteType[] = ['devis', 'commande_fournisseur', 'commande_client', 'client', 'produit', 'fournisseur'];
+const ALL_TYPES: EntiteType[] = [...CRM_TYPES, 'concurrent', 'concurrent_produit', 'concurrent_note'];
 const ALL_ACTIONS: ActionType[] = ['creation', 'modification', 'suppression', 'envoi_email', 'statut', 'reception', 'prise_stock'];
 
 export default function GED() {
@@ -184,7 +199,7 @@ export default function GED() {
     total: entries.length,
     today: entries.filter(e => e.date.startsWith(new Date().toISOString().split('T')[0])).length,
     devis: entries.filter(e => e.entiteType === 'devis').length,
-    commandes: entries.filter(e => e.entiteType === 'commande_fournisseur').length,
+    veille: entries.filter(e => (VEILLE_TYPES as readonly string[]).includes(e.entiteType)).length,
   };
 
   return (
@@ -204,8 +219,8 @@ export default function GED() {
           <p className="text-xs text-muted-foreground">Devis</p>
         </div>
         <div className="stat-card text-center">
-          <p className="text-2xl font-heading font-bold">{stats.commandes}</p>
-          <p className="text-xs text-muted-foreground">Cmd fournisseur</p>
+          <p className="text-2xl font-heading font-bold text-rose-600">{stats.veille}</p>
+          <p className="text-xs text-muted-foreground">Veille</p>
         </div>
       </div>
 
@@ -218,7 +233,12 @@ export default function GED() {
         <select value={filterType} onChange={e => setFilterType(e.target.value as EntiteType | 'tous')}
           className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
           <option value="tous">Tous les types</option>
-          {ALL_TYPES.map(t => <option key={t} value={t}>{entiteConfig[t].label}</option>)}
+          <optgroup label="CRM">
+            {CRM_TYPES.map(t => <option key={t} value={t}>{entiteConfig[t].label}</option>)}
+          </optgroup>
+          <optgroup label="Veille concurrence">
+            {VEILLE_TYPES.map(t => <option key={t} value={t}>{entiteConfig[t].label}</option>)}
+          </optgroup>
         </select>
         <select value={filterAction} onChange={e => setFilterAction(e.target.value as ActionType | 'tous')}
           className="text-sm rounded-md border border-input bg-background px-3 py-1.5">

@@ -1,6 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
 
-export type EntiteType = 'devis' | 'commande_fournisseur' | 'commande_client' | 'client' | 'produit' | 'fournisseur';
+export type EntiteType =
+  | 'devis'
+  | 'commande_fournisseur'
+  | 'commande_client'
+  | 'client'
+  | 'produit'
+  | 'fournisseur'
+  | 'concurrent'
+  | 'concurrent_produit'
+  | 'concurrent_note';
 
 export type ActionType =
   | 'creation'
