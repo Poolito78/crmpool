@@ -148,6 +148,25 @@ export function VeilleContent() {
   const [addProdOpen, setAddProdOpen] = useState(false);
   const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
+  const [showAddNomSuggestions, setShowAddNomSuggestions] = useState(false);
+
+  const addNomSuggestions = useMemo(() => {
+    const q = addProdForm.nom.trim().toLowerCase();
+    if (!q) return [];
+    const unique = Array.from(new Set(produits.map(p => p.nom)));
+    return unique.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
+  }, [addProdForm.nom, produits]);
+
+  function selectAddNomSuggestion(nom: string) {
+    const match = produits.find(p => p.nom === nom);
+    setAddProdForm(f => ({
+      ...f,
+      nom,
+      reference: f.reference || match?.reference || '',
+      categorie: f.categorie || match?.categorie || '',
+    }));
+    setShowAddNomSuggestions(false);
+  }
 
   const createurs = useMemo(() => [...new Set([
     ...concurrents.map(c => c.createdByEmail),
@@ -756,9 +775,35 @@ export function VeilleContent() {
                 <SelectContent>{concurrents.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1.5 relative">
               <Label>Nom *</Label>
-              <Input value={addProdForm.nom} onChange={e => setAddProdForm(f => ({ ...f, nom: e.target.value }))} placeholder="Nom du produit…" autoFocus />
+              <Input
+                value={addProdForm.nom}
+                onChange={e => { setAddProdForm(f => ({ ...f, nom: e.target.value })); setShowAddNomSuggestions(true); }}
+                onFocus={() => setShowAddNomSuggestions(true)}
+                onBlur={() => setTimeout(() => setShowAddNomSuggestions(false), 150)}
+                placeholder="Nom du produit…"
+                autoFocus
+                autoComplete="off"
+              />
+              {showAddNomSuggestions && addNomSuggestions.length > 0 && (
+                <div className="absolute z-50 left-0 right-0 top-full mt-1 bg-popover border rounded-md shadow-md overflow-hidden">
+                  {addNomSuggestions.map(nom => {
+                    const match = produits.find(p => p.nom === nom);
+                    return (
+                      <button
+                        key={nom}
+                        type="button"
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-accent flex items-center justify-between gap-2"
+                        onMouseDown={() => selectAddNomSuggestion(nom)}
+                      >
+                        <span className="font-medium truncate">{nom}</span>
+                        {match?.categorie && <span className="text-xs text-muted-foreground shrink-0">{match.categorie}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
