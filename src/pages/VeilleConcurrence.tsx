@@ -1,4 +1,8 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import * as pdfjsLib from 'pdfjs-dist';
+import { parseExcel } from '@/lib/parseExcel';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.mjs', import.meta.url).toString();
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import {
-  Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download,
+  Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download, Upload, Check,
   Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -100,6 +104,81 @@ export function exportByEmail(
   toast.success('Fichier email généré — ouvrez-le avec Outlook ou Thunderbird');
 }
 
+// ── Import tarif IA ──────────────────────────────────────────────────────────
+
+interface ExtractedProduit {
+  _id: string;
+  nom: string;
+  reference: string;
+  categorie: string;
+  prixHT: string;
+  description: string;
+  selected: boolean;
+}
+
+const IMPORT_PROMPT = `Extrais toutes les lignes produit/article/prestation de ce document avec leur prix.
+Retourne un JSON array (uniquement, sans markdown) : [{"nom":"...","reference":"...","categorie":"...","prixHT":"...","description":"..."}]
+Si un champ est absent, utilise une chaîne vide. prixHT doit être un nombre décimal (ex: "12.50").`;
+
+async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
+  const body = { model: '', messages: [{ role: 'user', content: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }], max_tokens: 2000, temperature: 0.1 };
+
+  const groqKey = import.meta.env.VITE_GROQ_API_KEY;
+  if (groqKey) {
+    try {
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+        body: JSON.stringify({ ...body, model: 'llama-3.1-70b-versatile' }),
+      });
+      const d = await r.json();
+      const text = d.choices?.[0]?.message?.content || '';
+      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    } catch { /* fallthrough */ }
+  }
+
+  const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (gemKey) {
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gemKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }] }] }),
+      });
+      const d = await r.json();
+      const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    } catch { /* fallthrough */ }
+  }
+
+  const orKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  if (orKey) {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
+      body: JSON.stringify({ ...body, model: 'mistralai/mistral-7b-instruct' }),
+    });
+    const d = await r.json();
+    const text = d.choices?.[0]?.message?.content || '';
+    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  }
+
+  throw new Error('Aucune clé API configurée (VITE_GROQ_API_KEY, VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY)');
+}
+
+async function extractTarifText(file: File): Promise<string> {
+  if (file.name.match(/\.(xlsx?|csv|ods)$/i)) {
+    const { texte } = await parseExcel(file);
+    return texte;
+  }
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= Math.min(pdf.numPages, 20); i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    pages.push(content.items.map((item: any) => item.str).join(' '));
+  }
+  return pages.join('\n\n');
+}
+
 // ── Composant principal (sans wrapper de scroll) ──────────────────────────────
 // Utilisé tel quel dans CRM.tsx ; wrappé dans un scroll container pour la page dédiée.
 
@@ -149,6 +228,17 @@ export function VeilleContent() {
   const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
   const [showAddNomSuggestions, setShowAddNomSuggestions] = useState(false);
+
+  // Import tarif
+  const [importOpen, setImportOpen] = useState(false);
+  const [importConcId, setImportConcId] = useState('');
+  const [analysing, setAnalysing] = useState(false);
+  const [extracted, setExtracted] = useState<ExtractedProduit[]>([]);
+  const [importError, setImportError] = useState('');
+  const [importSaving, setImportSaving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounter = useRef(0);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const addNomSuggestions = useMemo(() => {
     const q = addProdForm.nom.trim().toLowerCase();
@@ -264,6 +354,46 @@ export function VeilleContent() {
     setAddProdSaving(false);
     setAddProdOpen(false);
     toast.success('Produit ajouté');
+  }
+
+  const handleImportFiles = useCallback(async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const file = files[0];
+    if (!file.name.match(/\.(pdf|xlsx?|csv|ods)$/i)) {
+      setImportError('Format non supporté. Utilisez PDF, Excel ou CSV.');
+      return;
+    }
+    setAnalysing(true);
+    setImportError('');
+    setExtracted([]);
+    try {
+      const text = await extractTarifText(file);
+      const results = await callTarifAI(text);
+      setExtracted(results.map((r, i) => ({ ...r, _id: String(i), selected: true })));
+    } catch (e: any) {
+      setImportError(e.message || 'Erreur lors de l\'analyse.');
+    }
+    setAnalysing(false);
+  }, []);
+
+  async function importerProduits() {
+    const toImport = extracted.filter(p => p.selected);
+    if (!importConcId || toImport.length === 0) return;
+    setImportSaving(true);
+    for (const p of toImport) {
+      await addProduit({
+        concurrentId: importConcId,
+        nom: p.nom,
+        reference: p.reference || undefined,
+        categorie: p.categorie || undefined,
+        prixHT: p.prixHT ? parseFloat(p.prixHT.replace(',', '.')) : undefined,
+        description: p.description || undefined,
+      });
+    }
+    setImportSaving(false);
+    setImportOpen(false);
+    setExtracted([]);
+    toast.success(`${toImport.length} produit${toImport.length > 1 ? 's' : ''} importé${toImport.length > 1 ? 's' : ''}`);
   }
 
   if (loading) {
@@ -454,9 +584,14 @@ export function VeilleContent() {
                 <SelectItem value="prix">Trier par prix</SelectItem>
               </SelectContent>
             </Select>
-            <Button size="sm" className="ml-auto gap-1.5" onClick={openAddProd}>
-              <Plus className="w-4 h-4" /> Ajouter
-            </Button>
+            <div className="ml-auto flex gap-2">
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
+                <Upload className="w-4 h-4" /> Importer tarif
+              </Button>
+              <Button size="sm" className="gap-1.5" onClick={openAddProd}>
+                <Plus className="w-4 h-4" /> Ajouter
+              </Button>
+            </div>
           </div>
           {filteredProduits.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -760,6 +895,113 @@ export function VeilleContent() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Dialog — Importer tarif */}
+      <Dialog open={importOpen} onOpenChange={v => { if (!analysing) setImportOpen(v); }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Importer un tarif concurrent</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto space-y-4">
+            <div className="space-y-1.5">
+              <Label>Concurrent *</Label>
+              <Select value={importConcId} onValueChange={setImportConcId}>
+                <SelectTrigger><SelectValue placeholder="Sélectionner…" /></SelectTrigger>
+                <SelectContent>{concurrents.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+
+            {extracted.length === 0 && !analysing && (
+              <div
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${dragOver ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'}`}
+                onDragEnter={e => { e.preventDefault(); dragCounter.current++; setDragOver(true); }}
+                onDragOver={e => e.preventDefault()}
+                onDragLeave={() => { dragCounter.current--; if (dragCounter.current === 0) setDragOver(false); }}
+                onDrop={e => { e.preventDefault(); dragCounter.current = 0; setDragOver(false); handleImportFiles(e.dataTransfer.files); }}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
+                <p className="font-medium">Glissez votre tarif ici</p>
+                <p className="text-sm text-muted-foreground mt-1">PDF, Excel (.xlsx, .xls), CSV — analyse IA automatique</p>
+                <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.ods" onChange={e => handleImportFiles(e.target.files)} />
+              </div>
+            )}
+
+            {analysing && (
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Analyse du document en cours…</p>
+              </div>
+            )}
+
+            {importError && (
+              <div className="bg-destructive/10 border border-destructive/20 rounded-md px-4 py-3 text-sm text-destructive">
+                {importError}
+                <button className="ml-2 underline" onClick={() => setImportError('')}>Réessayer</button>
+              </div>
+            )}
+
+            {extracted.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">{extracted.filter(p => p.selected).length} / {extracted.length} produits sélectionnés</p>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setExtracted(e => e.map(p => ({ ...p, selected: true })))}>Tout</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setExtracted(e => e.map(p => ({ ...p, selected: false })))}>Aucun</Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setExtracted([]); setImportError(''); }}>
+                      <X className="h-4 w-4 mr-1" />Recommencer
+                    </Button>
+                  </div>
+                </div>
+                <div className="border rounded-lg overflow-hidden max-h-72 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 border-b sticky top-0">
+                      <tr>
+                        <th className="w-10 px-3 py-2" />
+                        <th className="text-left px-3 py-2 font-medium">Nom</th>
+                        <th className="text-left px-3 py-2 font-medium hidden sm:table-cell">Référence</th>
+                        <th className="text-left px-3 py-2 font-medium hidden md:table-cell">Catégorie</th>
+                        <th className="text-right px-3 py-2 font-medium">Prix HT</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {extracted.map(p => (
+                        <tr key={p._id} className={p.selected ? '' : 'opacity-40'}>
+                          <td className="px-3 py-2">
+                            <input type="checkbox" checked={p.selected} onChange={e => setExtracted(ex => ex.map(x => x._id === p._id ? { ...x, selected: e.target.checked } : x))} className="rounded" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input value={p.nom} onChange={e => setExtracted(ex => ex.map(x => x._id === p._id ? { ...x, nom: e.target.value } : x))} className="h-7 text-xs" />
+                          </td>
+                          <td className="px-3 py-2 hidden sm:table-cell">
+                            <Input value={p.reference} onChange={e => setExtracted(ex => ex.map(x => x._id === p._id ? { ...x, reference: e.target.value } : x))} className="h-7 text-xs" />
+                          </td>
+                          <td className="px-3 py-2 hidden md:table-cell">
+                            <Input value={p.categorie} onChange={e => setExtracted(ex => ex.map(x => x._id === p._id ? { ...x, categorie: e.target.value } : x))} className="h-7 text-xs" />
+                          </td>
+                          <td className="px-3 py-2">
+                            <Input value={p.prixHT} onChange={e => setExtracted(ex => ex.map(x => x._id === p._id ? { ...x, prixHT: e.target.value } : x))} className="h-7 text-xs text-right w-24 ml-auto" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="pt-2 border-t">
+            <Button variant="outline" onClick={() => setImportOpen(false)} disabled={importSaving}>Annuler</Button>
+            {extracted.length > 0 && (
+              <Button onClick={importerProduits} disabled={importSaving || !importConcId || extracted.filter(p => p.selected).length === 0}>
+                {importSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                <Check className="h-4 w-4" />
+                Importer {extracted.filter(p => p.selected).length} produit{extracted.filter(p => p.selected).length > 1 ? 's' : ''}
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog — Ajouter produit */}
       <Dialog open={addProdOpen} onOpenChange={setAddProdOpen}>
