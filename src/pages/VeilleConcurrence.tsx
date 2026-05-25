@@ -552,7 +552,8 @@ export function VeilleContent() {
 
         {/* ── Produits Concurrents ── */}
         <TabsContent value="produits" className="space-y-3 pt-3">
-          <div className="flex gap-2 flex-wrap items-center">
+          <div className="flex flex-col sm:flex-row gap-2">
+            <div className="flex gap-2 flex-wrap flex-1 items-center">
             <Select value={filterConcProduit || '_all'} onValueChange={v => setFilterConcProduit(v === '_all' ? '' : v)}>
               <SelectTrigger className="min-w-fit w-auto">
                 <Building2 className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
@@ -584,9 +585,10 @@ export function VeilleContent() {
                 <SelectItem value="prix">Trier par prix</SelectItem>
               </SelectContent>
             </Select>
-            <div className="ml-auto flex gap-2">
+            </div>
+            <div className="flex gap-2 justify-end">
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
-                <Upload className="w-4 h-4" /> Importer tarif
+                <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Importer tarif</span><span className="sm:hidden">Importer</span>
               </Button>
               <Button size="sm" className="gap-1.5" onClick={openAddProd}>
                 <Plus className="w-4 h-4" /> Ajouter
@@ -606,15 +608,15 @@ export function VeilleContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Concurrent</TableHead>
+                    <TableHead className="hidden sm:table-cell">Concurrent</TableHead>
                     <TableHead>Produit</TableHead>
-                    <TableHead>Référence</TableHead>
-                    <TableHead>Catégorie</TableHead>
+                    <TableHead className="hidden md:table-cell">Référence</TableHead>
+                    <TableHead className="hidden md:table-cell">Catégorie</TableHead>
                     <TableHead className="text-right">Prix HT</TableHead>
-                    <TableHead>Description</TableHead>
-                    <TableHead>Client source</TableHead>
-                    <TableHead>Saisi par</TableHead>
-                    <TableHead>Date</TableHead>
+                    <TableHead className="hidden lg:table-cell">Description</TableHead>
+                    <TableHead className="hidden lg:table-cell">Client source</TableHead>
+                    <TableHead className="hidden lg:table-cell">Saisi par</TableHead>
+                    <TableHead className="hidden md:table-cell">Date</TableHead>
                     <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
@@ -640,38 +642,38 @@ export function VeilleContent() {
                     if (isEditing) {
                       return (
                         <TableRow key={p.id} className="bg-muted/20">
-                          <TableCell className="font-medium text-sm">{conc?.nom || '—'}</TableCell>
+                          <TableCell className="hidden sm:table-cell font-medium text-sm">{conc?.nom || '—'}</TableCell>
                           <TableCell>
                             <Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-28" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             <Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             <Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
                           <TableCell>
                             <Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             <Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             <Input value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden lg:table-cell">
                             <Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="hidden md:table-cell">
                             <Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
-                                <Save className="w-3 h-3" />
+                              <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
+                                <Save className="w-4 h-4 sm:w-3 sm:h-3" />
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-muted-foreground" title="Annuler" onClick={() => setEditingProduitId(null)}>
-                                <X className="w-3 h-3" />
+                              <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-muted-foreground" title="Annuler" onClick={() => setEditingProduitId(null)}>
+                                <X className="w-4 h-4 sm:w-3 sm:h-3" />
                               </Button>
                             </div>
                           </TableCell>
@@ -680,23 +682,42 @@ export function VeilleContent() {
                     }
                     return (
                       <TableRow key={p.id} className="group cursor-pointer hover:bg-muted/30" onClick={startEdit}>
-                        <TableCell className="font-medium">{conc?.nom || '—'}</TableCell>
-                        <TableCell>{p.nom}</TableCell>
-                        <TableCell className="font-mono text-xs">{p.reference || '—'}</TableCell>
-                        <TableCell>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
-                        <TableCell className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>
-                        <TableCell className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>
+                        <TableCell className="hidden sm:table-cell font-medium">{conc?.nom || '—'}</TableCell>
+                        <TableCell>
+                          <div className="font-medium">{p.nom}</div>
+                          {conc?.nom && <p className="sm:hidden text-xs text-muted-foreground mt-0.5">{conc.nom}</p>}
+                          <div className="md:hidden flex items-center gap-1.5 mt-0.5 flex-wrap">
+                            {p.reference && <span className="font-mono text-xs text-muted-foreground">{p.reference}</span>}
+                            {p.categorie && <Badge variant="outline" className="text-[10px] py-0 h-4">{p.categorie}</Badge>}
+                          </div>
+                          {p.description && <p className="lg:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-48">{p.description}</p>}
+                          {(p.clientNom || sourceClient || p.informateur || p.createdByEmail) && (
+                            <div className="lg:hidden text-xs text-muted-foreground mt-0.5 flex gap-2 flex-wrap">
+                              {(p.clientNom || sourceClient) && <span>{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '')}</span>}
+                              {(p.informateur || p.createdByEmail) && <span>{p.informateur || formatCreateur(p.createdByEmail)}</span>}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell font-mono text-xs">{p.reference || '—'}</TableCell>
+                        <TableCell className="hidden md:table-cell">{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}
+                          <p className="md:hidden text-xs text-muted-foreground font-normal mt-0.5">
+                            {p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}
+                          </p>
+                        </TableCell>
+                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>
+                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>
                         <TableCell onClick={e => e.stopPropagation()}>
-                          <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100"
+                          <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-6 sm:w-6 text-destructive opacity-100 sm:opacity-0 group-hover:opacity-100"
                             onClick={async () => {
                               if (!confirm(`Supprimer "${p.nom}" ?`)) return;
                               await deleteProduit(p.id);
                               toast.success('Produit supprimé');
                             }}>
-                            <Trash2 className="w-3 h-3" />
+                            <Trash2 className="w-4 h-4 sm:w-3 sm:h-3" />
                           </Button>
                         </TableCell>
                       </TableRow>
