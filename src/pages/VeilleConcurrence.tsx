@@ -206,11 +206,17 @@ export function VeilleContent() {
     });
   }, []);
 
-  function saveDisplayName() {
+  async function saveDisplayName() {
     if (!myEmail || !nameInput.trim()) return;
-    setCreatorName(myEmail, nameInput.trim());
+    const name = nameInput.trim();
+    setCreatorName(myEmail, name);
+    // Persiste dans veille_roles.display_name pour que l'app Veille puisse le lire
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user.id) {
+      await supabase.from('veille_roles').update({ display_name: name }).eq('user_id', session.user.id);
+    }
     setNameEditOpen(false);
-    toast.success(`Nom d'affichage mis à jour : ${nameInput.trim()}`);
+    toast.success(`Nom d'affichage mis à jour : ${name}`);
   }
 
   const [searchConc, setSearchConc] = useState('');
