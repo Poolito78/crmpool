@@ -6,9 +6,11 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -142,7 +144,10 @@ export function VeilleContent() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
-  const [editingProduitForm, setEditingProduitForm] = useState({ nom: '', reference: '', categorie: '', prixHT: '', description: '', clientId: '' });
+  const [editingProduitForm, setEditingProduitForm] = useState({ nom: '', reference: '', categorie: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [addProdOpen, setAddProdOpen] = useState(false);
+  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [addProdSaving, setAddProdSaving] = useState(false);
 
   const createurs = useMemo(() => [...new Set([
     ...concurrents.map(c => c.createdByEmail),
@@ -211,6 +216,35 @@ export function VeilleContent() {
     const err = await deleteConcurrent(c.id);
     if (err) toast.error('Erreur lors de la suppression');
     else toast.success('Concurrent supprimé');
+  }
+
+  function openAddProd() {
+    setAddProdForm({
+      concurrentId: concurrents[0]?.id || '',
+      nom: '', reference: '', categorie: '', prixHT: '', description: '',
+      clientNom: '', informateur: formatCreateur(myEmail), dateRenseignement: new Date().toISOString().split('T')[0],
+    });
+    setAddProdOpen(true);
+  }
+
+  async function handleAddProd() {
+    if (!addProdForm.nom.trim() || !addProdForm.concurrentId) return;
+    setAddProdSaving(true);
+    const prixHT = addProdForm.prixHT ? parseFloat(addProdForm.prixHT.replace(',', '.')) : undefined;
+    await addProduit({
+      concurrentId: addProdForm.concurrentId,
+      nom: addProdForm.nom.trim(),
+      reference: addProdForm.reference || undefined,
+      categorie: addProdForm.categorie || undefined,
+      prixHT,
+      description: addProdForm.description || undefined,
+      clientNom: addProdForm.clientNom || undefined,
+      informateur: addProdForm.informateur || undefined,
+      dateRenseignement: addProdForm.dateRenseignement || undefined,
+    });
+    setAddProdSaving(false);
+    setAddProdOpen(false);
+    toast.success('Produit ajouté');
   }
 
   if (loading) {
@@ -369,7 +403,7 @@ export function VeilleContent() {
 
         {/* ── Produits Concurrents ── */}
         <TabsContent value="produits" className="space-y-3 pt-3">
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <Select value={filterConcProduit || '_all'} onValueChange={v => setFilterConcProduit(v === '_all' ? '' : v)}>
               <SelectTrigger className="min-w-fit w-auto">
                 <Building2 className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
@@ -401,6 +435,9 @@ export function VeilleContent() {
                 <SelectItem value="prix">Trier par prix</SelectItem>
               </SelectContent>
             </Select>
+            <Button size="sm" className="ml-auto gap-1.5" onClick={openAddProd}>
+              <Plus className="w-4 h-4" /> Ajouter
+            </Button>
           </div>
           {filteredProduits.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
@@ -435,13 +472,13 @@ export function VeilleContent() {
 
                     function startEdit() {
                       setEditingProduitId(p.id);
-                      setEditingProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '' });
+                      setEditingProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '', clientNom: p.clientNom || '', informateur: p.informateur || '', dateRenseignement: p.dateRenseignement || '' });
                     }
 
                     async function saveEdit() {
                       if (!editingProduitForm.nom.trim()) return;
                       const prixHT = editingProduitForm.prixHT ? parseFloat(editingProduitForm.prixHT.replace(',', '.')) : undefined;
-                      await updateProduit({ ...p, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, prixHT, description: editingProduitForm.description || undefined, clientId: editingProduitForm.clientId || undefined });
+                      await updateProduit({ ...p, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, prixHT, description: editingProduitForm.description || undefined, clientId: editingProduitForm.clientId || undefined, clientNom: editingProduitForm.clientNom || undefined, informateur: editingProduitForm.informateur || undefined, dateRenseignement: editingProduitForm.dateRenseignement || undefined });
                       setEditingProduitId(null);
                       toast.success('Produit mis à jour');
                     }
@@ -466,17 +503,14 @@ export function VeilleContent() {
                             <Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
                           <TableCell>
-                            <select
-                              className="h-7 rounded-md border border-input bg-background px-2 text-sm w-36"
-                              value={editingProduitForm.clientId}
-                              onChange={e => setEditingProduitForm(f => ({ ...f, clientId: e.target.value }))}
-                            >
-                              <option value="">— Aucun —</option>
-                              {clients.map(c => <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
-                            </select>
+                            <Input value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{formatCreateur(p.createdByEmail)}</TableCell>
-                          <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
+                          <TableCell>
+                            <Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
+                          </TableCell>
+                          <TableCell>
+                            <Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
+                          </TableCell>
                           <TableCell>
                             <div className="flex gap-1">
                               <Button size="icon" variant="ghost" className="h-6 w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
@@ -498,9 +532,9 @@ export function VeilleContent() {
                         <TableCell>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
                         <TableCell className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>
                         <TableCell className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{sourceClient ? (sourceClient.societe || sourceClient.nom) : '—'}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{formatCreateur(p.createdByEmail)}</TableCell>
-                        <TableCell className="text-xs text-muted-foreground">{p.createdAt}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>
                         <TableCell onClick={e => e.stopPropagation()}>
                           <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive opacity-0 group-hover:opacity-100"
                             onClick={async () => {
@@ -707,6 +741,70 @@ export function VeilleContent() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* Dialog — Ajouter produit */}
+      <Dialog open={addProdOpen} onOpenChange={setAddProdOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Ajouter un produit concurrent</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1.5">
+              <Label>Concurrent *</Label>
+              <Select value={addProdForm.concurrentId} onValueChange={v => setAddProdForm(f => ({ ...f, concurrentId: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{concurrents.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Nom *</Label>
+              <Input value={addProdForm.nom} onChange={e => setAddProdForm(f => ({ ...f, nom: e.target.value }))} placeholder="Nom du produit…" autoFocus />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Référence</Label>
+                <Input value={addProdForm.reference} onChange={e => setAddProdForm(f => ({ ...f, reference: e.target.value }))} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Catégorie</Label>
+                <Input value={addProdForm.categorie} onChange={e => setAddProdForm(f => ({ ...f, categorie: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Prix HT (€)</Label>
+              <Input type="number" step="0.01" value={addProdForm.prixHT} onChange={e => setAddProdForm(f => ({ ...f, prixHT: e.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Description</Label>
+              <Input value={addProdForm.description} onChange={e => setAddProdForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Source du prix</p>
+              <div className="space-y-1.5">
+                <Label>Date de renseignement</Label>
+                <Input type="date" value={addProdForm.dateRenseignement} onChange={e => setAddProdForm(f => ({ ...f, dateRenseignement: e.target.value }))} />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Client source</Label>
+                  <Input value={addProdForm.clientNom} onChange={e => setAddProdForm(f => ({ ...f, clientNom: e.target.value }))} placeholder="Nom du client" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Informateur</Label>
+                  <Input value={addProdForm.informateur} onChange={e => setAddProdForm(f => ({ ...f, informateur: e.target.value }))} placeholder="Qui a renseigné ?" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddProdOpen(false)}>Annuler</Button>
+            <Button onClick={handleAddProd} disabled={addProdSaving || !addProdForm.nom.trim() || !addProdForm.concurrentId}>
+              {addProdSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Ajouter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <ConcurrentDialog
         open={dialogOpen}
