@@ -45,6 +45,9 @@ export interface ConcurrentProduit {
   prixHT?: number;
   description?: string;
   clientId?: string;
+  clientNom?: string;
+  informateur?: string;
+  dateRenseignement?: string;
   createdBy?: string;
   createdByEmail?: string;
   createdAt: string;
@@ -102,6 +105,9 @@ function dbToConcurrentProduit(r: any): ConcurrentProduit {
     prixHT: r.prix_ht != null ? Number(r.prix_ht) : undefined,
     description: r.description || undefined,
     clientId: r.client_id || undefined,
+    clientNom: r.client_nom || undefined,
+    informateur: r.informateur || undefined,
+    dateRenseignement: r.date_renseignement || undefined,
     createdBy: r.created_by || undefined,
     createdByEmail: r.created_by_email || undefined,
     createdAt: r.created_at?.split('T')[0] || '',
@@ -120,6 +126,11 @@ function concurrentProduitToDb(p: ConcurrentProduit) {
     client_id: p.clientId || null,
     created_by: p.createdBy || null,
     created_by_email: p.createdByEmail || null,
+    // Colonnes ajoutées via migration — incluses conditionnellement pour éviter
+    // l'erreur PostgREST si la migration n'a pas encore été appliquée
+    ...(p.clientNom !== undefined ? { client_nom: p.clientNom || null } : {}),
+    ...(p.informateur !== undefined ? { informateur: p.informateur || null } : {}),
+    ...(p.dateRenseignement !== undefined ? { date_renseignement: p.dateRenseignement || null } : {}),
   };
 }
 
