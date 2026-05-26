@@ -733,9 +733,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <thead>
                 {/* Ligne 1 : groupes */}
                 <tr className="bg-[#CC0000] text-white">
-                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-top border-r border-white/20">
+                  {/* Pas de rowSpan — html2canvas gère mal les cellules fusionnées (hauteur rognée).
+                      Deux <th> séparés avec même fond rouge donnent le même rendu visuel. */}
+                  <th className="text-left py-2 px-2 font-bold uppercase text-xs border-r border-white/20"
+                      style={{ verticalAlign: 'bottom', borderBottom: 'none' }}>
                     <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>Désignation</div>
-                    {/* lien site — <div> au lieu de <span class="block"> pour html2canvas */}
                     <div style={{ fontSize: '10px', fontWeight: 'normal', fontStyle: 'italic', opacity: 0.7, marginTop: '2px' }}>Fiches système / Produit : www.isofloor.fr</div>
                   </th>
                   <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Conso. Est.</th>
@@ -744,6 +746,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </tr>
                 {/* Ligne 2 : sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
+                  {/* Cellule vide pour la colonne Désignation (même fond rouge → pas de ligne visible) */}
+                  <th className="border-r border-white/20" style={{ borderTop: 'none' }}></th>
                   <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg/m²</th>
                   <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
                   <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg</th>
@@ -827,8 +831,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
-                        {/* flex : html2canvas gère mal inline-block+verticalAlign, flex est stable */}
-                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '6px', rowGap: '2px' }}>
+                        {/* flex baseline : plus stable que alignItems:center dans html2canvas */}
+                        <div style={{ display: 'flex', alignItems: 'baseline', flexWrap: 'wrap', columnGap: '6px', rowGap: '2px' }}>
                           <span>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
