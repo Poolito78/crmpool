@@ -1120,7 +1120,7 @@ export default function CalculateurUPS() {
                         </th>
                         <th className="text-right px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">€/kg</th>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Réf.</th>
-                        <th className="w-8 px-2" />
+                        <th className="sticky right-0 bg-muted/50 px-2 w-20 border-l border-border/40" />
                       </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -1164,7 +1164,7 @@ export default function CalculateurUPS() {
                             <td className="px-3 py-2 text-muted-foreground max-w-[140px] truncate" title={[a.reference, a.note].filter(Boolean).join(' — ')}>
                               {[a.reference, a.note].filter(Boolean).join(' — ') || '—'}
                             </td>
-                            <td className="px-2 py-2 whitespace-nowrap">
+                            <td className="sticky right-0 bg-card border-l border-border/40 px-2 py-2 whitespace-nowrap">
                               <div className="flex gap-0.5">
                                 <button onClick={() => openAchatEdit(a)}
                                   className="p-1.5 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 rounded transition-colors"
