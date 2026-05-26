@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -127,6 +127,10 @@ export default function Devis() {
   const dragClientYRef = useRef<number>(0);
   const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'crm'>('devis');
   const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
+  // Comparatif — édition manuelle du PU Achat
+  const [portAchatManuel, setPortAchatManuel] = useState<number | null>(null);
+  const [compaEditingId, setCompaEditingId] = useState<string | null>(null); // ligneId ou '__transport__'
+  const [compaEditVal, setCompaEditVal] = useState('');
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
   const [fraisPortAuto, setFraisPortAuto] = useState(true);
@@ -240,6 +244,8 @@ export default function Devis() {
       if (prio) fInit[l.id] = prio.fournisseurId;
     }
     setSelectedFournisseurPerLigne(fInit);
+    setPortAchatManuel(null);
+    setCompaEditingId(null);
     setUndoStack([]);
   }
 
@@ -269,6 +275,8 @@ export default function Devis() {
     prevClientIdRef.current = '';
     setDialogTab('devis');
     setSelectedFournisseurPerLigne({});
+    setPortAchatManuel(null);
+    setCompaEditingId(null);
     setAdresseLivraisonId('');
     setUndoStack([]);
     setDialogOpen(true);
@@ -2019,16 +2027,17 @@ export default function Devis() {
               const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
               return prod?.categorie?.toLowerCase().includes('granulat');
             });
-            let portAchat = 0;
+            let portAchatCalcule = 0;
             if (fraisPortHT > 0) {
               if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
                 const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsCompa);
-                portAchat = prix ?? 0;
+                portAchatCalcule = prix ?? 0;
               } else {
                 // standard : pas de markup → achat = vente
-                portAchat = calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
+                portAchatCalcule = calculerFraisPort(poidsCompa, hasGranulatCompa) ?? fraisPortHT;
               }
             }
+            const portAchat = portAchatManuel ?? portAchatCalcule;
             const portVente = fraisPortHT;
             const portMarge = portVente - portAchat;
             const portCoeff = portAchat > 0 ? portVente / portAchat : null;
@@ -2123,7 +2132,7 @@ export default function Devis() {
                                 // Surcharge : valeur auto-calculée, lecture seule
                                 puAchat > 0 ? <span className="text-muted-foreground italic">{formatMontant(puAchat)}</span> : <span className="text-muted-foreground">—</span>
                               ) : !l.produitId ? (
-                                // Ligne libre autre : input éditable
+                                // Ligne libre : input toujours éditable
                                 <input
                                   type="number" min={0} step={0.01}
                                   value={l.prixAchatLigne ?? ''}
@@ -2131,7 +2140,46 @@ export default function Devis() {
                                   className="w-20 text-right border border-border rounded px-1 py-0 text-xs bg-background"
                                   placeholder="0,00"
                                 />
-                              ) : puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}
+                              ) : compaEditingId === l.id ? (
+                                // Édition en cours
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  value={compaEditVal}
+                                  onChange={e => setCompaEditVal(e.target.value)}
+                                  onBlur={() => {
+                                    const v = parseFloat(compaEditVal);
+                                    updateLigne(l.id, 'prixAchatLigne', !isNaN(v) && v > 0 ? v : undefined);
+                                    setCompaEditingId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    if (e.key === 'Escape') setCompaEditingId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-20 text-right border border-primary rounded px-1 py-0 text-xs bg-background"
+                                />
+                              ) : (
+                                // Lecture — clic pour éditer
+                                <div className="flex items-center gap-0.5 justify-end group/edit">
+                                  {l.prixAchatLigne != null && (
+                                    <button type="button" title="Remettre le prix achat automatique"
+                                      onClick={() => updateLigne(l.id, 'prixAchatLigne', undefined)}
+                                      className="opacity-0 group-hover/edit:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                                    ><RotateCcw className="w-3 h-3" /></button>
+                                  )}
+                                  <span
+                                    title={l.prixAchatLigne != null ? 'Prix achat modifié manuellement — cliquer pour éditer' : 'Cliquer pour modifier le prix achat'}
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditVal(String(puAchat || 0)); }}
+                                    className={`cursor-pointer hover:underline decoration-dashed underline-offset-2 transition-colors ${l.prixAchatLigne != null ? 'text-amber-600 dark:text-amber-400 font-medium' : 'hover:text-primary'}`}
+                                  >
+                                    {puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}
+                                  </span>
+                                  <Pencil
+                                    className="w-3 h-3 opacity-0 group-hover/edit:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditVal(String(puAchat || 0)); }}
+                                  />
+                                </div>
+                              )}
                             </td>
                             <td className="px-2 py-1.5 text-right">{totAchat > 0 ? formatMontant(totAchat) : <span className="text-muted-foreground">—</span>}</td>
                             <td className="px-2 py-1.5 text-right">{formatMontant(puVente)}</td>
@@ -2149,7 +2197,46 @@ export default function Devis() {
                         return (
                           <tr className="border-b border-border/50 hover:bg-muted/30 bg-blue-50/30 dark:bg-blue-950/20">
                             <td className="px-2 py-1.5 text-muted-foreground italic" colSpan={3}>{transportLabel}</td>
-                            <td className="px-2 py-1.5 text-right">{portAchat > 0 ? formatMontant(portAchat) : <span className="text-muted-foreground">—</span>}</td>
+                            <td className="px-2 py-1.5 text-right">
+                              {compaEditingId === '__transport__' ? (
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  value={compaEditVal}
+                                  onChange={e => setCompaEditVal(e.target.value)}
+                                  onBlur={() => {
+                                    const v = parseFloat(compaEditVal);
+                                    setPortAchatManuel(!isNaN(v) && v >= 0 ? v : null);
+                                    setCompaEditingId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    if (e.key === 'Escape') setCompaEditingId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-20 text-right border border-primary rounded px-1 py-0 text-xs bg-background"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-0.5 justify-end group/edit">
+                                  {portAchatManuel != null && (
+                                    <button type="button" title="Remettre le coût transport automatique"
+                                      onClick={() => setPortAchatManuel(null)}
+                                      className="opacity-0 group-hover/edit:opacity-100 text-muted-foreground hover:text-destructive transition-opacity shrink-0"
+                                    ><RotateCcw className="w-3 h-3" /></button>
+                                  )}
+                                  <span
+                                    title={portAchatManuel != null ? 'Coût transport modifié manuellement — cliquer pour éditer' : 'Cliquer pour modifier le coût transport achat'}
+                                    onClick={() => { setCompaEditingId('__transport__'); setCompaEditVal(String(portAchat || 0)); }}
+                                    className={`cursor-pointer hover:underline decoration-dashed underline-offset-2 transition-colors ${portAchatManuel != null ? 'text-amber-600 dark:text-amber-400 font-medium' : 'hover:text-primary'}`}
+                                  >
+                                    {portAchat > 0 ? formatMontant(portAchat) : <span className="text-muted-foreground">—</span>}
+                                  </span>
+                                  <Pencil
+                                    className="w-3 h-3 opacity-0 group-hover/edit:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
+                                    onClick={() => { setCompaEditingId('__transport__'); setCompaEditVal(String(portAchat || 0)); }}
+                                  />
+                                </div>
+                              )}
+                            </td>
                             <td className="px-2 py-1.5 text-right">{portAchat > 0 ? formatMontant(portAchat) : <span className="text-muted-foreground">—</span>}</td>
                             <td className="px-2 py-1.5 text-right">{formatMontant(portVente)}</td>
                             <td className="px-2 py-1.5 text-right font-medium">{formatMontant(portVente)}</td>
