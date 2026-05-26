@@ -731,40 +731,61 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '72px' }} />{/* Total HT */}
               </colgroup>
               <thead>
-                {/* Ligne 1 : groupes — cellule Désignation vide (fond rouge identique → invisible)
-                    Le contenu DÉSIGNATION est dans la ligne 2 pour s'aligner visuellement
-                    avec kg/m² KG etc. (html2canvas ne supporte pas rowSpan correctement) */}
-                {/* Ligne 1 : DÉSIGNATION + groupes Conso./Condit./Prix */}
+                {/* verticalAlign:middle est ignoré par html2canvas sur les <th>.
+                    Approche fiable : div flex height fixe à l'intérieur de chaque cellule
+                    (même technique que le badge RAL). padding:0 sur le <th>, tout le
+                    padding/centering est dans le wrapper div. */}
+                {/* ── Ligne 1 : DÉSIGNATION + groupes Conso./Condit./Prix ── */}
                 <tr className="bg-[#CC0000] text-white">
-                  {/* borderBottom rouge = même couleur que fond → invisible mais évite la fusion
-                      des deux cellules qui casserait le centrage vertical */}
-                  {/* lineHeight:'1rem' aligne la hauteur de cellule sur les cellules text-xs (line-height:1rem)
-                      qui donnent la hauteur de la ligne → verticalAlign:middle fonctionne correctement */}
-                  <th className="text-left py-1 px-2 font-bold uppercase border-r border-white/20"
-                      style={{ fontSize: '11px', lineHeight: '1rem', borderBottom: '1px solid #CC0000', verticalAlign: 'middle' }}>
-                    Désignation
+                  <th className="font-bold uppercase border-r border-white/20"
+                      style={{ padding: 0, borderBottom: '1px solid #CC0000' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', height: '24px', padding: '0 8px', boxSizing: 'border-box', fontSize: '11px' }}>
+                      Désignation
+                    </div>
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Conso. Est.</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ verticalAlign: 'middle' }}>Condit.</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ verticalAlign: 'middle' }}>Prix</th>
+                  <th colSpan={2} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Conso. Est.</div>
+                  </th>
+                  <th colSpan={3} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box' }}>Condit.</div>
+                  </th>
+                  <th colSpan={3} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box' }}>Prix</div>
+                  </th>
                 </tr>
-                {/* Ligne 2 : "Fiches système..." + sous-colonnes */}
+                {/* ── Ligne 2 : Fiches système + sous-colonnes ── */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  {/* data-pdf-href → jsPDF ajoute une annotation de lien cliquable dans le PDF */}
-                  <th className="text-left py-1 px-2 border-r border-white/20"
-                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', lineHeight: '1rem', opacity: 0.75, verticalAlign: 'middle' }}
+                  <th className="border-r border-white/20" style={{ padding: 0 }}
                       data-pdf-href="https://www.isofloor.fr">
-                    Fiches système / Produit :{' '}
-                    <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
+                    <div style={{ display: 'flex', alignItems: 'center', height: '22px', padding: '0 8px', boxSizing: 'border-box', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75 }}>
+                      Fiches système / Produit :{' '}
+                      <span style={{ textDecoration: 'underline', marginLeft: '3px' }}>www.isofloor.fr</span>
+                    </div>
                   </th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>kg/m²</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>kg</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Unité</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Unité</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>(Kg)</th>
-                  <th className="py-1 px-1 text-right" style={{ verticalAlign: 'middle' }}>Total HT</th>
+                  <th className="border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>kg/m²</div>
+                  </th>
+                  <th style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>KG</div>
+                  </th>
+                  <th className="border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>kg</div>
+                  </th>
+                  <th style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Unité</div>
+                  </th>
+                  <th style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>KG</div>
+                  </th>
+                  <th className="border-l border-white/20" style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Unité</div>
+                  </th>
+                  <th style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>(Kg)</div>
+                  </th>
+                  <th style={{ padding: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box' }}>Total HT</div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
