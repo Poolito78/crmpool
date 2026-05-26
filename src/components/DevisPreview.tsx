@@ -736,8 +736,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     avec kg/m² KG etc. (html2canvas ne supporte pas rowSpan correctement) */}
                 {/* Ligne 1 : DÉSIGNATION + groupes Conso./Condit./Prix */}
                 <tr className="bg-[#CC0000] text-white">
+                  {/* borderBottom rouge = même couleur que fond → invisible mais évite la fusion
+                      des deux cellules qui casserait le centrage vertical */}
                   <th className="text-left py-1 px-2 font-bold uppercase border-r border-white/20"
-                      style={{ fontSize: '11px', borderBottom: 'none', verticalAlign: 'middle' }}>
+                      style={{ fontSize: '11px', borderBottom: '1px solid #CC0000', verticalAlign: 'middle' }}>
                     Désignation
                   </th>
                   <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Conso. Est.</th>
@@ -748,7 +750,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <tr className="bg-[#CC0000] text-white text-xs">
                   {/* data-pdf-href → jsPDF ajoute une annotation de lien cliquable dans le PDF */}
                   <th className="text-left py-1 px-2 border-r border-white/20"
-                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, borderTop: 'none', verticalAlign: 'middle' }}
+                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, verticalAlign: 'middle' }}
                       data-pdf-href="https://www.isofloor.fr">
                     Fiches système / Produit :{' '}
                     <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
