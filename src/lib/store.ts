@@ -41,6 +41,7 @@ export interface Client {
   estRevendeur?: boolean;
   remisesParCategorie?: Record<string, number>;
   contacts?: Contact[];
+  delaiReglement?: string;
 }
 
 export interface Fournisseur {
@@ -399,6 +400,7 @@ function dbToClient(r: any): Client {
     estRevendeur: r.est_revendeur || false,
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
     contacts: (r.contacts as Contact[]) || [],
+    delaiReglement: r.delai_reglement || undefined,
   };
 }
 
@@ -420,6 +422,7 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     est_revendeur: c.estRevendeur || false,
     remises_par_categorie: c.remisesParCategorie || {},
     contacts: c.contacts || [],
+    ...(c.delaiReglement !== undefined ? { delai_reglement: c.delaiReglement } : {}),
   };
 }
 

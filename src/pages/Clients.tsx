@@ -1047,7 +1047,7 @@ export default function Clients() {
               <div className="mt-2">
                 <select
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-9"
-                  value={(form as any).delaiReglement || '45J FDM'}
+                  value={form.delaiReglement || '45J FDM'}
                   onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
                 >
                   {DELAI_REGLEMENT_OPTIONS.map(opt => (
@@ -1055,7 +1055,7 @@ export default function Clients() {
                   ))}
                 </select>
                 <p className="mt-1 text-xs text-muted-foreground italic">
-                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === ((form as any).delaiReglement || '45J FDM'))?.conditions}
+                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === (form.delaiReglement || '45J FDM'))?.conditions}
                 </p>
               </div>
             </div>
