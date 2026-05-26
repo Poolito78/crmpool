@@ -126,38 +126,46 @@ export async function generatePdfFromElement(
   element: HTMLElement,
   opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string },
 ): Promise<string> {
-  // ── Force la largeur de capture à 794px (= largeur A4 en pixels CSS à 96dpi)
-  // Sans ça, si la fenêtre est plus étroite, le document est capturé plus petit
-  // puis étiré sur toute la largeur A4 → rendu "écrasé/étiré".
+  // ── Clone l'élément dans un conteneur hors-écran à la racine du body
+  // pour éviter que les ancêtres (dialog overflow-y:auto → overflow-x:hidden)
+  // ne rognent l'élément lors de la capture html2canvas.
   const A4_PX = 794;
-  const parent = element.parentElement;
-  const savedEl = { width: element.style.width, minWidth: element.style.minWidth, maxWidth: element.style.maxWidth };
-  const savedPa = parent ? { width: parent.style.width, maxWidth: parent.style.maxWidth } : null;
-  element.style.width = A4_PX + 'px';
-  element.style.minWidth = A4_PX + 'px';
-  element.style.maxWidth = A4_PX + 'px';
-  if (parent) { parent.style.width = A4_PX + 'px'; parent.style.maxWidth = A4_PX + 'px'; }
-  // Attend 2 frames pour que le navigateur reflowe le layout au new width avant capture
+  const wrap = document.createElement('div');
+  wrap.style.cssText = [
+    `position:fixed`,
+    `left:-${A4_PX + 200}px`,
+    `top:0`,
+    `width:${A4_PX}px`,
+    `overflow:visible`,
+    `background:white`,
+    `pointer-events:none`,
+    `z-index:-9999`,
+  ].join(';');
+  const clone = element.cloneNode(true) as HTMLElement;
+  clone.style.width = A4_PX + 'px';
+  clone.style.minWidth = A4_PX + 'px';
+  clone.style.maxWidth = A4_PX + 'px';
+  wrap.appendChild(clone);
+  document.body.appendChild(wrap);
+  // Attend 2 frames pour que le navigateur reflowe le clone au new width avant capture
   await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
   let canvas: HTMLCanvasElement;
   try {
-    canvas = await html2canvas(element, {
+    canvas = await html2canvas(clone, {
       scale: 2,
       useCORS: true,
       allowTaint: true,
       logging: false,
       backgroundColor: '#ffffff',
       imageTimeout: 15000,
-      windowWidth: 1200,  // viewport simulé large → maxWidth:794px s'applique pleinement
+      windowWidth: A4_PX,
     });
   } finally {
-    // Restaure les styles originaux quoi qu'il arrive
-    element.style.width = savedEl.width;
-    element.style.minWidth = savedEl.minWidth;
-    element.style.maxWidth = savedEl.maxWidth;
-    if (parent && savedPa) { parent.style.width = savedPa.width; parent.style.maxWidth = savedPa.maxWidth; }
+    document.body.removeChild(wrap);
   }
+  // Alias utilisé par les fonctions de mesure DOM ci-dessous
+  const captureEl = clone;
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
@@ -226,7 +234,7 @@ export async function generatePdfFromElement(
   function getOffsetRelative(el: HTMLElement): { top: number; bottom: number } {
     let top = 0;
     let cur: HTMLElement | null = el;
-    while (cur && cur !== element) {
+    while (cur && cur !== captureEl) {
       top += cur.offsetTop;
       cur = cur.offsetParent as HTMLElement | null;
     }
@@ -234,13 +242,13 @@ export async function generatePdfFromElement(
   }
 
   function computePageSlices(): number[] {
-    const elementH = element.scrollHeight || element.offsetHeight;
+    const elementH = captureEl.scrollHeight || captureEl.offsetHeight;
     if (elementH === 0) return [];
     const domToMm = imgH / elementH;
 
     // Bord bas de chaque <tr> en mm depuis le haut du container
     const rowBottoms: number[] = [];
-    element.querySelectorAll('tr').forEach(tr => {
+    captureEl.querySelectorAll('tr').forEach(tr => {
       const { bottom } = getOffsetRelative(tr as HTMLElement);
       const bottomMm = bottom * domToMm;
       if (bottomMm > 0 && bottomMm <= imgH) rowBottoms.push(bottomMm);
