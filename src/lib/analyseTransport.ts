@@ -6,7 +6,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
 ).toString();
 
 export interface TransportExtrait {
-  transporteur?: string;
+  fournisseur?: string;  // l'expéditeur / donneur d'ordre (ex: QRM, TREMCO CPG)
+  transporteur?: string; // le prestataire transport (ex: UPS, Heppner)
   date?: string;
   poidsKg?: number;
   prixHT?: number;
@@ -20,7 +21,8 @@ export interface TransportExtrait {
 const PROMPT = `Tu es un assistant spécialisé dans l'extraction de données depuis des factures, lettres de voiture et bons de transport.
 Extrait les informations de transport. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 {
-  "transporteur": "nom du transporteur (UPS, Heppner, GLS, DB Schenker, TNT, Geodis, XPO…) ou null",
+  "fournisseur": "nom de l'expéditeur / donneur d'ordre / client de la livraison (ex: QRM, TREMCO CPG, Sika, Mapei…) — c'est le nom de l'entreprise qui a fait appel au transporteur, pas le transporteur lui-même. ou null",
+  "transporteur": "nom du prestataire transport (UPS, Heppner, GLS, DB Schenker, TNT, Geodis, XPO, DHL, Fedex…) ou null",
   "date": "date de la facture ou de la livraison au format YYYY-MM-DD ou null",
   "poidsKg": nombre (poids expédié en kg) ou null,
   "prixHT": nombre (montant HT des frais de transport en euros) ou null,

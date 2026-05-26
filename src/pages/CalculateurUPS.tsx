@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, generateId, getStandardBareme, saveStandardBareme, DEFAULT_STANDARD_BAREME, type TransporteurType, type BaremePalier, type StandardBareme } from '@/lib/store';
+import { useCRM } from '@/lib/StoreContext';
 import { analyserDocumentTransport } from '@/lib/analyseTransport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -89,7 +90,8 @@ const LS_ACHATS_KEY = 'crm_transport_achats';
 interface AchatTransport {
   id: string;
   date: string;
-  transporteur: string;
+  fournisseur: string;   // ex : QRM, TREMCO CPG — l'expéditeur des marchandises
+  transporteur: string;  // ex : UPS, Heppner — le prestataire transport
   poidsKg: number;
   distanceKm: number | null;
   deptDepart: string;
@@ -116,6 +118,7 @@ function loadAchats(): AchatTransport[] {
 // ── Composant ─────────────────────────────────────────────────────────────────
 
 export default function CalculateurUPS() {
+  const { fournisseurs } = useCRM();
   const [pageTab, setPageTab] = useState<PageTab>('standard');
 
   // Barèmes (persistés en localStorage)
@@ -230,6 +233,7 @@ export default function CalculateurUPS() {
   const [achatFormOpen, setAchatFormOpen] = useState(false);
   const [achatForm, setAchatForm] = useState<Partial<AchatTransport>>({
     date: new Date().toISOString().split('T')[0],
+    fournisseur: '',
     transporteur: '',
     poidsKg: undefined,
     distanceKm: null,
@@ -284,6 +288,7 @@ export default function CalculateurUPS() {
     const entry: AchatTransport = {
       id: generateId(),
       date: achatForm.date || new Date().toISOString().split('T')[0],
+      fournisseur: achatForm.fournisseur || '',
       transporteur: achatForm.transporteur || '',
       poidsKg: p,
       distanceKm: dist,
@@ -295,7 +300,7 @@ export default function CalculateurUPS() {
     };
     setAchats(prev => [entry, ...prev]);
     setAchatFormOpen(false);
-    setAchatForm({ date: new Date().toISOString().split('T')[0], deptDepart: '76', transporteur: '', reference: '', note: '' });
+    setAchatForm({ date: new Date().toISOString().split('T')[0], fournisseur: '', deptDepart: '76', transporteur: '', reference: '', note: '' });
     toast.success('Entrée ajoutée');
   }
 
@@ -357,6 +362,7 @@ export default function CalculateurUPS() {
       // Pré-remplir le formulaire
       setAchatForm(prev => ({
         ...prev,
+        fournisseur:   extrait.fournisseur   ?? prev.fournisseur,
         transporteur:  extrait.transporteur  ?? prev.transporteur,
         date:          extrait.date          ?? prev.date,
         poidsKg:       extrait.poidsKg       ?? prev.poidsKg,
@@ -988,7 +994,24 @@ export default function CalculateurUPS() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                {/* datalist suggestions fournisseurs CRM */}
+                <datalist id="dl-fournisseurs-achat">
+                  {fournisseurs.map(f => (
+                    <option key={f.id} value={f.societe || f.nom || ''} />
+                  ))}
+                </datalist>
+
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div className="space-y-1 col-span-2 sm:col-span-1">
+                    <Label className="text-xs">Fournisseur expéditeur *</Label>
+                    <Input
+                      list="dl-fournisseurs-achat"
+                      placeholder="ex : QRM, TREMCO CPG…"
+                      value={achatForm.fournisseur || ''}
+                      onChange={e => setAchatForm(f => ({ ...f, fournisseur: e.target.value }))}
+                      className="h-8 text-xs"
+                    />
+                  </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Date</Label>
                     <Input type="date" value={achatForm.date || ''} onChange={e => setAchatForm(f => ({ ...f, date: e.target.value }))} className="h-8 text-xs" />
@@ -1056,6 +1079,7 @@ export default function CalculateurUPS() {
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('date')}>
                           Date {achatSortBy === 'date' ? (achatSortAsc ? '↑' : '↓') : ''}
                         </th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">Fournisseur</th>
                         <th className="text-left px-3 py-2 font-medium text-muted-foreground">Transporteur</th>
                         <th className="text-right px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('poids')}>
                           Poids {achatSortBy === 'poids' ? (achatSortAsc ? '↑' : '↓') : ''}
@@ -1094,6 +1118,7 @@ export default function CalculateurUPS() {
                               <GripVertical className="w-3.5 h-3.5" />
                             </td>
                             <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{a.date}</td>
+                            <td className="px-3 py-2 font-semibold text-primary/90 whitespace-nowrap">{a.fournisseur || <span className="text-muted-foreground font-normal italic">—</span>}</td>
                             <td className="px-3 py-2 font-medium">{a.transporteur || <span className="text-muted-foreground italic">—</span>}</td>
                             <td className="px-3 py-2 text-right whitespace-nowrap">
                               <span className="font-medium">{a.poidsKg} kg</span>
