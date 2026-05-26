@@ -150,6 +150,22 @@ export async function generatePdfFromElement(
   // Attend 2 frames pour que le navigateur reflowe le clone au new width avant capture
   await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
+  // ── Centrage vertical en-tête : force le padding symétrique sur le clone
+  // après reflow (offsetHeight connu) → lineHeight = hauteur réelle mesurée,
+  // paddingTop/Bottom = 0. Utilise !important pour court-circuiter tout conflit
+  // de cascade CSS qui empêcherait html2canvas de voir les bons styles.
+  clone.querySelectorAll<HTMLElement>('thead tr').forEach((tr, rowIdx) => {
+    tr.querySelectorAll<HTMLElement>('th').forEach(th => {
+      const h = th.offsetHeight || (rowIdx === 0 ? 26 : 20);
+      th.style.setProperty('padding-top', '0', 'important');
+      th.style.setProperty('padding-bottom', '0', 'important');
+      th.style.setProperty('line-height', h + 'px', 'important');
+      th.style.setProperty('vertical-align', 'middle', 'important');
+    });
+  });
+  // 1 frame supplémentaire pour appliquer les nouveaux styles avant capture
+  await new Promise<void>(r => requestAnimationFrame(() => r()));
+
   let canvas: HTMLCanvasElement;
   try {
     canvas = await html2canvas(clone, {
