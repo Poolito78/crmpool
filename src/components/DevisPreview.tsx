@@ -733,7 +733,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <thead>
                 {/* Ligne 1 : groupes */}
                 <tr className="bg-[#CC0000] text-white">
-                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-bottom border-r border-white/20">
+                  <th rowSpan={2} className="text-left py-2 px-2 font-bold uppercase text-xs align-top border-r border-white/20">
                     <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>Désignation</div>
                     {/* lien site — <div> au lieu de <span class="block"> pour html2canvas */}
                     <div style={{ fontSize: '10px', fontWeight: 'normal', fontStyle: 'italic', opacity: 0.7, marginTop: '2px' }}>Fiches système / Produit : www.isofloor.fr</div>
