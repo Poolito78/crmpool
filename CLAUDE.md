@@ -59,6 +59,7 @@ When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, 
 | `ComposantProduit` | Three quantity modes: plain `quantite`, `poidsKg` (weight → qty via `produit.poids`), or `consommationPct` (% of a base component). All three modes must be handled wherever composant cost is calculated. |
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`. Only `'ligne'` rows count in totals. `prixAchatLigne` = free-line purchase cost (e.g. energy surcharges). |
 | `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is price per kg from supplier catalog — **different** from `Produit.prixAchat`. |
+| `Client` | `delaiReglement?: string` — preset payment terms (`'Comptant' \| '30J' \| '30J FDM' \| '45J' \| '45J FDM'`). Drives auto-fill of the `conditions` textarea in the devis form when client changes. `DELAI_REGLEMENT_OPTIONS` (label + full text) exported from `Clients.tsx`. |
 | `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation`. `statut` includes `'archivé'` in addition to the standard statuses. Archived devis carry: `archiveDate?`, `archiveRaison?`, `archiveCommentaire?`, `archiveConcurrents?`. |
 | `CrmAction` | Has `concurrents?: CrmActionConcurrent[]` for recording competitor prices observed during visits/calls. Only include in DB payload when defined (column may not exist yet). |
 | `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constant `RAISON_ARCHIVE` holds label/color/messageDefaut per key. |
@@ -70,6 +71,13 @@ When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, 
 - `calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA)` — full devis totals.
 - `calculerFraisPort(poidsKg, hasGranulat)` — standard transport barème.
 - `calculerFraisPortBareme(bareme, poidsKg)` — generic barème (UPS / messagerie / GLS).
+
+**Local helpers in `Devis.tsx`** (defined after `calcQuantiteSurface`, hoisted):
+- `getVarianteDiff(produit, variantesChoisies?)` — sums `prixDiff` from all chosen variant options.
+- `getPrixLigne(produit, quantite, variantesChoisies?, isRevendeur?)` — `getPrixPourQuantite` base + `getVarianteDiff`. **Always use instead of `getPrixPourQuantite` alone whenever variants may be chosen** (quantity change, surface/conso change, populateForm). The existing `VarianteSelect onChange` handler is the canonical reference for this pattern.
+- `calcQuantiteSurface(prod, surface, consoOverride?)` — `Math.ceil(surface × conso / poids)`.
+
+**Devis comparatif manual overrides:** states `compaEditingId / compaEditVal` (per-line puAchat) and `portAchatManuel` (transport). Click-to-edit inline input, amber colour when overridden, ↺ reset. `portAchat = portAchatManuel ?? portAchatCalcule` in the IIFE.
 
 ### Sidebar nav structure (`src/components/CRMLayout.tsx`)
 
@@ -95,7 +103,7 @@ Current structure:
 | `Commandes.tsx` / `CommandesClient.tsx` | Purchase & sales order management. |
 | `FacturesClient.tsx` / `FacturesFournisseur.tsx` | Invoice tracking. |
 | `GED.tsx` | Document management (pieces jointes per devis line via `devis_pieces_jointes` table). |
-| `CalculateurUPS.tsx` | Shipping cost calculator (UPS barème). |
+| `CalculateurUPS.tsx` | Shipping cost calculator. 5 tabs: Standard, Transporteurs, Barèmes transporteurs, Saisie manuelle, **Achat**. The Achat tab stores real transport purchase history (drag-and-drop reorder, sortable, AI PDF extraction). localStorage key `crm_transport_achats`. `AchatTransport` interface has `fournisseur` (sender/client, e.g. QRM) distinct from `transporteur` (carrier, e.g. UPS). |
 | `StatsVariantes.tsx` | Sales statistics by product variant. |
 | `Dashboard.tsx` | KPI summary. |
 
@@ -135,8 +143,9 @@ Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern 
 - **`exportExcel.ts`** — `exportMultiSheet` generates multi-sheet `.xlsx` files (used for global data export from the nav bar).
 - **`parseEml.ts`** / **`parseMsgPdf.ts`** / **`parseExcel.ts`** — Parse raw email and Excel files into structured objects for AI analysis and import flows.
 - **`analyseDocument.ts`** — PDF text extraction via `pdfjs-dist`. Exports `TypeDocument` union and `TYPE_LABELS`.
+- **`analyseTransport.ts`** — `analyserDocumentTransport(file, apiKey?, geminiKey?, openrouterKey?)` extracts transport data from PDF/text via AI (Groq → Gemini → OpenRouter fallback). Returns `TransportExtrait`: `fournisseur` (donneur d'ordre / sender, e.g. QRM, TREMCO CPG) **distinct from** `transporteur` (carrier, e.g. UPS, Heppner). Used in the Achat tab of `CalculateurUPS.tsx`.
 - **`odooSync.ts`** — Generates a JS script to paste into the Odoo browser console to create a `sale.order`. Entry point: `genererScriptOdoo(devis, client, produits, options?)`. Constants: `ODOO_COMPANY_ID = 13`, `ODOO_FALLBACK_PRODUCT_ID = 362577`. Uses `promptOdooPartnerName(clientId, defaultName)` to handle partner name mismatches (cached in `localStorage` as `odoo_partner_<clientId>`).
-- **`ralColors.ts`** — RAL colour reference data.
+- **`ralColors.ts`** — RAL colour reference data. `getRalInfo('RAL XXXX')` returns `{ hex, dark }`. `VarianteSelect` auto-renders colour swatches for options whose `label` matches `RAL XXXX` — no `imageUrl` needed. Texture images (e.g. QuartzColor swatches) require `imageUrl` pointing to `/quartz/*.jpg`.
 
 ### PDF generation (`src/lib/pdfFolder.ts`)
 
@@ -153,6 +162,8 @@ The **comparatif achat/vente** tab uses these rules for `puAchat` per line:
 4. Product lines → `getPrixPourQuantite(prod, quantite).prixAchat`
 
 Replicate this pattern consistently in: the comparatif IIFE, devis card list (`totalAchatD`), and aperçu summary (`totalAchat`).
+
+**`populateForm` price recalculation:** when loading an existing devis into the edit dialog, `prixUnitaireHT` is recalculated for any `'ligne'`-type row where `getVarianteDiff > 0`. This corrects values saved before the variant-prixDiff logic was added without overriding manually set prices on non-variant lines.
 
 ### Supabase migrations (`supabase/migrations/`)
 
