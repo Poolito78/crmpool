@@ -231,6 +231,7 @@ export default function CalculateurUPS() {
   // ── Historique achats transport ────────────────────────────────────────────
   const [achats, setAchats] = useState<AchatTransport[]>(loadAchats);
   const [achatFormOpen, setAchatFormOpen] = useState(false);
+  const [achatEditId, setAchatEditId] = useState<string | null>(null); // null = création, string = édition
   const [achatForm, setAchatForm] = useState<Partial<AchatTransport>>({
     date: new Date().toISOString().split('T')[0],
     fournisseur: '',
@@ -279,6 +280,20 @@ export default function CalculateurUPS() {
     return { ...t, count: items.length, avg, min: Math.min(...prices), max: Math.max(...prices) };
   }), [achats]);
 
+  function closeAchatForm() {
+    setAchatFormOpen(false);
+    setAchatEditId(null);
+    setAchatForm({ date: new Date().toISOString().split('T')[0], fournisseur: '', deptDepart: '76', transporteur: '', reference: '', note: '' });
+  }
+
+  function openAchatEdit(a: AchatTransport) {
+    setAchatForm({ ...a });
+    setAchatEditId(a.id);
+    setAchatFormOpen(true);
+    // scroll vers le formulaire
+    setTimeout(() => dropZoneRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }
+
   function saveAchat() {
     const p = parseFloat(String(achatForm.poidsKg ?? '')) || 0;
     const prix = parseFloat(String(achatForm.prixHT ?? '')) || 0;
@@ -286,7 +301,7 @@ export default function CalculateurUPS() {
     if (prix <= 0) { toast.error('Prix achat requis'); return; }
     const dist = achatDistanceCalc ?? (achatForm.distanceKm ?? null);
     const entry: AchatTransport = {
-      id: generateId(),
+      id: achatEditId ?? generateId(),
       date: achatForm.date || new Date().toISOString().split('T')[0],
       fournisseur: achatForm.fournisseur || '',
       transporteur: achatForm.transporteur || '',
@@ -298,10 +313,14 @@ export default function CalculateurUPS() {
       reference: achatForm.reference || '',
       note: achatForm.note || '',
     };
-    setAchats(prev => [entry, ...prev]);
-    setAchatFormOpen(false);
-    setAchatForm({ date: new Date().toISOString().split('T')[0], fournisseur: '', deptDepart: '76', transporteur: '', reference: '', note: '' });
-    toast.success('Entrée ajoutée');
+    if (achatEditId) {
+      setAchats(prev => prev.map(a => a.id === achatEditId ? entry : a));
+      toast.success('Entrée mise à jour');
+    } else {
+      setAchats(prev => [entry, ...prev]);
+      toast.success('Entrée ajoutée');
+    }
+    closeAchatForm();
   }
 
   function deleteAchat(id: string) {
@@ -978,7 +997,12 @@ export default function CalculateurUPS() {
               <h2 className="font-semibold text-base">Historique des prix achat transport</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Renseignez les prix réels payés aux transporteurs — classés par poids et distance.</p>
             </div>
-            <Button size="sm" variant="outline" onClick={() => setAchatFormOpen(v => !v)} className="gap-1.5">
+            <Button size="sm" variant="outline"
+              onClick={() => {
+                if (achatFormOpen && achatEditId) { closeAchatForm(); setAchatFormOpen(true); }
+                else setAchatFormOpen(v => !v);
+              }}
+              className="gap-1.5">
               <Plus className="w-4 h-4" />
               Saisie manuelle
             </Button>
@@ -989,8 +1013,8 @@ export default function CalculateurUPS() {
             <Card className="border-primary/40">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center justify-between">
-                  Nouvelle entrée
-                  <button onClick={() => setAchatFormOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                  {achatEditId ? 'Modifier l\'entrée' : 'Nouvelle entrée'}
+                  <button onClick={closeAchatForm} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -1055,8 +1079,11 @@ export default function CalculateurUPS() {
                   </div>
                 </div>
                 <div className="flex justify-end gap-2 mt-3">
-                  <Button variant="outline" size="sm" onClick={() => setAchatFormOpen(false)}>Annuler</Button>
-                  <Button size="sm" onClick={saveAchat} className="gap-1.5"><Check className="w-3.5 h-3.5" /> Enregistrer</Button>
+                  <Button variant="outline" size="sm" onClick={closeAchatForm}>Annuler</Button>
+                  <Button size="sm" onClick={saveAchat} className="gap-1.5">
+                    <Check className="w-3.5 h-3.5" />
+                    {achatEditId ? 'Mettre à jour' : 'Enregistrer'}
+                  </Button>
                 </div>
               </CardContent>
             </Card>
@@ -1138,10 +1165,18 @@ export default function CalculateurUPS() {
                               {[a.reference, a.note].filter(Boolean).join(' — ') || '—'}
                             </td>
                             <td className="px-2 py-2">
-                              <button onClick={() => deleteAchat(a.id)}
-                                className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive rounded transition-opacity">
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => openAchatEdit(a)}
+                                  className="p-1 text-muted-foreground hover:text-primary rounded"
+                                  title="Modifier">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button onClick={() => deleteAchat(a.id)}
+                                  className="p-1 text-muted-foreground hover:text-destructive rounded"
+                                  title="Supprimer">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
