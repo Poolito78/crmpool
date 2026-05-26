@@ -752,6 +752,7 @@ export default function Devis() {
     // Évite d'écraser les surfaces individuelles à l'ouverture du formulaire
     if (prevSurfaceGlobaleRef.current === surfaceGlobaleM2) return;
     prevSurfaceGlobaleRef.current = surfaceGlobaleM2;
+    const client = clients.find(c => c.id === clientId);
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produits.find(pr => pr.id === l.produitId);
@@ -759,7 +760,9 @@ export default function Devis() {
       const conso = l.consommation || p.consommation;
       if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation);
-      return { ...l, quantite, surfaceM2: surfaceGlobaleM2 };
+      const palier = getPrixPourQuantite(p, quantite);
+      const prixUnitaireHT = client?.estRevendeur ? palier.prixRevendeur : palier.prixHT;
+      return { ...l, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
     }));
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
 
@@ -1624,7 +1627,10 @@ export default function Devis() {
                                     const surface = parseFloat(e.target.value) || 0;
                                     const conso = l.consommation ?? prod?.consommation;
                                     const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
-                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite } : li));
+                                    const client = clients.find(c => c.id === clientId);
+                                    const palier = prod ? getPrixPourQuantite(prod, quantite) : null;
+                                    const prixUnitaireHT = palier ? (client?.estRevendeur ? palier.prixRevendeur : palier.prixHT) : undefined;
+                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
                                   }} className="h-8 text-sm" placeholder="m²" />
                                 </div>
                               )}
@@ -1637,7 +1643,10 @@ export default function Devis() {
                                     const conso = raw === '' ? undefined : parseFloat(raw);
                                     const surface = l.surfaceM2 || surfaceGlobaleM2;
                                     const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
-                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite } : li));
+                                    const client = clients.find(c => c.id === clientId);
+                                    const palier = prod ? getPrixPourQuantite(prod, quantite) : null;
+                                    const prixUnitaireHT = palier ? (client?.estRevendeur ? palier.prixRevendeur : palier.prixHT) : undefined;
+                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
                                   }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />
                                 </div>
                               )}
