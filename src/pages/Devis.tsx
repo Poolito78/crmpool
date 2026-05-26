@@ -624,6 +624,24 @@ export default function Devis() {
     return Math.ceil(kgNeeded / produit.poids);
   }
 
+  /** Somme des prixDiff des variantes choisies sur une ligne */
+  function getVarianteDiff(produit: typeof produits[0], variantesChoisies?: Record<string, string>): number {
+    if (!produit.variantes?.length || !variantesChoisies) return 0;
+    return produit.variantes.reduce((sum, d) => {
+      const chosenLabel = variantesChoisies[d.id] ?? d.options[0]?.label;
+      const o = d.options.find(x => x.label === chosenLabel);
+      return sum + (o?.prixDiff ?? 0);
+    }, 0);
+  }
+
+  /** Prix unitaire HT final = palier + diff variantes */
+  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean): number {
+    const palier = getPrixPourQuantite(produit, quantite);
+    const base = isRevendeur ? palier.prixRevendeur : palier.prixHT;
+    const diff = getVarianteDiff(produit, variantesChoisies);
+    return Math.round((base + diff) * 100) / 100;
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produits.find(pr => pr.id === produitId);
     if (!p) return;
@@ -760,8 +778,7 @@ export default function Devis() {
       const conso = l.consommation || p.consommation;
       if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation);
-      const palier = getPrixPourQuantite(p, quantite);
-      const prixUnitaireHT = client?.estRevendeur ? palier.prixRevendeur : palier.prixHT;
+      const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
       return { ...l, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
     }));
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
@@ -1628,8 +1645,7 @@ export default function Devis() {
                                     const conso = l.consommation ?? prod?.consommation;
                                     const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
                                     const client = clients.find(c => c.id === clientId);
-                                    const palier = prod ? getPrixPourQuantite(prod, quantite) : null;
-                                    const prixUnitaireHT = palier ? (client?.estRevendeur ? palier.prixRevendeur : palier.prixHT) : undefined;
+                                    const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                     setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
                                   }} className="h-8 text-sm" placeholder="m²" />
                                 </div>
@@ -1644,8 +1660,7 @@ export default function Devis() {
                                     const surface = l.surfaceM2 || surfaceGlobaleM2;
                                     const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
                                     const client = clients.find(c => c.id === clientId);
-                                    const palier = prod ? getPrixPourQuantite(prod, quantite) : null;
-                                    const prixUnitaireHT = palier ? (client?.estRevendeur ? palier.prixRevendeur : palier.prixHT) : undefined;
+                                    const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                     setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
                                   }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />
                                 </div>
