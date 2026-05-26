@@ -104,7 +104,7 @@ interface Props {
   onSurfaceChange?: (ligneId: string, val: number) => void;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = true, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -759,7 +759,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {showKgRecap && (
                 <tr className="bg-muted/50 border-b-2 border-[#CC0000] text-xs italic font-medium">
                   <td />
-                  <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(1) : ''}</td>
+                  <td className="py-1.5 px-1 text-right">{sumConsoKgM2 > 0 ? sumConsoKgM2.toFixed(2) : ''}</td>
                   <td className="py-1.5 px-1 text-right">{sumTotalKg > 0 ? sumTotalKg.toFixed(1) : ''}</td>
                   <td /><td />
                   <td className="py-1.5 px-1 text-right">{sumCondKg > 0 ? sumCondKg.toFixed(1) : ''}</td>
@@ -891,7 +891,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const prixKgComp = poidsComp && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsComp * 100) / 100 : null;
                         return (
                           <>
-                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(1) : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? conso.toFixed(2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? totalKgConso.toFixed(2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? ''}</td>
@@ -910,7 +910,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const prixKg = poidsC && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsC * 100) / 100 : null;
                         return (
                           <>
-                            <td className="py-1.5 px-1 text-right">{conso > 0 ? conso : ''}</td>
+                            <td className="py-1.5 px-1 text-right">{conso > 0 ? conso.toFixed(2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{kg ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? ''}</td>
