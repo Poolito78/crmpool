@@ -738,8 +738,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <tr className="bg-[#CC0000] text-white">
                   {/* borderBottom rouge = même couleur que fond → invisible mais évite la fusion
                       des deux cellules qui casserait le centrage vertical */}
+                  {/* lineHeight:'1rem' aligne la hauteur de cellule sur les cellules text-xs (line-height:1rem)
+                      qui donnent la hauteur de la ligne → verticalAlign:middle fonctionne correctement */}
                   <th className="text-left py-1 px-2 font-bold uppercase border-r border-white/20"
-                      style={{ fontSize: '11px', borderBottom: '1px solid #CC0000', verticalAlign: 'middle' }}>
+                      style={{ fontSize: '11px', lineHeight: '1rem', borderBottom: '1px solid #CC0000', verticalAlign: 'middle' }}>
                     Désignation
                   </th>
                   <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Conso. Est.</th>
@@ -750,7 +752,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <tr className="bg-[#CC0000] text-white text-xs">
                   {/* data-pdf-href → jsPDF ajoute une annotation de lien cliquable dans le PDF */}
                   <th className="text-left py-1 px-2 border-r border-white/20"
-                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, verticalAlign: 'middle' }}
+                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', lineHeight: '1rem', opacity: 0.75, verticalAlign: 'middle' }}
                       data-pdf-href="https://www.isofloor.fr">
                     Fiches système / Produit :{' '}
                     <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
