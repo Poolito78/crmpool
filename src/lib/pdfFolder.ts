@@ -161,10 +161,13 @@ export async function generatePdfFromElement(
       imageTimeout: 15000,
       windowWidth: A4_PX,
     });
-  } finally {
+  } catch (err: unknown) {
+    // Nettoyage si html2canvas échoue
     document.body.removeChild(wrap);
+    throw err;
   }
-  // Alias utilisé par les fonctions de mesure DOM ci-dessous
+  // Le clone reste dans le DOM jusqu'à la fin des mesures offsetTop/offsetHeight.
+  // (Si finally retirait le wrap ici, offsetTop retourne 0 → computePageSlices inutile)
   const captureEl = clone;
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pw = pdf.internal.pageSize.getWidth();
@@ -282,6 +285,26 @@ export async function generatePdfFromElement(
     return slices;
   }
 
+  // ── Annotations de liens PDF (éléments portant data-pdf-href dans le clone) ──
+  type PdfLinkAnnot = { url: string; xMm: number; yMm: number; wMm: number; hMm: number };
+  const pdfLinks: PdfLinkAnnot[] = [];
+  {
+    const cloneH = captureEl.scrollHeight || captureEl.offsetHeight;
+    const dToMmY = cloneH > 0 ? imgH / cloneH : 1;
+    const dToMmX = pw / A4_PX;
+    captureEl.querySelectorAll<HTMLElement>('[data-pdf-href]').forEach(el => {
+      const url = el.getAttribute('data-pdf-href') ?? '';
+      if (!url) return;
+      const { top, bottom } = getOffsetRelative(el);
+      let leftPx = 0;
+      let cur: HTMLElement | null = el;
+      while (cur && cur !== captureEl) { leftPx += cur.offsetLeft; cur = cur.offsetParent as HTMLElement | null; }
+      pdfLinks.push({ url, xMm: leftPx * dToMmX, yMm: top * dToMmY, wMm: el.offsetWidth * dToMmX, hMm: (bottom - top) * dToMmY });
+    });
+  }
+  // Mesures terminées — on retire le clone du DOM
+  document.body.removeChild(wrap);
+
   // Si le dépassement est inférieur à 150 mm, on compresse pour tenir sur une page
   const overflow = imgH - contentH1;
   const forceSinglePage = overflow > 0 && overflow < 150;
@@ -289,6 +312,9 @@ export async function generatePdfFromElement(
   if (forceSinglePage) {
     pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH1);
     drawFooter(1, 1);
+    // Liens : ajustement y car le contenu est compressé de imgH → contentH1
+    const yScale = contentH1 / imgH;
+    for (const lk of pdfLinks) pdf.link(lk.xMm, lk.yMm * yScale, lk.wMm, lk.hMm * yScale, { url: lk.url });
   } else {
     const slices = computePageSlices();
     // Fallback si détection DOM échoue : découpe standard
@@ -328,6 +354,12 @@ export async function generatePdfFromElement(
       pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
       if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
+      // Liens sur cette page
+      for (const lk of pdfLinks) {
+        if (lk.yMm >= yOffsetMm && lk.yMm < yOffsetMm + sliceH) {
+          pdf.link(lk.xMm, (lk.yMm - yOffsetMm) + yContent, lk.wMm, lk.hMm, { url: lk.url });
+        }
+      }
       yOffsetMm += sliceH; page++;
     }
   }

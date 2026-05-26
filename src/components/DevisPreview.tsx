@@ -740,24 +740,27 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       style={{ fontSize: '11px', borderBottom: 'none', verticalAlign: 'middle' }}>
                     Désignation
                   </th>
-                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Conso. Est.</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Condit.</th>
-                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Prix</th>
+                  <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Conso. Est.</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ verticalAlign: 'middle' }}>Condit.</th>
+                  <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ verticalAlign: 'middle' }}>Prix</th>
                 </tr>
                 {/* Ligne 2 : "Fiches système..." + sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
+                  {/* data-pdf-href → jsPDF ajoute une annotation de lien cliquable dans le PDF */}
                   <th className="text-left py-1 px-2 border-r border-white/20"
-                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, borderTop: 'none', verticalAlign: 'middle' }}>
-                    Fiches système / Produit : www.isofloor.fr
+                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, borderTop: 'none', verticalAlign: 'middle' }}
+                      data-pdf-href="https://www.isofloor.fr">
+                    Fiches système / Produit :{' '}
+                    <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
                   </th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg/m²</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>Unité</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
-                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Unité</th>
-                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>(Kg)</th>
-                  <th className="py-1 px-1 text-right">Total HT</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>kg/m²</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>kg</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Unité</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>KG</th>
+                  <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>Unité</th>
+                  <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap', verticalAlign: 'middle' }}>(Kg)</th>
+                  <th className="py-1 px-1 text-right" style={{ verticalAlign: 'middle' }}>Total HT</th>
                 </tr>
               </thead>
               <tbody>
