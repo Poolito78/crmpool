@@ -150,23 +150,22 @@ export async function generatePdfFromElement(
   // Attend 2 frames pour que le navigateur reflowe le clone au new width avant capture
   await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
-  // ── Centrage vertical en-tête : chaque <th> contient un <div> interne dont
-  // height = lineHeight (centrage via line-box sur élément block, fiable html2canvas).
-  // On force ces valeurs sur le clone avec !important pour garantir le rendu.
-  clone.querySelectorAll<HTMLElement>('thead th').forEach(th => {
-    th.style.setProperty('padding', '0', 'important');
-    th.style.setProperty('vertical-align', 'top', 'important');
-    const div = th.querySelector<HTMLElement>(':scope > div');
-    if (div) {
-      const h = div.offsetHeight || th.offsetHeight || 26;
-      div.style.setProperty('height', h + 'px', 'important');
-      div.style.setProperty('line-height', h + 'px', 'important');
-      div.style.setProperty('display', 'block', 'important');
-    } else {
-      // Fallback si pas de div interne
-      const h = th.offsetHeight || 26;
-      th.style.setProperty('line-height', h + 'px', 'important');
-    }
+  // ── Centrage vertical en-tête : chaque <th> a verticalAlign:top + padding:0 ;
+  // le <div> interne porte le paddingTop/Bottom symétrique → centrage visuel fiable.
+  // On force les styles sur le clone avec !important pour garantir le rendu html2canvas.
+  clone.querySelectorAll<HTMLElement>('thead tr').forEach((tr, rowIdx) => {
+    const padV = rowIdx === 0 ? '6px' : '3px';
+    tr.querySelectorAll<HTMLElement>('th').forEach(th => {
+      th.style.setProperty('padding', '0', 'important');
+      th.style.setProperty('vertical-align', 'top', 'important');
+      const div = th.querySelector<HTMLElement>(':scope > div');
+      if (div) {
+        div.style.setProperty('padding-top', padV, 'important');
+        div.style.setProperty('padding-bottom', padV, 'important');
+        div.style.setProperty('line-height', '14px', 'important');
+        div.style.setProperty('display', 'block', 'important');
+      }
+    });
   });
   // 1 frame supplémentaire pour appliquer les nouveaux styles avant capture
   await new Promise<void>(r => requestAnimationFrame(() => r()));
