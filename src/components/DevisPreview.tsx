@@ -731,60 +731,41 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '72px' }} />{/* Total HT */}
               </colgroup>
               <thead>
-                {/* verticalAlign:middle est ignoré par html2canvas sur les <th>.
-                    Approche fiable : div flex height fixe à l'intérieur de chaque cellule
-                    (même technique que le badge RAL). padding:0 sur le <th>, tout le
-                    padding/centering est dans le wrapper div. */}
+                {/* Centrage vertical html2canvas-safe : lineHeight = hauteur de ligne sur le <th> directement.
+                    Ni verticalAlign ni flex ne fonctionnent de façon fiable dans html2canvas
+                    sur des table-cells. lineHeight force le texte centré dans la line-box. */}
                 {/* ── Ligne 1 : DÉSIGNATION + groupes Conso./Condit./Prix ── */}
                 <tr className="bg-[#CC0000] text-white">
                   <th className="font-bold uppercase border-r border-white/20"
-                      style={{ padding: 0, borderBottom: '1px solid #CC0000' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', height: '24px', padding: '0 8px', boxSizing: 'border-box', fontSize: '11px' }}>
-                      Désignation
-                    </div>
+                      style={{ padding: '0 8px', fontSize: '11px', lineHeight: '24px', borderBottom: '1px solid #CC0000' }}>
+                    Désignation
                   </th>
-                  <th colSpan={2} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Conso. Est.</div>
-                  </th>
-                  <th colSpan={3} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box' }}>Condit.</div>
-                  </th>
-                  <th colSpan={3} className="font-bold text-xs border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '24px', padding: '0 4px', boxSizing: 'border-box' }}>Prix</div>
-                  </th>
+                  <th colSpan={2} className="font-bold text-xs border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '24px', textAlign: 'center', whiteSpace: 'nowrap' }}>Conso. Est.</th>
+                  <th colSpan={3} className="font-bold text-xs border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '24px', textAlign: 'center' }}>Condit.</th>
+                  <th colSpan={3} className="font-bold text-xs border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '24px', textAlign: 'center' }}>Prix</th>
                 </tr>
                 {/* ── Ligne 2 : Fiches système + sous-colonnes ── */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  <th className="border-r border-white/20" style={{ padding: 0 }}
+                  <th className="border-r border-white/20"
+                      style={{ padding: '0 8px', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', lineHeight: '22px', opacity: 0.75 }}
                       data-pdf-href="https://www.isofloor.fr">
-                    <div style={{ display: 'flex', alignItems: 'center', height: '22px', padding: '0 8px', boxSizing: 'border-box', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75 }}>
-                      Fiches système / Produit :{' '}
-                      <span style={{ textDecoration: 'underline', marginLeft: '3px' }}>www.isofloor.fr</span>
-                    </div>
+                    Fiches système / Produit :{' '}
+                    <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
                   </th>
-                  <th className="border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>kg/m²</div>
-                  </th>
-                  <th style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>KG</div>
-                  </th>
-                  <th className="border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>kg</div>
-                  </th>
-                  <th style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Unité</div>
-                  </th>
-                  <th style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>KG</div>
-                  </th>
-                  <th className="border-l border-white/20" style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>Unité</div>
-                  </th>
-                  <th style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>(Kg)</div>
-                  </th>
-                  <th style={{ padding: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', height: '22px', padding: '0 4px', boxSizing: 'border-box' }}>Total HT</div>
+                  <th className="border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg/m²</th>
+                  <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg</th>
+                  <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</th>
+                  <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="border-l border-white/20"
+                      style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</th>
+                  <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
+                  <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right' }}>Total HT</th>
                   </th>
                 </tr>
               </thead>
@@ -861,9 +842,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
-                        {/* flex : html2canvas gère correctement center avec le clone hors-écran */}
-                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '6px', rowGap: '2px' }}>
-                          <span>{l.description}</span>
+                        {/* inline-block + verticalAlign:middle : seule technique fiable dans html2canvas
+                            pour centrer un badge (taller than text) par rapport au texte.
+                            flex alignItems:center n'est pas rendu correctement dans les table-cells. */}
+                        <div>
+                          <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...Object.values(l.variantesChoisies)].sort((a, b) => {
@@ -872,13 +855,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', flexShrink: 0, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
                                 const dataUrl = variantImgDataUrls[imgUrl];
                                 return (
-                                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                  <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }}>
                                     {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
                                     <span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
                                   </span>
