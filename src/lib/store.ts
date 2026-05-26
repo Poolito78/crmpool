@@ -1202,15 +1202,58 @@ export function calculerDateEcheance(dateBase: string, delaiReglement: string): 
   return result;
 }
 
+// ── Barème standard Isosign (conditions de vente) ────────────────────────────
+
+export const LS_STANDARD_BAREME_KEY = 'crm_transport_standard';
+
+export interface StandardTranche {
+  min: number;
+  max: number | null;  // null = illimité
+  prix: number;
+}
+
+export interface StandardBareme {
+  tranches: StandardTranche[];
+  seuilFranco: number;
+  hayon: number;
+  relivraison: number;
+}
+
+export const DEFAULT_STANDARD_BAREME: StandardBareme = {
+  tranches: [
+    { min: 1,   max: 25,  prix: 51  },
+    { min: 26,  max: 100, prix: 87  },
+    { min: 101, max: 700, prix: 178 },
+    { min: 701, max: null, prix: 235 },
+  ],
+  seuilFranco: 2700,
+  hayon: 12,
+  relivraison: 75,
+};
+
+export function getStandardBareme(): StandardBareme {
+  try {
+    const saved = localStorage.getItem(LS_STANDARD_BAREME_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as StandardBareme;
+      if (parsed.tranches?.length > 0) return parsed;
+    }
+  } catch { /* ignore */ }
+  return DEFAULT_STANDARD_BAREME;
+}
+
+export function saveStandardBareme(b: StandardBareme): void {
+  localStorage.setItem(LS_STANDARD_BAREME_KEY, JSON.stringify(b));
+}
+
 export function calculerFraisPort(poidsKg: number, hasGranulat: boolean): number | null {
   if (poidsKg <= 0) return 0;
   if (poidsKg > 2000) {
     return hasGranulat ? null : 0;
   }
-  if (poidsKg >= 701) return 230;
-  if (poidsKg >= 101) return 178;
-  if (poidsKg >= 26) return 85;
-  return 49;
+  const { tranches } = getStandardBareme();
+  const tranche = tranches.find(t => t.max === null || poidsKg <= t.max);
+  return tranche ? tranche.prix : null;
 }
 
 // ---- Barèmes transport par paliers de poids ----

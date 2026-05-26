@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, type TransporteurType, type BaremePalier } from '@/lib/store';
+import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, getStandardBareme, saveStandardBareme, DEFAULT_STANDARD_BAREME, type TransporteurType, type BaremePalier, type StandardBareme } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -48,7 +48,7 @@ function estimerDistanceKm(dept1: string, dept2: string): number | null {
 
 type CarrierKey = Exclude<TransporteurType, 'standard'>;
 type CustomBaremes = Record<CarrierKey, BaremePalier[]>;
-type PageTab = 'calcul' | 'baremes' | 'manuel';
+type PageTab = 'standard' | 'calcul' | 'baremes' | 'manuel';
 
 const LS_KEY = 'crm_transport_baremes';
 
@@ -84,7 +84,7 @@ const CARRIERS: { key: CarrierKey; label: string }[] = [
 // ── Composant ─────────────────────────────────────────────────────────────────
 
 export default function CalculateurUPS() {
-  const [pageTab, setPageTab] = useState<PageTab>('calcul');
+  const [pageTab, setPageTab] = useState<PageTab>('standard');
 
   // Barèmes (persistés en localStorage)
   const [customBaremes, setCustomBaremes] = useState<CustomBaremes>(loadBaremes);
@@ -144,6 +144,46 @@ export default function CalculateurUPS() {
     toast.success(`Barème ${BAREMES_TRANSPORT[key].label} réinitialisé`);
   };
 
+  // ── Standard Isosign ──────────────────────────────────────────────────────
+  const [std, setStd] = useState<StandardBareme>(getStandardBareme);
+  const [stdEditIdx, setStdEditIdx] = useState<number | null>(null);
+  const [stdEditPrix, setStdEditPrix] = useState('');
+  const [stdEditFranco, setStdEditFranco] = useState(false);
+  const [stdFrancoInput, setStdFrancoInput] = useState('');
+  const [stdEditHayon, setStdEditHayon] = useState(false);
+  const [stdHayonInput, setStdHayonInput] = useState('');
+  const [stdEditReliv, setStdEditReliv] = useState(false);
+  const [stdRelivInput, setStdRelivInput] = useState('');
+  // Calculateur standard
+  const [stdPoids, setStdPoids] = useState('');
+  const [stdMontant, setStdMontant] = useState('');
+  const [stdHayon, setStdHayon] = useState(false);
+  const [stdReliv, setStdReliv] = useState(false);
+  const [stdResult, setStdResult] = useState<{ prix: number; franco: boolean; total: number } | null>(null);
+  const [stdError, setStdError] = useState('');
+
+  const stdCalculer = () => {
+    setStdError(''); setStdResult(null);
+    const p = parseFloat(stdPoids.replace(',', '.'));
+    if (isNaN(p) || p <= 0) { setStdError('Saisissez un poids valide'); return; }
+    const m = parseFloat(stdMontant.replace(',', '.')) || 0;
+    const franco = m >= std.seuilFranco;
+    const tranche = std.tranches.find(t => t.max === null || p <= t.max);
+    if (!tranche) { setStdError('Aucune tranche ne correspond à ce poids'); return; }
+    const prixTransport = franco ? 0 : tranche.prix;
+    const total = prixTransport + (stdHayon ? std.hayon : 0) + (stdReliv ? std.relivraison : 0);
+    setStdResult({ prix: prixTransport, franco, total });
+  };
+
+  const stdSaveTranche = () => {
+    if (stdEditIdx === null) return;
+    const prix = parseFloat(stdEditPrix.replace(',', '.'));
+    if (isNaN(prix)) { toast.error('Valeur invalide'); return; }
+    const updated = { ...std, tranches: std.tranches.map((t, i) => i === stdEditIdx ? { ...t, prix } : t) };
+    setStd(updated); saveStandardBareme(updated); setStdEditIdx(null);
+    toast.success('Tarif mis à jour');
+  };
+
   // ── Saisie manuelle ────────────────────────────────────────────────────────
   const [manuelPrix, setManuelPrix] = useState('');
   const [manuelCoeff, setManuelCoeff] = useState('1.4');
@@ -181,9 +221,10 @@ export default function CalculateurUPS() {
       {/* Onglets page */}
       <div className="flex gap-1 border-b">
         {([
-          ['calcul',  'Calculateur'],
-          ['baremes', 'Barèmes'],
-          ['manuel',  'Saisie manuelle'],
+          ['standard', 'Standard Isosign'],
+          ['calcul',   'Transporteurs'],
+          ['baremes',  'Barèmes transporteurs'],
+          ['manuel',   'Saisie manuelle'],
         ] as [PageTab, string][]).map(([t, label]) => (
           <button
             key={t}
@@ -199,6 +240,218 @@ export default function CalculateurUPS() {
           </button>
         ))}
       </div>
+
+      {/* ══════════ STANDARD ISOSIGN ══════════ */}
+      {pageTab === 'standard' && (
+        <div className="space-y-6">
+          {/* Conditions résumées */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Truck className="w-5 h-5 text-amber-600" />
+                Conditions de transport standard
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Seuil franco */}
+              <div className="flex items-center gap-3 flex-wrap p-3 rounded-md bg-green-50 border border-green-200">
+                <span className="text-sm font-semibold text-green-800">Transport offert à partir de</span>
+                {stdEditFranco ? (
+                  <div className="flex items-center gap-2">
+                    <Input value={stdFrancoInput} onChange={e => setStdFrancoInput(e.target.value)}
+                      className="h-7 w-28" onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          const v = parseFloat(stdFrancoInput.replace(',', '.'));
+                          if (!isNaN(v)) { const u = { ...std, seuilFranco: v }; setStd(u); saveStandardBareme(u); toast.success('Seuil franco mis à jour'); }
+                          setStdEditFranco(false);
+                        }
+                        if (e.key === 'Escape') setStdEditFranco(false);
+                      }} autoFocus />
+                    <span className="text-sm text-green-800">€ HT</span>
+                    <button onClick={() => { const v = parseFloat(stdFrancoInput.replace(',', '.')); if (!isNaN(v)) { const u = { ...std, seuilFranco: v }; setStd(u); saveStandardBareme(u); toast.success('Seuil franco mis à jour'); } setStdEditFranco(false); }} className="p-1 text-green-700 hover:bg-green-100 rounded"><Check className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setStdEditFranco(false)} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="w-3.5 h-3.5" /></button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-green-800">{std.seuilFranco.toLocaleString('fr-FR', { minimumFractionDigits: 2 })} € HT</span>
+                    <button onClick={() => { setStdFrancoInput(String(std.seuilFranco)); setStdEditFranco(true); }} className="p-1 text-green-700 hover:bg-green-100 rounded opacity-60 hover:opacity-100"><Pencil className="w-3 h-3" /></button>
+                  </div>
+                )}
+              </div>
+
+              {/* Tranches */}
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">Tranche de poids</th>
+                      <th className="text-right px-4 py-2 font-medium text-muted-foreground">Frais HT</th>
+                      <th className="w-12 px-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {std.tranches.map((t, i) => (
+                      <tr key={i} className="hover:bg-muted/30 transition-colors group">
+                        <td className="px-4 py-2">
+                          {t.max === null ? `${t.min} kg et plus` : `De ${t.min} à ${t.max} kg`}
+                        </td>
+                        <td className="px-4 py-2 text-right">
+                          {stdEditIdx === i ? (
+                            <Input value={stdEditPrix} onChange={e => setStdEditPrix(e.target.value)}
+                              className="h-7 w-24 text-right ml-auto"
+                              onKeyDown={e => { if (e.key === 'Enter') stdSaveTranche(); if (e.key === 'Escape') setStdEditIdx(null); }}
+                              autoFocus />
+                          ) : (
+                            <span className="font-semibold">{formatMontant(t.prix)}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2">
+                          {stdEditIdx === i ? (
+                            <div className="flex gap-1">
+                              <button onClick={stdSaveTranche} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3.5 h-3.5" /></button>
+                              <button onClick={() => setStdEditIdx(null)} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="w-3.5 h-3.5" /></button>
+                            </div>
+                          ) : (
+                            <button onClick={() => { setStdEditIdx(i); setStdEditPrix(String(t.prix)); }}
+                              className="p-1 text-muted-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Suppléments */}
+              <div className="rounded-md border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b bg-muted/50">
+                      <th className="text-left px-4 py-2 font-medium text-muted-foreground">Supplément</th>
+                      <th className="text-right px-4 py-2 font-medium text-muted-foreground">Montant HT</th>
+                      <th className="w-12 px-3" />
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {/* Hayon */}
+                    <tr className="hover:bg-muted/30 transition-colors group">
+                      <td className="px-4 py-2">Hayon</td>
+                      <td className="px-4 py-2 text-right">
+                        {stdEditHayon ? (
+                          <Input value={stdHayonInput} onChange={e => setStdHayonInput(e.target.value)}
+                            className="h-7 w-24 text-right ml-auto"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { const v = parseFloat(stdHayonInput.replace(',', '.')); if (!isNaN(v)) { const u = { ...std, hayon: v }; setStd(u); saveStandardBareme(u); toast.success('Hayon mis à jour'); } setStdEditHayon(false); }
+                              if (e.key === 'Escape') setStdEditHayon(false);
+                            }} autoFocus />
+                        ) : <span className="font-semibold">{formatMontant(std.hayon)}</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {stdEditHayon ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => { const v = parseFloat(stdHayonInput.replace(',', '.')); if (!isNaN(v)) { const u = { ...std, hayon: v }; setStd(u); saveStandardBareme(u); toast.success('Hayon mis à jour'); } setStdEditHayon(false); }} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setStdEditHayon(false)} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setStdHayonInput(String(std.hayon)); setStdEditHayon(true); }} className="p-1 text-muted-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
+                        )}
+                      </td>
+                    </tr>
+                    {/* Relivraison */}
+                    <tr className="hover:bg-muted/30 transition-colors group">
+                      <td className="px-4 py-2">Relivraison (absence au rdv)</td>
+                      <td className="px-4 py-2 text-right">
+                        {stdEditReliv ? (
+                          <Input value={stdRelivInput} onChange={e => setStdRelivInput(e.target.value)}
+                            className="h-7 w-24 text-right ml-auto"
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { const v = parseFloat(stdRelivInput.replace(',', '.')); if (!isNaN(v)) { const u = { ...std, relivraison: v }; setStd(u); saveStandardBareme(u); toast.success('Relivraison mis à jour'); } setStdEditReliv(false); }
+                              if (e.key === 'Escape') setStdEditReliv(false);
+                            }} autoFocus />
+                        ) : <span className="font-semibold">{formatMontant(std.relivraison)}</span>}
+                      </td>
+                      <td className="px-3 py-2">
+                        {stdEditReliv ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => { const v = parseFloat(stdRelivInput.replace(',', '.')); if (!isNaN(v)) { const u = { ...std, relivraison: v }; setStd(u); saveStandardBareme(u); toast.success('Relivraison mis à jour'); } setStdEditReliv(false); }} className="p-1 text-green-600 hover:bg-green-50 rounded"><Check className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => setStdEditReliv(false)} className="p-1 text-muted-foreground hover:bg-muted rounded"><X className="w-3.5 h-3.5" /></button>
+                          </div>
+                        ) : (
+                          <button onClick={() => { setStdRelivInput(String(std.relivraison)); setStdEditReliv(true); }} className="p-1 text-muted-foreground hover:bg-muted rounded opacity-0 group-hover:opacity-100 transition-opacity"><Pencil className="w-3.5 h-3.5" /></button>
+                        )}
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <p className="text-xs text-muted-foreground flex-1">Cliquez sur une ligne pour modifier. Sauvegardé localement et utilisé dans le calcul automatique des devis.</p>
+                <Button variant="outline" size="sm" className="gap-1.5 text-muted-foreground shrink-0"
+                  onClick={() => { setStd(DEFAULT_STANDARD_BAREME); saveStandardBareme(DEFAULT_STANDARD_BAREME); toast.success('Barème réinitialisé'); }}>
+                  <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Mini calculateur standard */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Calculateur standard</CardTitle></CardHeader>
+            <CardContent className="space-y-3 max-w-sm">
+              <div className="space-y-1.5">
+                <Label>Montant commande HT (€) <span className="text-muted-foreground font-normal text-xs">— pour franco</span></Label>
+                <Input type="text" inputMode="decimal" placeholder={`ex : ${std.seuilFranco}`} value={stdMontant}
+                  onChange={e => { setStdMontant(e.target.value); setStdResult(null); }} />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Poids total (kg)</Label>
+                <div className="flex gap-2">
+                  <Input type="text" inputMode="decimal" placeholder="ex : 45" value={stdPoids}
+                    onChange={e => { setStdPoids(e.target.value); setStdResult(null); setStdError(''); }}
+                    onKeyDown={e => { if (e.key === 'Enter') stdCalculer(); }} />
+                  <Button onClick={stdCalculer}>Calculer</Button>
+                </div>
+              </div>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={stdHayon} onChange={e => { setStdHayon(e.target.checked); setStdResult(null); }} className="rounded" />
+                  Hayon (+{formatMontant(std.hayon)})
+                </label>
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={stdReliv} onChange={e => { setStdReliv(e.target.checked); setStdResult(null); }} className="rounded" />
+                  Relivraison (+{formatMontant(std.relivraison)})
+                </label>
+              </div>
+              {stdError && <p className="text-sm text-destructive">{stdError}</p>}
+              {stdResult && (
+                <div className="rounded-lg border bg-card p-4 space-y-1">
+                  {stdResult.franco ? (
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-green-600" />
+                      <span className="text-xl font-bold text-green-600">Transport offert</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Truck className="w-5 h-5 text-amber-600" />
+                      <span className="text-2xl font-bold">{formatMontant(stdResult.prix)}<span className="text-sm font-normal text-muted-foreground ml-1">HT</span></span>
+                    </div>
+                  )}
+                  {(stdHayon || stdReliv) && (
+                    <div className="border-t pt-2 mt-1 space-y-0.5">
+                      {stdHayon && <div className="flex justify-between text-sm text-muted-foreground"><span>Hayon</span><span>+{formatMontant(std.hayon)}</span></div>}
+                      {stdReliv && <div className="flex justify-between text-sm text-muted-foreground"><span>Relivraison</span><span>+{formatMontant(std.relivraison)}</span></div>}
+                      <div className="flex justify-between font-bold pt-1 border-t text-sm"><span>Total transport</span><span>{formatMontant(stdResult.total)} HT</span></div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* ══════════ CALCULATEUR ══════════ */}
       {pageTab === 'calcul' && (
