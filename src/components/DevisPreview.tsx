@@ -911,7 +911,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         return (
                           <>
                             <td className="py-1.5 px-1 text-right">{conso > 0 ? conso.toFixed(2) : ''}</td>
-                            <td className="py-1.5 px-1 text-right">{kg ?? ''}</td>
+                            <td className="py-1.5 px-1 text-right">{kg != null ? kg.toFixed(2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{condKg ?? ''}</td>
