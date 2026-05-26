@@ -137,6 +137,8 @@ export async function generatePdfFromElement(
   element.style.minWidth = A4_PX + 'px';
   element.style.maxWidth = A4_PX + 'px';
   if (parent) { parent.style.width = A4_PX + 'px'; parent.style.maxWidth = A4_PX + 'px'; }
+  // Attend 2 frames pour que le navigateur reflowe le layout au new width avant capture
+  await new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())));
 
   let canvas: HTMLCanvasElement;
   try {

@@ -827,32 +827,33 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium">
-                        {l.description}
-                        {l.variantesChoisies && (() => {
-                          const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                          return [...Object.values(l.variantesChoisies)].sort((a, b) => {
-                            const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
-                            return rank(a) - rank(b);
-                          }).map((label, i) => {
-                            const rs = getRalStyle(label);
-                            if (rs) return (
-                              <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
-                            );
-                            const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
-                            if (imgUrl) {
-                              // display:inline explicite (Tailwind preflight met img en block par défaut)
-                              // verticalAlign:top pour positionnement prévisible dans html2canvas
-                              const dataUrl = variantImgDataUrls[imgUrl];
-                              return (
-                                <span key={i} style={{ marginLeft: '6px' }}>
-                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'inline', width: '40px', height: '26px', borderRadius: '3px', verticalAlign: 'top' }} /> : null}
-                                  {' '}<span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
-                                </span>
+                        {/* flex : html2canvas gère mal inline-block+verticalAlign, flex est stable */}
+                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: '6px', rowGap: '2px' }}>
+                          <span>{l.description}</span>
+                          {l.variantesChoisies && (() => {
+                            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                            return [...Object.values(l.variantesChoisies)].sort((a, b) => {
+                              const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
+                              return rank(a) - rank(b);
+                            }).map((label, i) => {
+                              const rs = getRalStyle(label);
+                              if (rs) return (
+                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', flexShrink: 0, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
-                            }
-                            return <span key={i} className="ml-1.5 text-xs text-muted-foreground font-normal">· {label}</span>;
-                          });
-                        })()}
+                              const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
+                              if (imgUrl) {
+                                const dataUrl = variantImgDataUrls[imgUrl];
+                                return (
+                                  <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
+                                    <span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
+                                  </span>
+                                );
+                              }
+                              return <span key={i} className="text-xs text-muted-foreground font-normal">· {label}</span>;
+                            });
+                          })()}
+                        </div>
                         {surfaceGlobale > 0 ? (
                           getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
                             <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
