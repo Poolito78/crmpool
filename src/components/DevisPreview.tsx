@@ -734,18 +734,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {/* Ligne 1 : groupes — cellule Désignation vide (fond rouge identique → invisible)
                     Le contenu DÉSIGNATION est dans la ligne 2 pour s'aligner visuellement
                     avec kg/m² KG etc. (html2canvas ne supporte pas rowSpan correctement) */}
+                {/* Ligne 1 : DÉSIGNATION + groupes Conso./Condit./Prix */}
                 <tr className="bg-[#CC0000] text-white">
-                  <th className="border-r border-white/20" style={{ borderBottom: 'none', padding: 0 }}></th>
+                  <th className="text-left py-1 px-2 font-bold uppercase border-r border-white/20"
+                      style={{ fontSize: '11px', borderBottom: 'none', verticalAlign: 'middle' }}>
+                    Désignation
+                  </th>
                   <th colSpan={2} className="py-1 text-center font-bold text-xs border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>Conso. Est.</th>
                   <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Condit.</th>
                   <th colSpan={3} className="py-1 text-center font-bold text-xs border-l border-white/20">Prix</th>
                 </tr>
-                {/* Ligne 2 : sous-colonnes + contenu DÉSIGNATION */}
+                {/* Ligne 2 : "Fiches système..." + sous-colonnes */}
                 <tr className="bg-[#CC0000] text-white text-xs">
-                  <th className="text-left py-2 px-2 font-bold uppercase border-r border-white/20"
-                      style={{ fontSize: '11px', borderTop: 'none', verticalAlign: 'middle' }}>
-                    <div style={{ fontWeight: 'bold', textTransform: 'uppercase' }}>Désignation</div>
-                    <div style={{ fontSize: '9px', fontWeight: 'normal', fontStyle: 'italic', opacity: 0.7, marginTop: '2px' }}>Fiches système / Produit : www.isofloor.fr</div>
+                  <th className="text-left py-1 px-2 border-r border-white/20"
+                      style={{ fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75, borderTop: 'none', verticalAlign: 'middle' }}>
+                    Fiches système / Produit : www.isofloor.fr
                   </th>
                   <th className="py-1 px-1 text-right border-l border-white/20" style={{ whiteSpace: 'nowrap' }}>kg/m²</th>
                   <th className="py-1 px-1 text-right" style={{ whiteSpace: 'nowrap' }}>KG</th>
