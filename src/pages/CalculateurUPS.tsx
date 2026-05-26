@@ -1164,15 +1164,15 @@ export default function CalculateurUPS() {
                             <td className="px-3 py-2 text-muted-foreground max-w-[140px] truncate" title={[a.reference, a.note].filter(Boolean).join(' — ')}>
                               {[a.reference, a.note].filter(Boolean).join(' — ') || '—'}
                             </td>
-                            <td className="px-2 py-2">
-                              <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <td className="px-2 py-2 whitespace-nowrap">
+                              <div className="flex gap-0.5">
                                 <button onClick={() => openAchatEdit(a)}
-                                  className="p-1 text-muted-foreground hover:text-primary rounded"
-                                  title="Modifier">
+                                  className="p-1.5 text-muted-foreground/50 hover:text-primary hover:bg-primary/10 rounded transition-colors"
+                                  title="Modifier cette entrée">
                                   <Pencil className="w-3.5 h-3.5" />
                                 </button>
                                 <button onClick={() => deleteAchat(a.id)}
-                                  className="p-1 text-muted-foreground hover:text-destructive rounded"
+                                  className="p-1.5 text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 rounded transition-colors"
                                   title="Supprimer">
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
