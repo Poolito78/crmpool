@@ -126,14 +126,36 @@ export async function generatePdfFromElement(
   element: HTMLElement,
   opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string },
 ): Promise<string> {
-  const canvas = await html2canvas(element, {
-    scale: 2,
-    useCORS: true,
-    allowTaint: true,
-    logging: false,
-    backgroundColor: '#ffffff',
-    imageTimeout: 15000,
-  });
+  // ── Force la largeur de capture à 794px (= largeur A4 en pixels CSS à 96dpi)
+  // Sans ça, si la fenêtre est plus étroite, le document est capturé plus petit
+  // puis étiré sur toute la largeur A4 → rendu "écrasé/étiré".
+  const A4_PX = 794;
+  const parent = element.parentElement;
+  const savedEl = { width: element.style.width, minWidth: element.style.minWidth, maxWidth: element.style.maxWidth };
+  const savedPa = parent ? { width: parent.style.width, maxWidth: parent.style.maxWidth } : null;
+  element.style.width = A4_PX + 'px';
+  element.style.minWidth = A4_PX + 'px';
+  element.style.maxWidth = A4_PX + 'px';
+  if (parent) { parent.style.width = A4_PX + 'px'; parent.style.maxWidth = A4_PX + 'px'; }
+
+  let canvas: HTMLCanvasElement;
+  try {
+    canvas = await html2canvas(element, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      imageTimeout: 15000,
+      windowWidth: 1200,  // viewport simulé large → maxWidth:794px s'applique pleinement
+    });
+  } finally {
+    // Restaure les styles originaux quoi qu'il arrive
+    element.style.width = savedEl.width;
+    element.style.minWidth = savedEl.minWidth;
+    element.style.maxWidth = savedEl.maxWidth;
+    if (parent && savedPa) { parent.style.width = savedPa.width; parent.style.maxWidth = savedPa.maxWidth; }
+  }
   const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
