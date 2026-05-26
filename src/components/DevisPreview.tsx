@@ -766,7 +766,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</th>
                   <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
                   <th style={{ padding: '0 4px', lineHeight: '22px', textAlign: 'right' }}>Total HT</th>
-                  </th>
                 </tr>
               </thead>
               <tbody>
