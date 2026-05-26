@@ -1,10 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, generateId, getStandardBareme, saveStandardBareme, DEFAULT_STANDARD_BAREME, type TransporteurType, type BaremePalier, type StandardBareme } from '@/lib/store';
+import { analyserDocumentTransport } from '@/lib/analyseTransport';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Truck, MapPin, Pencil, Check, X, RotateCcw, Plus, GripVertical, Trash2, TrendingUp } from 'lucide-react';
+import { Truck, MapPin, Pencil, Check, X, RotateCcw, Plus, GripVertical, Trash2, TrendingUp, FileText, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -330,6 +331,57 @@ export default function CalculateurUPS() {
     if (achatSortBy === col) setAchatSortAsc(v => !v);
     else { setAchatSortBy(col); setAchatSortAsc(col === 'poids' || col === 'distance'); }
   }
+
+  // ── Extraction IA depuis document glissé ──────────────────────────────────
+  const [dropZoneDragging, setDropZoneDragging] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [extractedFile, setExtractedFile] = useState<string>('');
+  const dropZoneRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const groqKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
+  const geminiKey2 = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
+  const openrouterKey2 = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
+
+  const handleDocumentFile = useCallback(async (file: File) => {
+    const allowed = ['application/pdf', 'text/plain', 'application/octet-stream'];
+    const ext = file.name.toLowerCase();
+    if (!allowed.some(t => file.type.startsWith(t)) && !ext.endsWith('.pdf') && !ext.endsWith('.txt')) {
+      toast.error('Format non supporté — PDF ou texte uniquement');
+      return;
+    }
+    setExtracting(true);
+    setExtractedFile(file.name);
+    try {
+      const extrait = await analyserDocumentTransport(file, groqKey, geminiKey2, openrouterKey2);
+      // Pré-remplir le formulaire
+      setAchatForm(prev => ({
+        ...prev,
+        transporteur:  extrait.transporteur  ?? prev.transporteur,
+        date:          extrait.date          ?? prev.date,
+        poidsKg:       extrait.poidsKg       ?? prev.poidsKg,
+        prixHT:        extrait.prixHT        ?? prev.prixHT,
+        deptDepart:    extrait.deptDepart    ?? prev.deptDepart,
+        deptArrivee:   extrait.deptArrivee   ?? prev.deptArrivee,
+        distanceKm:    extrait.distanceKm    ?? prev.distanceKm,
+        reference:     extrait.reference     ?? prev.reference,
+        note:          extrait.note          ?? prev.note,
+      }));
+      setAchatFormOpen(true);
+      toast.success(`Document analysé — vérifiez et complétez les champs`);
+    } catch (err: any) {
+      toast.error(err.message || 'Erreur lors de l\'analyse');
+    } finally {
+      setExtracting(false);
+    }
+  }, [groqKey, geminiKey2, openrouterKey2]);
+
+  const onDropZone = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDropZoneDragging(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleDocumentFile(file);
+  }, [handleDocumentFile]);
 
   // ── Helper : sélecteur transporteur ───────────────────────────────────────
   const CarrierSelector = ({ value, onChange }: { value: CarrierKey; onChange: (k: CarrierKey) => void }) => (
@@ -857,15 +909,72 @@ export default function CalculateurUPS() {
       {pageTab === 'achat' && (
         <div className="space-y-6">
 
-          {/* ── En-tête + bouton ajouter ── */}
+          {/* ── Zone glisser-déposer document ── */}
+          <div
+            ref={dropZoneRef}
+            onDragOver={e => { e.preventDefault(); setDropZoneDragging(true); }}
+            onDragLeave={() => setDropZoneDragging(false)}
+            onDrop={onDropZone}
+            onClick={() => !extracting && fileInputRef.current?.click()}
+            className={cn(
+              'relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-8 transition-all cursor-pointer select-none',
+              dropZoneDragging
+                ? 'border-primary bg-primary/5 scale-[1.01]'
+                : 'border-border bg-muted/30 hover:border-primary/50 hover:bg-muted/50',
+              extracting && 'pointer-events-none opacity-80',
+            )}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.txt"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleDocumentFile(f); e.target.value = ''; }}
+            />
+            {extracting ? (
+              <>
+                <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                <div className="text-center">
+                  <p className="font-medium text-sm">Analyse en cours…</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate max-w-xs">{extractedFile}</p>
+                </div>
+              </>
+            ) : dropZoneDragging ? (
+              <>
+                <FileText className="w-10 h-10 text-primary" />
+                <p className="font-semibold text-primary">Déposer le document</p>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <FileText className="w-7 h-7 text-muted-foreground" />
+                  <Sparkles className="w-5 h-5 text-amber-500" />
+                </div>
+                <div className="text-center">
+                  <p className="font-medium text-sm">Glissez une facture ou lettre de voiture</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">PDF · TXT — l'IA extrait automatiquement transporteur, poids, prix, départements</p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-1 gap-1.5 pointer-events-none"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Choisir un fichier
+                </Button>
+              </>
+            )}
+          </div>
+
+          {/* ── En-tête + bouton ajouter manuellement ── */}
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div>
               <h2 className="font-semibold text-base">Historique des prix achat transport</h2>
               <p className="text-xs text-muted-foreground mt-0.5">Renseignez les prix réels payés aux transporteurs — classés par poids et distance.</p>
             </div>
-            <Button size="sm" onClick={() => setAchatFormOpen(v => !v)} className="gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setAchatFormOpen(v => !v)} className="gap-1.5">
               <Plus className="w-4 h-4" />
-              Ajouter une entrée
+              Saisie manuelle
             </Button>
           </div>
 
