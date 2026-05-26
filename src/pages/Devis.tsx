@@ -225,6 +225,7 @@ export default function Devis() {
     setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
+    setFraisPortAuto(false); // désactivé pour préserver les frais pré-renseignés
     setAdresseLivraisonId(d.adresseLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
     prevSurfaceGlobaleRef.current = d.surfaceGlobaleM2 || 0;
