@@ -1,10 +1,10 @@
-import { useState, useMemo, useEffect } from 'react';
-import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, getStandardBareme, saveStandardBareme, DEFAULT_STANDARD_BAREME, type TransporteurType, type BaremePalier, type StandardBareme } from '@/lib/store';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { BAREMES_TRANSPORT, calculerFraisPortBareme, formatMontant, generateId, getStandardBareme, saveStandardBareme, DEFAULT_STANDARD_BAREME, type TransporteurType, type BaremePalier, type StandardBareme } from '@/lib/store';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Truck, MapPin, Pencil, Check, X, RotateCcw } from 'lucide-react';
+import { Truck, MapPin, Pencil, Check, X, RotateCcw, Plus, GripVertical, Trash2, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -48,7 +48,7 @@ function estimerDistanceKm(dept1: string, dept2: string): number | null {
 
 type CarrierKey = Exclude<TransporteurType, 'standard'>;
 type CustomBaremes = Record<CarrierKey, BaremePalier[]>;
-type PageTab = 'standard' | 'calcul' | 'baremes' | 'manuel';
+type PageTab = 'standard' | 'calcul' | 'baremes' | 'manuel' | 'achat';
 
 const LS_KEY = 'crm_transport_baremes';
 
@@ -80,6 +80,37 @@ const CARRIERS: { key: CarrierKey; label: string }[] = [
   { key: 'messagerie', label: 'Messagerie' },
   { key: 'gls', label: 'Affrètement GLS' },
 ];
+
+// ── Historique achats transport ───────────────────────────────────────────────
+
+const LS_ACHATS_KEY = 'crm_transport_achats';
+
+interface AchatTransport {
+  id: string;
+  date: string;
+  transporteur: string;
+  poidsKg: number;
+  distanceKm: number | null;
+  deptDepart: string;
+  deptArrivee: string;
+  prixHT: number;
+  reference: string;
+  note: string;
+}
+
+const TRANCHES_POIDS = [
+  { label: '1 – 25 kg',     min: 1,   max: 25  },
+  { label: '26 – 100 kg',   min: 26,  max: 100 },
+  { label: '101 – 700 kg',  min: 101, max: 700 },
+  { label: '701 kg et +',   min: 701, max: Infinity },
+];
+
+function loadAchats(): AchatTransport[] {
+  try {
+    const s = localStorage.getItem(LS_ACHATS_KEY);
+    return s ? (JSON.parse(s) as AchatTransport[]) : [];
+  } catch { return []; }
+}
 
 // ── Composant ─────────────────────────────────────────────────────────────────
 
@@ -144,7 +175,7 @@ export default function CalculateurUPS() {
     toast.success(`Barème ${BAREMES_TRANSPORT[key].label} réinitialisé`);
   };
 
-  // ── Standard Isosign ──────────────────────────────────────────────────────
+  // ── Standard ──────────────────────────────────────────────────────────────
   const [std, setStd] = useState<StandardBareme>(getStandardBareme);
   const [stdEditIdx, setStdEditIdx] = useState<number | null>(null);
   const [stdEditPrix, setStdEditPrix] = useState('');
@@ -193,6 +224,113 @@ export default function CalculateurUPS() {
   const manuelCoeffNum = parseFloat(manuelCoeff.replace(',', '.')) || 1;
   const manuelTotal = Math.round(manuelPrixNum * manuelCoeffNum * 100) / 100;
 
+  // ── Historique achats transport ────────────────────────────────────────────
+  const [achats, setAchats] = useState<AchatTransport[]>(loadAchats);
+  const [achatFormOpen, setAchatFormOpen] = useState(false);
+  const [achatForm, setAchatForm] = useState<Partial<AchatTransport>>({
+    date: new Date().toISOString().split('T')[0],
+    transporteur: '',
+    poidsKg: undefined,
+    distanceKm: null,
+    deptDepart: '76',
+    deptArrivee: '',
+    prixHT: undefined,
+    reference: '',
+    note: '',
+  });
+  const [achatSortBy, setAchatSortBy] = useState<'date' | 'poids' | 'distance' | 'prix'>('date');
+  const [achatSortAsc, setAchatSortAsc] = useState(false);
+  const dragAchatIdx = useRef<number | null>(null);
+  const [dragOverAchat, setDragOverAchat] = useState<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(LS_ACHATS_KEY, JSON.stringify(achats));
+  }, [achats]);
+
+  const achatDistanceCalc = useMemo(
+    () => achatForm.deptDepart && achatForm.deptArrivee
+      ? estimerDistanceKm(achatForm.deptDepart, achatForm.deptArrivee)
+      : null,
+    [achatForm.deptDepart, achatForm.deptArrivee],
+  );
+
+  const achatsSorted = useMemo(() => {
+    return [...achats].sort((a, b) => {
+      let va: number, vb: number;
+      if (achatSortBy === 'date')     { va = new Date(a.date).getTime(); vb = new Date(b.date).getTime(); }
+      else if (achatSortBy === 'poids')    { va = a.poidsKg; vb = b.poidsKg; }
+      else if (achatSortBy === 'distance') { va = a.distanceKm ?? -1; vb = b.distanceKm ?? -1; }
+      else                              { va = a.prixHT; vb = b.prixHT; }
+      return achatSortAsc ? va - vb : vb - va;
+    });
+  }, [achats, achatSortBy, achatSortAsc]);
+
+  // Stats par tranche
+  const achatStats = useMemo(() => TRANCHES_POIDS.map(t => {
+    const items = achats.filter(a => a.poidsKg >= t.min && a.poidsKg <= t.max);
+    if (items.length === 0) return { ...t, count: 0, avg: null, min: null, max: null };
+    const prices = items.map(a => a.prixHT);
+    const avg = prices.reduce((s, v) => s + v, 0) / prices.length;
+    return { ...t, count: items.length, avg, min: Math.min(...prices), max: Math.max(...prices) };
+  }), [achats]);
+
+  function saveAchat() {
+    const p = parseFloat(String(achatForm.poidsKg ?? '')) || 0;
+    const prix = parseFloat(String(achatForm.prixHT ?? '')) || 0;
+    if (p <= 0) { toast.error('Poids requis'); return; }
+    if (prix <= 0) { toast.error('Prix achat requis'); return; }
+    const dist = achatDistanceCalc ?? (achatForm.distanceKm ?? null);
+    const entry: AchatTransport = {
+      id: generateId(),
+      date: achatForm.date || new Date().toISOString().split('T')[0],
+      transporteur: achatForm.transporteur || '',
+      poidsKg: p,
+      distanceKm: dist,
+      deptDepart: achatForm.deptDepart || '',
+      deptArrivee: achatForm.deptArrivee || '',
+      prixHT: prix,
+      reference: achatForm.reference || '',
+      note: achatForm.note || '',
+    };
+    setAchats(prev => [entry, ...prev]);
+    setAchatFormOpen(false);
+    setAchatForm({ date: new Date().toISOString().split('T')[0], deptDepart: '76', transporteur: '', reference: '', note: '' });
+    toast.success('Entrée ajoutée');
+  }
+
+  function deleteAchat(id: string) {
+    setAchats(prev => prev.filter(a => a.id !== id));
+    toast.success('Entrée supprimée');
+  }
+
+  function onDragStartAchat(realIdx: number) {
+    dragAchatIdx.current = realIdx;
+  }
+  function onDragOverAchat(e: React.DragEvent, sortedIdx: number) {
+    e.preventDefault();
+    setDragOverAchat(sortedIdx);
+  }
+  function onDropAchat(sortedIdx: number) {
+    if (dragAchatIdx.current === null || dragAchatIdx.current === sortedIdx) {
+      setDragOverAchat(null);
+      dragAchatIdx.current = null;
+      return;
+    }
+    // Reorder in achatsSorted, then apply to achats
+    const sorted = [...achatsSorted];
+    const [moved] = sorted.splice(dragAchatIdx.current, 1);
+    sorted.splice(sortedIdx, 0, moved);
+    const idOrder = sorted.map(a => a.id);
+    setAchats(idOrder.map(id => achats.find(a => a.id === id)!).filter(Boolean));
+    setDragOverAchat(null);
+    dragAchatIdx.current = null;
+  }
+
+  function toggleSort(col: typeof achatSortBy) {
+    if (achatSortBy === col) setAchatSortAsc(v => !v);
+    else { setAchatSortBy(col); setAchatSortAsc(col === 'poids' || col === 'distance'); }
+  }
+
   // ── Helper : sélecteur transporteur ───────────────────────────────────────
   const CarrierSelector = ({ value, onChange }: { value: CarrierKey; onChange: (k: CarrierKey) => void }) => (
     <div className="flex flex-wrap gap-1.5">
@@ -221,10 +359,11 @@ export default function CalculateurUPS() {
       {/* Onglets page */}
       <div className="flex gap-1 border-b">
         {([
-          ['standard', 'Standard Isosign'],
+          ['standard', 'Standard'],
           ['calcul',   'Transporteurs'],
           ['baremes',  'Barèmes transporteurs'],
           ['manuel',   'Saisie manuelle'],
+          ['achat',    'Achat'],
         ] as [PageTab, string][]).map(([t, label]) => (
           <button
             key={t}
@@ -241,7 +380,7 @@ export default function CalculateurUPS() {
         ))}
       </div>
 
-      {/* ══════════ STANDARD ISOSIGN ══════════ */}
+      {/* ══════════ STANDARD ══════════ */}
       {pageTab === 'standard' && (
         <div className="space-y-6">
           {/* Conditions résumées */}
@@ -389,6 +528,7 @@ export default function CalculateurUPS() {
 
               <div className="flex items-center gap-3">
                 <p className="text-xs text-muted-foreground flex-1">Cliquez sur une ligne pour modifier. Sauvegardé localement et utilisé dans le calcul automatique des devis.</p>
+
                 <Button variant="outline" size="sm" className="gap-1.5 text-muted-foreground shrink-0"
                   onClick={() => { setStd(DEFAULT_STANDARD_BAREME); saveStandardBareme(DEFAULT_STANDARD_BAREME); toast.success('Barème réinitialisé'); }}>
                   <RotateCcw className="w-3.5 h-3.5" /> Réinitialiser
@@ -711,6 +851,215 @@ export default function CalculateurUPS() {
             </p>
           </CardContent>
         </Card>
+      )}
+
+      {/* ══════════ ACHAT ══════════ */}
+      {pageTab === 'achat' && (
+        <div className="space-y-6">
+
+          {/* ── En-tête + bouton ajouter ── */}
+          <div className="flex items-center justify-between flex-wrap gap-3">
+            <div>
+              <h2 className="font-semibold text-base">Historique des prix achat transport</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Renseignez les prix réels payés aux transporteurs — classés par poids et distance.</p>
+            </div>
+            <Button size="sm" onClick={() => setAchatFormOpen(v => !v)} className="gap-1.5">
+              <Plus className="w-4 h-4" />
+              Ajouter une entrée
+            </Button>
+          </div>
+
+          {/* ── Formulaire ajout ── */}
+          {achatFormOpen && (
+            <Card className="border-primary/40">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center justify-between">
+                  Nouvelle entrée
+                  <button onClick={() => setAchatFormOpen(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Date</Label>
+                    <Input type="date" value={achatForm.date || ''} onChange={e => setAchatForm(f => ({ ...f, date: e.target.value }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Transporteur</Label>
+                    <Input placeholder="ex : UPS, Heppner…" value={achatForm.transporteur || ''} onChange={e => setAchatForm(f => ({ ...f, transporteur: e.target.value }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Poids (kg) *</Label>
+                    <Input type="number" min={0} step={0.1} placeholder="ex : 120" value={achatForm.poidsKg ?? ''} onChange={e => setAchatForm(f => ({ ...f, poidsKg: parseFloat(e.target.value) || undefined }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Prix achat HT (€) *</Label>
+                    <Input type="number" min={0} step={0.01} placeholder="ex : 87.00" value={achatForm.prixHT ?? ''} onChange={e => setAchatForm(f => ({ ...f, prixHT: parseFloat(e.target.value) || undefined }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dépt. départ</Label>
+                    <Input maxLength={3} placeholder="76" value={achatForm.deptDepart || ''} onChange={e => setAchatForm(f => ({ ...f, deptDepart: e.target.value.replace(/[^0-9AB]/gi, '').toUpperCase() }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Dépt. arrivée</Label>
+                    <Input maxLength={3} placeholder="ex : 13" value={achatForm.deptArrivee || ''} onChange={e => setAchatForm(f => ({ ...f, deptArrivee: e.target.value.replace(/[^0-9AB]/gi, '').toUpperCase() }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Distance (km)</Label>
+                    <div className="h-8 flex items-center gap-1.5 px-3 rounded-md bg-muted text-xs">
+                      <MapPin className="w-3 h-3 text-muted-foreground shrink-0" />
+                      {achatDistanceCalc !== null
+                        ? <span className="font-medium text-foreground">{achatDistanceCalc} km</span>
+                        : <span className="text-muted-foreground">auto</span>}
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Réf. commande</Label>
+                    <Input placeholder="ex : CF-2024-012" value={achatForm.reference || ''} onChange={e => setAchatForm(f => ({ ...f, reference: e.target.value }))} className="h-8 text-xs" />
+                  </div>
+                  <div className="space-y-1 col-span-2 sm:col-span-3 md:col-span-4">
+                    <Label className="text-xs">Note</Label>
+                    <Input placeholder="ex : Tarif négocié hors barème palette…" value={achatForm.note || ''} onChange={e => setAchatForm(f => ({ ...f, note: e.target.value }))} className="h-8 text-xs" />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2 mt-3">
+                  <Button variant="outline" size="sm" onClick={() => setAchatFormOpen(false)}>Annuler</Button>
+                  <Button size="sm" onClick={saveAchat} className="gap-1.5"><Check className="w-3.5 h-3.5" /> Enregistrer</Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ── Tableau historique ── */}
+          <Card>
+            <CardContent className="p-0">
+              {achats.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center gap-2 text-muted-foreground">
+                  <Truck className="w-8 h-8 opacity-30" />
+                  <p className="text-sm">Aucune entrée — cliquez sur "Ajouter une entrée" pour commencer.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="w-8 px-2" />
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('date')}>
+                          Date {achatSortBy === 'date' ? (achatSortAsc ? '↑' : '↓') : ''}
+                        </th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Transporteur</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('poids')}>
+                          Poids {achatSortBy === 'poids' ? (achatSortAsc ? '↑' : '↓') : ''}
+                        </th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('distance')}>
+                          Distance {achatSortBy === 'distance' ? (achatSortAsc ? '↑' : '↓') : ''}
+                        </th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">Dépt.</th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground cursor-pointer hover:text-foreground select-none whitespace-nowrap" onClick={() => toggleSort('prix')}>
+                          Prix achat HT {achatSortBy === 'prix' ? (achatSortAsc ? '↑' : '↓') : ''}
+                        </th>
+                        <th className="text-right px-3 py-2 font-medium text-muted-foreground whitespace-nowrap">€/kg</th>
+                        <th className="text-left px-3 py-2 font-medium text-muted-foreground">Réf.</th>
+                        <th className="w-8 px-2" />
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {achatsSorted.map((a, si) => {
+                        const realIdx = achats.findIndex(x => x.id === a.id);
+                        const eurosPerKg = a.poidsKg > 0 ? a.prixHT / a.poidsKg : null;
+                        const tranche = TRANCHES_POIDS.find(t => a.poidsKg >= t.min && a.poidsKg <= t.max);
+                        return (
+                          <tr
+                            key={a.id}
+                            draggable
+                            onDragStart={() => onDragStartAchat(si)}
+                            onDragOver={e => onDragOverAchat(e, si)}
+                            onDrop={() => onDropAchat(si)}
+                            onDragEnd={() => setDragOverAchat(null)}
+                            className={cn(
+                              'hover:bg-muted/30 transition-colors group cursor-grab active:cursor-grabbing',
+                              dragOverAchat === si && 'bg-primary/5 border-t-2 border-primary',
+                            )}
+                          >
+                            <td className="px-2 py-2 text-center text-muted-foreground/40 group-hover:text-muted-foreground">
+                              <GripVertical className="w-3.5 h-3.5" />
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{a.date}</td>
+                            <td className="px-3 py-2 font-medium">{a.transporteur || <span className="text-muted-foreground italic">—</span>}</td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">
+                              <span className="font-medium">{a.poidsKg} kg</span>
+                              {tranche && <span className="ml-1 text-muted-foreground opacity-60">({tranche.label})</span>}
+                            </td>
+                            <td className="px-3 py-2 text-right whitespace-nowrap">
+                              {a.distanceKm != null ? <span className="flex items-center justify-end gap-1"><MapPin className="w-3 h-3 text-muted-foreground" />{a.distanceKm} km</span> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">
+                              {a.deptDepart || a.deptArrivee ? `${a.deptDepart || '?'} → ${a.deptArrivee || '?'}` : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{formatMontant(a.prixHT)}</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap">
+                              {eurosPerKg !== null ? `${eurosPerKg.toFixed(2)} €` : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-muted-foreground max-w-[140px] truncate" title={[a.reference, a.note].filter(Boolean).join(' — ')}>
+                              {[a.reference, a.note].filter(Boolean).join(' — ') || '—'}
+                            </td>
+                            <td className="px-2 py-2">
+                              <button onClick={() => deleteAchat(a.id)}
+                                className="opacity-0 group-hover:opacity-100 p-1 text-muted-foreground hover:text-destructive rounded transition-opacity">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-xs text-muted-foreground px-3 py-2 border-t">
+                    {achats.length} entrée{achats.length > 1 ? 's' : ''} — glisser-déposer pour réordonner, cliquer les en-têtes pour trier
+                  </p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* ── Statistiques par tranche ── */}
+          {achats.length > 0 && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-base">
+                  <TrendingUp className="w-4 h-4 text-primary" />
+                  Moyennes par tranche de poids
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/50">
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground">Tranche</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Nb entrées</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Min</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Moy.</th>
+                        <th className="text-right px-4 py-2 font-medium text-muted-foreground">Max</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                      {achatStats.map(s => (
+                        <tr key={s.label} className={s.count === 0 ? 'opacity-40' : ''}>
+                          <td className="px-4 py-2 font-medium">{s.label}</td>
+                          <td className="px-4 py-2 text-right text-muted-foreground">{s.count}</td>
+                          <td className="px-4 py-2 text-right">{s.min !== null ? formatMontant(s.min) : '—'}</td>
+                          <td className="px-4 py-2 text-right font-semibold text-primary">{s.avg !== null ? formatMontant(Math.round(s.avg * 100) / 100) : '—'}</td>
+                          <td className="px-4 py-2 text-right">{s.max !== null ? formatMontant(s.max) : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* ══════════ SAISIE MANUELLE ══════════ */}
