@@ -226,7 +226,22 @@ export default function Devis() {
     setSysteme(d.systeme || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
-    setLignes(d.lignes.map(l => ({ ...l, id: l.id })));
+    setLignes(d.lignes.map(l => {
+      // Recalculer le prix des lignes dont la variante choisie a un prixDiff
+      // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
+      if ((!l.type || l.type === 'ligne') && l.produitId && l.variantesChoisies) {
+        const prod = produits.find(p => p.id === l.produitId);
+        if (prod) {
+          const diff = getVarianteDiff(prod, l.variantesChoisies);
+          if (diff !== 0) {
+            const cl = clients.find(c => c.id === d.clientId);
+            const prixUnitaireHT = getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur);
+            return { ...l, prixUnitaireHT };
+          }
+        }
+      }
+      return { ...l, id: l.id };
+    }));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
     setFraisPortAuto(false); // désactivé pour préserver les frais pré-renseignés
