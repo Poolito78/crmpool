@@ -1002,8 +1002,33 @@ export default function Produits() {
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
 
+            {/* Tarif — section spéciale pour les produits surcharge énergie */}
+            {form.categorie === 'surcharge' && (
+              <div className="border border-amber-300 dark:border-amber-700 rounded-lg p-3 space-y-3 bg-amber-50/50 dark:bg-amber-950/20">
+                <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">⚡ Taux de surcharge énergie</p>
+                <p className="text-xs text-muted-foreground">Ces valeurs sont des <strong>pourcentages (%)</strong> appliqués au total achat / vente des produits concernés.</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="text-xs font-semibold">% Achat (coût fournisseur)</Label>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" step="0.1" value={form.prixAchat} onChange={e => setForm(p => ({ ...p, prixAchat: parseFloat(e.target.value) || 0 }))} className="font-semibold" />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs font-semibold">% Vente (facturé client)</Label>
+                    <div className="flex items-center gap-1">
+                      <Input type="number" step="0.1" value={form.prixRevendeur} onChange={e => setForm(p => ({ ...p, prixRevendeur: parseFloat(e.target.value) || 0 }))} className="font-semibold" />
+                      <span className="text-sm text-muted-foreground">%</span>
+                    </div>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">Référence requise : <code className="bg-muted px-1 rounded">SURCHARGE_ENERGIE_MMA</code> ou <code className="bg-muted px-1 rounded">SURCHARGE_ENERGIE_HORS_MMA</code></p>
+              </div>
+            )}
+
             {/* Tarif — revendeur par défaut, public en option */}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+            {form.categorie !== 'surcharge' && <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold text-foreground">Tarif</p>
                 <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
@@ -1076,7 +1101,7 @@ export default function Produits() {
                   </div>
                 </>
               )}
-            </div>
+            </div>}
 
             {/* ─── Prix par palier ─── */}
             <div className="border border-border rounded-md p-3 space-y-2">

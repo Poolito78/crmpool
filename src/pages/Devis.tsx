@@ -452,10 +452,10 @@ export default function Devis() {
   // ─── Surcharge énergie — taux lus depuis le catalogue produits (fallback hardcodé) ──
   const _prodSurchargeMMA    = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_MMA');
   const _prodSurchargeHorsMMA = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_HORS_MMA');
-  const SURCHARGE_ENERGIE_MMA_VENTE_PCT      = _prodSurchargeMMA?.prixHT    ?? 15;
-  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT      = _prodSurchargeMMA?.prixAchat ?? 14.8;
-  const SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT = _prodSurchargeHorsMMA?.prixHT    ?? 5;
-  const SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT = _prodSurchargeHorsMMA?.prixAchat ?? 4.8;
+  const SURCHARGE_ENERGIE_MMA_VENTE_PCT      = _prodSurchargeMMA?.prixRevendeur ?? 15;
+  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT      = _prodSurchargeMMA?.prixAchat     ?? 14.8;
+  const SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT = _prodSurchargeHorsMMA?.prixRevendeur ?? 5;
+  const SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT = _prodSurchargeHorsMMA?.prixAchat     ?? 4.8;
 
   function addSurchargeEnergie() {
     // Totaux vente et achat MMA séparés
