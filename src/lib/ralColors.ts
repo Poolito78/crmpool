@@ -60,6 +60,24 @@ export const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: bo
   '9022':{ hex:'#909088', dark:true  }, '9023':{ hex:'#808080', dark:true  },
 };
 
+// ── QuartzColor → RAL : correspondances connues ───────────────────────────
+// Clé = numéro RAL, valeur = code QuartzColor associé (affiché sur le swatch)
+const RAL_QUARTZ: Record<string, string> = {
+  '1015': '326',
+  '1018': '321',
+  '1023': '319',
+  '3001': '605',
+  '3020': '606',
+  '5015': '479',
+  '5017': '466',
+  '6001': '709',
+  '7035': '232',
+  '7037': '222',
+  '7040': '2012',
+  '7043': '280',
+  '9005': '990',
+};
+
 // ── QuartzColor — codes sans équivalent RAL standard ──────────────────────
 // Les couleurs qui ont un RAL explicite dans leur label (ex: "232 (RAL 7035)")
 // sont gérées automatiquement via le pattern "RAL XXXX" ci-dessous.
@@ -82,12 +100,12 @@ const QUARTZ_COLORS: Record<string, { hex: string; dark: boolean }> = {
  *  2. Code QuartzColor en début de label (3-4 chiffres) → QUARTZ_COLORS
  *  3. Fallback : premier nombre à 4 chiffres → RAL_COLORS (ancien comportement)
  */
-export function getRalInfo(text: string): { hex: string; dark: boolean; white?: boolean; num: string } | undefined {
+export function getRalInfo(text: string): { hex: string; dark: boolean; white?: boolean; num: string; quartz?: string } | undefined {
   // 1. Motif explicite "RAL XXXX"
   const ralMatch = text.match(/RAL\s*(\d{4})/i);
   if (ralMatch) {
     const c = RAL_COLORS[ralMatch[1]];
-    if (c) return { ...c, num: ralMatch[1] };
+    if (c) return { ...c, num: ralMatch[1], quartz: RAL_QUARTZ[ralMatch[1]] };
   }
   // 2. Code QuartzColor en début de label (ex: "340 (Pastel Yellow)")
   const leadMatch = text.match(/^(\d{3,4})/);
@@ -100,5 +118,5 @@ export function getRalInfo(text: string): { hex: string; dark: boolean; white?: 
   if (!m) return undefined;
   const c = RAL_COLORS[m[1]];
   if (!c) return undefined;
-  return { ...c, num: m[1] };
+  return { ...c, num: m[1], quartz: RAL_QUARTZ[m[1]] };
 }

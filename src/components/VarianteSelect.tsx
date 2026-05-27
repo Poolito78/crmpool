@@ -62,7 +62,7 @@ function RalBadge({ label, selected }: { label: string; selected?: boolean }) {
         flexShrink: 0,
       }}
     >
-      RAL {ral.num}
+      {ral.quartz && <>{ral.quartz} · </>}RAL {ral.num}
     </span>
   );
 }
@@ -155,8 +155,9 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                     if (ral) return (
                       <div className="w-12 h-12 rounded border flex items-center justify-center"
                         style={{ backgroundColor: ral.hex, borderColor: ral.white ? '#ccc' : 'rgba(0,0,0,0.15)' }}>
-                        <span className="text-[9px] font-bold" style={{ color: ral.dark ? '#fff' : '#222' }}>
-                          RAL<br/>{ral.num}
+                        <span className="text-[9px] font-bold leading-tight text-center" style={{ color: ral.dark ? '#fff' : '#222' }}>
+                          {ral.quartz && <>{ral.quartz}<br/></>}
+                          <span className="opacity-80">RAL {ral.num}</span>
                         </span>
                       </div>
                     );
