@@ -871,7 +871,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                            return [...Object.values(l.variantesChoisies)].sort((a, b) => {
+                            return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
                               const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
                               return rank(a) - rank(b);
                             }).map((label, i) => {
@@ -1090,7 +1090,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           {l.description}
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                            return [...Object.values(l.variantesChoisies)].sort((a, b) => {
+                            return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
                               const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
                               return rank(a) - rank(b);
                             }).map((label, i) => {

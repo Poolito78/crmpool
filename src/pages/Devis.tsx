@@ -1677,7 +1677,12 @@ export default function Devis() {
                                     onChange={label => {
                                       setLignes(prev => prev.map(li => {
                                         if (li.id !== l.id) return li;
-                                        const variantesChoisies = { ...(li.variantesChoisies || {}), [dim.id]: label };
+                                        // Nettoyer les clés obsolètes (anciennes dimensions supprimées/renommées)
+                                        const validIds = new Set(prod.variantes!.map(d => d.id));
+                                        const cleaned = Object.fromEntries(
+                                          Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k))
+                                        );
+                                        const variantesChoisies = { ...cleaned, [dim.id]: label };
                                         const totalDiff = prod.variantes!.reduce((sum, d) => {
                                           const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
                                           const o = d.options.find(x => x.label === chosenLabel);
