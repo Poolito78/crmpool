@@ -321,6 +321,7 @@ export async function generatePdfFromElement(
   // l'en-tête manuellement avec jsPDF après avoir posé l'image html2canvas.
   type TheadRowData = {
     yMm: number; hMm: number;
+    hasBgRed: boolean; // true seulement si le <tr> a effectivement un fond rouge (#CC0000)
     cells: { xMm: number; wMm: number; text: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number; hasBorderLeft: boolean }[];
   };
   const theadRowData: TheadRowData[] = [];
@@ -348,7 +349,10 @@ export async function generatePdfFromElement(
           hasBorderLeft: th.classList.contains('border-l'),
         });
       });
-      theadRowData.push({ yMm: trTop * dY, hMm: tr.offsetHeight * dY, cells });
+      // Détecte le fond rouge via la couleur calculée (robuste : classe Tailwind ou style inline)
+      const trBg = window.getComputedStyle(tr).backgroundColor;
+      const hasBgRed = trBg === 'rgb(204, 0, 0)';
+      theadRowData.push({ yMm: trTop * dY, hMm: tr.offsetHeight * dY, hasBgRed, cells });
     });
   }
 
@@ -399,15 +403,21 @@ export async function generatePdfFromElement(
       // pour un centrage vertical parfait (contourne les bugs html2canvas sur <th>).
       if (page === 0 && theadRowData.length > 0) {
         theadRowData.forEach(row => {
-          // Rectangle rouge
+          // Ne redessiner que les rangées qui ont effectivement un fond rouge en HTML
+          if (!row.hasBgRed) return;
+          // Bornes X de la table depuis les mesures réelles des cellules
+          // (exclut automatiquement le padding du container — ex. px-10 — qui décale tout)
+          const leftX = row.cells.length > 0 ? Math.min(...row.cells.map(c => c.xMm)) : 0;
+          const rightX = row.cells.length > 0 ? Math.max(...row.cells.map(c => c.xMm + c.wMm)) : pw;
+          // Rectangle rouge aligné sur la table
           pdf.setFillColor(204, 0, 0);
-          pdf.rect(0, row.yMm, pw, row.hMm, 'F');
+          pdf.rect(leftX, row.yMm, rightX - leftX, row.hMm, 'F');
           // Séparateurs verticaux entre groupes de colonnes (border-l border-white/20)
-          // Couleur = blanc 20% sur #CC0000 → (255*0.2+204*0.8, 255*0.2+0*0.8, 255*0.2+0*0.8) ≈ (214,51,51)
+          // Couleur = blanc 20% sur #CC0000 → (255*0.2+204*0.8, ...) ≈ (214,51,51)
           pdf.setDrawColor(214, 51, 51);
           pdf.setLineWidth(0.25);
           row.cells.forEach(cell => {
-            if (cell.hasBorderLeft && cell.xMm > 0.5) {
+            if (cell.hasBorderLeft && cell.xMm > leftX + 0.5) {
               pdf.line(cell.xMm, row.yMm, cell.xMm, row.yMm + row.hMm);
             }
           });
