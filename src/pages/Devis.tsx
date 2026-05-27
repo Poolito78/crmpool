@@ -2381,7 +2381,7 @@ export default function Devis() {
                   clientId, adresseLivraisonId: adresseLivraisonId || undefined,
                   dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
                   fraisPortHT, fraisPortTVA, modeCalcul,
-                  surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                  surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
                 };
                 setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
                 setPreviewDevis(preview);
