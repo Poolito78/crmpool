@@ -867,7 +867,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium align-middle">
-                        {l.description}
+                        {/* Wrapper inline-block 14px dans le flow + badge absolu 28px centré (7px au-dessus, 7px en dessous) */}
+                        <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
                         {l.variantesChoisies && (() => {
                           const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                           return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
@@ -876,7 +877,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           }).map((label, i) => {
                             const rs = getRalStyle(label);
                             if (rs) return (
-                              <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', whiteSpace: 'nowrap', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
+                              <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', position: 'relative', marginLeft: '6px', width: '70px', height: '14px' }}>
+                                <span style={{ position: 'absolute', top: '-7px', left: '0', height: '28px', lineHeight: '28px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
+                              </span>
                             );
                             const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                             if (imgUrl) {
