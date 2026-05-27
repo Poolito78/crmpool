@@ -851,11 +851,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium align-middle">
-                        {/* inline-block + verticalAlign:middle : seule technique fiable dans html2canvas
-                            pour centrer un badge (taller than text) par rapport au texte.
-                            flex alignItems:center n'est pas rendu correctement dans les table-cells. */}
-                        {/* height === lineHeight sur le badge : technique CSS fiable pour centrer le texte
-                            dans un élément de hauteur fixe, indépendamment des métriques du font. */}
+                        {/* Wrapper inline-block de hauteur réduite (flow IFC) + badge position:absolute
+                            qui déborde en dessous. zIndex:5 pour premier plan sur la ligne suivante. */}
                         <div>
                           <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
@@ -866,7 +863,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, height: '18px', lineHeight: '18px', padding: '0 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                /* Wrapper : hauteur 14px dans le flow (n'agrandit pas la ligne)
+                                   Badge absolu : 26px centré, top:-6px → déborde 6px en dessous */
+                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', position: 'relative', zIndex: 5, marginLeft: '6px', width: '64px', height: '14px' }}>
+                                  <span style={{ position: 'absolute', top: '-6px', left: '0', height: '26px', lineHeight: '26px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', zIndex: 5, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                </span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
