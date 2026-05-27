@@ -318,17 +318,7 @@ export async function generatePdfFromElement(
   // Mesures terminées — on retire le clone du DOM
   document.body.removeChild(wrap);
 
-  // Si le dépassement est inférieur à 150 mm, on compresse pour tenir sur une page
-  const overflow = imgH - contentH1;
-  const forceSinglePage = overflow > 0 && overflow < 150;
-
-  if (forceSinglePage) {
-    pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, 0, pw, contentH1);
-    drawFooter(1, 1);
-    // Liens : ajustement y car le contenu est compressé de imgH → contentH1
-    const yScale = contentH1 / imgH;
-    for (const lk of pdfLinks) pdf.link(lk.xMm, lk.yMm * yScale, lk.wMm, lk.hMm * yScale, { url: lk.url });
-  } else {
+  {
     const slices = computePageSlices();
     // Fallback si détection DOM échoue : découpe standard
     let effectiveSlices = slices.length > 0 ? slices : (() => {
