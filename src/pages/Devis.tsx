@@ -50,12 +50,13 @@ export default function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
-  const [filterStatut, setFilterStatut] = useState<string>('tous');
-  const [filterClient, setFilterClient] = useState<string>('tous');
+  const _savedFilters = (() => { try { const s = localStorage.getItem('crm_devis_filters'); return s ? JSON.parse(s) : {}; } catch { return {}; } })();
+  const [filterStatut, setFilterStatut] = useState<string>(_savedFilters.filterStatut ?? 'tous');
+  const [filterClient, setFilterClient] = useState<string>(_savedFilters.filterClient ?? 'tous');
   const [filterContact, setFilterContact] = useState<string>('');
   const [filterProduit, setFilterProduit] = useState<string>('');
-  const [filterPeriode, setFilterPeriode] = useState<string>('tous');
-  const [sortBy, setSortBy] = useState<string>('date_desc');
+  const [filterPeriode, setFilterPeriode] = useState<string>(_savedFilters.filterPeriode ?? 'tous');
+  const [sortBy, setSortBy] = useState<string>(_savedFilters.sortBy ?? 'date_desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -152,7 +153,10 @@ export default function Devis() {
   // Archive
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<DevisType | null>(null);
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState<boolean>(_savedFilters.showArchived ?? false);
+  useEffect(() => {
+    try { localStorage.setItem('crm_devis_filters', JSON.stringify({ filterStatut, filterClient, filterPeriode, sortBy, showArchived })); } catch {}
+  }, [filterStatut, filterClient, filterPeriode, sortBy, showArchived]);
 
   // CRM tab in devis dialog
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
