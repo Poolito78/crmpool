@@ -849,13 +849,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       </tr>
                     )}
                     {/* Ligne produit principal */}
+                    {(() => {
+                      const hasRal = !!(l.variantesChoisies && Object.values(l.variantesChoisies).some(v => !!getRalStyle(v)));
+                      return (
                     <tr className="border-b border-border/60">
-                      <td className="py-1.5 px-2 font-medium">
+                      <td className={`${hasRal ? 'py-3' : 'py-1.5'} px-2 font-medium`}>
                         {/* inline-block + verticalAlign:middle : seule technique fiable dans html2canvas
                             pour centrer un badge (taller than text) par rapport au texte.
                             flex alignItems:center n'est pas rendu correctement dans les table-cells. */}
-                        <div>
-                          <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '4px' }}>
+                          <span>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...Object.values(l.variantesChoisies)].sort((a, b) => {
@@ -864,7 +867,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 8px 3px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', lineHeight: '1', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: '20px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
@@ -949,6 +952,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         );
                       })()}
                     </tr>
+                      );
+                    })()}
 
                     {/* Sous-lignes composants */}
                     {showComposants && compDatas.map(({ comp, compProd, consoComp, totalKgComp, unitesComp, condKgComp, prixUnite, prixKg, totalHTComp }) =>
