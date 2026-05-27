@@ -548,6 +548,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 const adresseLivraison = devis.adresseLivraisonId
                   ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
                   : null;
+                // Résolution du contact de livraison
+                const allContacts = client?.contacts || [];
+                let contactLivrNom = '';
+                let contactLivrTel = '';
+                if (devis.contactLivraisonId && devis.contactLivraisonId !== '__principal__') {
+                  const ct = allContacts.find(c => c.id === devis.contactLivraisonId);
+                  if (ct) {
+                    contactLivrNom = [ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email || '';
+                    contactLivrTel = ct.telephone || ct.telephoneMobile || '';
+                  }
+                } else {
+                  // Contact principal : utiliser le nom individuel du client + son téléphone
+                  contactLivrNom = client?.nom || '';
+                  contactLivrTel = client?.telephone || client?.telephoneMobile || '';
+                }
                 return (
                   <div className="grid grid-cols-2 gap-4 mb-3">
                     <div className="bg-muted/30 rounded-lg p-4">
@@ -565,18 +580,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <p className="font-semibold">{adresseLivraison.libelle}</p>
                           <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
                           <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
-                          {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
-                          {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
                         </>
                       ) : (
                         <>
                           <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                          {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
                           {client && <p className="text-muted-foreground">{client.adresse}</p>}
                           {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                          {client?.telephone && <p className="text-muted-foreground">Tél : {client.telephone}</p>}
                         </>
                       )}
+                      {/* Contact de livraison — toujours affiché */}
+                      {contactLivrNom && <p className="text-muted-foreground mt-1">Contact : {contactLivrNom}</p>}
+                      {contactLivrTel && <p className="text-muted-foreground">Tél : {contactLivrTel}</p>}
                     </div>
                   </div>
                 );

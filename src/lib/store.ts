@@ -308,6 +308,7 @@ export interface Devis {
   clientId: string;
   contactId?: string;
   adresseLivraisonId?: string;
+  contactLivraisonId?: string;
   dateCreation: string;
   dateValidite: string;
   statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré' | 'système' | 'archivé';
@@ -535,6 +536,7 @@ function dbToDevis(r: any): Devis {
     clientId: r.client_id || '',
     contactId: r.contact_id || undefined,
     adresseLivraisonId: r.adresse_livraison_id || undefined,
+    contactLivraisonId: r.contact_livraison_id || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
     dateValidite: r.date_validite?.split('T')[0] || '',
     statut: r.statut as Devis['statut'],
@@ -564,6 +566,7 @@ function devisToDb(d: Devis, userId: string) {
     client_id: d.clientId || null,
     contact_id: d.contactId || null,
     adresse_livraison_id: d.adresseLivraisonId || null,
+    ...(d.contactLivraisonId !== undefined ? { contact_livraison_id: d.contactLivraisonId || null } : {}),
     date_creation: d.dateCreation,
     date_validite: d.dateValidite || null,
     statut: d.statut,

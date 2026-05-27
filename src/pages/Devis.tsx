@@ -149,6 +149,7 @@ export default function Devis() {
   const [modeCalcul, setModeCalcul] = useState<'standard' | 'surface'>('standard');
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
+  const [contactLivraisonId, setContactLivraisonId] = useState('');
 
   // Archive
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -257,6 +258,7 @@ export default function Devis() {
     setFraisPortTVA(d.fraisPortTVA ?? 20);
     setFraisPortAuto(false); // désactivé pour préserver les frais pré-renseignés
     setAdresseLivraisonId(d.adresseLivraisonId || '');
+    setContactLivraisonId(d.contactLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
     prevSurfaceGlobaleRef.current = d.surfaceGlobaleM2 || 0;
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
@@ -730,7 +732,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -740,7 +742,7 @@ export default function Devis() {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
       savedId = generateId();
       const newDevis: DevisType = {
-        id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, dateCreation,
+        id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
         dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
@@ -764,7 +766,7 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
@@ -1354,6 +1356,37 @@ export default function Devis() {
                           ))}
                         </div>
                       )}
+                      {/* Contact de livraison */}
+                      {(() => {
+                        const allContacts = selectedClient.contacts || [];
+                        const hasContactPrincipal = selectedClient.nom || selectedClient.telephone;
+                        if (allContacts.length === 0 && !hasContactPrincipal) return null;
+                        return (
+                          <div className="border-t border-border pt-2 mt-2 space-y-1">
+                            <p className="font-medium text-muted-foreground text-xs">Contact livraison :</p>
+                            {/* Contact principal (client lui-même) */}
+                            <button
+                              type="button"
+                              onClick={() => setContactLivraisonId('__principal__')}
+                              className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${contactLivraisonId === '__principal__' || (!contactLivraisonId && !allContacts.find(c => c.id === contactLivraisonId)) ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                            >
+                              <span className="truncate">{selectedClient.societe || selectedClient.nom} {selectedClient.telephone ? `· ${selectedClient.telephone}` : ''}</span>
+                              {(contactLivraisonId === '__principal__' || !contactLivraisonId) && <span className="ml-auto text-[10px] shrink-0">✓</span>}
+                            </button>
+                            {allContacts.map(ct => (
+                              <button
+                                key={ct.id}
+                                type="button"
+                                onClick={() => setContactLivraisonId(ct.id)}
+                                className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${contactLivraisonId === ct.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                              >
+                                <span className="truncate">{[ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email}{ct.telephone || ct.telephoneMobile ? ` · ${ct.telephone || ct.telephoneMobile}` : ''}</span>
+                                {contactLivraisonId === ct.id && <span className="ml-auto text-[10px] shrink-0">✓</span>}
+                              </button>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })()}
@@ -2371,7 +2404,7 @@ export default function Devis() {
                 const preview: DevisType = {
                   id: editingId || 'preview',
                   numero: existing?.numero || 'APERÇU',
-                  clientId, adresseLivraisonId: adresseLivraisonId || undefined,
+                  clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
                   dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
                   fraisPortHT, fraisPortTVA, modeCalcul,
                   surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
