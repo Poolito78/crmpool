@@ -867,41 +867,42 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Ligne produit principal */}
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium align-middle">
-                        {/* Wrapper inline-block 14px dans le flow + badge absolu 28px centré (7px au-dessus, 7px en dessous) */}
-                        <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
-                        {l.variantesChoisies && (() => {
-                          const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                          return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
-                            const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
-                            return rank(a) - rank(b);
-                          }).map((label, i) => {
-                            const rs = getRalStyle(label);
-                            if (rs) return (
-                              <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', position: 'relative', marginLeft: '6px', width: '70px', height: '14px' }}>
-                                <span style={{ position: 'absolute', top: '-7px', left: '0', height: '28px', lineHeight: '28px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
-                              </span>
-                            );
-                            const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
-                            if (imgUrl) {
-                              const dataUrl = variantImgDataUrls[imgUrl];
-                              return (
-                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px' }}>
-                                  {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ display: 'block', width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
-                                  <span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
-                                </span>
+                        {/* Description + badge(s) sur la même ligne flex */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                          <span>{l.description}</span>
+                          {l.variantesChoisies && (() => {
+                            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                            return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
+                              const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
+                              return rank(a) - rank(b);
+                            }).map((label, i) => {
+                              const rs = getRalStyle(label);
+                              if (rs) return (
+                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', whiteSpace: 'nowrap', flexShrink: 0, ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                               );
-                            }
-                            return <span key={i} className="text-xs text-muted-foreground font-normal">· {label}</span>;
-                          });
-                        })()}
+                              const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
+                              if (imgUrl) {
+                                const dataUrl = variantImgDataUrls[imgUrl];
+                                return (
+                                  <span key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                                    {dataUrl ? <img src={dataUrl} alt="" width={40} height={26} style={{ width: '40px', height: '26px', borderRadius: '3px' }} /> : null}
+                                    <span style={{ fontSize: '0.7rem', color: '#555' }}>{label}</span>
+                                  </span>
+                                );
+                              }
+                              return <span key={i} className="text-xs text-muted-foreground font-normal">· {label}</span>;
+                            });
+                          })()}
+                        </div>
+                        {/* Surface m² sur sa propre ligne en dessous */}
                         {surfaceGlobale > 0 ? (
                           getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
-                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                            <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
                           ) : null
                         ) : getSurfaceLigne(l.id) > 0 && (hideControls || pdfMode) ? (
-                          <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                          <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
                         ) : (!hideControls && !pdfMode) ? (
-                          <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
+                          <span className="print:hidden inline-flex items-center gap-1.5">
                             <input
                               type="number" min={0} step={1}
                               value={getSurfaceLigne(l.id) || ''}
