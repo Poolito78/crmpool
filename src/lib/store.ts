@@ -140,6 +140,15 @@ export interface ProduitFournisseur {
   delaiLivraison: number;
   conditionnementMin: number;
   estPrioritaire: boolean;
+  paliersFournisseur?: PrixPalier[];  // tarifs dégressifs propres à ce fournisseur
+}
+
+/** Retourne le prix achat effectif d'un ProduitFournisseur à la quantité donnée (paliers dégressifs) */
+export function getPfPrixPourQuantite(pf: ProduitFournisseur, qte: number): number {
+  if (!pf.paliersFournisseur || pf.paliersFournisseur.length === 0) return pf.prixAchat;
+  const sorted = [...pf.paliersFournisseur].sort((a, b) => b.qteMin - a.qteMin);
+  const palier = sorted.find(p => qte >= p.qteMin);
+  return palier?.prixAchat ?? pf.prixAchat;
 }
 
 export interface LigneReception {
@@ -722,6 +731,9 @@ function dbToProduitFournisseur(r: any): ProduitFournisseur {
     delaiLivraison: Number(r.delai_livraison) || 0,
     conditionnementMin: Number(r.conditionnement_min) || 1,
     estPrioritaire: r.est_prioritaire || false,
+    paliersFournisseur: r.paliers_fournisseur
+      ? (Array.isArray(r.paliers_fournisseur) ? r.paliers_fournisseur : JSON.parse(r.paliers_fournisseur))
+      : undefined,
   };
 }
 
@@ -736,6 +748,9 @@ function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
     delai_livraison: pf.delaiLivraison,
     conditionnement_min: pf.conditionnementMin,
     est_prioritaire: pf.estPrioritaire,
+    ...(pf.paliersFournisseur !== undefined ? {
+      paliers_fournisseur: pf.paliersFournisseur && pf.paliersFournisseur.length > 0 ? pf.paliersFournisseur : null
+    } : {}),
   };
 }
 
@@ -1394,7 +1409,8 @@ export function calculerFournisseurPrioritaire(
     if (!fourn) continue;
 
     const qte = Math.max(qteCommande, pf.conditionnementMin);
-    const totalAchat = pf.prixAchat * qte;
+    const prixEffectif = getPfPrixPourQuantite(pf, qte);
+    const totalAchat = prixEffectif * qte;
     // Transport : gratuit si franco atteint, sinon coût transport
     const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
     const coutGlobal = totalAchat + transport;
