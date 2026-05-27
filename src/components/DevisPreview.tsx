@@ -896,10 +896,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {l.note && (() => {
                           const rsNote = getRalStyle(l.note!);
                           return (
-                            <div style={{ marginTop: '4px' }}>
+                            <div style={{ marginTop: '2px' }}>
                               {rsNote
-                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{l.note}</span>
-                                : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line' }}>{l.note}</span>
+                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{l.note}</span>
+                                : <span style={{ fontSize: '0.65rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line' }}>{l.note}</span>
                               }
                             </div>
                           );
