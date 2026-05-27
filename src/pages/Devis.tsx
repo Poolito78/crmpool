@@ -449,23 +449,32 @@ export default function Devis() {
     setNewLigneId(id);
   }
 
-  // ─── Surcharge énergie MMA ────────────────────────────────────────────────
-  const SURCHARGE_ENERGIE_MMA_VENTE_PCT = 15;
-  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT = 14.8;
+  // ─── Surcharge énergie — taux lus depuis le catalogue produits (fallback hardcodé) ──
+  const _prodSurchargeMMA    = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_MMA');
+  const _prodSurchargeHorsMMA = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_HORS_MMA');
+  const SURCHARGE_ENERGIE_MMA_VENTE_PCT      = _prodSurchargeMMA?.prixHT    ?? 15;
+  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT      = _prodSurchargeMMA?.prixAchat ?? 14.8;
+  const SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT = _prodSurchargeHorsMMA?.prixHT    ?? 5;
+  const SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT = _prodSurchargeHorsMMA?.prixAchat ?? 4.8;
+
   function addSurchargeEnergie() {
-    const totalMMA = lignes.reduce((acc, l) => {
-      if (!l.produitId) return acc;
+    // Totaux vente et achat MMA séparés
+    let totalVenteMMA = 0, totalAchatMMA = 0;
+    for (const l of lignes) {
+      if (!l.produitId) continue;
       const prod = produits.find(p => p.id === l.produitId);
-      if (!prod || prod.categorie?.toLowerCase() !== 'mma') return acc;
-      return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-    }, 0);
-    if (totalMMA <= 0) {
+      if (!prod || prod.categorie?.toLowerCase() !== 'mma') continue;
+      const coeff = 1 - (l.remise || 0) / 100;
+      totalVenteMMA += l.quantite * l.prixUnitaireHT * coeff;
+      totalAchatMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
+    }
+    if (totalVenteMMA <= 0) {
       import('sonner').then(({ toast }) => toast.warning('Aucun produit MMA trouvé dans le devis.'));
       return;
     }
     saveSnapshot();
-    const montantVente = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_VENTE_PCT) / 100;
-    const montantAchat = Math.round(totalMMA * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100;
+    const montantVente = Math.round(totalVenteMMA * SURCHARGE_ENERGIE_MMA_VENTE_PCT) / 100;
+    const montantAchat = Math.round(totalAchatMMA * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100;
     const id = generateId();
     setLignes(prev => [
       ...prev,
@@ -474,36 +483,27 @@ export default function Devis() {
     setNewLigneId(id);
   }
 
-  // ─── Surcharge énergie hors MMA ───────────────────────────────────────────
-  const SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT = 5;
-  const SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT = 4.8;
   function addSurchargeEnergieHorsMMA() {
-    const totalHorsMMA = lignes.reduce((acc, l) => {
-      if (!l.produitId) return acc;
+    let totalVenteHorsMMA = 0, totalAchatHorsMMA = 0;
+    for (const l of lignes) {
+      if (!l.produitId) continue;
       const prod = produits.find(p => p.id === l.produitId);
-      if (!prod || prod.categorie?.toLowerCase() === 'mma') return acc;
-      return acc + l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-    }, 0);
-    if (totalHorsMMA <= 0) {
+      if (!prod || prod.categorie?.toLowerCase() === 'mma') continue;
+      const coeff = 1 - (l.remise || 0) / 100;
+      totalVenteHorsMMA += l.quantite * l.prixUnitaireHT * coeff;
+      totalAchatHorsMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
+    }
+    if (totalVenteHorsMMA <= 0) {
       import('sonner').then(({ toast }) => toast.warning('Aucun produit hors MMA trouvé dans le devis.'));
       return;
     }
     saveSnapshot();
-    const montantVente = Math.round(totalHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) / 100;
-    const montantAchat = Math.round(totalHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100;
+    const montantVente = Math.round(totalVenteHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) / 100;
+    const montantAchat = Math.round(totalAchatHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100;
     const id = generateId();
     setLignes(prev => [
       ...prev,
-      {
-        id,
-        description: `Surcharge énergie hors MMA (${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}%)`,
-        quantite: 1,
-        unite: 'forfait',
-        prixUnitaireHT: montantVente,
-        prixAchatLigne: montantAchat,
-        tva: 20,
-        remise: 0,
-      },
+      { id, description: `Surcharge énergie hors MMA (${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 },
     ]);
     setNewLigneId(id);
   }
@@ -1051,13 +1051,7 @@ export default function Devis() {
           const totalAchatD = d.lignes.reduce((acc, l) => {
             if (l.type && l.type !== 'ligne') return acc;
             if (!l.produitId) {
-              // Surcharges énergie : achat = vente × ratio taux fixe
-              const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-              if (l.description?.includes('Surcharge énergie MMA'))
-                return acc + puVente * (SURCHARGE_ENERGIE_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_MMA_VENTE_PCT) * l.quantite;
-              if (l.description?.includes('Surcharge énergie hors MMA'))
-                return acc + puVente * (SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) * l.quantite;
-              // Autre ligne libre
+              // Toutes les lignes libres (surcharges incluses) : utiliser prixAchatLigne stocké
               return acc + (l.prixAchatLigne ?? 0) * l.quantite;
             }
             const prod = produits.find(p => p.id === l.produitId);
@@ -1932,11 +1926,6 @@ export default function Devis() {
               const totalAchat = lignes.reduce((acc, l) => {
                 if (l.type && l.type !== 'ligne') return acc;
                 if (!l.produitId) {
-                  const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-                  if (l.description?.includes('Surcharge énergie MMA'))
-                    return acc + puVente * (SURCHARGE_ENERGIE_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_MMA_VENTE_PCT) * l.quantite;
-                  if (l.description?.includes('Surcharge énergie hors MMA'))
-                    return acc + puVente * (SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) * l.quantite;
                   return acc + (l.prixAchatLigne ?? 0) * l.quantite;
                 }
                 const prod = produits.find(p => p.id === l.produitId);
@@ -2157,17 +2146,9 @@ export default function Devis() {
                         // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
                         // Paliers : on utilise getPrixPourQuantite pour tenir compte des tarifs par palier
                         const prixPalier = prod ? getPrixPourQuantite(prod, l.quantite) : null;
-                        // Surcharges énergie : achat = vente × (taux_achat / taux_vente)
-                        // Ce ratio est fixe indépendamment du total produits courant
-                        const isSurchargeMMA = !!l.description?.includes('Surcharge énergie MMA');
-                        const isSurchargeHorsMMA = !!l.description?.includes('Surcharge énergie hors MMA');
-                        const isSurcharge = isSurchargeMMA || isSurchargeHorsMMA;
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-                        const puAchat = isSurchargeMMA
-                          ? puVente * (SURCHARGE_ENERGIE_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_MMA_VENTE_PCT)
-                          : isSurchargeHorsMMA
-                            ? puVente * (SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT / SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT)
-                            : l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
+                        // Surcharges et lignes libres : utiliser prixAchatLigne stocké (calculé sur base achat)
+                        const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
                         const totAchat = puAchat * l.quantite;
                         const totVente = puVente * l.quantite;
                         const marge = totVente - totAchat;
