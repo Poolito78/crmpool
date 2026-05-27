@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1076,6 +1076,9 @@ export default function Devis() {
           const contactLabel = devisContact
             ? [devisContact.prenom, devisContact.nom].filter(Boolean).join(' ') + (devisContact.fonction ? ` · ${devisContact.fonction}` : '')
             : null;
+          const adresseLivraison = d.adresseLivraisonId
+            ? client?.adressesLivraison?.find(a => a.id === d.adresseLivraisonId)
+            : null;
           return (
             <div key={d.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer hover:border-primary/40 transition-colors" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -1120,6 +1123,12 @@ export default function Devis() {
                     {contactLabel && <span className="text-muted-foreground"> · {contactLabel}</span>}
                     {' • '}{formatDate(d.dateCreation)}
                   </p>
+                  {adresseLivraison && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {adresseLivraison.libelle} — {adresseLivraison.codePostal} {adresseLivraison.ville}
+                    </p>
+                  )}
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
                   {/* ── Documents liés ── */}
                   {(cfLies.length > 0 || ccLies.length > 0 || facLies.length > 0 || d.statut === 'accepté' || d.statut === 'envoyé') && (
