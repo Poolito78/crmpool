@@ -854,8 +854,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {/* inline-block + verticalAlign:middle : seule technique fiable dans html2canvas
                             pour centrer un badge (taller than text) par rapport au texte.
                             flex alignItems:center n'est pas rendu correctement dans les table-cells. */}
-                        <div>
-                          <span style={{ display: 'inline-block', verticalAlign: 'middle' }}>{l.description}</span>
+                        {/* lineHeight:'1' sur le div comprime la ligne IFC à la taille du font-size parent.
+                            Sans ça, line-height ~1.5 hérité du design system place vertical-align:middle
+                            dans la moitié basse de la ligne → texte/badge apparaissent en bas de la cellule. */}
+                        <div style={{ lineHeight: '1' }}>
+                          <span style={{ display: 'inline-block', verticalAlign: 'middle', lineHeight: 'normal' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...Object.values(l.variantesChoisies)].sort((a, b) => {
@@ -864,7 +867,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 4px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', lineHeight: 'normal', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 4px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
