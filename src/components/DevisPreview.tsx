@@ -731,60 +731,47 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '72px' }} />{/* Total HT */}
               </colgroup>
               <thead>
-                {/* Centrage vertical html2canvas-safe :
-                    - <th> : padding=0, verticalAlign='top' (ancre le div en haut, pas de dérive baseline)
-                    - <div> interne : paddingTop/Bottom symétrique + lineHeight → centrage visuel garanti
-                      par le padding, indépendant de tout comportement de table-cell */}
-                {/* ── Ligne 1 : DÉSIGNATION + groupes (div : pad 6px + lineHeight 14px = 26px) ── */}
+                {/* Centrage vertical : texte directement dans <th>, align-middle Tailwind.
+                    Pas de <div> interne (perturbe html2canvas sur les table-cells).
+                    padding symétrique haut/bas pour l'espace visuel, vertical-align:middle
+                    pour le centrage réel via la sémantique table-cell. */}
+                {/* ── Ligne 1 : DÉSIGNATION + groupes ── */}
                 <tr className="bg-[#CC0000] text-white">
-                  <th className="border-r border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '6px', paddingBottom: '6px', paddingLeft: '8px', paddingRight: '8px', lineHeight: '14px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>
-                      Désignation
-                    </div>
+                  <th className="border-r border-white/20 align-middle"
+                      style={{ padding: '6px 8px', fontSize: '11px', fontWeight: 'bold', textTransform: 'uppercase' }}>
+                    Désignation
                   </th>
-                  <th colSpan={2} className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '6px', paddingBottom: '6px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'nowrap' }}>Conso. Est.</div>
-                  </th>
-                  <th colSpan={3} className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '6px', paddingBottom: '6px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Condit.</div>
-                  </th>
-                  <th colSpan={3} className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '6px', paddingBottom: '6px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Prix</div>
-                  </th>
+                  <th colSpan={2} className="border-l border-white/20 align-middle"
+                      style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center', whiteSpace: 'nowrap' }}>Conso. Est.</th>
+                  <th colSpan={3} className="border-l border-white/20 align-middle"
+                      style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Condit.</th>
+                  <th colSpan={3} className="border-l border-white/20 align-middle"
+                      style={{ padding: '6px 4px', fontSize: '12px', fontWeight: 'bold', textAlign: 'center' }}>Prix</th>
                 </tr>
-                {/* ── Ligne 2 : Fiches système + sous-colonnes (div : pad 3px + lineHeight 14px = 20px) ── */}
+                {/* ── Ligne 2 : Fiches système + sous-colonnes ── */}
                 <tr className="bg-[#CC0000] text-white">
-                  <th className="border-r border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '8px', paddingRight: '8px', lineHeight: '14px', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75 }}
-                         data-pdf-href="https://www.isofloor.fr">
-                      Fiches système / Produit :{' '}
-                      <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
-                    </div>
+                  <th className="border-r border-white/20 align-middle"
+                      style={{ padding: '3px 8px', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75 }}
+                      data-pdf-href="https://www.isofloor.fr">
+                    Fiches système / Produit :{' '}
+                    <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
                   </th>
-                  <th className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg/m²</div>
-                  </th>
-                  <th style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</div>
-                  </th>
-                  <th className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg</div>
-                  </th>
-                  <th style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</div>
-                  </th>
-                  <th style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</div>
-                  </th>
-                  <th className="border-l border-white/20" style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</div>
-                  </th>
-                  <th style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</div>
-                  </th>
-                  <th style={{ padding: 0, verticalAlign: 'top' }}>
-                    <div style={{ paddingTop: '3px', paddingBottom: '3px', paddingLeft: '4px', paddingRight: '4px', lineHeight: '14px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT</div>
-                  </th>
+                  <th className="border-l border-white/20 align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg/m²</th>
+                  <th className="align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="border-l border-white/20 align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg</th>
+                  <th className="align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</th>
+                  <th className="align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>KG</th>
+                  <th className="border-l border-white/20 align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>Unité</th>
+                  <th className="align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
+                  <th className="align-middle"
+                      style={{ padding: '3px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT</th>
                 </tr>
               </thead>
               <tbody>
