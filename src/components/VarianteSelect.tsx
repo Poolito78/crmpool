@@ -165,7 +165,12 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                     return <div className="w-12 h-12 rounded bg-muted/40 border border-black/10" />;
                   })()}
                   <span className="text-[10px] leading-tight line-clamp-2 w-full">
-                    {opt.label}
+                    {(() => {
+                      const r = getRalInfo(opt.label);
+                      if (r?.quartz) return r.quartz;
+                      if (r) return `RAL ${r.num}`;
+                      return opt.label;
+                    })()}
                     {opt.prixDiff ? <span className="text-muted-foreground"> ({opt.prixDiff > 0 ? '+' : ''}{opt.prixDiff}€)</span> : ''}
                   </span>
                 </button>
