@@ -329,6 +329,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
 
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[88vh] flex flex-col overflow-hidden">
         <DialogHeader className="shrink-0">
@@ -646,5 +647,6 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         </DialogContent>
       </Dialog>
     )}
+    </>
   );
 }
