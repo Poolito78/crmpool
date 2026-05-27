@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, getPfPrixPourQuantite, type ProduitFournisseur, type PrixPalier } from '@/lib/store';
-import { Plus, Trash2, Star, Truck, Clock, Package, ChevronDown, ChevronUp, TrendingDown } from 'lucide-react';
+import {
+  generateId, formatMontant, calculerFournisseurPrioritaire,
+  getPfPrixPourQuantite, getPfTransportPourMontant,
+  type ProduitFournisseur, type PrixPalier, type PalierPort,
+} from '@/lib/store';
+import {
+  Plus, Trash2, Star, Truck, Clock, Package,
+  ChevronDown, ChevronUp, TrendingDown, Lock,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,18 +23,37 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
   const { fournisseurs, produits, updateProduits, produitFournisseurs, updateProduitFournisseurs } = useCRM();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
-  const [expandedPaliers, setExpandedPaliers] = useState<Set<string>>(new Set());
+  const [expandedPrix, setExpandedPrix]   = useState<Set<string>>(new Set());
+  const [expandedPort, setExpandedPort]   = useState<Set<string>>(new Set());
 
   const produit = produits.find(p => p.id === produitId);
   const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
   const prioritaire = calculerFournisseurPrioritaire(produitId, qteCommande, produitFournisseurs, fournisseurs);
   const availableFournisseurs = fournisseurs.filter(f => !pfs.some(pf => pf.fournisseurId === f.id));
-
   const prixAchatConditionne = produit?.prixAchat ?? 0;
+  const anyManualPin = pfs.some(pf => pf.estPrioritaire);
 
-  /** Met à jour uniquement le prix de référence du produit (utilisé dans devis/comparatif) */
   function updatePrixAchatProduit(newPrix: number) {
     updateProduits(prev => prev.map(p => p.id === produitId ? { ...p, prixAchat: newPrix } : p));
+  }
+
+  function updatePf(id: string, updates: Partial<ProduitFournisseur>) {
+    updateProduitFournisseurs(prev => prev.map(pf => pf.id === id ? { ...pf, ...updates } : pf));
+  }
+
+  /** Épingler manuellement un fournisseur comme prioritaire, ou dépingler si déjà actif */
+  function togglePin(pfId: string) {
+    const pf = pfs.find(p => p.id === pfId);
+    if (!pf) return;
+    if (pf.estPrioritaire) {
+      // Dépingler → retour au calcul auto
+      updatePf(pfId, { estPrioritaire: false });
+    } else {
+      // Épingler ce fournisseur, dépingler tous les autres du même produit
+      updateProduitFournisseurs(prev => prev.map(p =>
+        p.produitId === produitId ? { ...p, estPrioritaire: p.id === pfId } : p
+      ));
+    }
   }
 
   function addFournisseur() {
@@ -53,37 +79,25 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     toast.success('Fournisseur retiré');
   }
 
-  function updatePf(id: string, updates: Partial<ProduitFournisseur>) {
-    updateProduitFournisseurs(prev => prev.map(pf => pf.id === id ? { ...pf, ...updates } : pf));
-  }
-
   function getCoutGlobal(pf: ProduitFournisseur) {
     const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
     if (!fourn) return null;
     const qte = Math.max(qteCommande, pf.conditionnementMin);
     const prixEffectif = getPfPrixPourQuantite(pf, qte);
     const totalAchat = prixEffectif * qte;
-    const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
+    const transport = getPfTransportPourMontant(pf, fourn, totalAchat);
     return {
-      totalAchat,
-      transport,
+      totalAchat, transport,
       coutUnitaire: (totalAchat + transport) / qte,
       qte,
-      francoAtteint: totalAchat >= fourn.francoPort,
+      francoAtteint: transport === 0,
       prixEffectif,
-      hasPalierActif: prixEffectif !== pf.prixAchat,
+      hasPalierPrixActif: prixEffectif !== pf.prixAchat,
     };
   }
 
-  function togglePaliers(pfId: string) {
-    setExpandedPaliers(prev => {
-      const next = new Set(prev);
-      if (next.has(pfId)) next.delete(pfId); else next.add(pfId);
-      return next;
-    });
-  }
-
-  function addPalier(pfId: string) {
+  // ── Paliers prix ──────────────────────────────────────
+  function addPalierPrix(pfId: string) {
     updateProduitFournisseurs(prev => prev.map(pf => {
       if (pf.id !== pfId) return pf;
       const paliers = [...(pf.paliersFournisseur || [])];
@@ -91,11 +105,10 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
       const newPalier: PrixPalier = { qteMin: maxQte + 10, prixAchat: pf.prixAchat };
       return { ...pf, paliersFournisseur: [...paliers, newPalier] };
     }));
-    // Auto-expand si pas encore ouvert
-    setExpandedPaliers(prev => { const n = new Set(prev); n.add(pfId); return n; });
+    setExpandedPrix(prev => { const n = new Set(prev); n.add(pfId); return n; });
   }
 
-  function updatePalier(pfId: string, idx: number, field: keyof PrixPalier, value: number) {
+  function updatePalierPrix(pfId: string, idx: number, field: keyof PrixPalier, value: number) {
     updateProduitFournisseurs(prev => prev.map(pf => {
       if (pf.id !== pfId) return pf;
       const paliers = [...(pf.paliersFournisseur || [])];
@@ -104,7 +117,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     }));
   }
 
-  function removePalier(pfId: string, idx: number) {
+  function removePalierPrix(pfId: string, idx: number) {
     updateProduitFournisseurs(prev => prev.map(pf => {
       if (pf.id !== pfId) return pf;
       const paliers = (pf.paliersFournisseur || []).filter((_, i) => i !== idx);
@@ -112,11 +125,47 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     }));
   }
 
+  // ── Paliers port ──────────────────────────────────────
+  function addPalierPort(pfId: string) {
+    updateProduitFournisseurs(prev => prev.map(pf => {
+      if (pf.id !== pfId) return pf;
+      const paliers = [...(pf.paliersPort || [])];
+      const maxMontant = paliers.length > 0 ? Math.max(...paliers.map(p => p.montantMin)) : 0;
+      const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
+      const newPalier: PalierPort = { montantMin: maxMontant + 50, coutTransport: fourn?.coutTransport ?? 0 };
+      return { ...pf, paliersPort: [...paliers, newPalier] };
+    }));
+    setExpandedPort(prev => { const n = new Set(prev); n.add(pfId); return n; });
+  }
+
+  function updatePalierPort(pfId: string, idx: number, field: keyof PalierPort, value: number) {
+    updateProduitFournisseurs(prev => prev.map(pf => {
+      if (pf.id !== pfId) return pf;
+      const paliers = [...(pf.paliersPort || [])];
+      paliers[idx] = { ...paliers[idx], [field]: value };
+      return { ...pf, paliersPort: paliers };
+    }));
+  }
+
+  function removePalierPort(pfId: string, idx: number) {
+    updateProduitFournisseurs(prev => prev.map(pf => {
+      if (pf.id !== pfId) return pf;
+      const paliers = (pf.paliersPort || []).filter((_, i) => i !== idx);
+      return { ...pf, paliersPort: paliers.length > 0 ? paliers : undefined };
+    }));
+  }
+
   return (
     <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/20">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <p className="text-sm font-semibold text-foreground flex items-center gap-2">
           <Truck className="w-4 h-4" /> Fournisseurs ({pfs.length})
+          {anyManualPin && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full font-medium border border-amber-200 dark:border-amber-800">
+              <Lock className="w-2.5 h-2.5" /> Prioritaire fixé manuellement
+            </span>
+          )}
         </p>
         {availableFournisseurs.length > 0 && (
           <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
@@ -125,12 +174,11 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
         )}
       </div>
 
-      {/* Prix achat conditionné — référence produit pour devis/comparatif */}
+      {/* Prix de référence produit */}
       <div className="flex items-center gap-3 bg-muted/40 rounded-md px-3 py-2">
         <Label className="text-xs shrink-0">Prix achat conditionné</Label>
         <Input
-          type="number"
-          step="0.01"
+          type="number" step="0.01"
           value={prixAchatConditionne}
           onChange={e => updatePrixAchatProduit(parseFloat(e.target.value) || 0)}
           className="h-7 text-xs w-28 font-semibold"
@@ -145,18 +193,40 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
       {pfs.map(pf => {
         const fourn = fournisseurs.find(f => f.id === pf.fournisseurId);
         const isPrio = prioritaire?.id === pf.id;
+        const isManualPin = pf.estPrioritaire;
         const cost = getCoutGlobal(pf);
-        const paliers = pf.paliersFournisseur || [];
-        const showPaliers = expandedPaliers.has(pf.id);
+        const paliersPrix = pf.paliersFournisseur || [];
+        const paliersPort = pf.paliersPort || [];
+        const showPrix = expandedPrix.has(pf.id);
+        const showPort = expandedPort.has(pf.id);
 
         return (
           <div key={pf.id} className={`border rounded-lg p-3 space-y-2 ${isPrio ? 'border-primary bg-primary/5' : 'border-border'}`}>
-            {/* Header fournisseur */}
+            {/* Header carte */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {isPrio && <Star className="w-4 h-4 text-primary fill-primary" />}
+                {/* Bouton étoile — priorité manuelle */}
+                <button
+                  type="button"
+                  title={isManualPin
+                    ? 'Prioritaire fixé manuellement — cliquer pour remettre en auto'
+                    : isPrio
+                      ? 'Prioritaire (calcul auto) — cliquer pour fixer manuellement'
+                      : 'Définir comme fournisseur prioritaire'}
+                  onClick={() => togglePin(pf.id)}
+                  className={`p-0.5 rounded transition-colors ${isManualPin ? 'text-amber-500' : isPrio ? 'text-primary' : 'text-muted-foreground hover:text-primary'}`}
+                >
+                  <Star className={`w-4 h-4 ${isManualPin ? 'fill-amber-400' : isPrio ? 'fill-primary' : ''}`} />
+                </button>
                 <span className="text-sm font-medium">{fourn?.societe || 'Inconnu'}</span>
-                {isPrio && <span className="text-xs text-primary font-medium">Prioritaire</span>}
+                {isManualPin && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
+                    <Lock className="w-2.5 h-2.5" /> Fixé
+                  </span>
+                )}
+                {isPrio && !isManualPin && (
+                  <span className="text-xs text-primary font-medium">Auto ★</span>
+                )}
               </div>
               <button onClick={() => removePf(pf.id)} className="p-1 rounded hover:bg-destructive/10 text-destructive">
                 <Trash2 className="w-3.5 h-3.5" />
@@ -185,85 +255,124 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
               </div>
               <div>
                 <Label className="text-xs">
-                  Prix achat {paliers.length > 0 && <span className="text-muted-foreground">(base)</span>}
+                  Prix achat {paliersPrix.length > 0 && <span className="text-muted-foreground">(base)</span>}
                 </Label>
-                <Input
-                  type="number" step="0.01"
-                  value={pf.prixAchat}
+                <Input type="number" step="0.01" value={pf.prixAchat}
                   onChange={e => updatePf(pf.id, { prixAchat: parseFloat(e.target.value) || 0 })}
-                  className="h-8 text-xs font-semibold"
-                  title={paliers.length > 0 ? 'Prix de base — les paliers dégressifs prennent le relais selon la quantité' : 'Prix achat unitaire'}
-                />
+                  className="h-8 text-xs font-semibold" />
               </div>
             </div>
 
-            {/* Section tarifs dégressifs */}
-            <div className="border-t border-border/50 pt-2">
-              <button
-                type="button"
-                onClick={() => togglePaliers(pf.id)}
+            {/* Section tarifs dégressifs prix */}
+            <div className="border-t border-border/40 pt-1.5">
+              <button type="button"
+                onClick={() => setExpandedPrix(prev => { const n = new Set(prev); n.has(pf.id) ? n.delete(pf.id) : n.add(pf.id); return n; })}
                 className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <TrendingDown className="w-3 h-3" />
-                Tarifs dégressifs
-                {paliers.length > 0 && (
+                Prix dégressifs
+                {paliersPrix.length > 0 && (
                   <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-1.5 py-0 text-[10px] font-medium">
-                    {paliers.length} palier{paliers.length > 1 ? 's' : ''}
+                    {paliersPrix.length} palier{paliersPrix.length > 1 ? 's' : ''}
                   </span>
                 )}
-                {showPaliers ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+                {showPrix ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
               </button>
 
-              {showPaliers && (
+              {showPrix && (
                 <div className="mt-2 space-y-1.5">
-                  {paliers.length > 0 && (
+                  {paliersPrix.length > 0 && (
                     <div className="grid grid-cols-[90px_1fr_auto] gap-1 text-[10px] text-muted-foreground px-1 pb-0.5">
-                      <span>Qté min</span>
-                      <span>Prix achat (€)</span>
-                      <span />
+                      <span>Qté min</span><span>Prix achat (€)</span><span />
                     </div>
                   )}
-                  {paliers.map((palier, idx) => (
+                  {paliersPrix.map((palier, idx) => (
                     <div key={idx} className="grid grid-cols-[90px_1fr_auto] gap-1 items-center">
                       <div className="flex items-center gap-1">
                         <span className="text-[10px] text-muted-foreground shrink-0">≥</span>
-                        <Input
-                          type="number" min={1} step={1}
-                          value={palier.qteMin}
-                          onChange={e => updatePalier(pf.id, idx, 'qteMin', parseInt(e.target.value) || 1)}
-                          className="h-7 text-xs"
-                        />
+                        <Input type="number" min={1} step={1} value={palier.qteMin}
+                          onChange={e => updatePalierPrix(pf.id, idx, 'qteMin', parseInt(e.target.value) || 1)}
+                          className="h-7 text-xs" />
                       </div>
-                      <Input
-                        type="number" min={0} step={0.01}
-                        value={palier.prixAchat}
-                        onChange={e => updatePalier(pf.id, idx, 'prixAchat', parseFloat(e.target.value) || 0)}
-                        className="h-7 text-xs"
-                      />
-                      <button type="button" onClick={() => removePalier(pf.id, idx)}
+                      <Input type="number" min={0} step={0.01} value={palier.prixAchat}
+                        onChange={e => updatePalierPrix(pf.id, idx, 'prixAchat', parseFloat(e.target.value) || 0)}
+                        className="h-7 text-xs" />
+                      <button type="button" onClick={() => removePalierPrix(pf.id, idx)}
                         className="p-1 text-destructive hover:bg-destructive/10 rounded">
                         <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
-                  <Button variant="outline" size="sm" onClick={() => addPalier(pf.id)} className="h-7 text-xs w-full">
-                    <Plus className="w-3 h-3 mr-1" /> Ajouter un palier
+                  <Button variant="outline" size="sm" onClick={() => addPalierPrix(pf.id)} className="h-7 text-xs w-full">
+                    <Plus className="w-3 h-3 mr-1" /> Ajouter un palier prix
                   </Button>
-                  {paliers.length > 0 && (
-                    <p className="text-[10px] text-muted-foreground px-1">
-                      Prix de base appliqué si la quantité est inférieure à tous les paliers.
-                    </p>
+                  {paliersPrix.length > 0 && (
+                    <p className="text-[10px] text-muted-foreground px-1">Prix de base si quantité inférieure à tous les paliers.</p>
                   )}
+                </div>
+              )}
+            </div>
+
+            {/* Section frais de port dégressifs */}
+            <div className="border-t border-border/40 pt-1.5">
+              <button type="button"
+                onClick={() => setExpandedPort(prev => { const n = new Set(prev); n.has(pf.id) ? n.delete(pf.id) : n.add(pf.id); return n; })}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Truck className="w-3 h-3" />
+                Frais de port dégressifs
+                {paliersPort.length > 0 && (
+                  <span className="inline-flex items-center rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 px-1.5 py-0 text-[10px] font-medium">
+                    {paliersPort.length} palier{paliersPort.length > 1 ? 's' : ''}
+                  </span>
+                )}
+                {showPort ? <ChevronUp className="w-3 h-3 ml-0.5" /> : <ChevronDown className="w-3 h-3 ml-0.5" />}
+              </button>
+
+              {showPort && (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-[10px] text-muted-foreground px-1">
+                    Montant commande HT (€) → Frais de port (0 = franco).
+                    {fourn && paliersPort.length === 0 && (
+                      <span> Défaut fournisseur : franco à {formatMontant(fourn.francoPort)}, sinon {formatMontant(fourn.coutTransport)}.</span>
+                    )}
+                  </p>
+                  {paliersPort.length > 0 && (
+                    <div className="grid grid-cols-[110px_1fr_auto] gap-1 text-[10px] text-muted-foreground px-1 pb-0.5">
+                      <span>Montant min HT</span><span>Frais de port (€)</span><span />
+                    </div>
+                  )}
+                  {paliersPort.map((palier, idx) => (
+                    <div key={idx} className="grid grid-cols-[110px_1fr_auto] gap-1 items-center">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground shrink-0">≥</span>
+                        <Input type="number" min={0} step={1} value={palier.montantMin}
+                          onChange={e => updatePalierPort(pf.id, idx, 'montantMin', parseFloat(e.target.value) || 0)}
+                          className="h-7 text-xs" />
+                      </div>
+                      <Input type="number" min={0} step={0.01} value={palier.coutTransport}
+                        onChange={e => updatePalierPort(pf.id, idx, 'coutTransport', parseFloat(e.target.value) || 0)}
+                        placeholder="0 = franco"
+                        className="h-7 text-xs" />
+                      <button type="button" onClick={() => removePalierPort(pf.id, idx)}
+                        className="p-1 text-destructive hover:bg-destructive/10 rounded">
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  <Button variant="outline" size="sm" onClick={() => addPalierPort(pf.id)} className="h-7 text-xs w-full">
+                    <Plus className="w-3 h-3 mr-1" /> Ajouter un palier port
+                  </Button>
                 </div>
               )}
             </div>
 
             {/* Résumé coût */}
             {cost && (
-              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground border-t border-border/50 pt-2 mt-1">
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground border-t border-border/40 pt-2 mt-1">
                 <span>Qté: {cost.qte}</span>
-                {cost.hasPalierActif && (
-                  <span className="text-primary font-medium">Palier actif: {formatMontant(cost.prixEffectif)}/u</span>
+                {cost.hasPalierPrixActif && (
+                  <span className="text-primary font-medium">Palier prix: {formatMontant(cost.prixEffectif)}/u</span>
                 )}
                 <span>Achat: {formatMontant(cost.totalAchat)}</span>
                 <span className={cost.francoAtteint ? 'text-emerald-600 dark:text-emerald-400' : 'text-orange-500'}>

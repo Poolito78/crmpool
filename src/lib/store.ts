@@ -131,6 +131,11 @@ export interface Produit {
   variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
 }
 
+export interface PalierPort {
+  montantMin: number;    // montant HT commande (€) déclenchant ce tarif
+  coutTransport: number; // frais de port (0 = franco à ce palier)
+}
+
 export interface ProduitFournisseur {
   id: string;
   produitId: string;
@@ -140,15 +145,31 @@ export interface ProduitFournisseur {
   delaiLivraison: number;
   conditionnementMin: number;
   estPrioritaire: boolean;
-  paliersFournisseur?: PrixPalier[];  // tarifs dégressifs propres à ce fournisseur
+  paliersFournisseur?: PrixPalier[];  // tarifs prix dégressifs propres à ce fournisseur
+  paliersPort?: PalierPort[];         // frais de port dégressifs propres à ce fournisseur
 }
 
-/** Retourne le prix achat effectif d'un ProduitFournisseur à la quantité donnée (paliers dégressifs) */
+/** Retourne le prix achat effectif d'un ProduitFournisseur à la quantité donnée */
 export function getPfPrixPourQuantite(pf: ProduitFournisseur, qte: number): number {
   if (!pf.paliersFournisseur || pf.paliersFournisseur.length === 0) return pf.prixAchat;
   const sorted = [...pf.paliersFournisseur].sort((a, b) => b.qteMin - a.qteMin);
   const palier = sorted.find(p => qte >= p.qteMin);
   return palier?.prixAchat ?? pf.prixAchat;
+}
+
+/** Retourne les frais de port effectifs pour un ProduitFournisseur au montant HT donné.
+ *  Si des paliers port sont définis sur le lien, ils priment sur franco/coutTransport du fournisseur. */
+export function getPfTransportPourMontant(
+  pf: ProduitFournisseur,
+  fourn: { francoPort: number; coutTransport: number },
+  montantAchat: number
+): number {
+  if (pf.paliersPort && pf.paliersPort.length > 0) {
+    const sorted = [...pf.paliersPort].sort((a, b) => b.montantMin - a.montantMin);
+    const palier = sorted.find(p => montantAchat >= p.montantMin);
+    return palier?.coutTransport ?? fourn.coutTransport;
+  }
+  return montantAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
 }
 
 export interface LigneReception {
@@ -734,6 +755,9 @@ function dbToProduitFournisseur(r: any): ProduitFournisseur {
     paliersFournisseur: r.paliers_fournisseur
       ? (Array.isArray(r.paliers_fournisseur) ? r.paliers_fournisseur : JSON.parse(r.paliers_fournisseur))
       : undefined,
+    paliersPort: r.paliers_port
+      ? (Array.isArray(r.paliers_port) ? r.paliers_port : JSON.parse(r.paliers_port))
+      : undefined,
   };
 }
 
@@ -750,6 +774,9 @@ function produitFournisseurToDb(pf: ProduitFournisseur, userId: string) {
     est_prioritaire: pf.estPrioritaire,
     ...(pf.paliersFournisseur !== undefined ? {
       paliers_fournisseur: pf.paliersFournisseur && pf.paliersFournisseur.length > 0 ? pf.paliersFournisseur : null
+    } : {}),
+    ...(pf.paliersPort !== undefined ? {
+      paliers_port: pf.paliersPort && pf.paliersPort.length > 0 ? pf.paliersPort : null
     } : {}),
   };
 }
@@ -1401,6 +1428,10 @@ export function calculerFournisseurPrioritaire(
   if (pfs.length === 0) return null;
   if (pfs.length === 1) return pfs[0];
 
+  // Si un fournisseur est épinglé manuellement, il prime sur le calcul auto
+  const pinned = pfs.find(pf => pf.estPrioritaire);
+  if (pinned) return pinned;
+
   let best: ProduitFournisseur | null = null;
   let bestCost = Infinity;
 
@@ -1411,8 +1442,8 @@ export function calculerFournisseurPrioritaire(
     const qte = Math.max(qteCommande, pf.conditionnementMin);
     const prixEffectif = getPfPrixPourQuantite(pf, qte);
     const totalAchat = prixEffectif * qte;
-    // Transport : gratuit si franco atteint, sinon coût transport
-    const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
+    // Transport : utilise les paliers port si définis, sinon franco/coût standard
+    const transport = getPfTransportPourMontant(pf, fourn, totalAchat);
     const coutGlobal = totalAchat + transport;
     const coutUnitaire = coutGlobal / qte;
 
