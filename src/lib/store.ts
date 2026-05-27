@@ -961,7 +961,17 @@ export function useStore() {
       if (cRes.data) setClients(cRes.data.map(dbToClient));
       if (fRes.data) setFournisseurs(fRes.data.map(dbToFournisseur));
       if (pRes.data) setProduits(pRes.data.map(dbToProduit));
-      if (dRes.data) setDevis(dRes.data.map(dbToDevis));
+      // Migration one-shot : renomme DV-YYYY-NNN → DEV-YYYY-NNN en base
+      if (dRes.data) {
+        const dvRows = dRes.data.filter(d => d.numero?.startsWith('DV-'));
+        if (dvRows.length > 0) {
+          await Promise.all(dvRows.map(d =>
+            supabase.from('devis').update({ numero: (d.numero as string).replace(/^DV-/, 'DEV-') }).eq('id', d.id)
+          ));
+          dvRows.forEach(d => { d.numero = (d.numero as string).replace(/^DV-/, 'DEV-'); });
+        }
+        setDevis(dRes.data.map(dbToDevis));
+      }
       if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
       if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
       if (ccRes.data) setCommandesClient(ccRes.data.map(dbToCommandeClient));

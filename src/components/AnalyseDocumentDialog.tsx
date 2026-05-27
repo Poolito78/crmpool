@@ -125,7 +125,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (result.typeDocument === 'devis_client') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
       setCreerDevisClientId(foundClient?.id ?? '');
-      setCreerDevisNumero(result.numeroDocument || `DV-${year}-${nextNum}`);
+      setCreerDevisNumero(result.numeroDocument || `DEV-${year}-${nextNum}`);
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
       setCreerDevisRefAffaire(result.referencePartenaire || '');
