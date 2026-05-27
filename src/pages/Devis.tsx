@@ -2146,6 +2146,7 @@ export default function Devis() {
                         // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
                         // Paliers : on utilise getPrixPourQuantite pour tenir compte des tarifs par palier
                         const prixPalier = prod ? getPrixPourQuantite(prod, l.quantite) : null;
+                        const isSurcharge = !!l.description?.includes('Surcharge énergie');
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         // Surcharges et lignes libres : utiliser prixAchatLigne stocké (calculé sur base achat)
                         const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
