@@ -70,6 +70,7 @@ const QUARTZ_COLORS: Record<string, { hex: string; dark: boolean }> = {
   '452': { hex: '#8AAFC0', dark: false }, // Pastel Blue
   '637': { hex: '#B54020', dark: true  }, // Tile Red
   '740': { hex: '#7A9468', dark: true  }, // Pastel Green
+  '754': { hex: '#2E5C28', dark: true  }, // Forest Green
 };
 
 /**
