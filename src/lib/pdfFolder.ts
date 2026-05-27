@@ -153,7 +153,7 @@ export async function generatePdfFromElement(
   // ── Centrage vertical en-tête : force vertical-align:middle + padding symétrique
   // sur chaque <th> du clone avec !important pour garantir le rendu html2canvas.
   clone.querySelectorAll<HTMLElement>('thead tr').forEach((tr, rowIdx) => {
-    const padV = rowIdx === 0 ? '6px' : '3px';
+    const padV = rowIdx === 0 ? '4px' : '2px';
     tr.querySelectorAll<HTMLElement>('th').forEach(th => {
       th.style.setProperty('vertical-align', 'middle', 'important');
       th.style.setProperty('padding-top', padV, 'important');
@@ -321,7 +321,7 @@ export async function generatePdfFromElement(
   // l'en-tête manuellement avec jsPDF après avoir posé l'image html2canvas.
   type TheadRowData = {
     yMm: number; hMm: number;
-    cells: { xMm: number; wMm: number; text: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number }[];
+    cells: { xMm: number; wMm: number; text: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number; hasBorderLeft: boolean }[];
   };
   const theadRowData: TheadRowData[] = [];
   {
@@ -345,6 +345,7 @@ export async function generatePdfFromElement(
           bold: parseInt(cs.fontWeight) >= 600,
           italic: cs.fontStyle === 'italic',
           opacity: parseFloat(cs.opacity) || 1,
+          hasBorderLeft: th.classList.contains('border-l'),
         });
       });
       theadRowData.push({ yMm: trTop * dY, hMm: tr.offsetHeight * dY, cells });
@@ -401,6 +402,15 @@ export async function generatePdfFromElement(
           // Rectangle rouge
           pdf.setFillColor(204, 0, 0);
           pdf.rect(0, row.yMm, pw, row.hMm, 'F');
+          // Séparateurs verticaux entre groupes de colonnes (border-l border-white/20)
+          // Couleur = blanc 20% sur #CC0000 → (255*0.2+204*0.8, 255*0.2+0*0.8, 255*0.2+0*0.8) ≈ (214,51,51)
+          pdf.setDrawColor(214, 51, 51);
+          pdf.setLineWidth(0.25);
+          row.cells.forEach(cell => {
+            if (cell.hasBorderLeft && cell.xMm > 0.5) {
+              pdf.line(cell.xMm, row.yMm, cell.xMm, row.yMm + row.hMm);
+            }
+          });
           // Texte centré dans chaque cellule
           row.cells.forEach(cell => {
             if (!cell.text) return;
