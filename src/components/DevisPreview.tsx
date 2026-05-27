@@ -584,11 +584,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <div><span className="text-muted-foreground whitespace-nowrap mr-1">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
                   )}
                   {devis.systeme && (
-                    <div className="flex items-baseline gap-3">
-                      <span><span className="text-muted-foreground whitespace-nowrap mr-1">Système :</span><span className="font-medium">{devis.systeme}</span></span>
-                      {(devis.surfaceGlobaleM2 || 0) > 0 && (
-                        <span className="text-muted-foreground font-medium whitespace-nowrap">{devis.surfaceGlobaleM2} m²</span>
-                      )}
+                    <div>
+                      <span className="text-muted-foreground whitespace-nowrap mr-1">Système :</span>
+                      <span className="font-medium">{devis.systeme}{(devis.surfaceGlobaleM2 || 0) > 0 && <span className="text-muted-foreground ml-1">{devis.surfaceGlobaleM2} m²</span>}</span>
                     </div>
                   )}
                   {!devis.systeme && (devis.surfaceGlobaleM2 || 0) > 0 && (

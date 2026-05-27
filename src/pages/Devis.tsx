@@ -65,7 +65,14 @@ export default function Devis() {
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   // Mémorise la valeur précédente de surfaceGlobaleM2 pour éviter de l'écraser à l'ouverture du formulaire
   const prevSurfaceGlobaleRef = useRef<number>(0);
-  const [previewOptions, setPreviewOptions] = useState<PreviewOptions>({ showConso: false, showRemise: false, showComposants: false, showKgRecap: true });
+  const [previewOptions, setPreviewOptions] = useState<PreviewOptions>(() => {
+    try {
+      const saved = localStorage.getItem('crm_devis_preview_opts');
+      if (saved) return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true, ...JSON.parse(saved) };
+    } catch {}
+    return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true };
+  });
+  useEffect(() => { try { localStorage.setItem('crm_devis_preview_opts', JSON.stringify(previewOptions)); } catch {} }, [previewOptions]);
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
   const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
