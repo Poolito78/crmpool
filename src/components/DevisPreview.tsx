@@ -864,7 +864,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ display: 'inline-flex', alignItems: 'center', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', lineHeight: '1', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: '6px', backgroundColor: rs.backgroundColor, color: rs.color, padding: '1px 8px 3px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', lineHeight: '1', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
