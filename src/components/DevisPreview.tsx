@@ -868,7 +868,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <tr className="border-b border-border/60">
                       <td className="py-1.5 px-2 font-medium align-middle">
                         {/* Description + badge(s) sur la même ligne flex */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', flexWrap: 'wrap' }}>
                           <span>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -1098,7 +1098,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
+                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'baseline', letterSpacing: '0.04em', lineHeight: '1.4', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {
