@@ -721,8 +721,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <table className="w-full mb-6 text-xs border-collapse table-fixed">
               <colgroup>
                 <col />{/* Désignation : prend tout l'espace restant */}
-                <col style={{ width: '32px' }} />{/* kg/m² */}
-                <col style={{ width: '38px' }} />{/* Total KG conso */}
+                <col style={{ width: '44px' }} />{/* kg/m² */}
+                <col style={{ width: '54px' }} />{/* Total KG conso */}
                 <col style={{ width: '30px' }} />{/* kg cond */}
                 <col style={{ width: '28px' }} />{/* Unité cond */}
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
