@@ -60,8 +60,41 @@ export const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: bo
   '9022':{ hex:'#909088', dark:true  }, '9023':{ hex:'#808080', dark:true  },
 };
 
-/** Retourne les infos couleur RAL si le texte contient un numéro RAL à 4 chiffres */
+// ── QuartzColor — codes sans équivalent RAL standard ──────────────────────
+// Les couleurs qui ont un RAL explicite dans leur label (ex: "232 (RAL 7035)")
+// sont gérées automatiquement via le pattern "RAL XXXX" ci-dessous.
+// Seules les couleurs SANS RAL (ou dont le code numérique entrerait en conflit
+// avec un RAL existant) sont listées ici avec leur hexadécimal approximatif.
+const QUARTZ_COLORS: Record<string, { hex: string; dark: boolean }> = {
+  '340': { hex: '#D4A847', dark: false }, // Pastel Yellow
+  '452': { hex: '#8AAFC0', dark: false }, // Pastel Blue
+  '637': { hex: '#B54020', dark: true  }, // Tile Red
+  '740': { hex: '#7A9468', dark: true  }, // Pastel Green
+};
+
+/**
+ * Retourne les infos couleur d'un label de variante.
+ *
+ * Priorité :
+ *  1. Pattern explicite "RAL XXXX" → évite les faux-positifs (ex: "2012 (RAL 7040)"
+ *     doit retourner gris 7040, pas orange 2012)
+ *  2. Code QuartzColor en début de label (3-4 chiffres) → QUARTZ_COLORS
+ *  3. Fallback : premier nombre à 4 chiffres → RAL_COLORS (ancien comportement)
+ */
 export function getRalInfo(text: string): { hex: string; dark: boolean; white?: boolean; num: string } | undefined {
+  // 1. Motif explicite "RAL XXXX"
+  const ralMatch = text.match(/RAL\s*(\d{4})/i);
+  if (ralMatch) {
+    const c = RAL_COLORS[ralMatch[1]];
+    if (c) return { ...c, num: ralMatch[1] };
+  }
+  // 2. Code QuartzColor en début de label (ex: "340 (Pastel Yellow)")
+  const leadMatch = text.match(/^(\d{3,4})/);
+  if (leadMatch && QUARTZ_COLORS[leadMatch[1]]) {
+    const c = QUARTZ_COLORS[leadMatch[1]];
+    return { ...c, num: leadMatch[1] };
+  }
+  // 3. Fallback : tout nombre à 4 chiffres → RAL
   const m = text.match(/(\d{4})/);
   if (!m) return undefined;
   const c = RAL_COLORS[m[1]];
