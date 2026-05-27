@@ -10,6 +10,8 @@ import {
   Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen, History,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import DevisPreview from '@/components/DevisPreview';
+import type { Client, Produit, Devis as DevisType } from '@/lib/store';
 
 /* ── Types ── */
 export interface PieceJointe {
@@ -35,6 +37,8 @@ interface Props {
   devisId: string;
   devisNumero: string;
   initialMode?: 'note' | 'fichier' | null;
+  clients?: Client[];
+  produits?: Produit[];
 }
 
 /* ── Helpers ── */
@@ -77,7 +81,7 @@ const actionLabel: Record<string, { label: string; icon: typeof Clock; color: st
 };
 
 /* ── Composant principal ── */
-export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode }: Props) {
+export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode, clients = [], produits = [] }: Props) {
   const [pjs, setPjs] = useState<PieceJointe[]>([]);
   const [hist, setHist] = useState<HistoriqueEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -87,6 +91,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
   const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
+  const [snapshotDevis, setSnapshotDevis] = useState<DevisType | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const fileConfRef = useRef<HTMLInputElement>(null);
   const userId = useRef<string | null>(null);
@@ -561,6 +566,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             {!loading && hist.map(h => {
               const cfg = actionLabel[h.action] ?? { label: h.action, icon: Clock, color: 'text-muted-foreground' };
               const Icon = cfg.icon;
+              const snap = h.action === 'modification' && h.details?.snapshot ? h.details.snapshot as DevisType : null;
               return (
                 <div key={h.id} className="flex gap-3 items-start py-1.5 border-b border-border/40 last:border-0">
                   <div className="w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0 mt-0.5">
@@ -573,6 +579,15 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                       {h.details?.destinataire ? <span className="text-muted-foreground"> à {h.details.destinataire}</span> : ''}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{formatRelative(h.date)}</p>
+                    {snap && (
+                      <button
+                        onClick={() => setSnapshotDevis(snap)}
+                        className="mt-1 flex items-center gap-1 text-[10px] text-primary hover:underline"
+                      >
+                        <Eye className="w-3 h-3" />
+                        Voir avant modification
+                      </button>
+                    )}
                   </div>
                 </div>
               );
@@ -583,5 +598,25 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         </div>{/* fin zone drag & drop */}
       </DialogContent>
     </Dialog>
+
+    {/* Dialog snapshot "avant modification" */}
+    {snapshotDevis && (
+      <Dialog open={!!snapshotDevis} onOpenChange={(o) => { if (!o) setSnapshotDevis(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-600">
+              <History className="w-4 h-4" />
+              Devis avant modification — {snapshotDevis.numero}
+            </DialogTitle>
+          </DialogHeader>
+          <DevisPreview
+            devis={snapshotDevis}
+            client={clients.find(c => c.id === snapshotDevis.clientId)}
+            produits={produits}
+            hideControls
+          />
+        </DialogContent>
+      </Dialog>
+    )}
   );
 }

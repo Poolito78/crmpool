@@ -734,7 +734,7 @@ export default function Devis() {
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
-        logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
+        logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
       const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
@@ -2581,6 +2581,8 @@ export default function Devis() {
           devisId={chatterDevis.id}
           devisNumero={chatterDevis.numero}
           initialMode={chatterMode}
+          clients={clients}
+          produits={produits}
         />
       )}
 
