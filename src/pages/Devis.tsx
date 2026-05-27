@@ -1326,15 +1326,31 @@ export default function Devis() {
                       )}
                       {selectedClient.adressesLivraison?.length > 0 && (
                         <div className="border-t border-border pt-2 mt-2 space-y-1">
-                          <p className="font-medium text-muted-foreground">Adresses :</p>
+                          <p className="font-medium text-muted-foreground text-xs">Adresse de livraison :</p>
+                          {/* Option "identique facturation" */}
+                          <button
+                            type="button"
+                            onClick={() => setAdresseLivraisonId('')}
+                            className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${!adresseLivraisonId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                          >
+                            <span className="text-[10px] px-1.5 py-0 rounded-full border border-border shrink-0">Fact.</span>
+                            <span>Identique à l'adresse de facturation</span>
+                            {!adresseLivraisonId && <span className="ml-auto text-[10px]">✓</span>}
+                          </button>
                           {selectedClient.adressesLivraison.map(a => (
-                            <div key={a.id} className="flex items-center gap-1.5">
-                              <span className={`text-[10px] px-1.5 py-0 rounded-full border ${a.type === 'facturation' ? 'border-primary/30 text-primary' : 'border-border text-muted-foreground'}`}>
+                            <button
+                              key={a.id}
+                              type="button"
+                              onClick={() => setAdresseLivraisonId(a.id)}
+                              className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${adresseLivraisonId === a.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                            >
+                              <span className={`text-[10px] px-1.5 py-0 rounded-full border shrink-0 ${a.type === 'facturation' ? 'border-primary/30 text-primary' : 'border-border'}`}>
                                 {a.type === 'facturation' ? 'Fact.' : 'Livr.'}
                               </span>
-                              <span>{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}</span>
-                              {a.parDefaut && <span className="text-[10px] text-primary font-medium">(défaut)</span>}
-                            </div>
+                              <span className="truncate">{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}</span>
+                              {a.parDefaut && <span className="text-[10px] text-muted-foreground shrink-0">(défaut)</span>}
+                              {adresseLivraisonId === a.id && <span className="ml-auto text-[10px] shrink-0">✓</span>}
+                            </button>
                           ))}
                         </div>
                       )}
@@ -1370,29 +1386,6 @@ export default function Devis() {
                 </div>
               )}
             </div>
-            {/* Adresse de livraison */}
-            {(() => {
-              const selectedClient = clients.find(c => c.id === clientId);
-              const allAdresses = selectedClient?.adressesLivraison || [];
-              if (!selectedClient || allAdresses.length === 0) return null;
-              return (
-                <div>
-                  <Label>Adresse de livraison</Label>
-                  <select
-                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm"
-                    value={adresseLivraisonId}
-                    onChange={e => setAdresseLivraisonId(e.target.value)}
-                  >
-                    <option value="">— Identique à l'adresse du client —</option>
-                    {allAdresses.map(a => (
-                      <option key={a.id} value={a.id}>
-                        {a.type === 'facturation' ? '[Fact.]' : '[Livr.]'} {a.libelle} — {a.adresse}, {a.codePostal} {a.ville} {a.parDefaut ? '(défaut)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              );
-            })()}
             <div>
               <Label>Référence affaire</Label>
               <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
