@@ -1573,18 +1573,20 @@ export default function Devis() {
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
-                        className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
+                        className={`flex items-start gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
                           ${draggedId === l.id ? 'opacity-40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-amber-400 border-2 shadow-md bg-amber-50/50 dark:bg-amber-900/10' : draggedId === l.id ? '' : 'bg-amber-50/40 dark:bg-amber-900/10 border-amber-300/40'}`}>
-                        <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0" />
-                        <StickyNote className="w-4 h-4 text-amber-500 shrink-0" />
-                        <input
-                          type="text"
+                        <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0 mt-0.5" />
+                        <StickyNote className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <textarea
                           value={l.description}
                           onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                          onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
                           autoFocus={l.id === newLigneId}
-                          className="flex-1 text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50"
+                          rows={1}
+                          className="flex-1 text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 resize-none overflow-hidden leading-normal"
                           placeholder="Texte libre…"
+                          style={{ minHeight: '1.5rem' }}
                         />
                         <div className="flex items-center gap-1">
                           <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>

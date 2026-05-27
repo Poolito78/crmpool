@@ -846,7 +846,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     if (dl.type === 'texte') {
                       return dl.description ? (
                         <tr key={dl.id} className="border-b border-border/40">
-                          <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground">{dl.description}</td>
+                          <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>{dl.description}</td>
                         </tr>
                       ) : null;
                     }
@@ -1067,7 +1067,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   if (dl.type === 'texte') {
                     return dl.description ? (
                       <tr key={dl.id} className="border-b border-border/40">
-                        <td colSpan={colSpan} className="py-1.5 px-2 text-xs italic text-muted-foreground">{dl.description}</td>
+                        <td colSpan={colSpan} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>{dl.description}</td>
                       </tr>
                     ) : null;
                   }
