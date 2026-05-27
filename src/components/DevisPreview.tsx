@@ -866,7 +866,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 /* Wrapper : hauteur 14px dans le flow (n'agrandit pas la ligne)
                                    Badge absolu : 26px centré, top:-6px → déborde 6px en dessous */
                                 <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', position: 'relative', zIndex: 5, marginLeft: '6px', width: '64px', height: '14px' }}>
-                                  <span style={{ position: 'absolute', top: '-6px', left: '0', height: '20px', lineHeight: '20px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', zIndex: 5, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                  <span style={{ position: 'absolute', top: '-6px', left: '0', height: '18px', lineHeight: '18px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', zIndex: 5, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
                                 </span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
