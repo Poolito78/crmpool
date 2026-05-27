@@ -138,6 +138,7 @@ export default function Devis() {
   // Comparatif — édition manuelle du PU Achat
   const [portAchatManuel, setPortAchatManuel] = useState<number | null>(null);
   const [compaEditingId, setCompaEditingId] = useState<string | null>(null); // ligneId ou '__transport__'
+  const [compaEditingField, setCompaEditingField] = useState<'achat' | 'vente' | 'coeff'>('achat');
   const [compaEditVal, setCompaEditVal] = useState('');
   const [fraisPortHT, setFraisPortHT] = useState(0);
   const [fraisPortTVA, setFraisPortTVA] = useState(20);
@@ -2207,7 +2208,7 @@ export default function Devis() {
                                   className="w-20 text-right border border-border rounded px-1 py-0 text-xs bg-background"
                                   placeholder="0,00"
                                 />
-                              ) : compaEditingId === l.id ? (
+                              ) : compaEditingId === l.id && compaEditingField === 'achat' ? (
                                 // Édition en cours
                                 <input
                                   type="number" min={0} step={0.01}
@@ -2236,24 +2237,105 @@ export default function Devis() {
                                   )}
                                   <span
                                     title={l.prixAchatLigne != null ? 'Prix achat modifié manuellement — cliquer pour éditer' : 'Cliquer pour modifier le prix achat'}
-                                    onClick={() => { setCompaEditingId(l.id); setCompaEditVal(String(puAchat || 0)); }}
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditingField('achat'); setCompaEditVal(String(puAchat || 0)); }}
                                     className={`cursor-pointer hover:underline decoration-dashed underline-offset-2 transition-colors ${l.prixAchatLigne != null ? 'text-amber-600 dark:text-amber-400 font-medium' : 'hover:text-primary'}`}
                                   >
                                     {puAchat > 0 ? formatMontant(puAchat) : <span className="text-muted-foreground">—</span>}
                                   </span>
                                   <Pencil
                                     className="w-3 h-3 opacity-0 group-hover/edit:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
-                                    onClick={() => { setCompaEditingId(l.id); setCompaEditVal(String(puAchat || 0)); }}
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditingField('achat'); setCompaEditVal(String(puAchat || 0)); }}
                                   />
                                 </div>
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-right">{totAchat > 0 ? formatMontant(totAchat) : <span className="text-muted-foreground">—</span>}</td>
-                            <td className="px-2 py-1.5 text-right">{formatMontant(puVente)}</td>
+                            {/* PU Vente — éditable par clic */}
+                            <td className="px-2 py-1.5 text-right">
+                              {isSurcharge ? (
+                                <span className="text-muted-foreground italic">{formatMontant(puVente)}</span>
+                              ) : compaEditingId === l.id && compaEditingField === 'vente' ? (
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  value={compaEditVal}
+                                  onChange={e => setCompaEditVal(e.target.value)}
+                                  onBlur={() => {
+                                    const v = parseFloat(compaEditVal);
+                                    if (!isNaN(v) && v >= 0) {
+                                      const remise = l.remise || 0;
+                                      updateLigne(l.id, 'prixUnitaireHT', remise < 100 ? v / (1 - remise / 100) : v);
+                                    }
+                                    setCompaEditingId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    if (e.key === 'Escape') setCompaEditingId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-20 text-right border border-primary rounded px-1 py-0 text-xs bg-background"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-0.5 justify-end group/editv">
+                                  <span
+                                    title="Cliquer pour modifier le prix de vente"
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditingField('vente'); setCompaEditVal(String(+puVente.toFixed(4))); }}
+                                    className="cursor-pointer hover:underline decoration-dashed underline-offset-2 transition-colors hover:text-primary"
+                                  >
+                                    {formatMontant(puVente)}
+                                  </span>
+                                  <Pencil
+                                    className="w-3 h-3 opacity-0 group-hover/editv:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
+                                    onClick={() => { setCompaEditingId(l.id); setCompaEditingField('vente'); setCompaEditVal(String(+puVente.toFixed(4))); }}
+                                  />
+                                </div>
+                              )}
+                            </td>
                             <td className="px-2 py-1.5 text-right font-medium">{formatMontant(totVente)}</td>
                             <td className={`px-2 py-1.5 text-right ${marge < 0 ? 'text-destructive' : ''}`}>{totAchat > 0 ? formatMontant(marge) : <span className="text-muted-foreground">—</span>}</td>
                             <td className={`px-2 py-1.5 text-right ${margePct < 30 && totAchat > 0 ? 'text-orange-500' : ''}`}>{totAchat > 0 ? `${margePct.toFixed(1)}%` : <span className="text-muted-foreground">—</span>}</td>
-                            <td className={`px-2 py-1.5 text-right font-semibold ${coeffColor}`}>{coeff != null ? coeff.toFixed(2) : <span className="text-muted-foreground font-normal">—</span>}</td>
+                            {/* Coeff — éditable par clic */}
+                            <td className={`px-2 py-1.5 text-right font-semibold ${coeffColor}`}>
+                              {isSurcharge ? (
+                                coeff != null ? coeff.toFixed(2) : <span className="text-muted-foreground font-normal">—</span>
+                              ) : compaEditingId === l.id && compaEditingField === 'coeff' ? (
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  value={compaEditVal}
+                                  onChange={e => setCompaEditVal(e.target.value)}
+                                  onBlur={() => {
+                                    const v = parseFloat(compaEditVal);
+                                    if (!isNaN(v) && v > 0 && puAchat > 0) {
+                                      const newPuVente = puAchat * v;
+                                      const remise = l.remise || 0;
+                                      updateLigne(l.id, 'prixUnitaireHT', remise < 100 ? newPuVente / (1 - remise / 100) : newPuVente);
+                                    }
+                                    setCompaEditingId(null);
+                                  }}
+                                  onKeyDown={e => {
+                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                    if (e.key === 'Escape') setCompaEditingId(null);
+                                  }}
+                                  autoFocus
+                                  className="w-16 text-right border border-primary rounded px-1 py-0 text-xs bg-background"
+                                />
+                              ) : (
+                                <div className="flex items-center gap-0.5 justify-end group/editc">
+                                  <span
+                                    title={coeff != null && puAchat > 0 ? 'Cliquer pour modifier le coefficient' : ''}
+                                    onClick={() => { if (coeff != null && puAchat > 0) { setCompaEditingId(l.id); setCompaEditingField('coeff'); setCompaEditVal(coeff.toFixed(2)); } }}
+                                    className={coeff != null && puAchat > 0 ? 'cursor-pointer hover:underline decoration-dashed underline-offset-2 transition-colors hover:text-primary font-semibold' : 'font-normal text-muted-foreground'}
+                                  >
+                                    {coeff != null ? coeff.toFixed(2) : '—'}
+                                  </span>
+                                  {coeff != null && puAchat > 0 && (
+                                    <Pencil
+                                      className="w-3 h-3 opacity-0 group-hover/editc:opacity-50 text-muted-foreground shrink-0 cursor-pointer hover:opacity-100"
+                                      onClick={() => { setCompaEditingId(l.id); setCompaEditingField('coeff'); setCompaEditVal(coeff.toFixed(2)); }}
+                                    />
+                                  )}
+                                </div>
+                              )}
+                            </td>
                           </tr>
                         );
                       })}
