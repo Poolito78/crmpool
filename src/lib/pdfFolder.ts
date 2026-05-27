@@ -424,13 +424,23 @@ export async function generatePdfFromElement(
           // Texte centré dans chaque cellule
           row.cells.forEach(cell => {
             if (!cell.text) return;
-            pdf.setFontSize(cell.fontSizePt);
-            pdf.setFont('helvetica', cell.bold ? (cell.italic ? 'bolditalic' : 'bold') : (cell.italic ? 'italic' : 'normal'));
+            const fontStyle = cell.bold ? (cell.italic ? 'bolditalic' : 'bold') : (cell.italic ? 'italic' : 'normal');
+            pdf.setFont('helvetica', fontStyle);
+            // Auto-réduit la fonte si le texte dépasse la cellule.
+            // Les métriques Helvetica de jsPDF sont plus larges que le rendu navigateur →
+            // les cellules étroites (<32px) débordent sur la cellule voisine sans ce clamp.
+            const hPad = 0.5; // mm padding horizontal (réduit pour maximiser l'espace)
+            const availW = Math.max(0.5, cell.wMm - 2 * hPad);
+            const unitW = pdf.getStringUnitWidth(cell.text); // indépendant de la taille courante
+            const maxFontPt = unitW > 0
+              ? availW * (pdf.internal.scaleFactor) / unitW
+              : cell.fontSizePt;
+            const useFontPt = Math.min(cell.fontSizePt, Math.max(4, maxFontPt));
+            pdf.setFontSize(useFontPt);
             // Blanc mélangé au fond rouge selon opacité (simule opacity CSS)
             const bl = (c: number) => Math.round(255 * cell.opacity + c * (1 - cell.opacity));
             pdf.setTextColor(bl(204), bl(0), bl(0));
             const midY = row.yMm + row.hMm / 2;
-            const hPad = 2; // mm padding horizontal
             if (cell.alignH === 'center') {
               pdf.text(cell.text, cell.xMm + cell.wMm / 2, midY, { align: 'center', baseline: 'middle' });
             } else if (cell.alignH === 'right') {
