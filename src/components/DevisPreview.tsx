@@ -543,38 +543,43 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </div>
               </div>
 
-              {/* Ligne 2 : adresses */}
+              {/* Ligne 2 : adresses — toujours deux blocs côte à côte */}
               {(() => {
                 const adresseLivraison = devis.adresseLivraisonId
                   ? client?.adressesLivraison?.find(a => a.id === devis.adresseLivraisonId)
                   : null;
-                const factBlock = (
-                  <div className="bg-muted/30 rounded-lg p-4">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
-                    <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                    {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
-                    {client && <p className="text-muted-foreground">{client.adresse}</p>}
-                    {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                    {client?.email && <p className="text-muted-foreground">{client.email}</p>}
+                return (
+                  <div className="grid grid-cols-2 gap-4 mb-3">
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
+                      <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                      {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                      {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                      {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                      {client?.email && <p className="text-muted-foreground">{client.email}</p>}
+                    </div>
+                    <div className="bg-muted/30 rounded-lg p-4">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
+                      {adresseLivraison ? (
+                        <>
+                          <p className="font-semibold">{adresseLivraison.libelle}</p>
+                          <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
+                          <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
+                          {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
+                          {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
+                        </>
+                      ) : (
+                        <>
+                          <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
+                          {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                          {client && <p className="text-muted-foreground">{client.adresse}</p>}
+                          {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
+                          {client?.telephone && <p className="text-muted-foreground">Tél : {client.telephone}</p>}
+                        </>
+                      )}
+                    </div>
                   </div>
                 );
-                if (adresseLivraison) {
-                  return (
-                    <div className="grid grid-cols-2 gap-4 mb-3">
-                      {factBlock}
-                      <div className="bg-muted/30 rounded-lg p-4">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>
-                        <p className="font-semibold">{adresseLivraison.libelle}</p>
-                        <p className="text-muted-foreground">{adresseLivraison.adresse}</p>
-                        <p className="text-muted-foreground">{adresseLivraison.codePostal} {adresseLivraison.ville}</p>
-                        {adresseLivraison.contact && <p className="text-muted-foreground">Contact : {adresseLivraison.contact}</p>}
-                        {adresseLivraison.telephone && <p className="text-muted-foreground">Tél : {adresseLivraison.telephone}</p>}
-                      </div>
-                    </div>
-                  );
-                }
-                // Pas d'adresse de livraison distincte → un seul bloc pleine largeur
-                return <div className="mb-3">{factBlock}</div>;
               })()}
 
               {/* Ligne 3 : réf affaire + système (gauche) */}
