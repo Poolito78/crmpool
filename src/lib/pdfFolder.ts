@@ -315,6 +315,42 @@ export async function generatePdfFromElement(
       pdfLinks.push({ url, xMm: leftPx * dToMmX, yMm: top * dToMmY, wMm: el.offsetWidth * dToMmX, hMm: (bottom - top) * dToMmY });
     });
   }
+
+  // ── Mesure des rangées <thead> pour overlay jsPDF (centrage vertical précis) ──
+  // html2canvas ne centre pas fiablement le texte dans les <th>. On redessine
+  // l'en-tête manuellement avec jsPDF après avoir posé l'image html2canvas.
+  type TheadRowData = {
+    yMm: number; hMm: number;
+    cells: { xMm: number; wMm: number; text: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number }[];
+  };
+  const theadRowData: TheadRowData[] = [];
+  {
+    const cloneH = captureEl.scrollHeight || captureEl.offsetHeight;
+    const dY = cloneH > 0 ? imgH / cloneH : 1;
+    const dX = pw / A4_PX;
+    captureEl.querySelectorAll<HTMLElement>('thead tr').forEach(tr => {
+      let trTop = 0; let c: HTMLElement | null = tr;
+      while (c && c !== captureEl) { trTop += c.offsetTop; c = c.offsetParent as HTMLElement | null; }
+      const cells: TheadRowData['cells'] = [];
+      tr.querySelectorAll<HTMLElement>('th').forEach(th => {
+        const cs = window.getComputedStyle(th);
+        let thLeft = 0; let d: HTMLElement | null = th;
+        while (d && d !== captureEl) { thLeft += d.offsetLeft; d = d.offsetParent as HTMLElement | null; }
+        cells.push({
+          xMm: thLeft * dX,
+          wMm: th.offsetWidth * dX,
+          text: th.textContent?.trim() ?? '',
+          alignH: cs.textAlign,
+          fontSizePt: parseFloat(cs.fontSize) * 0.75,
+          bold: parseInt(cs.fontWeight) >= 600,
+          italic: cs.fontStyle === 'italic',
+          opacity: parseFloat(cs.opacity) || 1,
+        });
+      });
+      theadRowData.push({ yMm: trTop * dY, hMm: tr.offsetHeight * dY, cells });
+    });
+  }
+
   // Mesures terminées — on retire le clone du DOM
   document.body.removeChild(wrap);
 
@@ -357,6 +393,36 @@ export async function generatePdfFromElement(
       pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
       if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
+
+      // ── Overlay en-tête : redessine les rangées <thead> avec jsPDF
+      // pour un centrage vertical parfait (contourne les bugs html2canvas sur <th>).
+      if (page === 0 && theadRowData.length > 0) {
+        theadRowData.forEach(row => {
+          // Rectangle rouge
+          pdf.setFillColor(204, 0, 0);
+          pdf.rect(0, row.yMm, pw, row.hMm, 'F');
+          // Texte centré dans chaque cellule
+          row.cells.forEach(cell => {
+            if (!cell.text) return;
+            pdf.setFontSize(cell.fontSizePt);
+            pdf.setFont('helvetica', cell.bold ? (cell.italic ? 'bolditalic' : 'bold') : (cell.italic ? 'italic' : 'normal'));
+            // Blanc mélangé au fond rouge selon opacité (simule opacity CSS)
+            const bl = (c: number) => Math.round(255 * cell.opacity + c * (1 - cell.opacity));
+            pdf.setTextColor(bl(204), bl(0), bl(0));
+            const midY = row.yMm + row.hMm / 2;
+            const hPad = 2; // mm padding horizontal
+            if (cell.alignH === 'center') {
+              pdf.text(cell.text, cell.xMm + cell.wMm / 2, midY, { align: 'center', baseline: 'middle' });
+            } else if (cell.alignH === 'right') {
+              pdf.text(cell.text, cell.xMm + cell.wMm - hPad, midY, { align: 'right', baseline: 'middle' });
+            } else {
+              pdf.text(cell.text, cell.xMm + hPad, midY, { align: 'left', baseline: 'middle' });
+            }
+          });
+        });
+        pdf.setTextColor(0, 0, 0); // reset
+      }
+
       // Liens sur cette page
       for (const lk of pdfLinks) {
         if (lk.yMm >= yOffsetMm && lk.yMm < yOffsetMm + sliceH) {
