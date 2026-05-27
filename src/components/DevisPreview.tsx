@@ -74,16 +74,15 @@ const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }
   '9022':{ hex:'#909088', dark:true  }, '9023':{ hex:'#808080', dark:true  },
 };
 
-function getRalStyle(text: string): { backgroundColor: string; color: string; border?: string; ralNum: string } | undefined {
-  const m = text.match(/(\d{4})/);
-  if (!m) return undefined;
-  const c = RAL_COLORS[m[1]];
-  if (!c) return undefined;
+function getRalStyle(text: string): { backgroundColor: string; color: string; border?: string; ralNum: string; quartz?: string } | undefined {
+  const info = getRalInfo(text);
+  if (!info) return undefined;
   return {
-    backgroundColor: c.hex,
-    color: c.dark ? '#ffffff' : '#1a1a1a',
-    ralNum: m[1],
-    ...(c.white ? { border: '1px solid #ccc' } : {}),
+    backgroundColor: info.hex,
+    color: info.dark ? '#ffffff' : '#1a1a1a',
+    ralNum: info.num,
+    quartz: info.quartz,
+    ...(info.white ? { border: '1px solid #ccc' } : {}),
   };
 }
 
@@ -883,7 +882,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 /* Wrapper : hauteur 14px dans le flow (n'agrandit pas la ligne)
                                    Badge absolu : 26px centré, top:-6px → déborde 6px en dessous */
                                 <span key={i} style={{ display: 'inline-block', verticalAlign: 'middle', position: 'relative', zIndex: 5, marginLeft: '6px', width: '64px', height: '14px' }}>
-                                  <span style={{ position: 'absolute', top: '-6px', left: '0', height: '26px', lineHeight: '26px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', zIndex: 5, ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                  <span style={{ position: 'absolute', top: '-6px', left: '0', height: '26px', lineHeight: '26px', whiteSpace: 'nowrap', backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', zIndex: 5, ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                                 </span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
@@ -1101,7 +1100,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
                               if (rs) return (
-                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>RAL {rs.ralNum}</span>
+                                <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '2px 8px 2px 6px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                               );
                               const imgUrl = prod?.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
                               if (imgUrl) {

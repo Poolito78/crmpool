@@ -102,12 +102,13 @@ export default function VarianteSelect({ dimension, value, onChange, className }
         } : undefined}
       >
         {selectedOpt && !selectedRal && <SwatchPreview opt={selectedOpt} size="sm" />}
-        {selectedRal && (
-          <span className="text-[10px] font-bold tracking-wide shrink-0 opacity-80">RAL</span>
-        )}
         <span className="flex-1 text-left truncate font-medium">
-          {selectedOpt?.label ?? '—'}
-          {selectedOpt?.prixDiff ? ` (${selectedOpt.prixDiff > 0 ? '+' : ''}${selectedOpt.prixDiff}€)` : ''}
+          {selectedRal
+            ? (selectedRal.quartz
+                ? `${selectedRal.quartz} · RAL ${selectedRal.num}`
+                : `RAL ${selectedRal.num}`)
+            : selectedOpt?.label ?? '—'}
+          {!selectedRal && selectedOpt?.prixDiff ? ` (${selectedOpt.prixDiff > 0 ? '+' : ''}${selectedOpt.prixDiff}€)` : ''}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
