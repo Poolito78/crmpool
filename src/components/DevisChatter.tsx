@@ -39,6 +39,7 @@ interface Props {
   initialMode?: 'note' | 'fichier' | null;
   clients?: Client[];
   produits?: Produit[];
+  onRestore?: (snapshot: DevisType) => void;
 }
 
 /* ── Helpers ── */
@@ -81,7 +82,7 @@ const actionLabel: Record<string, { label: string; icon: typeof Clock; color: st
 };
 
 /* ── Composant principal ── */
-export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode, clients = [], produits = [] }: Props) {
+export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode, clients = [], produits = [], onRestore }: Props) {
   const [pjs, setPjs] = useState<PieceJointe[]>([]);
   const [hist, setHist] = useState<HistoriqueEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,6 +93,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
   const [snapshotDevis, setSnapshotDevis] = useState<DevisType | null>(null);
+  const [restoreConfirm, setRestoreConfirm] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const fileConfRef = useRef<HTMLInputElement>(null);
   const userId = useRef<string | null>(null);
@@ -601,7 +603,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
 
     {/* Dialog snapshot "avant modification" */}
     {snapshotDevis && (
-      <Dialog open={!!snapshotDevis} onOpenChange={(o) => { if (!o) setSnapshotDevis(null); }}>
+      <Dialog open={!!snapshotDevis} onOpenChange={(o) => { if (!o) { setSnapshotDevis(null); setRestoreConfirm(false); } }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-600">
@@ -609,6 +611,32 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               Devis avant modification — {snapshotDevis.numero}
             </DialogTitle>
           </DialogHeader>
+
+          {onRestore && (
+            <div className="flex items-center gap-3 px-1 pb-2 border-b border-border">
+              {!restoreConfirm ? (
+                <Button variant="outline" size="sm" className="text-amber-600 border-amber-300 hover:bg-amber-50"
+                  onClick={() => setRestoreConfirm(true)}>
+                  <History className="w-3.5 h-3.5 mr-1.5" />
+                  Restaurer cette version
+                </Button>
+              ) : (
+                <>
+                  <span className="text-sm text-muted-foreground">Écraser le devis actuel avec cette version ?</span>
+                  <Button size="sm" variant="destructive" onClick={() => {
+                    onRestore(snapshotDevis);
+                    setSnapshotDevis(null);
+                    setRestoreConfirm(false);
+                    toast.success('Devis restauré à la version précédente');
+                  }}>
+                    Confirmer
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => setRestoreConfirm(false)}>Annuler</Button>
+                </>
+              )}
+            </div>
+          )}
+
           <DevisPreview
             devis={snapshotDevis}
             client={clients.find(c => c.id === snapshotDevis.clientId)}

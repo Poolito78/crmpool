@@ -2583,6 +2583,10 @@ export default function Devis() {
           initialMode={chatterMode}
           clients={clients}
           produits={produits}
+          onRestore={(snapshot) => {
+            updateDevis(prev => prev.map(d => d.id === snapshot.id ? { ...snapshot } : d));
+            logHistorique({ entiteType: 'devis', entiteId: snapshot.id, entiteNumero: snapshot.numero, action: 'modification', details: { client: clients.find(c => c.id === snapshot.clientId)?.nom, referenceAffaire: snapshot.referenceAffaire, snapshot: devis.find(d => d.id === snapshot.id) ?? null, note: 'Restauration version précédente' } });
+          }}
         />
       )}
 
