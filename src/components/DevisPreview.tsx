@@ -860,7 +860,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     return (
                   <Fragment key={l.id}>
                     {showHeader && (
-                      <tr className="bg-primary/[0.03] border-t border-[#CC0000]">
+                      <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
                         <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
                       </tr>
                     )}
@@ -1083,7 +1083,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   return (
                     <Fragment key={l.id}>
                       {showHeaderS && (
-                        <tr className="bg-primary/[0.03] border-t border-[#CC0000]">
+                        <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
                           <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
                         </tr>
                       )}

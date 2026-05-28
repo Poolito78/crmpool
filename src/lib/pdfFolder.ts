@@ -263,11 +263,20 @@ export async function generatePdfFromElement(
     const domToMm = imgH / elementH;
 
     // Bord bas de chaque <tr> en mm depuis le haut du container
+    // Les <tr data-pdf-no-break-after> (headers de groupe) sont exclus : on ne coupe
+    // pas juste après eux pour éviter qu'ils restent seuls en bas de page.
+    const noBreakAfterBottoms = new Set<number>();
+    captureEl.querySelectorAll<HTMLElement>('tr[data-pdf-no-break-after]').forEach(tr => {
+      const { bottom } = getOffsetRelative(tr);
+      const bottomMm = bottom * domToMm;
+      if (bottomMm > 0) noBreakAfterBottoms.add(Math.round(bottomMm * 100) / 100);
+    });
+
     const rowBottoms: number[] = [];
     captureEl.querySelectorAll('tr').forEach(tr => {
       const { bottom } = getOffsetRelative(tr as HTMLElement);
-      const bottomMm = bottom * domToMm;
-      if (bottomMm > 0 && bottomMm <= imgH) rowBottoms.push(bottomMm);
+      const bottomMm = Math.round(bottom * domToMm * 100) / 100;
+      if (bottomMm > 0 && bottomMm <= imgH && !noBreakAfterBottoms.has(bottomMm)) rowBottoms.push(bottomMm);
     });
     rowBottoms.sort((a, b) => a - b);
 
