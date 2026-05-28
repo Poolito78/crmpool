@@ -350,6 +350,7 @@ export interface Devis {
   conditions?: string;
   fraisPortHT?: number;
   fraisPortTVA?: number;
+  fraisPortAuto?: boolean;
   modeCalcul?: 'standard' | 'surface';
   surfaceGlobaleM2?: number;
   raisonRefus?: string;
@@ -578,6 +579,7 @@ function dbToDevis(r: any): Devis {
     conditions: r.conditions || undefined,
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
+    fraisPortAuto: r.frais_port_auto != null ? Boolean(r.frais_port_auto) : undefined,
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
     raisonRefus: r.raison_refus || undefined,
@@ -608,6 +610,7 @@ function devisToDb(d: Devis, userId: string) {
     conditions: d.conditions || null,
     frais_port_ht: d.fraisPortHT ?? 0,
     frais_port_tva: d.fraisPortTVA ?? 20,
+    ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,
     raison_refus: d.raisonRefus || null,

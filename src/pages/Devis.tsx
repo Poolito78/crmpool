@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
@@ -257,7 +257,7 @@ export default function Devis() {
     }));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
-    setFraisPortAuto(!(d.fraisPortHT > 0)); // auto si pas de montant pré-renseigné
+    setFraisPortAuto(d.fraisPortAuto ?? !(d.fraisPortHT > 0));
     setAdresseLivraisonId(d.adresseLivraisonId || '');
     setContactLivraisonId(d.contactLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
@@ -733,7 +733,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -744,7 +744,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -767,12 +767,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -825,6 +825,13 @@ export default function Devis() {
       const coeffTotal = expressJ1 ? coeffTransport * coeffExpress : coeffTransport;
       if (prix !== null) setFraisPortHT(Math.round(prix * coeffTotal * 100) / 100);
     } else {
+      // Franco : si total HT lignes ≥ seuil → port offert
+      const totalHTLignes = calculerTotalDevis(lignes, 0, 0).totalHT;
+      const std = getStandardBareme();
+      if (totalHTLignes >= std.seuilFranco) {
+        setFraisPortHT(0);
+        return;
+      }
       const hasGranulat = lignes.some(l => {
         const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
         return prod?.categorie?.toLowerCase().includes('granulat');
