@@ -262,14 +262,6 @@ export async function generatePdfFromElement(
     if (elementH === 0) return [];
     const domToMm = imgH / elementH;
 
-    // Zones interdites de coupure : top→bottom en mm des <tr data-pdf-no-break-after>
-    // (headers de groupe). Aucun saut de page ne doit tomber DANS cette zone.
-    const noBreakZones: { top: number; bottom: number }[] = [];
-    captureEl.querySelectorAll<HTMLElement>('tr[data-pdf-no-break-after]').forEach(tr => {
-      const { top, bottom } = getOffsetRelative(tr);
-      noBreakZones.push({ top: top * domToMm, bottom: bottom * domToMm });
-    });
-
     // Bord bas de chaque <tr> en mm depuis le haut du container
     const rowBottoms: number[] = [];
     captureEl.querySelectorAll('tr').forEach(tr => {
@@ -280,13 +272,14 @@ export async function generatePdfFromElement(
     rowBottoms.sort((a, b) => a - b);
 
     // Après avoir choisi un bestBreak, s'assurer qu'il ne tombe pas dans une zone
-    // interdite. Si c'est le cas, reculer jusqu'au row bottom juste avant la zone.
+    // interdite (noBreakZones collecté AVANT removeChild, coordonnées fiables).
+    // Un break à exactement zone.top est autorisé (coupe juste avant le header).
     function adjustBreak(candidate: number, minBreak: number): number {
       for (const zone of noBreakZones) {
-        if (candidate > zone.top - 1 && candidate < zone.bottom + 0.5) {
-          // Le candidat est dans la zone interdite → chercher le dernier rowBottom avant zone.top
+        if (candidate > zone.top + 0.5 && candidate < zone.bottom + 0.5) {
+          // Le candidat est dans la zone → chercher le dernier rowBottom avant zone.top
           for (let i = rowBottoms.length - 1; i >= 0; i--) {
-            if (rowBottoms[i] < zone.top - 0.5 && rowBottoms[i] >= minBreak) {
+            if (rowBottoms[i] <= zone.top + 0.5 && rowBottoms[i] >= minBreak) {
               return rowBottoms[i];
             }
           }
@@ -381,6 +374,25 @@ export async function generatePdfFromElement(
       const hasBgRed = trBg === 'rgb(204, 0, 0)';
       theadRowData.push({ yMm: trTop * dY, hMm: tr.offsetHeight * dY, hasBgRed, cells });
     });
+  }
+
+  // ── Zones interdites de coupure : headers de groupe ─────────────────────────
+  // IMPORTANT : collecté ici, AVANT removeChild. Après détachement du DOM,
+  // offsetParent === null → getOffsetRelative ne remonte plus jusqu'à captureEl
+  // et retourne des coordonnées fausses.
+  const noBreakZones: { top: number; bottom: number }[] = [];
+  {
+    const cloneH = captureEl.scrollHeight || captureEl.offsetHeight;
+    if (cloneH > 0) {
+      const dY = imgH / cloneH;
+      captureEl.querySelectorAll<HTMLElement>('tr[data-pdf-no-break-after]').forEach(tr => {
+        let trTop = 0; let c: HTMLElement | null = tr;
+        while (c && c !== captureEl) { trTop += c.offsetTop; c = c.offsetParent as HTMLElement | null; }
+        const topMm = trTop * dY;
+        const bottomMm = (trTop + tr.offsetHeight) * dY;
+        if (bottomMm > 0) noBreakZones.push({ top: topMm, bottom: bottomMm });
+      });
+    }
   }
 
   // Mesures terminées — on retire le clone du DOM
