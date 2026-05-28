@@ -738,7 +738,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           const fmt = (v: number, d = 3) => String(parseFloat(v.toFixed(d)));
 
           return (
-            <table className="w-full mb-6 text-xs border-collapse table-fixed">
+            <table className="w-full mb-6 text-xs border-collapse">
               <colgroup>
                 <col />{/* Désignation : prend tout l'espace restant */}
                 <col style={{ width: '44px' }} />{/* kg/m² */}
@@ -1008,7 +1008,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           );
         })() : (
           /* Table simple (sans mode conso) */
-          <table className="w-full mb-6 text-xs table-fixed">
+          <table className="w-full mb-6 text-xs">
             <colgroup>
               <col />{/* Description : prend tout l'espace restant */}
               <col className="w-10" />{/* Qté */}
