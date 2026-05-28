@@ -395,11 +395,14 @@ export async function generatePdfFromElement(
     }
   }
 
+  // Calcul des slices AVANT retrait du clone : offsetTop/offsetParent fiables
+  const precomputedSlices = computePageSlices();
+
   // Mesures terminées — on retire le clone du DOM
   document.body.removeChild(wrap);
 
   {
-    const slices = computePageSlices();
+    const slices = precomputedSlices;
     // Fallback si détection DOM échoue : découpe standard
     let effectiveSlices = slices.length > 0 ? slices : (() => {
       const fallback: number[] = [];
