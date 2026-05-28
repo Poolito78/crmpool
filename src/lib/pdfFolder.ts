@@ -262,23 +262,38 @@ export async function generatePdfFromElement(
     if (elementH === 0) return [];
     const domToMm = imgH / elementH;
 
-    // Bord bas de chaque <tr> en mm depuis le haut du container
-    // Les <tr data-pdf-no-break-after> (headers de groupe) sont exclus : on ne coupe
-    // pas juste après eux pour éviter qu'ils restent seuls en bas de page.
-    const noBreakAfterBottoms = new Set<number>();
+    // Zones interdites de coupure : top→bottom en mm des <tr data-pdf-no-break-after>
+    // (headers de groupe). Aucun saut de page ne doit tomber DANS cette zone.
+    const noBreakZones: { top: number; bottom: number }[] = [];
     captureEl.querySelectorAll<HTMLElement>('tr[data-pdf-no-break-after]').forEach(tr => {
-      const { bottom } = getOffsetRelative(tr);
-      const bottomMm = bottom * domToMm;
-      if (bottomMm > 0) noBreakAfterBottoms.add(Math.round(bottomMm * 100) / 100);
+      const { top, bottom } = getOffsetRelative(tr);
+      noBreakZones.push({ top: top * domToMm, bottom: bottom * domToMm });
     });
 
+    // Bord bas de chaque <tr> en mm depuis le haut du container
     const rowBottoms: number[] = [];
     captureEl.querySelectorAll('tr').forEach(tr => {
       const { bottom } = getOffsetRelative(tr as HTMLElement);
-      const bottomMm = Math.round(bottom * domToMm * 100) / 100;
-      if (bottomMm > 0 && bottomMm <= imgH && !noBreakAfterBottoms.has(bottomMm)) rowBottoms.push(bottomMm);
+      const bottomMm = bottom * domToMm;
+      if (bottomMm > 0 && bottomMm <= imgH) rowBottoms.push(bottomMm);
     });
     rowBottoms.sort((a, b) => a - b);
+
+    // Après avoir choisi un bestBreak, s'assurer qu'il ne tombe pas dans une zone
+    // interdite. Si c'est le cas, reculer jusqu'au row bottom juste avant la zone.
+    function adjustBreak(candidate: number, minBreak: number): number {
+      for (const zone of noBreakZones) {
+        if (candidate > zone.top - 1 && candidate < zone.bottom + 0.5) {
+          // Le candidat est dans la zone interdite → chercher le dernier rowBottom avant zone.top
+          for (let i = rowBottoms.length - 1; i >= 0; i--) {
+            if (rowBottoms[i] < zone.top - 0.5 && rowBottoms[i] >= minBreak) {
+              return rowBottoms[i];
+            }
+          }
+        }
+      }
+      return candidate;
+    }
 
     // Pas de lignes détectées → découpe standard
     if (rowBottoms.length === 0) return [];
@@ -299,6 +314,9 @@ export async function generatePdfFromElement(
           break;
         }
       }
+      if (bestBreak <= consumed) bestBreak = naturalBreak;
+      // Ajuster pour éviter de couper dans une zone interdite (header de groupe)
+      bestBreak = adjustBreak(bestBreak, minBreak);
       if (bestBreak <= consumed) bestBreak = naturalBreak;
       slices.push(bestBreak - consumed);
       consumed = bestBreak;
