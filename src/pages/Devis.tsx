@@ -257,7 +257,7 @@ export default function Devis() {
     }));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);
-    setFraisPortAuto(false); // désactivé pour préserver les frais pré-renseignés
+    setFraisPortAuto(!(d.fraisPortHT > 0)); // auto si pas de montant pré-renseigné
     setAdresseLivraisonId(d.adresseLivraisonId || '');
     setContactLivraisonId(d.contactLivraisonId || '');
     setModeCalcul(d.modeCalcul || 'standard');
