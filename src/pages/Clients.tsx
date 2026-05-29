@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Upload, Download, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,6 +26,57 @@ const DELAI_REGLEMENT_OPTIONS = [
 ] as const;
 
 export { DELAI_REGLEMENT_OPTIONS };
+
+// ─── Recherche entreprise (API officielle recherche-entreprises.api.gouv.fr) ───
+
+interface EntrepriseResult {
+  siren: string;
+  nom_complet: string;
+  sigle?: string;
+  etat_administratif: 'A' | 'F';
+  date_creation?: string;
+  activite_principale?: string;
+  libelle_activite_principale?: string;
+  nature_juridique?: string;
+  libelle_nature_juridique?: string;
+  tranche_effectif_salarie?: string;
+  siege: {
+    siret?: string;
+    adresse?: string;
+    code_postal?: string;
+    libelle_commune?: string;
+    numero_voie?: string;
+    type_voie?: string;
+    libelle_voie?: string;
+    complement_adresse?: string;
+  };
+  dirigeants?: { nom?: string; prenoms?: string; qualite?: string }[];
+}
+
+const EFFECTIF_LABELS: Record<string, string> = {
+  '00': '0 salarié', '01': '1-2', '02': '3-5', '03': '6-9',
+  '11': '10-19', '12': '20-49', '21': '50-99', '22': '100-199',
+  '31': '200-249', '32': '250-499', '41': '500-999', '42': '1000+',
+  '51': '2000+', '52': '5000+', '53': '10 000+',
+};
+
+function getSolvabilite(e: EntrepriseResult): { score: number; label: string; color: string } {
+  if (e.etat_administratif !== 'A') return { score: 0, label: 'Fermée', color: '#ef4444' };
+  let score = 2; // base : entreprise active
+  const ageYears = e.date_creation
+    ? (Date.now() - new Date(e.date_creation).getTime()) / (1000 * 3600 * 24 * 365)
+    : 0;
+  if (ageYears >= 10) score += 2;
+  else if (ageYears >= 3) score += 1;
+  const eff = e.tranche_effectif_salarie;
+  if (eff && ['21','22','31','32','41','42','51','52','53'].includes(eff)) score += 2;
+  else if (eff && ['11','12'].includes(eff)) score += 1;
+  else if (eff && ['02','03'].includes(eff)) score += 0;
+  const s = Math.min(score, 5);
+  if (s >= 4) return { score: s, label: 'Solvabilité bonne', color: '#22c55e' };
+  if (s >= 2) return { score: s, label: 'Solvabilité moyenne', color: '#f59e0b' };
+  return { score: s, label: 'Solvabilité faible', color: '#ef4444' };
+}
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: [], francoPort: 0, coutTransport: 0, delaiReglement: '45J FDM'
@@ -126,6 +177,10 @@ export default function Clients() {
   const [iaImage, setIaImage] = useState<{ base64: string; mimeType: string; previewUrl: string } | null>(null);
   const [iaLoading, setIaLoading] = useState(false);
   const [iaOpen, setIaOpen] = useState(false);
+  const [siretOpen, setSiretOpen] = useState(false);
+  const [siretQuery, setSiretQuery] = useState('');
+  const [siretResults, setSiretResults] = useState<EntrepriseResult[]>([]);
+  const [siretLoading, setSiretLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm'>('infos');
@@ -190,7 +245,48 @@ export default function Clients() {
     setEditingClient(null);
     setForm(emptyClient);
     setClientDialogTab('infos');
+    setSiretOpen(false);
+    setSiretQuery('');
+    setSiretResults([]);
     setDialogOpen(true);
+  }
+
+  async function searchEntreprise() {
+    const q = siretQuery.trim();
+    if (!q) return;
+    setSiretLoading(true);
+    setSiretResults([]);
+    try {
+      const res = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${encodeURIComponent(q)}&per_page=6`);
+      const data = await res.json();
+      setSiretResults(data.results || []);
+    } catch {
+      toast.error('Impossible de contacter l\'API entreprises');
+    } finally {
+      setSiretLoading(false);
+    }
+  }
+
+  function importEntreprise(e: EntrepriseResult) {
+    const s = e.siege;
+    const adresseParts = [s.numero_voie, s.type_voie, s.libelle_voie, s.complement_adresse].filter(Boolean).join(' ');
+    const adresse = adresseParts || s.adresse || '';
+    const notesParts: string[] = [];
+    if (s.siret) notesParts.push(`SIRET : ${s.siret}`);
+    if (e.activite_principale) notesParts.push(`APE : ${e.activite_principale}${e.libelle_activite_principale ? ' – ' + e.libelle_activite_principale : ''}`);
+    if (e.libelle_nature_juridique) notesParts.push(`Forme : ${e.libelle_nature_juridique}`);
+    if (e.tranche_effectif_salarie && EFFECTIF_LABELS[e.tranche_effectif_salarie]) notesParts.push(`Effectif : ${EFFECTIF_LABELS[e.tranche_effectif_salarie]}`);
+    setForm(prev => ({
+      ...prev,
+      societe: e.nom_complet,
+      adresse: adresse.trim(),
+      ville: s.libelle_commune || '',
+      codePostal: s.code_postal || '',
+      notes: notesParts.join('\n'),
+    }));
+    setSiretOpen(false);
+    setSiretResults([]);
+    setSiretQuery('');
   }
 
   function handleEmailExtracted(contact: ExtractedContact) {
@@ -218,6 +314,9 @@ export default function Clients() {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
     setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, francoPort: c.francoPort || 0, coutTransport: c.coutTransport || 0, delaiReglement: c.delaiReglement || '45J FDM' });
+    setSiretOpen(false);
+    setSiretResults([]);
+    setSiretQuery('');
     setDialogOpen(true);
   }
 
@@ -998,6 +1097,84 @@ export default function Clients() {
               </div>
             )}
           </div>
+
+          {/* Zone recherche entreprise — API recherche-entreprises.api.gouv.fr */}
+          <div className="space-y-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full border-dashed text-muted-foreground hover:text-foreground"
+              onClick={() => { setSiretOpen(o => !o); setSiretResults([]); setSiretQuery(''); }}
+            >
+              <Building2 className="w-3.5 h-3.5 mr-1.5" /> Rechercher une société (SIRET / raison sociale)
+            </Button>
+            {siretOpen && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    autoFocus
+                    className="h-8 text-sm flex-1"
+                    placeholder="Nom, SIRET, SIREN…"
+                    value={siretQuery}
+                    onChange={e => setSiretQuery(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') searchEntreprise(); }}
+                  />
+                  <Button size="sm" className="h-8 px-3" disabled={!siretQuery.trim() || siretLoading} onClick={searchEntreprise}>
+                    {siretLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  </Button>
+                </div>
+                {siretResults.length > 0 && (
+                  <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {siretResults.map(e => {
+                      const solv = getSolvabilite(e);
+                      const adresseAffichee = [e.siege.numero_voie, e.siege.type_voie, e.siege.libelle_voie].filter(Boolean).join(' ') || e.siege.adresse || '';
+                      const ageAns = e.date_creation
+                        ? Math.floor((Date.now() - new Date(e.date_creation).getTime()) / (1000 * 3600 * 24 * 365))
+                        : null;
+                      return (
+                        <button
+                          key={e.siren}
+                          type="button"
+                          onClick={() => importEntreprise(e)}
+                          className="w-full text-left rounded-lg border border-border bg-background hover:bg-accent/50 px-3 py-2 transition-colors"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <p className="font-medium text-sm leading-tight truncate">{e.nom_complet}{e.sigle ? ` (${e.sigle})` : ''}</p>
+                              {adresseAffichee && (
+                                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                                  {adresseAffichee}{e.siege.code_postal ? `, ${e.siege.code_postal}` : ''}{e.siege.libelle_commune ? ` ${e.siege.libelle_commune}` : ''}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
+                                {e.siege.siret && <span className="text-[10px] text-muted-foreground font-mono">SIRET {e.siege.siret}</span>}
+                                {e.activite_principale && <span className="text-[10px] text-muted-foreground">APE {e.activite_principale}</span>}
+                                {ageAns !== null && <span className="text-[10px] text-muted-foreground">{ageAns} an{ageAns > 1 ? 's' : ''}</span>}
+                                {e.tranche_effectif_salarie && EFFECTIF_LABELS[e.tranche_effectif_salarie] && (
+                                  <span className="text-[10px] text-muted-foreground">{EFFECTIF_LABELS[e.tranche_effectif_salarie]} sal.</span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex-shrink-0 flex flex-col items-end gap-1">
+                              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full" style={{ backgroundColor: solv.color + '22', color: solv.color }}>
+                                {'★'.repeat(solv.score) + '☆'.repeat(5 - solv.score)}
+                              </span>
+                              <span className="text-[9px]" style={{ color: solv.color }}>{solv.label}</span>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+                {!siretLoading && siretResults.length === 0 && siretQuery && (
+                  <p className="text-xs text-muted-foreground text-center py-2">Aucun résultat — modifiez votre recherche</p>
+                )}
+                <p className="text-[10px] text-muted-foreground text-center">Source : données.gouv.fr — indicateur de solvabilité basé sur l'ancienneté et l'effectif</p>
+              </div>
+            )}
+          </div>
+
           <div className="grid gap-3 py-2">
             {/* Société — identifiant principal */}
             <div>
