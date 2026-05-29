@@ -406,18 +406,19 @@ export default function Clients() {
     if (text?.trim()) setIaText(text.trim());
   }
 
-  function save() {
-    if (!form.societe?.trim()) { toast.error('La société est requise'); return; }
+  function save(silent = false): boolean {
+    if (!form.societe?.trim()) { if (!silent) toast.error('La société est requise'); return false; }
     const derived = deriveFromContacts(form);
     const toSave = { ...form, ...derived };
     if (editingClient) {
       updateClients(prev => prev.map(c => c.id === editingClient.id ? { ...c, ...toSave } : c));
-      toast.success('Client modifié');
+      if (!silent) toast.success('Client modifié');
     } else {
       updateClients(prev => [...prev, { ...toSave, id: generateId(), dateCreation: new Date().toISOString().split('T')[0] }]);
-      toast.success('Client ajouté');
+      if (!silent) toast.success('Client ajouté');
     }
-    setDialogOpen(false);
+    if (!silent) setDialogOpen(false);
+    return true;
   }
 
   // Auto-save client en temps réel
@@ -900,7 +901,15 @@ export default function Clients() {
       </AlertDialog>
 
       {/* Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) { setShowAdresseForm(false); setEditingAdresse(null); } }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open && !editingClient) {
+          // Fermeture via X / Échap / fond — auto-save si une société est saisie
+          const ok = save(true);
+          if (ok) toast.info('Nouveau client sauvegardé automatiquement', { duration: 3000 });
+        }
+        setDialogOpen(open);
+        if (!open) { setShowAdresseForm(false); setEditingAdresse(null); }
+      }}>
         <DialogContent mobileFullscreen className="sm:w-[90vw] sm:max-w-[90vw] sm:max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>

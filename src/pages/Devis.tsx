@@ -1228,7 +1228,15 @@ export default function Devis() {
       </div>
 
       {/* Create/Edit Dialog */}
-      <Dialog open={dialogOpen} onOpenChange={(open) => { setDialogOpen(open); if (!open) setEditingId(null); }}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        if (!open && !editingId) {
+          // Fermeture via X / Échap / fond — auto-save si contenu suffisant
+          const savedId = save(true);
+          if (savedId) toast.info('Brouillon sauvegardé automatiquement', { duration: 3000 });
+        }
+        setDialogOpen(open);
+        if (!open) setEditingId(null);
+      }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
           {/* Onglets */}
