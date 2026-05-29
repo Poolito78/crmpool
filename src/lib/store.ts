@@ -42,6 +42,16 @@ export interface Client {
   remisesParCategorie?: Record<string, number>;
   contacts?: Contact[];
   delaiReglement?: string;
+  // Comptabilité / identification légale
+  siret?: string;
+  codeApe?: string;
+  libelleApe?: string;
+  formeJuridique?: string;
+  tvaIntra?: string;
+  rcs?: string;
+  trancheEffectif?: string;
+  dateCreationEntreprise?: string;
+  capitalSocial?: string;
 }
 
 export interface Fournisseur {
@@ -433,6 +443,15 @@ function dbToClient(r: any): Client {
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
     contacts: (r.contacts as Contact[]) || [],
     delaiReglement: r.delai_reglement || undefined,
+    siret: r.siret || undefined,
+    codeApe: r.code_ape || undefined,
+    libelleApe: r.libelle_ape || undefined,
+    formeJuridique: r.forme_juridique || undefined,
+    tvaIntra: r.tva_intra || undefined,
+    rcs: r.rcs || undefined,
+    trancheEffectif: r.tranche_effectif || undefined,
+    dateCreationEntreprise: r.date_creation_entreprise || undefined,
+    capitalSocial: r.capital_social || undefined,
   };
 }
 
@@ -455,6 +474,15 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     remises_par_categorie: c.remisesParCategorie || {},
     contacts: c.contacts || [],
     ...(c.delaiReglement !== undefined ? { delai_reglement: c.delaiReglement } : {}),
+    ...(c.siret !== undefined ? { siret: c.siret } : {}),
+    ...(c.codeApe !== undefined ? { code_ape: c.codeApe } : {}),
+    ...(c.libelleApe !== undefined ? { libelle_ape: c.libelleApe } : {}),
+    ...(c.formeJuridique !== undefined ? { forme_juridique: c.formeJuridique } : {}),
+    ...(c.tvaIntra !== undefined ? { tva_intra: c.tvaIntra } : {}),
+    ...(c.rcs !== undefined ? { rcs: c.rcs } : {}),
+    ...(c.trancheEffectif !== undefined ? { tranche_effectif: c.trancheEffectif } : {}),
+    ...(c.dateCreationEntreprise !== undefined ? { date_creation_entreprise: c.dateCreationEntreprise } : {}),
+    ...(c.capitalSocial !== undefined ? { capital_social: c.capitalSocial } : {}),
   };
 }
 

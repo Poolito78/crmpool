@@ -79,7 +79,8 @@ function getSolvabilite(e: EntrepriseResult): { score: number; label: string; co
 }
 
 const emptyClient: Omit<Client, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: [], francoPort: 0, coutTransport: 0, delaiReglement: '45J FDM'
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', adressesLivraison: [], estRevendeur: false, remisesParCategorie: {}, contacts: [], francoPort: 0, coutTransport: 0, delaiReglement: '45J FDM',
+  siret: '', codeApe: '', libelleApe: '', formeJuridique: '', tvaIntra: '', rcs: '', trancheEffectif: '', dateCreationEntreprise: '', capitalSocial: '',
 };
 
 // Dérive le nom/email/tel du client depuis le premier contact (contact principal)
@@ -183,7 +184,7 @@ export default function Clients() {
   const [siretLoading, setSiretLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm'>('infos');
+  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite'>('infos');
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
   const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
 
@@ -271,22 +272,33 @@ export default function Clients() {
     const s = e.siege;
     const adresseParts = [s.numero_voie, s.type_voie, s.libelle_voie, s.complement_adresse].filter(Boolean).join(' ');
     const adresse = adresseParts || s.adresse || '';
-    const notesParts: string[] = [];
-    if (s.siret) notesParts.push(`SIRET : ${s.siret}`);
-    if (e.activite_principale) notesParts.push(`APE : ${e.activite_principale}${e.libelle_activite_principale ? ' – ' + e.libelle_activite_principale : ''}`);
-    if (e.libelle_nature_juridique) notesParts.push(`Forme : ${e.libelle_nature_juridique}`);
-    if (e.tranche_effectif_salarie && EFFECTIF_LABELS[e.tranche_effectif_salarie]) notesParts.push(`Effectif : ${EFFECTIF_LABELS[e.tranche_effectif_salarie]}`);
+    // Calcul TVA intra depuis SIREN (9 premiers chiffres du SIRET)
+    const siret = s.siret || '';
+    const siren = siret.replace(/\s/g, '').substring(0, 9);
+    let tvaIntraCalc = '';
+    if (/^\d{9}$/.test(siren)) {
+      const key = (12 + 3 * (parseInt(siren, 10) % 97)) % 97;
+      tvaIntraCalc = `FR${String(key).padStart(2, '0')}${siren}`;
+    }
     setForm(prev => ({
       ...prev,
       societe: e.nom_complet,
       adresse: adresse.trim(),
       ville: s.libelle_commune || '',
       codePostal: s.code_postal || '',
-      notes: notesParts.join('\n'),
+      siret: siret,
+      codeApe: e.activite_principale || '',
+      libelleApe: e.libelle_activite_principale || '',
+      formeJuridique: e.libelle_nature_juridique || '',
+      trancheEffectif: e.tranche_effectif_salarie || '',
+      dateCreationEntreprise: e.date_creation || '',
+      tvaIntra: tvaIntraCalc,
     }));
     setSiretOpen(false);
     setSiretResults([]);
     setSiretQuery('');
+    // Aller sur l'onglet comptabilité pour montrer les champs remplis
+    setClientDialogTab('comptabilite');
   }
 
   function handleEmailExtracted(contact: ExtractedContact) {
@@ -313,7 +325,7 @@ export default function Clients() {
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, francoPort: c.francoPort || 0, coutTransport: c.coutTransport || 0, delaiReglement: c.delaiReglement || '45J FDM' });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, francoPort: c.francoPort || 0, coutTransport: c.coutTransport || 0, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '' });
     setSiretOpen(false);
     setSiretResults([]);
     setSiretQuery('');
@@ -894,13 +906,12 @@ export default function Clients() {
             <DialogTitle>{editingClient ? 'Modifier le client' : 'Nouveau client'}</DialogTitle>
           </DialogHeader>
 
-          {/* Onglets (visible seulement en mode édition) */}
-          {editingClient && (
-            <div className="flex gap-1 border-b border-border -mt-2 mb-2">
-              <button type="button" onClick={() => setClientDialogTab('infos')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'infos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Infos</button>
-              <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>
-            </div>
-          )}
+          {/* Onglets */}
+          <div className="flex gap-1 border-b border-border -mt-2 mb-2">
+            <button type="button" onClick={() => setClientDialogTab('infos')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'infos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Infos</button>
+            <button type="button" onClick={() => setClientDialogTab('comptabilite')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'comptabilite' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comptabilité</button>
+            {editingClient && <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+          </div>
 
           {/* ── Onglet CRM ──────────────────────────────────────────────────── */}
           {editingClient && clientDialogTab === 'crm' && (() => {
@@ -1019,8 +1030,70 @@ export default function Clients() {
             );
           })()}
 
+          {/* ── Onglet Comptabilité ─────────────────────────────────────────── */}
+          {clientDialogTab === 'comptabilite' && (
+            <div className="space-y-4 py-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">N° SIRET</Label>
+                  <Input className="h-8 text-sm font-mono" value={form.siret || ''} onChange={e => setForm(prev => ({ ...prev, siret: e.target.value }))} placeholder="00000000000000" maxLength={14} />
+                </div>
+                <div>
+                  <Label className="text-xs">TVA intracommunautaire</Label>
+                  <div className="flex gap-1">
+                    <Input className="h-8 text-sm font-mono" value={form.tvaIntra || ''} onChange={e => setForm(prev => ({ ...prev, tvaIntra: e.target.value }))} placeholder="FR00000000000" />
+                    {form.siret && (() => {
+                      const siren = (form.siret || '').replace(/\s/g, '').substring(0, 9);
+                      if (!/^\d{9}$/.test(siren)) return null;
+                      const key = (12 + 3 * (parseInt(siren, 10) % 97)) % 97;
+                      const calc = `FR${String(key).padStart(2, '0')}${siren}`;
+                      if (calc === form.tvaIntra) return null;
+                      return (
+                        <button type="button" title="Calculer depuis SIRET" className="h-8 px-2 rounded border border-dashed border-primary/40 text-xs text-primary hover:bg-primary/10" onClick={() => setForm(prev => ({ ...prev, tvaIntra: calc }))}>
+                          Calc.
+                        </button>
+                      );
+                    })()}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs">Code APE / NAF</Label>
+                  <Input className="h-8 text-sm font-mono" value={form.codeApe || ''} onChange={e => setForm(prev => ({ ...prev, codeApe: e.target.value }))} placeholder="43.33Z" />
+                </div>
+                <div>
+                  <Label className="text-xs">Libellé activité</Label>
+                  <Input className="h-8 text-sm" value={form.libelleApe || ''} onChange={e => setForm(prev => ({ ...prev, libelleApe: e.target.value }))} placeholder="Travaux de revêtement…" />
+                </div>
+                <div>
+                  <Label className="text-xs">Forme juridique</Label>
+                  <Input className="h-8 text-sm" value={form.formeJuridique || ''} onChange={e => setForm(prev => ({ ...prev, formeJuridique: e.target.value }))} placeholder="SAS, SARL, EURL…" />
+                </div>
+                <div>
+                  <Label className="text-xs">Capital social</Label>
+                  <Input className="h-8 text-sm" value={form.capitalSocial || ''} onChange={e => setForm(prev => ({ ...prev, capitalSocial: e.target.value }))} placeholder="10 000 €" />
+                </div>
+                <div>
+                  <Label className="text-xs">RCS</Label>
+                  <Input className="h-8 text-sm" value={form.rcs || ''} onChange={e => setForm(prev => ({ ...prev, rcs: e.target.value }))} placeholder="RCS Paris B 000 000 000" />
+                </div>
+                <div>
+                  <Label className="text-xs">Effectif</Label>
+                  <select className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm" value={form.trancheEffectif || ''} onChange={e => setForm(prev => ({ ...prev, trancheEffectif: e.target.value }))}>
+                    <option value="">— Inconnu —</option>
+                    {Object.entries(EFFECTIF_LABELS).map(([k, v]) => <option key={k} value={k}>{v} salarié{k === '00' ? '' : 's'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Date création entreprise</Label>
+                  <Input className="h-8 text-sm" type="date" value={form.dateCreationEntreprise || ''} onChange={e => setForm(prev => ({ ...prev, dateCreationEntreprise: e.target.value }))} />
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground italic">Ces informations peuvent être pré-remplies via la recherche entreprise (onglet Infos).</p>
+            </div>
+          )}
+
           {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}
-          <div className={editingClient && clientDialogTab !== 'infos' ? 'hidden' : ''}>
+          <div className={clientDialogTab !== 'infos' ? 'hidden' : ''}>
 
           {/* Zone IA — extraction automatique des coordonnées */}
           <div className="space-y-2">
@@ -1448,7 +1521,7 @@ export default function Clients() {
           </div>{/* end infos tab wrapper */}
           <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            {clientDialogTab === 'infos' && <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>}
+            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite') && <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>}
           </div>
         </DialogContent>
       </Dialog>

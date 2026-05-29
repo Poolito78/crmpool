@@ -1,0 +1,10 @@
+-- Champs comptabilité / identification légale sur la fiche client
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS siret text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS code_ape text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS libelle_ape text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS forme_juridique text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS tva_intra text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS rcs text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS tranche_effectif text;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS date_creation_entreprise date;
+ALTER TABLE clients ADD COLUMN IF NOT EXISTS capital_social text;
