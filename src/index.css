@@ -134,6 +134,16 @@
   }
 }
 
+/* Anti-décalage horizontal des Dialog Radix.
+   À l'ouverture, react-remove-scroll pose data-scroll-locked sur <body>
+   et ajoute un margin-right égal à la largeur de la scrollbar pour compenser
+   sa disparition. Avec des dialogues imbriqués (aperçu par-dessus l'édition),
+   cette compensation décale visiblement le contenu centré. On la neutralise. */
+body[data-scroll-locked] {
+  margin-right: 0 !important;
+  overflow-y: hidden !important;
+}
+
 @media print {
   @page { margin: 10mm; size: A4 portrait; }
   body { visibility: hidden; }
