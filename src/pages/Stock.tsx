@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant, calculerFournisseurPrioritaire, useEntrepots, type Entrepot } from '@/lib/store';
-import { AlertTriangle, CheckCircle, Package, Truck, Download, Star, Warehouse, Plus, Edit2, Trash2, Save, X, Building2, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle, Package, Truck, Download, Star, Warehouse, Plus, Edit2, Trash2, Save, X, Building2, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Search, Filter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,6 +10,46 @@ import { exportToExcel } from '@/lib/exportExcel';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 
+// ── Colonnes du tableau stock global ──────────────────────────────────────────
+type StockColKey = 'statut' | 'description' | 'categorie' | 'proprietaire' | 'disponibleVente' | 'stock' | 'stockMin' | 'qteReappro' | 'fournisseur' | 'valeur';
+type SortDir = 'asc' | 'desc';
+
+// Sentinelle "non vide"
+const NON_VIDE = '!empty';
+
+// Petit composant filtre avec bouton ≠∅
+function FilterCell({ value, onChange, align = 'left' }: { value: string; onChange: (v: string) => void; align?: 'left' | 'right' | 'center' }) {
+  if (value === NON_VIDE) {
+    return (
+      <button
+        onClick={() => onChange('')}
+        className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap"
+      >
+        ≠ vide <X className="w-3 h-3" />
+      </button>
+    );
+  }
+  return (
+    <div className="flex items-center gap-0.5">
+      <input
+        type="text"
+        placeholder="Filtrer..."
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className={cn(
+          'h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring',
+          align === 'right' && 'text-right'
+        )}
+      />
+      <button
+        onClick={() => onChange(NON_VIDE)}
+        title="Non vide"
+        className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 py-0.5 rounded leading-none"
+      >≠∅</button>
+    </div>
+  );
+}
+
 type TabId = 'global' | 'entrepots' | 'stockistes';
 
 export default function Stock() {
@@ -17,6 +57,23 @@ export default function Stock() {
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
   const [tab, setTab] = useState<TabId>('global');
+  // ── Stock global : tri + filtres ────────────────────────────────────────────
+  const [globalSearch, setGlobalSearch] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [colFilters, setColFilters] = useState<Partial<Record<StockColKey, string>>>({});
+  const [sortCol, setSortCol] = useState<StockColKey | null>('statut');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
+
+  function handleSort(col: StockColKey) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
+  function setFilter(col: StockColKey, val: string) {
+    setColFilters(prev => ({ ...prev, [col]: val }));
+  }
+  function hasActiveFilters() {
+    return globalSearch.trim() !== '' || Object.values(colFilters).some(v => v);
+  }
   const [entrepotDialogOpen, setEntrepotDialogOpen] = useState(false);
   const [editingEntrepot, setEditingEntrepot] = useState<Entrepot | null>(null);
   const [entrepotForm, setEntrepotForm] = useState({ nom: '', adresse: '', ville: '', codePostal: '', notes: '', estDefaut: false });
@@ -166,163 +223,267 @@ export default function Stock() {
       </div>
 
       {/* ══ Tab : Stock global ══════════════════════════════════════════════ */}
-      {tab === 'global' && (
-        <div className="space-y-6">
-          <div className="flex justify-end">
-            <Button variant="outline" onClick={() => exportToExcel(sorted.map(p => {
-              const info = getBestSupplierInfo(p);
-              const fourn = p.proprietaireFournisseurId ? fournisseurs.find(f => f.id === p.proprietaireFournisseurId)?.societe : undefined;
-              return {
-                Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin,
-                Alerte: p.stock < p.stockMin ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT,
-                Catégorie: p.categorie || '', Propriétaire: p.proprietaire === 'fournisseur' ? (fourn || 'Fournisseur') : 'ISOSIGN',
-                'Fournisseur optimal': info?.fourn.societe || '', 'Prix achat': info?.prixAchat || '',
-              };
-            }), 'stock', 'Stock')}>
-              <Download className="w-4 h-4 mr-2" /> Exporter
-            </Button>
-          </div>
+      {tab === 'global' && (() => {
+        // ── Données enrichies ──────────────────────────────────────────────────
+        const enriched = produits.map(p => {
+          const info = getBestSupplierInfo(p);
+          const low = p.stock < p.stockMin;
+          const qteReappro = low ? Math.max(0, p.stockMin - p.stock) : 0;
+          const proprioFourn = p.proprietaire === 'fournisseur' && p.proprietaireFournisseurId
+            ? fournisseurs.find(f => f.id === p.proprietaireFournisseurId)
+            : null;
+          return { p, info, low, qteReappro, proprioFourn };
+        });
 
-          {/* Indicateurs */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="stat-card text-center">
-              <Package className="w-5 h-5 mx-auto text-primary mb-1" />
-              <p className="text-2xl font-heading font-bold">{totalStock}</p>
-              <p className="text-xs text-muted-foreground">Unités totales</p>
-            </div>
-            <div className="stat-card text-center">
-              <p className="text-2xl font-heading font-bold">{formatMontant(totalValeur)}</p>
-              <p className="text-xs text-muted-foreground">Valeur stock HT</p>
-            </div>
-            <div className="stat-card text-center">
-              <AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${alertes > 0 ? 'text-warning' : 'text-success'}`} />
-              <p className="text-2xl font-heading font-bold">{alertes}</p>
-              <p className="text-xs text-muted-foreground">Alertes</p>
-            </div>
-          </div>
+        // ── Filtrage ───────────────────────────────────────────────────────────
+        const applyFilter = (val: string, test: (nonVide: boolean, v: string) => boolean) => {
+          if (!val) return true;
+          return test(val === NON_VIDE, val.toLowerCase());
+        };
+        const filtered = enriched.filter(({ p, info, low, proprioFourn }) => {
+          if (globalSearch) {
+            const s = globalSearch.toLowerCase();
+            if (![p.description, p.reference, p.categorie, info?.fourn.societe].some(x => x?.toLowerCase().includes(s))) return false;
+          }
+          if (!applyFilter(colFilters.statut || '', (nv, v) => nv ? low : (low ? 'alerte' : 'ok').includes(v))) return false;
+          if (!applyFilter(colFilters.description || '', (nv, v) => nv ? !!p.description?.trim() : p.description?.toLowerCase().includes(v) || p.reference?.toLowerCase().includes(v))) return false;
+          if (!applyFilter(colFilters.categorie || '', (nv, v) => nv ? !!p.categorie?.trim() : (p.categorie || '').toLowerCase().includes(v))) return false;
+          if (!applyFilter(colFilters.proprietaire || '', (nv, v) => nv ? true : (p.proprietaire === 'fournisseur' ? (proprioFourn?.societe || 'fournisseur') : 'isosign').toLowerCase().includes(v))) return false;
+          if (!applyFilter(colFilters.disponibleVente || '', (nv, v) => nv ? p.disponibleVente !== false : (p.disponibleVente !== false ? 'oui' : 'non').includes(v))) return false;
+          if (!applyFilter(colFilters.stock || '', (nv, v) => nv ? p.stock > 0 : String(p.stock).includes(v))) return false;
+          if (!applyFilter(colFilters.stockMin || '', (nv, v) => nv ? p.stockMin > 0 : String(p.stockMin).includes(v))) return false;
+          if (!applyFilter(colFilters.fournisseur || '', (nv, v) => nv ? !!info : (info?.fourn.societe || '').toLowerCase().includes(v))) return false;
+          if (!applyFilter(colFilters.valeur || '', (nv, v) => nv ? p.stock * p.prixHT > 0 : formatMontant(p.stock * p.prixHT).includes(v))) return false;
+          return true;
+        });
 
-          {/* Réappro par fournisseur */}
-          {reapproParFournisseur.size > 0 && (
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Truck className="w-4 h-4" /> Réappro optimale par fournisseur
-              </h3>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {[...reapproParFournisseur.entries()].map(([fId, group]) => {
-                  const totalReappro = group.produits.reduce((s, { info }) => s + info.totalAchat, 0);
-                  const francoAtteint = totalReappro >= group.fourn.francoPort;
-                  const manque = Math.max(0, group.fourn.francoPort - totalReappro);
-                  return (
-                    <div key={fId} className="bg-card rounded-xl border border-border p-4 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium text-sm flex items-center gap-1">
-                          <Star className="w-3.5 h-3.5 text-primary" /> {group.fourn.societe}
-                        </p>
-                        <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${francoAtteint ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
-                          {francoAtteint ? 'Franco atteint' : 'Franco non atteint'}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-1 text-xs">
-                        <span className="text-muted-foreground">Franco de port :</span>
-                        <span className="text-right font-medium">{formatMontant(group.fourn.francoPort)}</span>
-                        <span className="text-muted-foreground">Total réappro :</span>
-                        <span className="text-right font-medium">{formatMontant(totalReappro)}</span>
-                        {!francoAtteint && (
-                          <>
-                            <span className="text-muted-foreground">Reste pour franco :</span>
-                            <span className="text-right font-medium text-warning">{formatMontant(manque)}</span>
-                          </>
-                        )}
-                        <span className="text-muted-foreground">Coût transport :</span>
-                        <span className="text-right font-medium">{francoAtteint ? <span className="text-success">Gratuit</span> : formatMontant(group.fourn.coutTransport)}</span>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {group.produits.length} produit{group.produits.length > 1 ? 's' : ''} :
-                        <span className="ml-1">{group.produits.map(({ produit, info }) => `${produit.description} (${info.qte} ${produit.unite} à ${formatMontant(info.prixAchat)})`).join(', ')}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+        // ── Tri ────────────────────────────────────────────────────────────────
+        const sortedFiltered = [...filtered].sort((a, b) => {
+          const dir = sortDir === 'asc' ? 1 : -1;
+          switch (sortCol) {
+            case 'statut':        return dir * ((a.low ? 0 : 1) - (b.low ? 0 : 1));
+            case 'description':   return dir * a.p.description.localeCompare(b.p.description);
+            case 'categorie':     return dir * (a.p.categorie || '').localeCompare(b.p.categorie || '');
+            case 'proprietaire':  return dir * (a.p.proprietaire || 'isosign').localeCompare(b.p.proprietaire || 'isosign');
+            case 'disponibleVente': return dir * ((a.p.disponibleVente !== false ? 1 : 0) - (b.p.disponibleVente !== false ? 1 : 0));
+            case 'stock':         return dir * (a.p.stock - b.p.stock);
+            case 'stockMin':      return dir * (a.p.stockMin - b.p.stockMin);
+            case 'qteReappro':    return dir * (a.qteReappro - b.qteReappro);
+            case 'fournisseur':   return dir * (a.info?.fourn.societe || '').localeCompare(b.info?.fourn.societe || '');
+            case 'valeur':        return dir * (a.p.stock * a.p.prixHT - b.p.stock * b.p.prixHT);
+            default:              return 0;
+          }
+        });
+
+        // ── En-tête triable ────────────────────────────────────────────────────
+        function SortTh({ col, label, align = 'left', className = '' }: { col: StockColKey; label: string; align?: string; className?: string }) {
+          const isSorted = sortCol === col;
+          const Icon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+          return (
+            <th
+              onClick={() => handleSort(col)}
+              className={cn('px-3 py-3 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground whitespace-nowrap', `text-${align}`, className)}
+            >
+              <div className={cn('flex items-center gap-1', align === 'right' && 'justify-end')}>
+                {align === 'right' && <Icon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
+                {label}
+                {align !== 'right' && <Icon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
+              </div>
+            </th>
+          );
+        }
+
+        return (
+          <div className="space-y-4">
+            {/* Indicateurs */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="stat-card text-center">
+                <Package className="w-5 h-5 mx-auto text-primary mb-1" />
+                <p className="text-2xl font-heading font-bold">{totalStock}</p>
+                <p className="text-xs text-muted-foreground">Unités totales</p>
+              </div>
+              <div className="stat-card text-center">
+                <p className="text-2xl font-heading font-bold">{formatMontant(totalValeur)}</p>
+                <p className="text-xs text-muted-foreground">Valeur stock HT</p>
+              </div>
+              <div className="stat-card text-center">
+                <AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${alertes > 0 ? 'text-warning' : 'text-success'}`} />
+                <p className="text-2xl font-heading font-bold">{alertes}</p>
+                <p className="text-xs text-muted-foreground">Alertes</p>
               </div>
             </div>
-          )}
 
-          {/* Tableau stock */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50">
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Statut</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground">Produit</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Catégorie</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Propriétaire</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground">Stock</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Min.</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Qté réappro</th>
-                    <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Fournisseur optimal</th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Valeur</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {sorted.map(p => {
-                    const low = p.stock < p.stockMin;
-                    const info = getBestSupplierInfo(p);
-                    const qteReappro = low ? Math.max(0, p.stockMin - p.stock) : 0;
-                    const proprioFourn = p.proprietaire === 'fournisseur' && p.proprietaireFournisseurId
-                      ? fournisseurs.find(f => f.id === p.proprietaireFournisseurId)
-                      : null;
+            {/* Réappro par fournisseur */}
+            {reapproParFournisseur.size > 0 && (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Truck className="w-4 h-4" /> Réappro optimale par fournisseur
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {[...reapproParFournisseur.entries()].map(([fId, group]) => {
+                    const totalReappro = group.produits.reduce((s, { info }) => s + info.totalAchat, 0);
+                    const francoAtteint = totalReappro >= group.fourn.francoPort;
+                    const manque = Math.max(0, group.fourn.francoPort - totalReappro);
                     return (
+                      <div key={fId} className="bg-card rounded-xl border border-border p-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="font-medium text-sm flex items-center gap-1">
+                            <Star className="w-3.5 h-3.5 text-primary" /> {group.fourn.societe}
+                          </p>
+                          <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${francoAtteint ? 'bg-success/10 text-success' : 'bg-warning/10 text-warning'}`}>
+                            {francoAtteint ? 'Franco atteint' : 'Franco non atteint'}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1 text-xs">
+                          <span className="text-muted-foreground">Franco de port :</span>
+                          <span className="text-right font-medium">{formatMontant(group.fourn.francoPort)}</span>
+                          <span className="text-muted-foreground">Total réappro :</span>
+                          <span className="text-right font-medium">{formatMontant(totalReappro)}</span>
+                          {!francoAtteint && (<><span className="text-muted-foreground">Reste pour franco :</span><span className="text-right font-medium text-warning">{formatMontant(manque)}</span></>)}
+                          <span className="text-muted-foreground">Coût transport :</span>
+                          <span className="text-right font-medium">{francoAtteint ? <span className="text-success">Gratuit</span> : formatMontant(group.fourn.coutTransport)}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {group.produits.length} produit{group.produits.length > 1 ? 's' : ''} :
+                          <span className="ml-1">{group.produits.map(({ produit, info }) => `${produit.description} (${info.qte} ${produit.unite} à ${formatMontant(info.prixAchat)})`).join(', ')}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Barre recherche + actions */}
+            <div className="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between">
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Rechercher produit..."
+                  value={globalSearch}
+                  onChange={e => setGlobalSearch(e.target.value)}
+                  className="pl-9 h-9"
+                />
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <Button
+                  variant={showFilters ? 'secondary' : 'outline'}
+                  size="sm"
+                  onClick={() => { setShowFilters(s => !s); if (showFilters) setColFilters({}); }}
+                >
+                  <Filter className="w-4 h-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Filtres</span>
+                  {hasActiveFilters() && !showFilters && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">!</span>}
+                </Button>
+                {hasActiveFilters() && (
+                  <Button variant="ghost" size="sm" onClick={() => { setColFilters({}); setGlobalSearch(''); }}>
+                    <X className="w-4 h-4 mr-1" /> Effacer
+                  </Button>
+                )}
+                <Button variant="outline" size="sm" onClick={() => exportToExcel(sortedFiltered.map(({ p, info, proprioFourn }) => ({
+                  Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin,
+                  Alerte: p.stock < p.stockMin ? 'Oui' : 'Non', 'Dispo vente': p.disponibleVente !== false ? 'Oui' : 'Non',
+                  'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '',
+                  Propriétaire: p.proprietaire === 'fournisseur' ? (proprioFourn?.societe || 'Fournisseur') : 'ISOSIGN',
+                  'Fournisseur optimal': info?.fourn.societe || '', 'Prix achat': info?.prixAchat || '',
+                })), 'stock', 'Stock')}>
+                  <Download className="w-4 h-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">Exporter</span>
+                </Button>
+              </div>
+            </div>
+
+            {/* Tableau */}
+            <div className="bg-card rounded-xl border border-border overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50">
+                      <SortTh col="statut" label="Statut" />
+                      <SortTh col="description" label="Produit" />
+                      <SortTh col="categorie" label="Catégorie" className="hidden sm:table-cell" />
+                      <SortTh col="disponibleVente" label="Dispo" align="center" className="hidden sm:table-cell" />
+                      <SortTh col="proprietaire" label="Propriétaire" className="hidden md:table-cell" />
+                      <SortTh col="stock" label="Stock" align="right" />
+                      <SortTh col="stockMin" label="Min." align="right" className="hidden sm:table-cell" />
+                      <SortTh col="qteReappro" label="Réappro" align="right" className="hidden sm:table-cell" />
+                      <SortTh col="fournisseur" label="Fourn. optimal" className="hidden md:table-cell" />
+                      <SortTh col="valeur" label="Valeur" align="right" className="hidden md:table-cell" />
+                    </tr>
+                    {showFilters && (
+                      <tr className="border-b border-border bg-muted/20">
+                        <td className="px-3 py-1"><FilterCell value={colFilters.statut || ''} onChange={v => setFilter('statut', v)} /></td>
+                        <td className="px-3 py-1"><FilterCell value={colFilters.description || ''} onChange={v => setFilter('description', v)} /></td>
+                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.categorie || ''} onChange={v => setFilter('categorie', v)} /></td>
+                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.disponibleVente || ''} onChange={v => setFilter('disponibleVente', v)} align="center" /></td>
+                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.proprietaire || ''} onChange={v => setFilter('proprietaire', v)} /></td>
+                        <td className="px-3 py-1"><FilterCell value={colFilters.stock || ''} onChange={v => setFilter('stock', v)} align="right" /></td>
+                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.stockMin || ''} onChange={v => setFilter('stockMin', v)} align="right" /></td>
+                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.qteReappro || ''} onChange={v => setFilter('qteReappro', v)} align="right" /></td>
+                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.fournisseur || ''} onChange={v => setFilter('fournisseur', v)} /></td>
+                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.valeur || ''} onChange={v => setFilter('valeur', v)} align="right" /></td>
+                      </tr>
+                    )}
+                  </thead>
+                  <tbody>
+                    {sortedFiltered.map(({ p, info, low, qteReappro, proprioFourn }) => (
                       <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           {low ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle className="w-4 h-4 text-success" />}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="px-3 py-3">
                           <p className="font-medium">{p.description}</p>
                           <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">{p.categorie || '—'}</td>
-                        <td className="px-4 py-3 hidden md:table-cell">
+                        <td className="px-3 py-3 text-muted-foreground hidden sm:table-cell">{p.categorie || '—'}</td>
+                        <td className="px-3 py-3 text-center hidden sm:table-cell">
+                          {p.disponibleVente !== false
+                            ? <span title="Disponible à la vente" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span>
+                            : <span title="Non disponible" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}
+                        </td>
+                        <td className="px-3 py-3 hidden md:table-cell">
                           {p.proprietaire === 'fournisseur' ? (
                             <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full">
-                              <Truck className="w-3 h-3" />
-                              {proprioFourn?.societe || 'Fournisseur'}
+                              <Truck className="w-3 h-3" />{proprioFourn?.societe || 'Fournisseur'}
                             </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">ISOSIGN</span>
-                          )}
+                          ) : <span className="text-xs text-muted-foreground">ISOSIGN</span>}
                         </td>
-                        <td className={`px-4 py-3 text-right font-semibold ${low ? 'text-warning' : ''}`}>{p.stock} {p.unite}</td>
-                        <td className="px-4 py-3 text-right text-muted-foreground hidden sm:table-cell">{p.stockMin}</td>
-                        <td className="px-4 py-3 text-right hidden sm:table-cell">
-                          {low ? <span className="text-warning font-medium">{qteReappro} {p.unite} <span className="text-xs text-muted-foreground">({formatMontant(qteReappro * (info?.prixAchat || p.prixAchat))})</span></span> : '—'}
+                        <td className={`px-3 py-3 text-right font-semibold ${low ? 'text-warning' : ''}`}>{p.stock} {p.unite}</td>
+                        <td className="px-3 py-3 text-right text-muted-foreground hidden sm:table-cell">{p.stockMin}</td>
+                        <td className="px-3 py-3 text-right hidden sm:table-cell">
+                          {low ? <span className="text-warning font-medium">{qteReappro} {p.unite} <span className="text-xs text-muted-foreground">({formatMontant(qteReappro * (info?.prixAchat || p.prixAchat))})</span></span> : <span className="text-muted-foreground">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">
+                        <td className="px-3 py-3 text-muted-foreground hidden md:table-cell">
                           {info ? (
                             <div>
                               <span className="flex items-center gap-1">
-                                {info.isMulti && <Star className="w-3 h-3 text-primary" />}
-                                {info.fourn.societe}
+                                {info.isMulti && <Star className="w-3 h-3 text-primary" />}{info.fourn.societe}
                               </span>
-                              <span className="block text-xs">
-                                {formatMontant(info.prixAchat)}/{p.unite}
-                                {info.fourn.francoPort > 0 && ` · Franco ${formatMontant(info.fourn.francoPort)}`}
-                              </span>
+                              <span className="block text-xs">{formatMontant(info.prixAchat)}/{p.unite}{info.fourn.francoPort > 0 && ` · Franco ${formatMontant(info.fourn.francoPort)}`}</span>
                               {info.isMulti && <span className="text-xs text-primary">{info.nbFournisseurs} fournisseurs</span>}
                             </div>
                           ) : '—'}
                         </td>
-                        <td className="px-4 py-3 text-right hidden md:table-cell">{formatMontant(p.stock * p.prixHT)}</td>
+                        <td className="px-3 py-3 text-right hidden md:table-cell">{formatMontant(p.stock * p.prixHT)}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {sortedFiltered.length === 0 && (
+                <p className="text-center py-8 text-muted-foreground text-sm">
+                  {hasActiveFilters() ? 'Aucun produit ne correspond aux filtres' : 'Aucun produit en stock'}
+                </p>
+              )}
+              {sortedFiltered.length > 0 && sortedFiltered.length < produits.length && (
+                <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border">
+                  {sortedFiltered.length} / {produits.length} produit{produits.length > 1 ? 's' : ''}
+                </p>
+              )}
             </div>
-            {sorted.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun produit en stock</p>}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ══ Tab : Par entrepôt ══════════════════════════════════════════════ */}
       {tab === 'entrepots' && (

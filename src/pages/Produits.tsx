@@ -28,8 +28,9 @@ const COLUMNS = [
   { key: 'poids',        label: 'Poids (kg)',       align: 'right' as const },
   { key: 'consommation', label: 'Conso. (kg/m²)',   align: 'right' as const },
   { key: 'tva',          label: 'TVA %',            align: 'right' as const },
-  { key: 'stock',        label: 'Stock',            align: 'right' as const },
-  { key: 'qteVendue',   label: 'Qté vendue',       align: 'right' as const },
+  { key: 'stock',           label: 'Stock',            align: 'right'  as const },
+  { key: 'qteVendue',      label: 'Qté vendue',       align: 'right'  as const },
+  { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
@@ -37,6 +38,7 @@ const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie',
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
+  disponibleVente: true,
 };
 
 // Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
@@ -250,24 +252,28 @@ export default function Produits() {
       const matchVariante = p.variantes?.some(dim => dim.options.some(opt => opt.label.toLowerCase().includes(q)));
       if (!matchBase && !matchVariante) return false;
     }
-    // Column filters
+    // Column filters (supports !empty sentinel for "non vide")
     for (const [key, val] of Object.entries(columnFilters)) {
       if (!val) continue;
+      const isNonVide = val === '!empty';
       const v = val.toLowerCase();
+      const pfsF = key === 'fournisseur' ? produitFournisseurs.filter(pf => pf.produitId === p.id) : [];
+      const fournNames = key === 'fournisseur' ? pfsF.map(pf => fournisseurs.find(f => f.id === pf.fournisseurId)?.societe || '').join(' ') : '';
       switch (key) {
-        case 'reference':    if (!p.reference?.toLowerCase().includes(v)) return false; break;
-        case 'description':  if (!p.description?.toLowerCase().includes(v)) return false; break;
-        case 'categorie':    if (!p.categorie?.toLowerCase().includes(v)) return false; break;
-        case 'fournisseur': { const pfsF = produitFournisseurs.filter(pf => pf.produitId === p.id); const names = pfsF.map(pf => fournisseurs.find(f => f.id === pf.fournisseurId)?.societe || '').join(' '); if (!names.toLowerCase().includes(v)) return false; break; }
-        case 'prixAchat':    if (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v)) return false; break;
-        case 'coefficient':  if (!String(p.coefficient.toFixed(2)).includes(v)) return false; break;
-        case 'prixHT':       if (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v)) return false; break;
-        case 'prixRevendeur':if (!formatMontant(p.prixRevendeur).toLowerCase().includes(v) && !String(p.prixRevendeur).includes(v)) return false; break;
-        case 'poids':        if (!String(p.poids || 0).includes(v)) return false; break;
-        case 'consommation': if (!String(p.consommation || 0).includes(v)) return false; break;
-        case 'tva':          if (!String(p.tva).includes(v)) return false; break;
-        case 'stock':        if (!String(p.stock).includes(v)) return false; break;
-        case 'qteVendue':    if (!String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
+        case 'reference':    if (isNonVide ? !p.reference?.trim() : !p.reference?.toLowerCase().includes(v)) return false; break;
+        case 'description':  if (isNonVide ? !p.description?.trim() : !p.description?.toLowerCase().includes(v)) return false; break;
+        case 'categorie':    if (isNonVide ? !p.categorie?.trim() : !p.categorie?.toLowerCase().includes(v)) return false; break;
+        case 'fournisseur':  if (isNonVide ? (!fournNames.trim() && !p.fournisseurId) : !fournNames.toLowerCase().includes(v)) return false; break;
+        case 'prixAchat':    if (isNonVide ? p.prixAchat === 0 : (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v))) return false; break;
+        case 'coefficient':  if (isNonVide ? p.coefficient === 0 : !String(p.coefficient.toFixed(2)).includes(v)) return false; break;
+        case 'prixHT':       if (isNonVide ? p.prixHT === 0 : (!formatMontant(p.prixHT).toLowerCase().includes(v) && !String(p.prixHT).includes(v))) return false; break;
+        case 'prixRevendeur':if (isNonVide ? p.prixRevendeur === 0 : (!formatMontant(p.prixRevendeur).toLowerCase().includes(v) && !String(p.prixRevendeur).includes(v))) return false; break;
+        case 'poids':        if (isNonVide ? !p.poids : !String(p.poids || 0).includes(v)) return false; break;
+        case 'consommation': if (isNonVide ? !p.consommation : !String(p.consommation || 0).includes(v)) return false; break;
+        case 'tva':          if (isNonVide ? p.tva === 0 : !String(p.tva).includes(v)) return false; break;
+        case 'stock':        if (isNonVide ? p.stock === 0 : !String(p.stock).includes(v)) return false; break;
+        case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
+        case 'disponibleVente': if (isNonVide ? !(p.disponibleVente !== false) : !String(p.disponibleVente !== false ? 'oui' : 'non').includes(v)) return false; break;
       }
     }
     return true;
@@ -289,8 +295,9 @@ export default function Produits() {
         case 'poids':        av = a.poids || 0; bv = b.poids || 0; break;
         case 'consommation': av = a.consommation || 0; bv = b.consommation || 0; break;
         case 'tva':          av = a.tva; bv = b.tva; break;
-        case 'stock':        av = a.stock; bv = b.stock; break;
-        case 'qteVendue':    av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
+        case 'stock':           av = a.stock; bv = b.stock; break;
+        case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
+        case 'disponibleVente': av = (a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
@@ -366,7 +373,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '' });
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -837,16 +844,36 @@ export default function Produits() {
               {showFilters && (
                 <tr className="border-b border-border bg-muted/30">
                   <th className="px-3 py-1"></th>
-                  {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => (
-                    <th key={col.key} className="px-3 py-1">
-                      <Input
-                        placeholder="Filtrer..."
-                        value={columnFilters[col.key] || ''}
-                        onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
-                        className={`h-7 text-xs ${col.align === 'right' ? 'text-right' : ''}`}
-                      />
-                    </th>
-                  ))}
+                  {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                    const fVal = columnFilters[col.key] || '';
+                    const isNV = fVal === '!empty';
+                    return (
+                      <th key={col.key} className="px-3 py-1">
+                        {isNV ? (
+                          <button
+                            onClick={() => setColumnFilters(prev => ({ ...prev, [col.key]: '' }))}
+                            className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap"
+                          >
+                            ≠ vide <X className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <div className="flex items-center gap-0.5">
+                            <Input
+                              placeholder="Filtrer..."
+                              value={fVal}
+                              onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
+                              className={`h-7 text-xs flex-1 min-w-0 ${col.align === 'right' ? 'text-right' : ''}`}
+                            />
+                            <button
+                              onClick={() => setColumnFilters(prev => ({ ...prev, [col.key]: '!empty' }))}
+                              title="Filtre non vide"
+                              className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 py-0.5 rounded leading-none"
+                            >≠∅</button>
+                          </div>
+                        )}
+                      </th>
+                    );
+                  })}
                   <th className="px-3 py-1">
                     {Object.values(columnFilters).some(v => v) && (
                       <button onClick={() => setColumnFilters({})} className="p-1 rounded hover:bg-muted" title="Effacer les filtres">
@@ -879,6 +906,13 @@ export default function Produits() {
                     case 'tva':          return <td className="px-3 py-3 text-right">{p.tva}%</td>;
                     case 'stock':        return <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
                     case 'qteVendue':    return <td className="px-3 py-3 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
+                    case 'disponibleVente': return (
+                      <td className="px-3 py-3 text-center">
+                        {p.disponibleVente !== false
+                          ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span>
+                          : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}
+                      </td>
+                    );
                     default:             return <td />;
                   }
                 };
@@ -1369,6 +1403,18 @@ export default function Produits() {
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
               <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
             </div>
+
+            {/* Disponible à la vente */}
+            <label className="flex items-center gap-2.5 px-1 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={(form as any).disponibleVente !== false}
+                onChange={e => setForm(p => ({ ...p, disponibleVente: e.target.checked }))}
+                className="rounded w-4 h-4 accent-primary"
+              />
+              <span className="text-sm font-medium">Disponible à la vente</span>
+              <span className="text-xs text-muted-foreground">(visible dans stock &amp; devis)</span>
+            </label>
 
             {/* Propriétaire de la marchandise */}
             <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">

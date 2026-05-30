@@ -161,6 +161,7 @@ export interface Produit {
   variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
   proprietaire?: 'isosign' | 'fournisseur'; // propriétaire de la marchandise
   proprietaireFournisseurId?: string;        // si proprietaire = 'fournisseur'
+  disponibleVente?: boolean;                 // produit proposé à la vente
 }
 
 export interface PalierPort {
@@ -581,6 +582,7 @@ function dbToProduit(r: any): Produit {
     variantes: r.variantes ? (Array.isArray(r.variantes) ? r.variantes : JSON.parse(r.variantes)) : undefined,
     proprietaire: (r.proprietaire as 'isosign' | 'fournisseur') || 'isosign',
     proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
+    disponibleVente: r.disponible_vente ?? true,
   };
 }
 
@@ -615,6 +617,7 @@ function produitToDb(p: Produit, userId: string) {
     variantes: p.variantes && p.variantes.length > 0 ? p.variantes : null,
     ...(p.proprietaire !== undefined ? { proprietaire: p.proprietaire } : {}),
     ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
+    ...(p.disponibleVente !== undefined ? { disponible_vente: p.disponibleVente } : {}),
   };
 }
 
