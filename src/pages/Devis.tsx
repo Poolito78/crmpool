@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
@@ -28,6 +28,8 @@ import VarianteSelect from '@/components/VarianteSelect';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -107,6 +109,7 @@ export default function Devis() {
     return new Set(DEFAULT_DEVIS_TABLE_COLS);
   });
   useEffect(() => { try { localStorage.setItem('devis_table_cols', JSON.stringify([...visDevisTableCols])); } catch {} }, [visDevisTableCols]);
+  const devisCols = useTableColumns<DevisTableColKey>('devis_table', DEVIS_TABLE_COLS_DEF.map(c => c.key));
   const [colMenuDevis, setColMenuDevis] = useState(false);
   const colMenuDevisRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1168,7 +1171,7 @@ export default function Devis() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
+                  {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => {
                     const sortKey = col.key === 'totalHT' ? 'total' : col.key === 'date' ? 'date' : col.key === 'validite' ? 'validite' : col.key === 'marge' ? 'marge' : col.key === 'port' ? 'port' : col.key === 'numero' ? 'numero' : col.key === 'client' ? 'client' : col.key;
                     const isAsc = sortBy === `${sortKey}_asc`;
                     const isDesc = sortBy === `${sortKey}_desc`;
@@ -1177,20 +1180,23 @@ export default function Devis() {
                     const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
                     const hasFilter = !!(colFiltersD[col.key]);
                     const isFilterOpen = openFilterColsD.has(col.key);
+                    const isDragOver = devisCols.dragOverKey === col.key && devisCols.dragKey !== col.key;
                     return (
-                      <th key={col.key} className="px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap">
-                        <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
-                          <button onClick={() => { const asc = `${sortKey}_asc`; const desc = `${sortKey}_desc`; setSortBy(isAsc ? desc : asc); }} className="flex items-center gap-1 hover:text-foreground cursor-pointer">
+                      <th key={col.key} {...devisCols.thProps(col.key)} style={devisCols.widthStyle(col.key)} className={`relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${devisCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                        {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                        <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${devisCols.widthStyle(col.key) ? 'overflow-hidden' : ''}`}>
+                          <button onClick={() => { const asc = `${sortKey}_asc`; const desc = `${sortKey}_desc`; setSortBy(isAsc ? desc : asc); }} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
                             {col.align === 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
-                            <span>{col.label}</span>
+                            <span className="truncate">{col.label}</span>
                             {col.align !== 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                           </button>
                           {isFilterable && (
-                            <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
+                            <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
                               <Filter className="w-3 h-3" />
                             </button>
                           )}
                         </div>
+                        <ColResizeHandle {...devisCols.resizeHandleProps(col.key)} />
                       </th>
                     );
                   })}
@@ -1198,7 +1204,7 @@ export default function Devis() {
                 </tr>
                 {openFilterColsD.size > 0 && (
                   <tr className="border-b border-border bg-muted/20">
-                    {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
+                    {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => {
                       const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
                       if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
                       const fVal = colFiltersD[col.key] || '';
@@ -1271,65 +1277,33 @@ export default function Devis() {
                   }, 0);
                   const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
                   const margeD = totalHTD > 0 ? ((totalHTD - totalAchat) / totalHTD * 100) : 0;
-                  const vs = visDevisTableCols;
-                  return (
-                    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
-                      {vs.has('numero') && (
-                        <td className="px-3 py-2.5">
-                          <p className="font-semibold text-sm">{d.numero}</p>
-                          {d.referenceAffaire && !vs.has('refAffaire') && <p className="text-xs text-muted-foreground">{d.referenceAffaire}</p>}
-                        </td>
-                      )}
-                      {vs.has('statut') && (
-                        <td className="px-3 py-2.5">
-                          <select
-                            value={d.statut}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => { const newStatut = e.target.value as DevisType['statut']; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: newStatut } : dv)); }}
-                            className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}
-                          >
-                            <option value="brouillon">brouillon</option>
-                            <option value="envoyé">envoyé</option>
-                            <option value="accepté">accepté</option>
-                            <option value="refusé">refusé</option>
-                            <option value="expiré">expiré</option>
-                            <option value="archivé">archivé</option>
+                  const horsDelai = !!d.dateValidite && d.dateValidite < new Date().toISOString().split('T')[0] && !['accepté', 'refusé', 'archivé', 'système'].includes(d.statut);
+                  const renderCellD = (key: DevisTableColKey) => {
+                    const ws = devisCols.widthStyle(key);
+                    const trunc = ws ? ' truncate' : '';
+                    switch (key) {
+                      case 'numero': return <td style={ws} className={`px-3 py-2.5${trunc}`}><p className="font-semibold text-sm truncate">{d.numero}</p></td>;
+                      case 'statut': return (
+                        <td style={ws} className="px-3 py-2.5">
+                          <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}>
+                            <option value="brouillon">brouillon</option><option value="envoyé">envoyé</option><option value="accepté">accepté</option><option value="refusé">refusé</option><option value="expiré">expiré</option><option value="archivé">archivé</option>
                           </select>
                         </td>
-                      )}
-                      {vs.has('client') && (
-                        <td className="px-3 py-2.5">
-                          <p className="text-sm font-medium truncate max-w-[160px]">{client?.societe || client?.nom || '—'}</p>
-                        </td>
-                      )}
-                      {vs.has('refAffaire') && (
-                        <td className="px-3 py-2.5 text-muted-foreground text-xs">{d.referenceAffaire || '—'}</td>
-                      )}
-                      {vs.has('systeme') && (
-                        <td className="px-3 py-2.5 text-muted-foreground text-xs">{d.systeme || '—'}</td>
-                      )}
-                      {vs.has('date') && (
-                        <td className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>
-                      )}
-                      {vs.has('validite') && (() => {
-                        const horsDelai = !!d.dateValidite && d.dateValidite < new Date().toISOString().split('T')[0] && !['accepté', 'refusé', 'archivé', 'système'].includes(d.statut);
-                        return (
-                          <td className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>
-                            {formatDate(d.dateValidite)}
-                          </td>
-                        );
-                      })()}
-                      {vs.has('totalHT') && (
-                        <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>
-                      )}
-                      {vs.has('marge') && (
-                        <td className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>
-                          {totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}
-                        </td>
-                      )}
-                      {vs.has('port') && (
-                        <td className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>
-                      )}
+                      );
+                      case 'client': return <td style={ws} className="px-3 py-2.5"><p className="text-sm font-medium truncate max-w-[160px]">{client?.societe || client?.nom || '—'}</p></td>;
+                      case 'refAffaire': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.referenceAffaire || ''}>{d.referenceAffaire || '—'}</td>;
+                      case 'systeme': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.systeme || ''}>{d.systeme || '—'}</td>;
+                      case 'date': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>;
+                      case 'validite': return <td style={ws} className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>{formatDate(d.dateValidite)}</td>;
+                      case 'totalHT': return <td style={ws} className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>;
+                      case 'marge': return <td style={ws} className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>{totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}</td>;
+                      case 'port': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>;
+                      default: return <td style={ws} className="px-3 py-2.5" />;
+                    }
+                  };
+                  return (
+                    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
+                      {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => <Fragment key={col.key}>{renderCellD(col.key)}</Fragment>)}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-0.5 justify-end">
                           <button onClick={() => openArchiveDialog(d)} title="Archiver" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-muted-foreground hover:text-foreground"><Archive className="w-3.5 h-3.5" /></button>
