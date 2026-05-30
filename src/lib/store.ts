@@ -69,6 +69,26 @@ export interface Fournisseur {
   coutTransport: number;
   delaiReglement: string;
   dateCreation: string;
+  estStockiste?: boolean;
+  delaiExpedition?: number; // jours d'expédition
+}
+
+// ── Entrepôts ────────────────────────────────────────────────────────────────
+export interface Entrepot {
+  id: string;
+  nom: string;
+  adresse?: string;
+  ville?: string;
+  codePostal?: string;
+  notes?: string;
+  estDefaut: boolean;
+  createdAt: string;
+}
+
+export interface StockEntrepot {
+  produitId: string;
+  entrepotId: string;
+  stock: number;
 }
 
 export interface ComposantProduit {
@@ -139,6 +159,8 @@ export interface Produit {
   dateCreation: string;
   paliersPrix?: PrixPalier[];       // prix évolutifs par palier de quantité/poids
   variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
+  proprietaire?: 'isosign' | 'fournisseur'; // propriétaire de la marchandise
+  proprietaireFournisseurId?: string;        // si proprietaire = 'fournisseur'
 }
 
 export interface PalierPort {
@@ -502,6 +524,8 @@ function dbToFournisseur(r: any): Fournisseur {
     coutTransport: Number(r.cout_transport) || 0,
     delaiReglement: normalizeDelaiReglement(r.delai_reglement ? String(r.delai_reglement) : '45J FDM'),
     dateCreation: r.date_creation?.split('T')[0] || '',
+    estStockiste: r.est_stockiste ?? false,
+    delaiExpedition: r.delai_expedition != null ? Number(r.delai_expedition) : 0,
   };
 }
 
@@ -522,6 +546,8 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     cout_transport: f.coutTransport,
     delai_reglement: f.delaiReglement,
     date_creation: f.dateCreation,
+    ...(f.estStockiste !== undefined ? { est_stockiste: f.estStockiste } : {}),
+    ...(f.delaiExpedition !== undefined ? { delai_expedition: f.delaiExpedition } : {}),
   };
 }
 
@@ -553,6 +579,8 @@ function dbToProduit(r: any): Produit {
     dateCreation: r.date_creation?.split('T')[0] || '',
     paliersPrix: r.paliers_prix ? (Array.isArray(r.paliers_prix) ? r.paliers_prix : JSON.parse(r.paliers_prix)) : undefined,
     variantes: r.variantes ? (Array.isArray(r.variantes) ? r.variantes : JSON.parse(r.variantes)) : undefined,
+    proprietaire: (r.proprietaire as 'isosign' | 'fournisseur') || 'isosign',
+    proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
   };
 }
 
@@ -585,6 +613,8 @@ function produitToDb(p: Produit, userId: string) {
     date_creation: p.dateCreation,
     paliers_prix: p.paliersPrix && p.paliersPrix.length > 0 ? p.paliersPrix : null,
     variantes: p.variantes && p.variantes.length > 0 ? p.variantes : null,
+    ...(p.proprietaire !== undefined ? { proprietaire: p.proprietaire } : {}),
+    ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
   };
 }
 
@@ -1213,6 +1243,108 @@ export function useStore() {
   }, []);
 
   return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+}
+
+// ── Entrepôts DB mapping ────────────────────────────────────────────────────
+
+function dbToEntrepot(r: any): Entrepot {
+  return {
+    id: r.id,
+    nom: r.nom,
+    adresse: r.adresse || undefined,
+    ville: r.ville || undefined,
+    codePostal: r.code_postal || undefined,
+    notes: r.notes || undefined,
+    estDefaut: r.est_defaut ?? false,
+    createdAt: r.created_at || '',
+  };
+}
+
+function entrepotToDb(e: Entrepot, userId: string) {
+  return {
+    id: e.id,
+    user_id: userId,
+    nom: e.nom,
+    adresse: e.adresse || null,
+    ville: e.ville || null,
+    code_postal: e.codePostal || null,
+    notes: e.notes || null,
+    est_defaut: e.estDefaut,
+  };
+}
+
+function dbToStockEntrepot(r: any): StockEntrepot {
+  return {
+    produitId: r.produit_id,
+    entrepotId: r.entrepot_id,
+    stock: Number(r.stock) || 0,
+  };
+}
+
+export function useEntrepots() {
+  const [entrepots, setEntrepots] = useState<Entrepot[]>([]);
+  const [stockEntrepots, setStockEntrepots] = useState<StockEntrepot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const userIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    async function load() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      userIdRef.current = session.user.id;
+      const [eRes, sRes] = await Promise.all([
+        supabase.from('entrepots').select('*').order('created_at', { ascending: true }),
+        supabase.from('stock_entrepot').select('*'),
+      ]);
+      if (eRes.data) setEntrepots(eRes.data.map(dbToEntrepot));
+      if (sRes.data) setStockEntrepots(sRes.data.map(dbToStockEntrepot));
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  const addEntrepot = useCallback(async (e: Omit<Entrepot, 'id' | 'createdAt'>) => {
+    const userId = userIdRef.current;
+    if (!userId) return null;
+    const newE: Entrepot = { ...e, id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    const { error } = await supabase.from('entrepots').insert(entrepotToDb(newE, userId) as any);
+    if (!error) setEntrepots(prev => [...prev, newE]);
+    return error ? null : newE;
+  }, []);
+
+  const updateEntrepot = useCallback(async (e: Entrepot) => {
+    const userId = userIdRef.current;
+    if (!userId) return;
+    const { error } = await supabase.from('entrepots').update(entrepotToDb(e, userId) as any).eq('id', e.id);
+    if (!error) setEntrepots(prev => prev.map(x => x.id === e.id ? e : x));
+    return error;
+  }, []);
+
+  const deleteEntrepot = useCallback(async (id: string) => {
+    const { error } = await supabase.from('entrepots').delete().eq('id', id);
+    if (!error) {
+      setEntrepots(prev => prev.filter(e => e.id !== id));
+      setStockEntrepots(prev => prev.filter(s => s.entrepotId !== id));
+    }
+    return error;
+  }, []);
+
+  const upsertStock = useCallback(async (produitId: string, entrepotId: string, stock: number) => {
+    const { error } = await supabase.from('stock_entrepot').upsert(
+      { produit_id: produitId, entrepot_id: entrepotId, stock },
+      { onConflict: 'produit_id,entrepot_id' }
+    );
+    if (!error) {
+      setStockEntrepots(prev => {
+        const exists = prev.find(s => s.produitId === produitId && s.entrepotId === entrepotId);
+        if (exists) return prev.map(s => s.produitId === produitId && s.entrepotId === entrepotId ? { ...s, stock } : s);
+        return [...prev, { produitId, entrepotId, stock }];
+      });
+    }
+    return error;
+  }, []);
+
+  return { entrepots, stockEntrepots, loading, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock };
 }
 
 export function generateId() {

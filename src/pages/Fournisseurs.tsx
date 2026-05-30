@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
-  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM'
+  nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', estStockiste: false, delaiExpedition: 0,
 };
 
 const importFields: { key: string; label: string; aliases: string[]; type: 'text' | 'number'; default?: any }[] = [
@@ -108,12 +108,14 @@ export default function Fournisseurs() {
       francoPort: 0,
       coutTransport: 0,
       delaiReglement: '45j FDM',
+      estStockiste: false,
+      delaiExpedition: 0,
     });
     setDialogOpen(true);
   }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM' });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM', estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
     setDialogOpen(true);
   }
 
@@ -416,6 +418,31 @@ export default function Fournisseurs() {
                     <option value="60j FDM">60j FDM</option>
                   </select>
                 </div>
+              </div>
+              <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+                <p className="text-sm font-semibold text-foreground">Stock disponible</p>
+                <label className="flex items-center gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={(form as any).estStockiste ?? false}
+                    onChange={e => setForm(prev => ({ ...prev, estStockiste: e.target.checked }))}
+                    className="rounded w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm">Fournisseur stockiste</span>
+                  <span className="text-xs text-muted-foreground">(produits disponibles sur stock)</span>
+                </label>
+                {(form as any).estStockiste && (
+                  <div>
+                    <Label className="text-xs">Délai d'expédition (jours)</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={(form as any).delaiExpedition ?? 0}
+                      onChange={e => setForm(prev => ({ ...prev, delaiExpedition: parseInt(e.target.value) || 0 }))}
+                      placeholder="0 = immédiat"
+                    />
+                  </div>
+                )}
               </div>
             </div>
           </div>

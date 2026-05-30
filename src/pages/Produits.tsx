@@ -35,7 +35,8 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[]
+  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
+  proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
 };
 
 // Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
@@ -365,7 +366,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '' });
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '' });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -1367,6 +1368,50 @@ export default function Produits() {
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
               <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+            </div>
+
+            {/* Propriétaire de la marchandise */}
+            <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
+              <p className="text-xs font-medium text-muted-foreground">Propriétaire de la marchandise</p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="proprietaire"
+                    value="isosign"
+                    checked={((form as any).proprietaire ?? 'isosign') === 'isosign'}
+                    onChange={() => setForm(p => ({ ...p, proprietaire: 'isosign', proprietaireFournisseurId: '' }))}
+                    className="accent-primary"
+                  />
+                  ISOSIGN
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer text-sm">
+                  <input
+                    type="radio"
+                    name="proprietaire"
+                    value="fournisseur"
+                    checked={((form as any).proprietaire) === 'fournisseur'}
+                    onChange={() => setForm(p => ({ ...p, proprietaire: 'fournisseur' }))}
+                    className="accent-primary"
+                  />
+                  Fournisseur (stockiste)
+                </label>
+              </div>
+              {((form as any).proprietaire) === 'fournisseur' && (
+                <div>
+                  <Label className="text-xs">Fournisseur propriétaire</Label>
+                  <select
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    value={(form as any).proprietaireFournisseurId || ''}
+                    onChange={e => setForm(p => ({ ...p, proprietaireFournisseurId: e.target.value }))}
+                  >
+                    <option value="">— Choisir un fournisseur —</option>
+                    {fournisseurs.map(f => (
+                      <option key={f.id} value={f.id}>{f.societe}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
