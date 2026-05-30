@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
+import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -116,6 +116,11 @@ export default function Produits() {
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
+  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs'>('infos');
+  const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
+
+  // Hook entrepôts (chargé une seule fois)
+  const { entrepots, stockEntrepots, upsertStock: upsertStockEntrepot } = useEntrepots();
 
   // Persist visible columns
   useEffect(() => {
@@ -244,6 +249,17 @@ export default function Produits() {
     return map;
   }, [commandesClient]);
 
+  // Stock réservé : quantité dans commandes actives non encore livrées
+  const stockReserveParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cc of commandesClient.filter(c => ['a_traiter', 'accuse_envoye', 'commande_envoyee'].includes(c.statut))) {
+      for (const l of cc.lignes) {
+        if (l.produitId) map[l.produitId] = (map[l.produitId] || 0) + (l.quantite || 0);
+      }
+    }
+    return map;
+  }, [commandesClient]);
+
   const filtered = safeProduits.filter(p => {
     // Global search
     if (search) {
@@ -339,7 +355,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setVariantes([]); setEditingStack([]); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -381,6 +397,8 @@ export default function Produits() {
     setLignesKit(p.lignesKit || []);
     setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
     setVariantes(p.variantes ? [...p.variantes] : []);
+    setProduitTab('infos');
+    setEntrepotStockEdit(null);
     setDialogOpen(true);
   }
 
@@ -1029,6 +1047,29 @@ export default function Produits() {
               </DialogTitle>
             </div>
           </DialogHeader>
+          {/* ── Barre d'onglets ─────────────────────────────────────────────── */}
+          <div className="flex gap-1 bg-muted/50 rounded-xl p-1 mt-1 mb-2">
+            {([
+              { id: 'infos',       label: 'Informations', icon: Package },
+              { id: 'stock',       label: 'Stock & entrepôts', icon: Warehouse },
+              { id: 'fournisseurs', label: 'Fournisseurs', icon: Truck },
+            ] as const).map(t => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setProduitTab(t.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-1 justify-center ${produitTab === t.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                <t.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="hidden sm:inline">{t.label}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="overflow-x-hidden min-w-0">
+
+          {/* ══ Onglet Infos ═══════════════════════════════════════════════ */}
+          {produitTab === 'infos' && (
           <div className="grid gap-4 py-2 overflow-x-hidden min-w-0">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
@@ -1399,65 +1440,10 @@ export default function Produits() {
                 </div>
               );
             })()}
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Stock</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
-              <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
-            </div>
-
-            {/* Disponible à la vente */}
-            <label className="flex items-center gap-2.5 px-1 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={(form as any).disponibleVente !== false}
-                onChange={e => setForm(p => ({ ...p, disponibleVente: e.target.checked }))}
-                className="rounded w-4 h-4 accent-primary"
-              />
-              <span className="text-sm font-medium">Disponible à la vente</span>
-              <span className="text-xs text-muted-foreground">(visible dans stock &amp; devis)</span>
-            </label>
-
-            {/* Propriétaire de la marchandise */}
-            <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
-              <p className="text-xs font-medium text-muted-foreground">Propriétaire de la marchandise</p>
-              <div className="flex gap-4">
-                <label className="flex items-center gap-2 cursor-pointer text-sm">
-                  <input
-                    type="radio"
-                    name="proprietaire"
-                    value="isosign"
-                    checked={((form as any).proprietaire ?? 'isosign') === 'isosign'}
-                    onChange={() => setForm(p => ({ ...p, proprietaire: 'isosign', proprietaireFournisseurId: '' }))}
-                    className="accent-primary"
-                  />
-                  ISOSIGN
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer text-sm">
-                  <input
-                    type="radio"
-                    name="proprietaire"
-                    value="fournisseur"
-                    checked={((form as any).proprietaire) === 'fournisseur'}
-                    onChange={() => setForm(p => ({ ...p, proprietaire: 'fournisseur' }))}
-                    className="accent-primary"
-                  />
-                  Fournisseur (stockiste)
-                </label>
-              </div>
-              {((form as any).proprietaire) === 'fournisseur' && (
-                <div>
-                  <Label className="text-xs">Fournisseur propriétaire</Label>
-                  <select
-                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={(form as any).proprietaireFournisseurId || ''}
-                    onChange={e => setForm(p => ({ ...p, proprietaireFournisseurId: e.target.value }))}
-                  >
-                    <option value="">— Choisir un fournisseur —</option>
-                    {fournisseurs.map(f => (
-                      <option key={f.id} value={f.id}>{f.societe}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {/* Stock, dispo et entrepôts → onglet Stock */}
+            <div className="flex items-center gap-2 px-1 py-0.5 text-xs text-muted-foreground bg-muted/30 rounded-lg">
+              <Warehouse className="w-3.5 h-3.5 shrink-0" />
+              Stock, propriétaire et entrepôts disponibles dans l'onglet <button type="button" onClick={() => setProduitTab('stock')} className="underline text-primary hover:opacity-80">Stock &amp; entrepôts</button>
             </div>
 
             <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
@@ -2072,16 +2058,180 @@ export default function Produits() {
               </DialogContent>
             </Dialog>
 
-            {editing && (
-              composants.length > 0 ? (
-                <div className="border border-border rounded-lg p-3 bg-muted/20 text-xs text-muted-foreground flex items-start gap-2">
-                  <span className="text-base leading-none">ℹ️</span>
-                  <span>Produit composé — les fournisseurs et prix achat sont gérés au niveau de chaque composant.</span>
+          </div>)} {/* fin onglet Infos */}
+
+          {/* ══ Onglet Stock & Entrepôts ═══════════════════════════════════ */}
+          {produitTab === 'stock' && (() => {
+            const reserve = editing ? (stockReserveParProduit[editing.id] || 0) : 0;
+            const stockActuel = form.stock;
+            const dispo = stockActuel - reserve;
+            return (
+              <div className="space-y-4 py-2">
+                {/* Indicateurs disponible / réservé / final */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-card border border-border rounded-xl p-3 text-center">
+                    <p className="text-2xl font-heading font-bold text-success">{stockActuel}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Disponible</p>
+                  </div>
+                  <div className="bg-card border border-border rounded-xl p-3 text-center">
+                    <p className="text-2xl font-heading font-bold text-warning">{reserve}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Réservé (cmd)</p>
+                  </div>
+                  <div className={`bg-card border rounded-xl p-3 text-center ${dispo < 0 ? 'border-destructive/50' : 'border-border'}`}>
+                    <p className={`text-2xl font-heading font-bold ${dispo < 0 ? 'text-destructive' : dispo === 0 ? 'text-muted-foreground' : 'text-primary'}`}>{dispo}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Dispo finale</p>
+                  </div>
                 </div>
+
+                {/* Champs stock */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div><Label>Stock total</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
+                  <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+                </div>
+
+                {/* Disponible à la vente */}
+                <label className="flex items-center gap-2.5 px-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={(form as any).disponibleVente !== false}
+                    onChange={e => setForm(p => ({ ...p, disponibleVente: e.target.checked }))}
+                    className="rounded w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-medium">Disponible à la vente</span>
+                  <span className="text-xs text-muted-foreground">(visible dans stock &amp; devis)</span>
+                </label>
+
+                {/* Propriétaire de la marchandise */}
+                <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
+                  <p className="text-xs font-medium text-muted-foreground">Propriétaire de la marchandise</p>
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="radio" name="proprietaire" value="isosign"
+                        checked={((form as any).proprietaire ?? 'isosign') === 'isosign'}
+                        onChange={() => setForm(p => ({ ...p, proprietaire: 'isosign', proprietaireFournisseurId: '' }))}
+                        className="accent-primary"
+                      /> ISOSIGN
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <input type="radio" name="proprietaire" value="fournisseur"
+                        checked={(form as any).proprietaire === 'fournisseur'}
+                        onChange={() => setForm(p => ({ ...p, proprietaire: 'fournisseur' }))}
+                        className="accent-primary"
+                      /> Fournisseur (dépôt)
+                    </label>
+                  </div>
+                  {(form as any).proprietaire === 'fournisseur' && (
+                    <div>
+                      <Label className="text-xs">Fournisseur propriétaire</Label>
+                      <select
+                        className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        value={(form as any).proprietaireFournisseurId || ''}
+                        onChange={e => setForm(p => ({ ...p, proprietaireFournisseurId: e.target.value }))}
+                      >
+                        <option value="">— Choisir un fournisseur —</option>
+                        {fournisseurs.map(f => <option key={f.id} value={f.id}>{f.societe}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* ── Entrepôts ── */}
+                <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
+                  <p className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                    <Warehouse className="w-3.5 h-3.5" /> Répartition par entrepôt
+                  </p>
+                  {entrepots.length === 0 ? (
+                    <p className="text-xs text-muted-foreground py-2">Aucun entrepôt configuré. Créez-en un depuis la page Stock → onglet "Par entrepôt".</p>
+                  ) : editing ? (
+                    <div className="space-y-1.5">
+                      {entrepots.map(e => {
+                        const stockIci = stockEntrepots.find(s => s.produitId === editing.id && s.entrepotId === e.id)?.stock ?? 0;
+                        const isEdit = entrepotStockEdit?.id === e.id;
+                        return (
+                          <div key={e.id} className="flex items-center gap-3 px-2 py-1.5 rounded-lg hover:bg-background transition-colors">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium flex items-center gap-1.5">
+                                <Warehouse className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                {e.nom}
+                                {e.estDefaut && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Défaut</span>}
+                              </p>
+                              {e.ville && <p className="text-xs text-muted-foreground pl-5">{e.ville}</p>}
+                            </div>
+                            {isEdit ? (
+                              <div className="flex items-center gap-1">
+                                <Input
+                                  type="number" min={0}
+                                  className="w-20 h-7 text-right text-sm"
+                                  value={entrepotStockEdit.value}
+                                  onChange={ev => setEntrepotStockEdit({ id: e.id, value: ev.target.value })}
+                                  onKeyDown={async ev => {
+                                    if (ev.key === 'Enter') {
+                                      const v = parseInt(entrepotStockEdit.value);
+                                      if (!isNaN(v) && v >= 0) {
+                                        await upsertStockEntrepot(editing.id, e.id, v);
+                                        toast.success('Stock mis à jour');
+                                      }
+                                      setEntrepotStockEdit(null);
+                                    }
+                                    if (ev.key === 'Escape') setEntrepotStockEdit(null);
+                                  }}
+                                  autoFocus
+                                />
+                                <button
+                                  type="button"
+                                  onClick={async () => {
+                                    const v = parseInt(entrepotStockEdit.value);
+                                    if (!isNaN(v) && v >= 0) {
+                                      await upsertStockEntrepot(editing.id, e.id, v);
+                                      toast.success('Stock mis à jour');
+                                    }
+                                    setEntrepotStockEdit(null);
+                                  }}
+                                  className="p-1 rounded text-success hover:bg-success/10"
+                                ><Save className="w-3.5 h-3.5" /></button>
+                                <button type="button" onClick={() => setEntrepotStockEdit(null)} className="p-1 rounded text-muted-foreground hover:bg-muted"><X className="w-3.5 h-3.5" /></button>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setEntrepotStockEdit({ id: e.id, value: String(stockIci) })}
+                                className="font-semibold text-sm hover:text-primary transition-colors px-2 py-0.5 rounded hover:bg-primary/5 shrink-0"
+                              >
+                                {stockIci} {form.unite}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <p className="text-xs text-muted-foreground px-2 pt-1">Cliquez sur une quantité pour la modifier.</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground py-1">Enregistrez le produit d'abord pour affecter du stock aux entrepôts.</p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* ══ Onglet Fournisseurs ════════════════════════════════════════ */}
+          {produitTab === 'fournisseurs' && (
+            <div className="py-2">
+              {editing ? (
+                composants.length > 0 ? (
+                  <div className="border border-border rounded-lg p-3 bg-muted/20 text-xs text-muted-foreground flex items-start gap-2">
+                    <span className="text-base leading-none">ℹ️</span>
+                    <span>Produit composé — les fournisseurs et prix achat sont gérés au niveau de chaque composant.</span>
+                  </div>
+                ) : (
+                  <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
+                )
               ) : (
-                <ProduitFournisseursPanel produitId={editing.id} qteCommande={Math.max(1, form.stockMin - form.stock)} />
-              )
-            )}
+                <p className="text-sm text-muted-foreground py-4 text-center">Enregistrez le produit d'abord pour gérer les fournisseurs.</p>
+              )}
+            </div>
+          )}
+
+          </div> {/* fin wrapper onglets */}
 
             <div className="sticky bottom-0 bg-background flex flex-col-reverse sm:flex-row sm:justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
               <Button variant="outline" className="w-full sm:w-auto" onClick={() => setDialogOpen(false)}>Annuler</Button>
@@ -2092,7 +2242,6 @@ export default function Produits() {
               )}
               <Button className="w-full sm:w-auto" onClick={() => save(false)}>{editing ? 'Modifier' : 'Ajouter'}</Button>
             </div>
-          </div>
         </DialogContent>
       </Dialog>
 
