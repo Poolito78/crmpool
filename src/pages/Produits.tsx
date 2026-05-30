@@ -95,6 +95,22 @@ export default function Produits() {
     return {};
   });
   const resizingRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
+  // Ordre des colonnes (persisté) — drag de l'en-tête pour réordonner
+  const [colOrder, setColOrder] = useState<ColKey[]>(() => {
+    try {
+      const s = localStorage.getItem('produits_col_order');
+      if (s) {
+        const saved = JSON.parse(s) as ColKey[];
+        const valid = saved.filter(k => COLUMNS.some(c => c.key === k));
+        // Ajoute en fin toute colonne absente de l'ordre sauvegardé
+        const missing = COLUMNS.map(c => c.key).filter(k => !valid.includes(k));
+        return [...valid, ...missing];
+      }
+    } catch { /* ignore */ }
+    return COLUMNS.map(c => c.key);
+  });
+  const [dragColKey, setDragColKey] = useState<ColKey | null>(null);
+  const [dragOverColKey, setDragOverColKey] = useState<ColKey | null>(null);
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -197,6 +213,28 @@ export default function Produits() {
       try { localStorage.setItem('produits_col_widths', JSON.stringify(next)); } catch { /* ignore */ }
       return next;
     });
+  }
+
+  // ── Réordonnancement des colonnes (drag de l'en-tête) ───────────────────────
+  // Colonnes visibles dans l'ordre choisi par l'utilisateur
+  const orderedVisibleCols = colOrder
+    .map(k => COLUMNS.find(c => c.key === k))
+    .filter((c): c is typeof COLUMNS[number] => !!c && visibleCols.has(c.key));
+
+  function handleColDrop(targetKey: ColKey) {
+    if (!dragColKey || dragColKey === targetKey) { setDragColKey(null); setDragOverColKey(null); return; }
+    setColOrder(prev => {
+      const next = [...prev];
+      const from = next.indexOf(dragColKey);
+      const to = next.indexOf(targetKey);
+      if (from === -1 || to === -1) return prev;
+      next.splice(from, 1);
+      next.splice(to, 0, dragColKey);
+      try { localStorage.setItem('produits_col_order', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
+    setDragColKey(null);
+    setDragOverColKey(null);
   }
 
   function toggleFilterCol(col: ColKey) {
@@ -857,18 +895,26 @@ export default function Produits() {
                 <th className="px-2 py-2.5 w-8">
                   <input type="checkbox" checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length} onChange={toggleAll} className="rounded border-input" />
                 </th>
-                {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                {orderedVisibleCols.map(col => {
                   const isSorted = sortCol === col.key;
                   const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
                   const hasFilter = !!(columnFilters[col.key]);
                   const isFilterOpen = openFilterCols.has(col.key);
                   const cw = colWidths[col.key];
+                  const isDragOver = dragOverColKey === col.key && dragColKey !== col.key;
                   return (
                     <th
                       key={col.key}
+                      draggable={!resizingRef.current}
+                      onDragStart={e => { setDragColKey(col.key); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', col.key); } catch { /* ignore */ } }}
+                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverColKey !== col.key) setDragOverColKey(col.key); }}
+                      onDragLeave={() => { if (dragOverColKey === col.key) setDragOverColKey(null); }}
+                      onDrop={e => { e.preventDefault(); handleColDrop(col.key); }}
+                      onDragEnd={() => { setDragColKey(null); setDragOverColKey(null); }}
                       style={cw ? { width: cw, minWidth: cw, maxWidth: cw } : undefined}
-                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.align === 'right' ? 'text-right' : 'text-left'} ${dragColKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}
                     >
+                      {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                       <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${cw ? 'overflow-hidden' : ''}`}>
                         <button
                           className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0"
@@ -886,8 +932,10 @@ export default function Produits() {
                           <Filter className="w-3 h-3" />
                         </button>
                       </div>
-                      {/* Poignée de redimensionnement */}
+                      {/* Poignée de redimensionnement (non draggable pour ne pas déclencher le réordonnancement) */}
                       <div
+                        draggable={false}
+                        onDragStart={e => { e.preventDefault(); e.stopPropagation(); }}
                         onMouseDown={e => startColResize(e, col.key, cw || (e.currentTarget.parentElement as HTMLElement)?.offsetWidth || 120)}
                         onDoubleClick={() => resetColWidth(col.key)}
                         title="Glisser pour redimensionner · double-clic pour réinitialiser"
@@ -929,7 +977,18 @@ export default function Produits() {
                             className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
                             onClick={() => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS))}
                           >
-                            Réinitialiser
+                            Réinitialiser les colonnes visibles
+                          </button>
+                          <button
+                            className="mt-1 w-full text-xs text-muted-foreground hover:text-foreground text-left"
+                            onClick={() => {
+                              const def = COLUMNS.map(c => c.key) as ColKey[];
+                              setColOrder(def);
+                              setColWidths({});
+                              try { localStorage.setItem('produits_col_order', JSON.stringify(def)); localStorage.removeItem('produits_col_widths'); } catch { /* ignore */ }
+                            }}
+                          >
+                            Réinitialiser l'ordre et les largeurs
                           </button>
                         </div>
                       )}
@@ -966,7 +1025,7 @@ export default function Produits() {
               {openFilterCols.size > 0 && (
                 <tr className="border-b border-border bg-muted/20">
                   <th className="px-3 py-1"></th>
-                  {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                  {orderedVisibleCols.map(col => {
                     if (!openFilterCols.has(col.key)) return <th key={col.key} className="px-3 py-1" />;
                     const fVal = columnFilters[col.key] || '';
                     const isNV = fVal === '!empty';
@@ -1036,7 +1095,7 @@ export default function Produits() {
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
                     <td className="px-2 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
-                    {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                    {orderedVisibleCols.map(col => {
                       const cell = renderCell(col.key) as ReactElement<any>;
                       const cw = colWidths[col.key];
                       if (cw && cell) {
