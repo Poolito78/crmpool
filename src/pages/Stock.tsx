@@ -517,21 +517,42 @@ export default function Stock() {
                   const { total, valeur } = getTotauxEntrepot(e.id);
                   const isActive = (selectedEntrepotId || entrepots[0]?.id) === e.id;
                   return (
-                    <button
+                    <div
                       key={e.id}
                       onClick={() => setSelectedEntrepotId(e.id)}
                       className={cn(
-                        'flex flex-col items-start px-4 py-2.5 rounded-xl border text-left transition-all',
+                        'group relative flex items-start gap-3 px-3 py-2.5 rounded-xl border text-left transition-all cursor-pointer',
                         isActive ? 'border-primary bg-primary/5 text-foreground' : 'border-border bg-card text-muted-foreground hover:border-primary/50'
                       )}
                     >
-                      <span className="font-semibold text-sm flex items-center gap-1.5">
-                        <Warehouse className="w-3.5 h-3.5 shrink-0" />
-                        {e.nom}
-                        {e.estDefaut && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Défaut</span>}
-                      </span>
-                      <span className="text-xs mt-0.5 opacity-70">{total} unités · {formatMontant(valeur)}</span>
-                    </button>
+                      <div className="flex-1 min-w-0">
+                        <span className="font-semibold text-sm flex items-center gap-1.5">
+                          <Warehouse className="w-3.5 h-3.5 shrink-0" />
+                          {e.nom}
+                          {e.estDefaut && <span className="text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">Défaut</span>}
+                        </span>
+                        <span className="text-xs mt-0.5 opacity-70 block">{total} unités · {formatMontant(valeur)}</span>
+                      </div>
+                      <div
+                        className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity pt-0.5"
+                        onClick={ev => ev.stopPropagation()}
+                      >
+                        <button
+                          onClick={() => openEditEntrepot(e)}
+                          title="Modifier"
+                          className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEntrepot(e.id)}
+                          title="Supprimer"
+                          className="p-1 rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
                   );
                 })}
                 <Button variant="outline" size="sm" onClick={openNewEntrepot}>
