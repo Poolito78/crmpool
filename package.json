@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "prebuild": "node -e \"try{require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})}catch(e){}\"",
+    "prebuild": "node -e \"const fs=require('fs');['node_modules/.vite','node_modules/.cache','dist','.vercel/output'].forEach(p=>{try{fs.rmSync(p,{recursive:true,force:true})}catch(e){}})\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
