@@ -880,11 +880,20 @@ export default function Produits() {
         <div className="flex flex-wrap gap-2">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           {selected.size > 0 && (
-            <Button variant="destructive" size="sm" onClick={removeSelected}>
-              <Trash2 className="w-4 h-4 sm:mr-2" />
-              <span className="hidden sm:inline">Supprimer {selected.size} sélectionné(s)</span>
-              <span className="sm:hidden">{selected.size}</span>
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => {
+                const sel = produits.filter(p => selected.has(p.id));
+                exportToExcel(sel.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits_selection', 'Produits');
+              }}>
+                <Download className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Exporter {selected.size} sélectionné(s)</span>
+                <span className="sm:hidden">{selected.size}</span>
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Importer</span>
+              </Button>
+            </>
           )}
           {Object.values(columnFilters).some(v => v) && (
             <Button variant="ghost" size="sm" onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }}>
