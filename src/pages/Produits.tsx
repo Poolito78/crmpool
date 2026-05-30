@@ -89,6 +89,8 @@ export default function Produits() {
   const colChooserRef = useRef<HTMLDivElement>(null);
   const [gearMenuOpen, setGearMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
   // Largeurs de colonnes redimensionnables (persistées)
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
     try { const s = localStorage.getItem('produits_col_widths'); if (s) return JSON.parse(s); } catch { /* ignore */ }
@@ -176,6 +178,16 @@ export default function Produits() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [gearMenuOpen]);
+
+  // Close row action menu on outside click
+  useEffect(() => {
+    if (!rowMenuId) return;
+    const handler = (e: MouseEvent) => {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) setRowMenuId(null);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [rowMenuId]);
 
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1106,10 +1118,32 @@ export default function Produits() {
                       return <Fragment key={col.key}>{cell}</Fragment>;
                     })}
                     <td className="px-2 py-2.5">
-                      <div className="flex gap-0.5 justify-end">
-                        <button onClick={() => openEdit(p)} className="p-1 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => duplicate(p)} className="p-1 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
-                        <button onClick={() => remove(p.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                      <div className="flex justify-end">
+                        <div className="relative" ref={rowMenuId === p.id ? rowMenuRef : undefined}>
+                          <button
+                            onClick={() => setRowMenuId(rowMenuId === p.id ? null : p.id)}
+                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
+                            title="Actions"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                          {rowMenuId === p.id && (
+                            <div className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[150px] text-left">
+                              <button
+                                onClick={() => { setRowMenuId(null); duplicate(p); }}
+                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
+                              >
+                                <Copy className="w-4 h-4 text-muted-foreground" /> Dupliquer
+                              </button>
+                              <button
+                                onClick={() => { setRowMenuId(null); remove(p.id); }}
+                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-destructive/10 text-destructive"
+                              >
+                                <Trash2 className="w-4 h-4" /> Supprimer
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>
