@@ -707,7 +707,12 @@ export default function Stock() {
                           </thead>
                           <tbody>
                             {produitsDispo.map(({ produit, pf }) => (
-                              <tr key={pf.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                              <tr
+                                key={pf.id}
+                                className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                                onClick={() => navigate(`/produits?highlight=${produit.id}`)}
+                                title="Ouvrir la fiche produit"
+                              >
                                 <td className="px-4 py-2.5">
                                   <p className="font-medium">{produit.description}</p>
                                   <p className="text-xs text-muted-foreground font-mono">{produit.reference}</p>
