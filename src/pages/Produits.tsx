@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, Fragment, cloneElement, type ReactElement } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
@@ -89,6 +89,12 @@ export default function Produits() {
   const colChooserRef = useRef<HTMLDivElement>(null);
   const [gearMenuOpen, setGearMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
+  // Largeurs de colonnes redimensionnables (persistées)
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try { const s = localStorage.getItem('produits_col_widths'); if (s) return JSON.parse(s); } catch { /* ignore */ }
+    return {};
+  });
+  const resizingRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -158,6 +164,39 @@ export default function Produits() {
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(key); setSortDir('asc'); }
+  }
+
+  // ── Redimensionnement de colonnes (drag sur la bordure droite) ──────────────
+  function startColResize(e: React.MouseEvent, key: string, currentW: number) {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = { key, startX: e.clientX, startW: currentW };
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (ev: MouseEvent) => {
+      const r = resizingRef.current;
+      if (!r) return;
+      const w = Math.max(50, Math.round(r.startW + (ev.clientX - r.startX)));
+      setColWidths(prev => ({ ...prev, [r.key]: w }));
+    };
+    const onUp = () => {
+      resizingRef.current = null;
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      setColWidths(prev => { try { localStorage.setItem('produits_col_widths', JSON.stringify(prev)); } catch { /* ignore */ } return prev; });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  }
+  function resetColWidth(key: string) {
+    setColWidths(prev => {
+      const next = { ...prev };
+      delete next[key];
+      try { localStorage.setItem('produits_col_widths', JSON.stringify(next)); } catch { /* ignore */ }
+      return next;
+    });
   }
 
   function toggleFilterCol(col: ColKey) {
@@ -823,28 +862,37 @@ export default function Produits() {
                   const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
                   const hasFilter = !!(columnFilters[col.key]);
                   const isFilterOpen = openFilterCols.has(col.key);
+                  const cw = colWidths[col.key];
                   return (
                     <th
                       key={col.key}
-                      className={`px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      style={cw ? { width: cw, minWidth: cw, maxWidth: cw } : undefined}
+                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
                     >
-                      <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
+                      <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${cw ? 'overflow-hidden' : ''}`}>
                         <button
-                          className="flex items-center gap-1 hover:text-foreground cursor-pointer"
+                          className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0"
                           onClick={() => handleSort(col.key)}
                         >
                           {col.align === 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
-                          <span>{col.label}</span>
+                          <span className="truncate">{col.label}</span>
                           {col.align !== 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                         </button>
                         <button
                           onClick={() => toggleFilterCol(col.key)}
                           title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
-                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
+                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
                         >
                           <Filter className="w-3 h-3" />
                         </button>
                       </div>
+                      {/* Poignée de redimensionnement */}
+                      <div
+                        onMouseDown={e => startColResize(e, col.key, cw || (e.currentTarget.parentElement as HTMLElement)?.offsetWidth || 120)}
+                        onDoubleClick={() => resetColWidth(col.key)}
+                        title="Glisser pour redimensionner · double-clic pour réinitialiser"
+                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10"
+                      />
                     </th>
                   );
                 })}
@@ -988,9 +1036,16 @@ export default function Produits() {
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
                     <td className="px-2 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
-                    {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => (
-                      <Fragment key={col.key}>{renderCell(col.key)}</Fragment>
-                    ))}
+                    {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                      const cell = renderCell(col.key) as ReactElement<any>;
+                      const cw = colWidths[col.key];
+                      if (cw && cell) {
+                        const prevCls = (cell.props.className || '') as string;
+                        const cls = prevCls.includes('truncate') ? prevCls : `${prevCls} truncate`;
+                        return <Fragment key={col.key}>{cloneElement(cell, { style: { ...(cell.props.style || {}), width: cw, maxWidth: cw }, className: cls })}</Fragment>;
+                      }
+                      return <Fragment key={col.key}>{cell}</Fragment>;
+                    })}
                     <td className="px-2 py-2.5">
                       <div className="flex gap-0.5 justify-end">
                         <button onClick={() => openEdit(p)} className="p-1 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
