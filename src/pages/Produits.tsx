@@ -815,7 +815,7 @@ export default function Produits() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-3 py-3 w-8">
+                <th className="px-2 py-2.5 w-8">
                   <input type="checkbox" checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length} onChange={toggleAll} className="rounded border-input" />
                 </th>
                 {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
@@ -826,7 +826,7 @@ export default function Produits() {
                   return (
                     <th
                       key={col.key}
-                      className={`px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
+                      className={`px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
                     >
                       <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
                         <button
@@ -962,21 +962,21 @@ export default function Produits() {
                 const prioFournObj = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId) : null;
                 const renderCell = (key: ColKey) => {
                   switch (key) {
-                    case 'reference':    return <td className="px-3 py-3 font-mono text-xs" title={p.reference}>{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
-                    case 'description':  return <td className="px-3 py-3 font-medium max-w-xs truncate" title={`${p.reference} — ${p.description}`}>{p.description}</td>;
-                    case 'categorie':    return <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>;
-                    case 'fournisseur':  return <td className="px-3 py-3 text-muted-foreground">{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
-                    case 'prixAchat':    return <td className="px-3 py-3 text-right">{formatMontant(p.prixAchat)}</td>;
-                    case 'coefficient':  return <td className="px-3 py-3 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
-                    case 'prixRevendeur':return <td className="px-3 py-3 text-right font-semibold">{formatMontant(p.prixRevendeur)}<span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span></td>;
-                    case 'prixHT':       return <td className="px-3 py-3 text-right text-muted-foreground">{formatMontant(p.prixHT)}<span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span></td>;
-                    case 'poids':        return <td className="px-3 py-3 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
-                    case 'consommation': return <td className="px-3 py-3 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
-                    case 'tva':          return <td className="px-3 py-3 text-right">{p.tva}%</td>;
-                    case 'stock':        return <td className={`px-3 py-3 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
-                    case 'qteVendue':    return <td className="px-3 py-3 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
+                    case 'reference':    return <td className="px-2 py-2.5 font-mono text-xs" title={p.reference}>{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
+                    case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${p.description}`}>{p.description}</td>;
+                    case 'categorie':    return <td className="px-2 py-2.5 text-muted-foreground max-w-[110px] truncate" title={p.categorie || ''}>{p.categorie || '—'}</td>;
+                    case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
+                    case 'prixAchat':    return <td className="px-2 py-2.5 text-right">{formatMontant(p.prixAchat)}</td>;
+                    case 'coefficient':  return <td className="px-2 py-2.5 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
+                    case 'prixRevendeur':return <td className="px-2 py-2.5 text-right font-semibold">{formatMontant(p.prixRevendeur)}<span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span></td>;
+                    case 'prixHT':       return <td className="px-2 py-2.5 text-right text-muted-foreground">{formatMontant(p.prixHT)}<span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span></td>;
+                    case 'poids':        return <td className="px-2 py-2.5 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
+                    case 'consommation': return <td className="px-2 py-2.5 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
+                    case 'tva':          return <td className="px-2 py-2.5 text-right">{p.tva}%</td>;
+                    case 'stock':        return <td className={`px-2 py-2.5 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
+                    case 'qteVendue':    return <td className="px-2 py-2.5 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'disponibleVente': return (
-                      <td className="px-3 py-3 text-center">
+                      <td className="px-2 py-2.5 text-center">
                         {p.disponibleVente !== false
                           ? <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span>
                           : <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}
@@ -987,15 +987,15 @@ export default function Produits() {
                 };
                 return (
                   <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; openEdit(p); }}>
-                    <td className="px-3 py-3"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
+                    <td className="px-2 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => (
                       <Fragment key={col.key}>{renderCell(col.key)}</Fragment>
                     ))}
-                    <td className="px-3 py-3">
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => duplicate(p)} className="p-1.5 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
-                        <button onClick={() => remove(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                    <td className="px-2 py-2.5">
+                      <div className="flex gap-0.5 justify-end">
+                        <button onClick={() => openEdit(p)} className="p-1 rounded-md hover:bg-muted" title="Modifier"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => duplicate(p)} className="p-1 rounded-md hover:bg-muted text-muted-foreground" title="Dupliquer"><Copy className="w-4 h-4" /></button>
+                        <button onClick={() => remove(p.id)} className="p-1 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </td>
                   </tr>
