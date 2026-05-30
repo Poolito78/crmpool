@@ -10,6 +10,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { exportToExcel } from '@/lib/exportExcel';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
+import { Fragment } from 'react';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type StockColKey = 'statut' | 'description' | 'categorie' | 'proprietaire' | 'disponibleVente' | 'stock' | 'stockMin' | 'qteReappro' | 'fournisseur' | 'valeur';
@@ -120,6 +123,7 @@ export default function Stock() {
   const [sortCol, setSortCol] = useState<StockColKey | null>('statut');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [visGlobal, setVisGlobal] = useState<Set<StockColKey>>(() => new Set(ALL_GLOBAL_COLS.map(c => c.key)));
+  const gCols = useTableColumns<StockColKey>('stock_global', ALL_GLOBAL_COLS.map(c => c.key));
   const [colMenuGlobal, setColMenuGlobal] = useState(false);
 
   function handleSort(col: StockColKey) {
@@ -326,28 +330,37 @@ export default function Stock() {
           }
         });
 
-        function SortTh({ col, label, align = 'left', className = '' }: { col: StockColKey; label: string; align?: string; className?: string }) {
+        function SortTh({ col, label, align = 'left' }: { col: StockColKey; label: string; align?: string; className?: string }) {
           const isSorted = sortCol === col;
           const SI = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
           const hasFilter = !!(colFilters[col]);
           const isOpen = openFilterCols.has(col);
+          const isDragOver = gCols.dragOverKey === col && gCols.dragKey !== col;
           return (
-            <th className={cn('px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap', className)}>
-              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '')}>
-                <button onClick={() => handleSort(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer">
+            <th {...gCols.thProps(col)} style={gCols.widthStyle(col)} className={cn('relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', gCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+              {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '', gCols.widthStyle(col) ? 'overflow-hidden' : '')}>
+                <button onClick={() => handleSort(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
                   {align === 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterCol(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                <button onClick={() => toggleFilterCol(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
                   <Filter className="w-3 h-3" />
                 </button>
               </div>
+              <ColResizeHandle {...gCols.resizeHandleProps(col)} />
             </th>
           );
         }
 
         const vg = visGlobal;
+        const GLOBAL_LABELS: Record<StockColKey, { label: string; align?: string }> = {
+          statut: { label: 'Statut' }, description: { label: 'Produit' }, categorie: { label: 'Catégorie' },
+          disponibleVente: { label: 'Dispo vente', align: 'center' }, proprietaire: { label: 'Propriétaire' },
+          stock: { label: 'Stock', align: 'right' }, stockMin: { label: 'Min.', align: 'right' },
+          qteReappro: { label: 'Réappro', align: 'right' }, fournisseur: { label: 'Fourn. optimal' }, valeur: { label: 'Valeur', align: 'right' },
+        };
         return (
           <div className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -415,47 +428,42 @@ export default function Stock() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
-                      {vg.has('statut') && <SortTh col="statut" label="Statut" />}
-                      {vg.has('description') && <SortTh col="description" label="Produit" />}
-                      {vg.has('categorie') && <SortTh col="categorie" label="Catégorie" />}
-                      {vg.has('disponibleVente') && <SortTh col="disponibleVente" label="Dispo vente" align="center" />}
-                      {vg.has('proprietaire') && <SortTh col="proprietaire" label="Propriétaire" />}
-                      {vg.has('stock') && <SortTh col="stock" label="Stock" align="right" />}
-                      {vg.has('stockMin') && <SortTh col="stockMin" label="Min." align="right" />}
-                      {vg.has('qteReappro') && <SortTh col="qteReappro" label="Réappro" align="right" />}
-                      {vg.has('fournisseur') && <SortTh col="fournisseur" label="Fourn. optimal" />}
-                      {vg.has('valeur') && <SortTh col="valeur" label="Valeur" align="right" />}
+                      {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => <SortTh key={col.key} col={col.key} label={GLOBAL_LABELS[col.key].label} align={GLOBAL_LABELS[col.key].align} />)}
                     </tr>
                     {openFilterCols.size > 0 && (
                       <tr className="border-b border-border bg-muted/20">
-                        {vg.has('statut') && <td className="px-3 py-1">{openFilterCols.has('statut') && <FilterCell value={colFilters.statut || ''} onChange={v => setFilter('statut', v)} />}</td>}
-                        {vg.has('description') && <td className="px-3 py-1">{openFilterCols.has('description') && <FilterCell value={colFilters.description || ''} onChange={v => setFilter('description', v)} />}</td>}
-                        {vg.has('categorie') && <td className="px-3 py-1">{openFilterCols.has('categorie') && <FilterCell value={colFilters.categorie || ''} onChange={v => setFilter('categorie', v)} />}</td>}
-                        {vg.has('disponibleVente') && <td className="px-3 py-1">{openFilterCols.has('disponibleVente') && <FilterCell value={colFilters.disponibleVente || ''} onChange={v => setFilter('disponibleVente', v)} align="center" />}</td>}
-                        {vg.has('proprietaire') && <td className="px-3 py-1">{openFilterCols.has('proprietaire') && <FilterCell value={colFilters.proprietaire || ''} onChange={v => setFilter('proprietaire', v)} />}</td>}
-                        {vg.has('stock') && <td className="px-3 py-1">{openFilterCols.has('stock') && <FilterCell value={colFilters.stock || ''} onChange={v => setFilter('stock', v)} align="right" />}</td>}
-                        {vg.has('stockMin') && <td className="px-3 py-1">{openFilterCols.has('stockMin') && <FilterCell value={colFilters.stockMin || ''} onChange={v => setFilter('stockMin', v)} align="right" />}</td>}
-                        {vg.has('qteReappro') && <td className="px-3 py-1">{openFilterCols.has('qteReappro') && <FilterCell value={colFilters.qteReappro || ''} onChange={v => setFilter('qteReappro', v)} align="right" />}</td>}
-                        {vg.has('fournisseur') && <td className="px-3 py-1">{openFilterCols.has('fournisseur') && <FilterCell value={colFilters.fournisseur || ''} onChange={v => setFilter('fournisseur', v)} />}</td>}
-                        {vg.has('valeur') && <td className="px-3 py-1">{openFilterCols.has('valeur') && <FilterCell value={colFilters.valeur || ''} onChange={v => setFilter('valeur', v)} align="right" />}</td>}
+                        {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => (
+                          <td key={col.key} style={gCols.widthStyle(col.key)} className="px-3 py-1">
+                            {openFilterCols.has(col.key) && <FilterCell value={colFilters[col.key] || ''} onChange={v => setFilter(col.key, v)} align={GLOBAL_LABELS[col.key].align === 'right' ? 'right' : GLOBAL_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
+                          </td>
+                        ))}
                       </tr>
                     )}
                   </thead>
                   <tbody>
-                    {sortedFiltered.map(({ p, info, low, qteReappro, proprioFourn }) => (
-                      <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/produits?highlight=${p.id}`)} title="Ouvrir la fiche produit">
-                        {vg.has('statut') && <td className="px-3 py-3">{low ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle className="w-4 h-4 text-success" />}</td>}
-                        {vg.has('description') && <td className="px-3 py-3"><p className="font-medium">{p.description}</p><p className="text-xs text-muted-foreground font-mono">{p.reference}</p></td>}
-                        {vg.has('categorie') && <td className="px-3 py-3 text-muted-foreground">{p.categorie || '—'}</td>}
-                        {vg.has('disponibleVente') && <td className="px-3 py-3 text-center">{p.disponibleVente !== false ? <span title="Disponible à la vente" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span> : <span title="Non disponible" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}</td>}
-                        {vg.has('proprietaire') && <td className="px-3 py-3">{p.proprietaire === 'fournisseur' ? <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full"><Truck className="w-3 h-3" />{proprioFourn?.societe || 'Fournisseur'}</span> : <span className="text-xs text-muted-foreground">ISOSIGN</span>}</td>}
-                        {vg.has('stock') && <td className={`px-3 py-3 text-right font-semibold ${low ? 'text-warning' : ''}`}>{p.stock} {p.unite}</td>}
-                        {vg.has('stockMin') && <td className="px-3 py-3 text-right text-muted-foreground">{p.stockMin}</td>}
-                        {vg.has('qteReappro') && <td className="px-3 py-3 text-right">{low ? <span className="text-warning font-medium">{qteReappro} {p.unite} <span className="text-xs text-muted-foreground">({formatMontant(qteReappro * (info?.prixAchat || p.prixAchat))})</span></span> : <span className="text-muted-foreground">—</span>}</td>}
-                        {vg.has('fournisseur') && <td className="px-3 py-3 text-muted-foreground">{info ? <div><span className="flex items-center gap-1">{info.isMulti && <Star className="w-3 h-3 text-primary" />}{info.fourn.societe}</span><span className="block text-xs">{formatMontant(info.prixAchat)}/{p.unite}{info.fourn.francoPort > 0 && ` · Franco ${formatMontant(info.fourn.francoPort)}`}</span>{info.isMulti && <span className="text-xs text-primary">{info.nbFournisseurs} fournisseurs</span>}</div> : '—'}</td>}
-                        {vg.has('valeur') && <td className="px-3 py-3 text-right">{formatMontant(p.stock * p.prixHT)}</td>}
-                      </tr>
-                    ))}
+                    {sortedFiltered.map(({ p, info, low, qteReappro, proprioFourn }) => {
+                      const renderG = (key: StockColKey) => {
+                        const ws = gCols.widthStyle(key);
+                        switch (key) {
+                          case 'statut': return <td style={ws} className="px-3 py-3">{low ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle className="w-4 h-4 text-success" />}</td>;
+                          case 'description': return <td style={ws} className={`px-3 py-3${ws ? ' truncate' : ''}`}><p className="font-medium truncate">{p.description}</p><p className="text-xs text-muted-foreground font-mono truncate">{p.reference}</p></td>;
+                          case 'categorie': return <td style={ws} className={`px-3 py-3 text-muted-foreground${ws ? ' truncate' : ''}`}>{p.categorie || '—'}</td>;
+                          case 'disponibleVente': return <td style={ws} className="px-3 py-3 text-center">{p.disponibleVente !== false ? <span title="Disponible à la vente" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-success/15 text-success text-xs font-bold">✓</span> : <span title="Non disponible" className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-muted text-muted-foreground text-xs">✕</span>}</td>;
+                          case 'proprietaire': return <td style={ws} className="px-3 py-3">{p.proprietaire === 'fournisseur' ? <span className="inline-flex items-center gap-1 text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full"><Truck className="w-3 h-3" />{proprioFourn?.societe || 'Fournisseur'}</span> : <span className="text-xs text-muted-foreground">ISOSIGN</span>}</td>;
+                          case 'stock': return <td style={ws} className={`px-3 py-3 text-right font-semibold ${low ? 'text-warning' : ''}`}>{p.stock} {p.unite}</td>;
+                          case 'stockMin': return <td style={ws} className="px-3 py-3 text-right text-muted-foreground">{p.stockMin}</td>;
+                          case 'qteReappro': return <td style={ws} className="px-3 py-3 text-right">{low ? <span className="text-warning font-medium">{qteReappro} {p.unite} <span className="text-xs text-muted-foreground">({formatMontant(qteReappro * (info?.prixAchat || p.prixAchat))})</span></span> : <span className="text-muted-foreground">—</span>}</td>;
+                          case 'fournisseur': return <td style={ws} className={`px-3 py-3 text-muted-foreground${ws ? ' truncate' : ''}`}>{info ? <div className={ws ? 'truncate' : ''}><span className="flex items-center gap-1">{info.isMulti && <Star className="w-3 h-3 text-primary" />}{info.fourn.societe}</span><span className="block text-xs">{formatMontant(info.prixAchat)}/{p.unite}{info.fourn.francoPort > 0 && ` · Franco ${formatMontant(info.fourn.francoPort)}`}</span>{info.isMulti && <span className="text-xs text-primary">{info.nbFournisseurs} fournisseurs</span>}</div> : '—'}</td>;
+                          case 'valeur': return <td style={ws} className="px-3 py-3 text-right">{formatMontant(p.stock * p.prixHT)}</td>;
+                          default: return <td style={ws} className="px-3 py-3" />;
+                        }
+                      };
+                      return (
+                        <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/produits?highlight=${p.id}`)} title="Ouvrir la fiche produit">
+                          {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => <Fragment key={col.key}>{renderG(col.key)}</Fragment>)}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
