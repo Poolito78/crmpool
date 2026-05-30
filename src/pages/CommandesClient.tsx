@@ -1,5 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -17,9 +19,22 @@ import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 import CommandeARDialog from '@/components/CommandeARDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
+type CCColKey = 'numero' | 'client' | 'ref' | 'date' | 'livraison' | 'echeance' | 'total' | 'statut';
+const CC_COLS: { key: CCColKey; label: string; cls: string }[] = [
+  { key: 'numero', label: 'N°', cls: 'text-left' },
+  { key: 'client', label: 'Client', cls: 'text-left' },
+  { key: 'ref', label: 'Réf. Affaire', cls: 'text-left hidden sm:table-cell' },
+  { key: 'date', label: 'Date', cls: 'text-left hidden md:table-cell' },
+  { key: 'livraison', label: 'Départ / Livraison', cls: 'text-left hidden lg:table-cell' },
+  { key: 'echeance', label: 'Échéance', cls: 'text-left hidden lg:table-cell' },
+  { key: 'total', label: 'Total HT', cls: 'text-right' },
+  { key: 'statut', label: 'Statut', cls: 'text-center' },
+];
+
 export default function CommandesClient() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const ccCols = useTableColumns<CCColKey>('commandes_client_table', CC_COLS.map(c => c.key));
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, facturesClient, updateFacturesClient } = useCRM();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
@@ -357,14 +372,16 @@ export default function CommandesClient() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">N°</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Client</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">Réf. Affaire</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Date</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Départ / Livraison</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Échéance</th>
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total HT</th>
-              <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
+              {ccCols.ordered(CC_COLS).map(col => {
+                const isDragOver = ccCols.dragOverKey === col.key && ccCols.dragKey !== col.key;
+                return (
+                  <th key={col.key} {...ccCols.thProps(col.key)} style={ccCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${ccCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                    {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                    <span className="truncate">{col.label}</span>
+                    <ColResizeHandle {...ccCols.resizeHandleProps(col.key)} />
+                  </th>
+                );
+              })}
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -376,75 +393,34 @@ export default function CommandesClient() {
               const dvLie = cmd.devisId ? devis.find(d => d.id === cmd.devisId) : undefined;
               const cfLies = cmd.devisId ? commandesFournisseur.filter(cf => cf.devisId === cmd.devisId) : [];
               const facLies = facturesClient.filter(f => f.commandeClientId === cmd.id || (cmd.devisId && f.devisId === cmd.devisId));
-              return (
-                <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="py-3 px-4">
+              const renderCC = (key: CCColKey) => {
+                const ws = ccCols.widthStyle(key);
+                const col = CC_COLS.find(c => c.key === key)!;
+                const base = `py-3 px-4 ${col.cls}`;
+                switch (key) {
+                  case 'numero': return <td style={ws} className={base}>
                     <div className="font-mono text-xs">{cmd.numero}</div>
                     {(dvLie || cfLies.length > 0 || facLies.length > 0) && (
                       <div className="flex items-center gap-1 flex-wrap mt-1">
-                        {dvLie && (
-                          <button
-                            onClick={() => navigate(`/devis?search=${encodeURIComponent(dvLie.numero)}`)}
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"
-                          >
-                            <FileText className="w-2.5 h-2.5" />{dvLie.numero}
-                          </button>
-                        )}
-                        {cfLies.map(cf => (
-                          <button
-                            key={cf.id}
-                            onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)}
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"
-                          >
-                            <ShoppingCart className="w-2.5 h-2.5" />{cf.numero}
-                          </button>
-                        ))}
-                        {facLies.map(fac => (
-                          <button
-                            key={fac.id}
-                            onClick={() => navigate(`/factures-client?search=${encodeURIComponent(fac.numero)}`)}
-                            className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"
-                          >
-                            <Receipt className="w-2.5 h-2.5" />{fac.numero}
-                          </button>
-                        ))}
+                        {dvLie && <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dvLie.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20 transition-colors"><FileText className="w-2.5 h-2.5" />{dvLie.numero}</button>}
+                        {cfLies.map(cf => <button key={cf.id} onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20 transition-colors"><ShoppingCart className="w-2.5 h-2.5" />{cf.numero}</button>)}
+                        {facLies.map(fac => <button key={fac.id} onClick={() => navigate(`/factures-client?search=${encodeURIComponent(fac.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20 transition-colors"><Receipt className="w-2.5 h-2.5" />{fac.numero}</button>)}
                       </div>
                     )}
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium">{client?.nom || '—'}</div>
-                    {client?.societe && <div className="text-xs text-muted-foreground">{client.societe}</div>}
-                  </td>
-                  <td className="py-3 px-4 hidden sm:table-cell text-muted-foreground">{cmd.referenceAffaire || '—'}</td>
-                  <td className="py-3 px-4 hidden md:table-cell text-muted-foreground">{formatDate(cmd.dateCreation)}</td>
-                  <td className="py-3 px-4 hidden lg:table-cell">
-                    {cmd.dateDepart || cmd.dateLivraisonPrevue ? (
-                      <div className="text-xs space-y-0.5">
-                        {cmd.dateDepart && <div className="text-muted-foreground">Départ: <span className="font-medium text-foreground">{formatDate(cmd.dateDepart)}</span></div>}
-                        {cmd.dateLivraisonPrevue && <div className="text-muted-foreground">Livr.: <span className="font-medium text-foreground">{formatDate(cmd.dateLivraisonPrevue)}</span></div>}
-                      </div>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="py-3 px-4 hidden lg:table-cell">
-                    {cmd.dateEcheance ? (
-                      <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
-                        {formatDate(cmd.dateEcheance)}
-                        {isOverdue && <span className="block text-[10px]">Échu</span>}
-                      </span>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="py-3 px-4 text-right font-medium">{formatMontant(cmd.totalHT)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <select
-                      value={cmd.statut}
-                      onChange={e => updateStatut(cmd.id, e.target.value as StatutCommandeClient)}
-                      className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}
-                    >
-                      {allStatuts.map(s => (
-                        <option key={s} value={s}>{STATUTS_COMMANDE_CLIENT[s].label}</option>
-                      ))}
-                    </select>
-                  </td>
+                  </td>;
+                  case 'client': return <td style={ws} className={base}><div className="font-medium truncate">{client?.nom || '—'}</div>{client?.societe && <div className="text-xs text-muted-foreground truncate">{client.societe}</div>}</td>;
+                  case 'ref': return <td style={ws} className={`${base} text-muted-foreground`}>{cmd.referenceAffaire || '—'}</td>;
+                  case 'date': return <td style={ws} className={`${base} text-muted-foreground`}>{formatDate(cmd.dateCreation)}</td>;
+                  case 'livraison': return <td style={ws} className={base}>{cmd.dateDepart || cmd.dateLivraisonPrevue ? <div className="text-xs space-y-0.5">{cmd.dateDepart && <div className="text-muted-foreground">Départ: <span className="font-medium text-foreground">{formatDate(cmd.dateDepart)}</span></div>}{cmd.dateLivraisonPrevue && <div className="text-muted-foreground">Livr.: <span className="font-medium text-foreground">{formatDate(cmd.dateLivraisonPrevue)}</span></div>}</div> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                  case 'echeance': return <td style={ws} className={base}>{cmd.dateEcheance ? <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>{formatDate(cmd.dateEcheance)}{isOverdue && <span className="block text-[10px]">Échu</span>}</span> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                  case 'total': return <td style={ws} className={`${base} font-medium`}>{formatMontant(cmd.totalHT)}</td>;
+                  case 'statut': return <td style={ws} className={base}><select value={cmd.statut} onChange={e => updateStatut(cmd.id, e.target.value as StatutCommandeClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_COMMANDE_CLIENT[s].label}</option>)}</select></td>;
+                  default: return <td style={ws} className={base} />;
+                }
+              };
+              return (
+                <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                  {ccCols.ordered(CC_COLS).map(col => <Fragment key={col.key}>{renderCC(col.key)}</Fragment>)}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1 flex-wrap">
                       <button onClick={() => openCmdFournisseur(cmd)} className="p-1.5 rounded hover:bg-muted" title="Cmd Fournisseur">
