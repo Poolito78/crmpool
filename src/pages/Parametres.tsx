@@ -1,6 +1,13 @@
-import { LayoutDashboard, Eye, EyeOff, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { useEntrepots, type Entrepot } from '@/lib/store';
 import {
   DASHBOARD_TILES,
   type DashboardTileDef,
@@ -12,19 +19,152 @@ import {
 
 export default function Parametres() {
   const hidden = useHiddenTiles();
+  const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
 
-  // Groupes dans l'ordre d'apparition
+  // ── État dialog entrepôt ────────────────────────────────────────────────────
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingEntrepot, setEditingEntrepot] = useState<Entrepot | null>(null);
+  const [form, setForm] = useState({ nom: '', adresse: '', ville: '', codePostal: '', notes: '', estDefaut: false });
+  const [saving, setSaving] = useState(false);
+
+  function openNew() {
+    setEditingEntrepot(null);
+    setForm({ nom: '', adresse: '', ville: '', codePostal: '', notes: '', estDefaut: false });
+    setDialogOpen(true);
+  }
+
+  function openEdit(e: Entrepot) {
+    setEditingEntrepot(e);
+    setForm({ nom: e.nom, adresse: e.adresse || '', ville: e.ville || '', codePostal: e.codePostal || '', notes: e.notes || '', estDefaut: e.estDefaut });
+    setDialogOpen(true);
+  }
+
+  async function handleSave() {
+    if (!form.nom.trim()) { toast.error('Le nom est requis'); return; }
+    setSaving(true);
+    if (editingEntrepot) {
+      const err = await updateEntrepot({
+        ...editingEntrepot, ...form,
+        adresse: form.adresse || undefined, ville: form.ville || undefined,
+        codePostal: form.codePostal || undefined, notes: form.notes || undefined,
+      });
+      if (err) { toast.error('Erreur : ' + err.message); setSaving(false); return; }
+      toast.success('Entrepôt modifié');
+    } else {
+      const res = await addEntrepot({
+        ...form,
+        adresse: form.adresse || undefined, ville: form.ville || undefined,
+        codePostal: form.codePostal || undefined, notes: form.notes || undefined,
+      });
+      if (!res) { toast.error('Erreur lors de la création'); setSaving(false); return; }
+      toast.success('Entrepôt créé');
+    }
+    setSaving(false);
+    setDialogOpen(false);
+  }
+
+  async function handleDelete(e: Entrepot) {
+    if (!confirm(`Supprimer l'entrepôt "${e.nom}" ?`)) return;
+    const err = await deleteEntrepot(e.id);
+    if (err) { toast.error('Erreur : ' + err.message); return; }
+    toast.success('Entrepôt supprimé');
+  }
+
+  // ── Dashboard ───────────────────────────────────────────────────────────────
   const groups = DASHBOARD_TILES.reduce<Record<string, DashboardTileDef[]>>((acc, t) => {
     (acc[t.group] ||= []).push(t);
     return acc;
   }, {});
   const groupOrder = ['Indicateurs', 'Alertes', 'Encours fin de mois', 'Panneaux'];
-
   const visibleCount = DASHBOARD_TILES.length - hidden.size;
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
-      {/* En-tête section Tableau de bord */}
+
+      {/* ══ Section Entrepôts ════════════════════════════════════════════════ */}
+      <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+              <Warehouse className="w-5 h-5 text-primary" />
+              Entrepôts de stockage
+            </h2>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Gérez vos entrepôts pour répartir et suivre vos stocks par emplacement.
+            </p>
+          </div>
+          <Button size="sm" onClick={openNew}>
+            <Plus className="w-4 h-4 mr-1.5" /> Nouvel entrepôt
+          </Button>
+        </div>
+
+        {loadingE ? (
+          <div className="flex justify-center py-8">
+            <div className="animate-spin w-6 h-6 border-4 border-primary border-t-transparent rounded-full" />
+          </div>
+        ) : entrepots.length === 0 ? (
+          <div className="border border-dashed border-border rounded-lg p-8 text-center">
+            <Warehouse className="w-9 h-9 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Aucun entrepôt configuré.</p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={openNew}>
+              <Plus className="w-4 h-4 mr-1.5" /> Créer le premier entrepôt
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {entrepots.map(e => (
+              <div
+                key={e.id}
+                className="flex items-center gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3 hover:bg-muted/40 transition-colors"
+              >
+                {/* Icône */}
+                <Warehouse className="w-4 h-4 text-primary shrink-0" />
+
+                {/* Infos */}
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm flex items-center gap-2">
+                    {e.nom}
+                    {e.estDefaut && (
+                      <span className="inline-flex items-center gap-0.5 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full">
+                        <Star className="w-2.5 h-2.5" /> Défaut
+                      </span>
+                    )}
+                  </p>
+                  {(e.ville || e.adresse) && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3 shrink-0" />
+                      {[e.adresse, e.codePostal, e.ville].filter(Boolean).join(' ')}
+                    </p>
+                  )}
+                  {e.notes && (
+                    <p className="text-xs text-muted-foreground/70 mt-0.5 italic truncate">{e.notes}</p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => openEdit(e)}
+                    title="Modifier"
+                    className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDelete(e)}
+                    title="Supprimer"
+                    className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ══ Section Tableau de bord ══════════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5">
         <div className="flex items-center justify-between gap-3 mb-1">
           <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -76,6 +216,90 @@ export default function Parametres() {
           </div>
         </div>
       ))}
+
+      {/* ══ Dialog créer / modifier entrepôt ════════════════════════════════ */}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEntrepot ? 'Modifier l\'entrepôt' : 'Nouvel entrepôt'}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div>
+              <Label>Nom *</Label>
+              <Input
+                value={form.nom}
+                onChange={e => setForm(p => ({ ...p, nom: e.target.value }))}
+                placeholder="Ex : Entrepôt principal"
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
+              />
+            </div>
+            <div>
+              <Label>Adresse</Label>
+              <Input
+                value={form.adresse}
+                onChange={e => setForm(p => ({ ...p, adresse: e.target.value }))}
+                placeholder="Rue, numéro…"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <div className="col-span-2">
+                <Label>Ville</Label>
+                <Input
+                  value={form.ville}
+                  onChange={e => setForm(p => ({ ...p, ville: e.target.value }))}
+                />
+              </div>
+              <div>
+                <Label>Code postal</Label>
+                <Input
+                  value={form.codePostal}
+                  onChange={e => setForm(p => ({ ...p, codePostal: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Notes</Label>
+              <Input
+                value={form.notes}
+                onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                placeholder="Informations complémentaires…"
+              />
+            </div>
+            <label className={cn('flex items-center gap-2.5 cursor-pointer select-none rounded-lg px-3 py-2.5 border transition-colors', form.estDefaut ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/50')}>
+              <input
+                type="checkbox"
+                checked={form.estDefaut}
+                onChange={e => setForm(p => ({ ...p, estDefaut: e.target.checked }))}
+                className="rounded accent-primary"
+              />
+              <span className="text-sm">
+                <span className="font-medium">Entrepôt par défaut</span>
+                <span className="block text-xs text-muted-foreground">Sélectionné automatiquement dans Stock</span>
+              </span>
+            </label>
+          </div>
+          <div className="flex justify-between gap-2 pt-2">
+            {editingEntrepot && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/5"
+                onClick={() => { handleDelete(editingEntrepot); setDialogOpen(false); }}
+              >
+                <Trash2 className="w-3.5 h-3.5 mr-1.5" /> Supprimer
+              </Button>
+            )}
+            <div className={cn('flex gap-2', !editingEntrepot && 'ml-auto')}>
+              <Button variant="outline" onClick={() => setDialogOpen(false)} disabled={saving}>Annuler</Button>
+              <Button onClick={handleSave} disabled={saving}>
+                {saving ? 'Enregistrement…' : editingEntrepot ? 'Modifier' : 'Créer'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
