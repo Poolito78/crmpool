@@ -72,7 +72,7 @@ export default function Produits() {
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
-  const [showFilters, setShowFilters] = useState(false);
+  const [openFilterCols, setOpenFilterCols] = useState<Set<ColKey>>(new Set());
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
     try {
       const s = localStorage.getItem('produits_visible_cols');
@@ -146,6 +146,14 @@ export default function Produits() {
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(key); setSortDir('asc'); }
+  }
+
+  function toggleFilterCol(col: ColKey) {
+    setOpenFilterCols(prev => {
+      const n = new Set(prev);
+      n.has(col) ? n.delete(col) : n.add(col);
+      return n;
+    });
   }
 
   // Auto-open product from query param (e.g. from devis)
@@ -782,10 +790,11 @@ export default function Produits() {
               <Trash2 className="w-4 h-4 mr-2" /> Tout sélectionner
             </Button>
           )}
-          <Button variant={showFilters ? "secondary" : "outline"} size="sm" onClick={() => { setShowFilters(!showFilters); if (showFilters) setColumnFilters({}); }}>
-            <Filter className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Filtres</span>
-          </Button>
+          {Object.values(columnFilters).some(v => v) && (
+            <Button variant="ghost" size="sm" onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }}>
+              <X className="w-4 h-4 mr-1" /> Effacer
+            </Button>
+          )}
           {/* Sélecteur de colonnes — masqué sur mobile */}
           <div className="relative hidden sm:block" ref={colChooserRef}>
             <Button variant="outline" size="sm" onClick={() => setColChooserOpen(v => !v)}>
@@ -843,26 +852,40 @@ export default function Produits() {
                 {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
                   const isSorted = sortCol === col.key;
                   const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                  const hasFilter = !!(columnFilters[col.key]);
+                  const isFilterOpen = openFilterCols.has(col.key);
                   return (
                     <th
                       key={col.key}
-                      className={`px-3 py-3 font-medium text-muted-foreground select-none cursor-pointer hover:text-foreground whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
-                      onClick={() => handleSort(col.key)}
+                      className={`px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap ${col.align === 'right' ? 'text-right' : 'text-left'}`}
                     >
-                      <div className={`flex items-center gap-1 ${col.align === 'right' ? 'justify-end' : ''}`}>
-                        {col.align === 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
-                        <span>{col.label}</span>
-                        {col.align === 'left' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                      <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
+                        <button
+                          className="flex items-center gap-1 hover:text-foreground cursor-pointer"
+                          onClick={() => handleSort(col.key)}
+                        >
+                          {col.align === 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                          <span>{col.label}</span>
+                          {col.align !== 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                        </button>
+                        <button
+                          onClick={() => toggleFilterCol(col.key)}
+                          title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
+                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </button>
                       </div>
                     </th>
                   );
                 })}
                 <th className="px-3 py-3"></th>
               </tr>
-              {showFilters && (
-                <tr className="border-b border-border bg-muted/30">
+              {openFilterCols.size > 0 && (
+                <tr className="border-b border-border bg-muted/20">
                   <th className="px-3 py-1"></th>
                   {COLUMNS.filter(c => visibleCols.has(c.key)).map(col => {
+                    if (!openFilterCols.has(col.key)) return <th key={col.key} className="px-3 py-1" />;
                     const fVal = columnFilters[col.key] || '';
                     const isNV = fVal === '!empty';
                     return (
@@ -880,25 +903,19 @@ export default function Produits() {
                               placeholder="Filtrer..."
                               value={fVal}
                               onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
-                              className={`h-7 text-xs flex-1 min-w-0 ${col.align === 'right' ? 'text-right' : ''}`}
+                              className={`h-6 text-xs flex-1 min-w-0 ${col.align === 'right' ? 'text-right' : ''}`}
                             />
                             <button
                               onClick={() => setColumnFilters(prev => ({ ...prev, [col.key]: '!empty' }))}
-                              title="Filtre non vide"
-                              className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 py-0.5 rounded leading-none"
+                              title="Non vide"
+                              className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 rounded leading-none"
                             >≠∅</button>
                           </div>
                         )}
                       </th>
                     );
                   })}
-                  <th className="px-3 py-1">
-                    {Object.values(columnFilters).some(v => v) && (
-                      <button onClick={() => setColumnFilters({})} className="p-1 rounded hover:bg-muted" title="Effacer les filtres">
-                        <X className="w-3.5 h-3.5 text-muted-foreground" />
-                      </button>
-                    )}
-                  </th>
+                  <th className="px-3 py-1" />
                 </tr>
               )}
             </thead>
