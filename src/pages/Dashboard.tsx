@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
+import { useHiddenTiles } from '@/lib/dashboardSettings';
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -17,6 +18,7 @@ export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
+  const hidden = useHiddenTiles();
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -140,16 +142,16 @@ export default function Dashboard() {
   const actionsAujourdhui = actionsUrgentes.filter(a => a.datePlanifiee === today);
 
   const stats = [
-    { label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
-    { label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
-    { label: 'Fournisseurs', value: fournisseurs.length, icon: Truck, color: 'text-info', bg: 'bg-info/10', link: '/fournisseurs' },
-    { label: 'Devis', value: devis.length, icon: FileText, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
-    { label: 'CA Accepté HT', value: formatMontant(caTotal), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
-    { label: 'Marge annuelle', value: formatMontant(margeAnnuelle), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10', link: '/devis' },
-    { label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
-    { label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
-    { label: 'Concurrents suivis', value: concurrentsList.length, icon: Eye, color: 'text-rose-500', bg: 'bg-rose-500/10', link: '/veille-concurrence' },
-  ];
+    { id: 'stat-clients', label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
+    { id: 'stat-produits', label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
+    { id: 'stat-fournisseurs', label: 'Fournisseurs', value: fournisseurs.length, icon: Truck, color: 'text-info', bg: 'bg-info/10', link: '/fournisseurs' },
+    { id: 'stat-devis', label: 'Devis', value: devis.length, icon: FileText, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
+    { id: 'stat-ca', label: 'CA Accepté HT', value: formatMontant(caTotal), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
+    { id: 'stat-marge-annuelle', label: 'Marge annuelle', value: formatMontant(margeAnnuelle), icon: TrendingUp, color: 'text-primary', bg: 'bg-primary/10', link: '/devis' },
+    { id: 'stat-marge-mensuelle', label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
+    { id: 'stat-stock-bas', label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
+    { id: 'stat-concurrents', label: 'Concurrents suivis', value: concurrentsList.length, icon: Eye, color: 'text-rose-500', bg: 'bg-rose-500/10', link: '/veille-concurrence' },
+  ].filter(s => !hidden.has(s.id as any));
 
   const statutColors: Record<string, string> = {
     brouillon: 'bg-muted text-muted-foreground',
@@ -182,11 +184,11 @@ export default function Dashboard() {
       )}
 
       {/* ── Alertes prioritaires ── */}
-      {(commandesATraiter.length > 0 || actionsUrgentes.length > 0) && (
+      {((commandesATraiter.length > 0 && !hidden.has('alerte-commandes')) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* Commandes client à traiter */}
-          {commandesATraiter.length > 0 && (
+          {commandesATraiter.length > 0 && !hidden.has('alerte-commandes') && (
             <Link to="/commandes-client" className="block rounded-xl border-2 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 p-4 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
@@ -220,7 +222,7 @@ export default function Dashboard() {
           )}
 
           {/* CRM : relances */}
-          {actionsUrgentes.length > 0 && (
+          {actionsUrgentes.length > 0 && !hidden.has('alerte-relances') && (
             <Link to="/crm" className="block rounded-xl border-2 border-violet-300 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-4 hover:bg-violet-100 dark:hover:bg-violet-900/30 transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 rounded-lg bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center shrink-0">
@@ -294,10 +296,10 @@ export default function Dashboard() {
       />
 
       {/* ── Encours fin de mois ── */}
-      {(totalFournFDM > 0 || totalClientFDM > 0) && (
+      {((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Fournisseurs FDM */}
-          {totalFournFDM > 0 && (
+          {totalFournFDM > 0 && !hidden.has('encours-fourn-fdm') && (
             <Link to="/commandes" className="bg-card rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
@@ -317,7 +319,7 @@ export default function Dashboard() {
           )}
 
           {/* Clients FDM */}
-          {totalClientFDM > 0 && (
+          {totalClientFDM > 0 && !hidden.has('encours-client-fdm') && (
             <Link to="/commandes-client" className="bg-card rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-success/10 flex items-center justify-center shrink-0">
@@ -340,7 +342,7 @@ export default function Dashboard() {
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}
-        {echeancesFournisseurs.length > 0 && (
+        {echeancesFournisseurs.length > 0 && !hidden.has('panel-echeances-fourn') && (
           <div className="bg-card rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -383,6 +385,7 @@ export default function Dashboard() {
         )}
 
         {/* Recent Quotes */}
+        {!hidden.has('panel-derniers-devis') && (
         <div className="bg-card rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg">Derniers devis</h2>
@@ -413,8 +416,10 @@ export default function Dashboard() {
             {devis.length === 0 && <p className="text-sm text-muted-foreground">Aucun devis</p>}
           </div>
         </div>
+        )}
 
         {/* Low Stock Alerts */}
+        {!hidden.has('panel-alertes-stock') && (
         <div className="bg-card rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg">Alertes stock</h2>
@@ -436,8 +441,10 @@ export default function Dashboard() {
             {produitsStockBas.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">✅ Stock OK</p>}
           </div>
         </div>
+        )}
 
         {/* Veille Concurrence */}
+        {!hidden.has('panel-veille') && (
         <div className="bg-card rounded-xl border border-rose-200 dark:border-rose-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -484,6 +491,7 @@ export default function Dashboard() {
             </>
           )}
         </div>
+        )}
       </div>
     </div>
   );
