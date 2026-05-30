@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, SlidersHorizontal } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +25,24 @@ import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import VarianteSelect from '@/components/VarianteSelect';
+
+// ── Colonnes du tableau liste devis ───────────────────────────────────────────
+const DEVIS_TABLE_COLS_DEF = [
+  { key: 'numero',     label: 'Numéro',       align: 'left'  },
+  { key: 'statut',     label: 'Statut',       align: 'left'  },
+  { key: 'client',     label: 'Client',       align: 'left'  },
+  { key: 'refAffaire', label: 'Réf. affaire', align: 'left'  },
+  { key: 'systeme',    label: 'Système',      align: 'left'  },
+  { key: 'date',       label: 'Date',         align: 'left'  },
+  { key: 'validite',   label: 'Validité',     align: 'left'  },
+  { key: 'totalHT',    label: 'Total HT',     align: 'right' },
+  { key: 'marge',      label: 'Marge',        align: 'right' },
+  { key: 'port',       label: 'Port HT',      align: 'right' },
+] as const;
+type DevisTableColKey = typeof DEVIS_TABLE_COLS_DEF[number]['key'];
+const DEFAULT_DEVIS_TABLE_COLS: DevisTableColKey[] = ['numero', 'statut', 'client', 'refAffaire', 'date', 'totalHT'];
+export { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS };
+export type { DevisTableColKey };
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -88,6 +106,59 @@ export default function Devis() {
   const kitPickerRef = useRef<HTMLDivElement>(null);
   const [colChooserOpen, setColChooserOpen] = useState(false);
   const colChooserRef = useRef<HTMLDivElement>(null);
+
+  // ── Vue tableau devis ───────────────────────────────────────────────────────
+  const [devisView, setDevisView] = useState<'liste' | 'tableau'>(() => {
+    try { return (localStorage.getItem('devis_view') as 'liste' | 'tableau') || 'liste'; } catch { return 'liste'; }
+  });
+  useEffect(() => { try { localStorage.setItem('devis_view', devisView); } catch {} }, [devisView]);
+  const [openFilterColsD, setOpenFilterColsD] = useState<Set<DevisTableColKey>>(new Set());
+  const [colFiltersD, setColFiltersD] = useState<Partial<Record<DevisTableColKey, string>>>({});
+  const [visDevisTableCols, setVisDevisTableCols] = useState<Set<DevisTableColKey>>(() => {
+    try {
+      const s = localStorage.getItem('devis_table_cols');
+      if (s) { const p = JSON.parse(s) as DevisTableColKey[]; if (Array.isArray(p) && p.length > 0) return new Set(p); }
+    } catch {}
+    return new Set(DEFAULT_DEVIS_TABLE_COLS);
+  });
+  useEffect(() => { try { localStorage.setItem('devis_table_cols', JSON.stringify([...visDevisTableCols])); } catch {} }, [visDevisTableCols]);
+  const [colMenuDevis, setColMenuDevis] = useState(false);
+  const colMenuDevisRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!colMenuDevis) return;
+    const h = (e: MouseEvent) => { if (colMenuDevisRef.current && !colMenuDevisRef.current.contains(e.target as Node)) setColMenuDevis(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [colMenuDevis]);
+
+  function toggleFilterColD(col: DevisTableColKey) {
+    setOpenFilterColsD(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+  }
+  function setFilterD(col: DevisTableColKey, val: string) { setColFiltersD(prev => ({ ...prev, [col]: val })); }
+  function hasActiveFiltersD() { return Object.values(colFiltersD).some(v => v); }
+
+  // Tableau trié+filtré (colonne sort → remplace le sortBy select en mode tableau)
+  const sortedTable = (() => {
+    const NON_VIDE = '!empty';
+    let arr = sorted;
+    if (hasActiveFiltersD()) {
+      arr = arr.filter(d => {
+        const cl = clients.find(c => c.id === d.clientId);
+        const fNum = colFiltersD.numero || '';
+        if (fNum) { const nv = fNum === NON_VIDE; if (nv ? !d.numero?.trim() : !d.numero?.toLowerCase().includes(fNum.toLowerCase())) return false; }
+        const fSt = colFiltersD.statut || '';
+        if (fSt) { const nv = fSt === NON_VIDE; if (nv ? !d.statut : !d.statut.toLowerCase().includes(fSt.toLowerCase())) return false; }
+        const fCl = colFiltersD.client || '';
+        if (fCl) { const nv = fCl === NON_VIDE; const cn = (cl?.societe || cl?.nom || '').toLowerCase(); if (nv ? !cn : !cn.includes(fCl.toLowerCase())) return false; }
+        const fRef = colFiltersD.refAffaire || '';
+        if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
+        const fSys = colFiltersD.systeme || '';
+        if (fSys) { const nv = fSys === NON_VIDE; if (nv ? !d.systeme?.trim() : !(d.systeme || '').toLowerCase().includes(fSys.toLowerCase())) return false; }
+        return true;
+      });
+    }
+    return arr;
+  })();
   const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => {
     try {
       const s = localStorage.getItem('devis_ligne_cols');
@@ -220,6 +291,16 @@ export default function Devis() {
       case 'numero_desc': return b.numero.localeCompare(a.numero);
       case 'client_asc':  return (clientA?.societe || clientA?.nom || '').localeCompare(clientB?.societe || clientB?.nom || '');
       case 'client_desc': return (clientB?.societe || clientB?.nom || '').localeCompare(clientA?.societe || clientA?.nom || '');
+      case 'statut_asc':  return a.statut.localeCompare(b.statut);
+      case 'statut_desc': return b.statut.localeCompare(a.statut);
+      case 'refAffaire_asc':  return (a.referenceAffaire || '').localeCompare(b.referenceAffaire || '');
+      case 'refAffaire_desc': return (b.referenceAffaire || '').localeCompare(a.referenceAffaire || '');
+      case 'systeme_asc':  return (a.systeme || '').localeCompare(b.systeme || '');
+      case 'systeme_desc': return (b.systeme || '').localeCompare(a.systeme || '');
+      case 'validite_asc':  return a.dateValidite.localeCompare(b.dateValidite);
+      case 'validite_desc': return b.dateValidite.localeCompare(a.dateValidite);
+      case 'port_asc':  return (a.fraisPortHT || 0) - (b.fraisPortHT || 0);
+      case 'port_desc': return (b.fraisPortHT || 0) - (a.fraisPortHT || 0);
       default: return 0;
     }
   });
@@ -971,7 +1052,30 @@ export default function Devis() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
           </div>
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end">
+          <div className="flex gap-2 shrink-0 flex-wrap justify-end items-center">
+            {/* Vue liste / tableau */}
+            <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+              <button onClick={() => setDevisView('liste')} title="Vue liste (cartes)" className={`px-2.5 py-1.5 transition-colors ${devisView === 'liste' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-4 h-4" /></button>
+              <button onClick={() => setDevisView('tableau')} title="Vue tableau (colonnes)" className={`px-2.5 py-1.5 border-l border-border transition-colors ${devisView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-4 h-4" /></button>
+            </div>
+            {devisView === 'tableau' && (
+              <div className="relative shrink-0" ref={colMenuDevisRef}>
+                <Button variant="outline" size="sm" onClick={() => setColMenuDevis(o => !o)}>
+                  <SlidersHorizontal className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Colonnes</span>
+                  {visDevisTableCols.size < DEVIS_TABLE_COLS_DEF.length && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">{visDevisTableCols.size}</span>}
+                </Button>
+                {colMenuDevis && (
+                  <div className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-xl shadow-lg py-1 min-w-44">
+                    {DEVIS_TABLE_COLS_DEF.map(c => (
+                      <label key={c.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 cursor-pointer text-sm select-none">
+                        <input type="checkbox" checked={visDevisTableCols.has(c.key)} onChange={() => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })} className="rounded accent-primary w-3.5 h-3.5" />
+                        {c.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')} className="hidden sm:flex"><Download className="w-4 h-4 mr-2" /> Exporter</Button>
             <Button variant="outline" onClick={() => setEmailAnalyzerOpen(true)} className="hidden sm:flex shrink-0"><Mail className="w-4 h-4 mr-2" /> Analyser un mail</Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
@@ -1051,8 +1155,163 @@ export default function Devis() {
         </div>
       </div>
 
-      {/* List */}
-      <div className="space-y-3">
+      {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
+      {devisView === 'tableau' && (
+        <div className="bg-card rounded-xl border border-border overflow-hidden">
+          {(hasActiveFiltersD()) && (
+            <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+              {Object.entries(colFiltersD).filter(([, v]) => v).map(([k, v]) => (
+                <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {DEVIS_TABLE_COLS_DEF.find(c => c.key === k)?.label} : {v}
+                  <button onClick={() => setFilterD(k as DevisTableColKey, '')}><XIcon className="w-3 h-3" /></button>
+                </span>
+              ))}
+              <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
+            </div>
+          )}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50">
+                  {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
+                    const sortKey = col.key === 'totalHT' ? 'total' : col.key === 'date' ? 'date' : col.key === 'validite' ? 'validite' : col.key === 'marge' ? 'marge' : col.key === 'port' ? 'port' : col.key === 'numero' ? 'numero' : col.key === 'client' ? 'client' : col.key;
+                    const isAsc = sortBy === `${sortKey}_asc`;
+                    const isDesc = sortBy === `${sortKey}_desc`;
+                    const isSorted = isAsc || isDesc;
+                    const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme'].includes(col.key);
+                    const hasFilter = !!(colFiltersD[col.key]);
+                    const isFilterOpen = openFilterColsD.has(col.key);
+                    return (
+                      <th key={col.key} className="px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap">
+                        <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
+                          <button onClick={() => { const asc = `${sortKey}_asc`; const desc = `${sortKey}_desc`; setSortBy(isAsc ? desc : asc); }} className="flex items-center gap-1 hover:text-foreground cursor-pointer">
+                            {col.align === 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                            <span>{col.label}</span>
+                            {col.align !== 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
+                          </button>
+                          {isFilterable && (
+                            <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
+                              <Filter className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      </th>
+                    );
+                  })}
+                  <th className="px-3 py-2 w-8"></th>
+                </tr>
+                {openFilterColsD.size > 0 && (
+                  <tr className="border-b border-border bg-muted/20">
+                    {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
+                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme'].includes(col.key);
+                      if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
+                      const fVal = colFiltersD[col.key] || '';
+                      const isNV = fVal === '!empty';
+                      return (
+                        <td key={col.key} className="px-3 py-1">
+                          {isNV ? (
+                            <button onClick={() => setFilterD(col.key, '')} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap">≠ vide <XIcon className="w-3 h-3" /></button>
+                          ) : (
+                            <div className="flex items-center gap-0.5">
+                              <input placeholder="Filtrer..." value={fVal} onChange={e => setFilterD(col.key, e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />
+                              <button onClick={() => setFilterD(col.key, '!empty')} title="Non vide" className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 rounded leading-none">≠∅</button>
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="px-3 py-1" />
+                  </tr>
+                )}
+              </thead>
+              <tbody>
+                {sortedTable.map(d => {
+                  const client = clients.find(c => c.id === d.clientId);
+                  const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
+                  const totalAchat = d.lignes.reduce((acc, l) => {
+                    if (l.type && l.type !== 'ligne') return acc;
+                    if (!l.produitId) return acc + (l.prixAchatLigne ?? 0) * l.quantite;
+                    const prod = produits.find(p => p.id === l.produitId);
+                    if (!prod) return acc;
+                    return acc + getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+                  }, 0);
+                  const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
+                  const margeD = totalHTD > 0 ? ((totalHTD - totalAchat) / totalHTD * 100) : 0;
+                  const vs = visDevisTableCols;
+                  return (
+                    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
+                      {vs.has('numero') && (
+                        <td className="px-3 py-2.5">
+                          <p className="font-semibold text-sm">{d.numero}</p>
+                          {d.referenceAffaire && !vs.has('refAffaire') && <p className="text-xs text-muted-foreground">{d.referenceAffaire}</p>}
+                        </td>
+                      )}
+                      {vs.has('statut') && (
+                        <td className="px-3 py-2.5">
+                          <select
+                            value={d.statut}
+                            onClick={e => e.stopPropagation()}
+                            onChange={e => { const newStatut = e.target.value as DevisType['statut']; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: newStatut } : dv)); }}
+                            className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}
+                          >
+                            <option value="brouillon">brouillon</option>
+                            <option value="envoyé">envoyé</option>
+                            <option value="accepté">accepté</option>
+                            <option value="refusé">refusé</option>
+                            <option value="expiré">expiré</option>
+                            <option value="archivé">archivé</option>
+                          </select>
+                        </td>
+                      )}
+                      {vs.has('client') && (
+                        <td className="px-3 py-2.5">
+                          <p className="text-sm font-medium truncate max-w-[160px]">{client?.societe || client?.nom || '—'}</p>
+                        </td>
+                      )}
+                      {vs.has('refAffaire') && (
+                        <td className="px-3 py-2.5 text-muted-foreground text-xs">{d.referenceAffaire || '—'}</td>
+                      )}
+                      {vs.has('systeme') && (
+                        <td className="px-3 py-2.5 text-muted-foreground text-xs">{d.systeme || '—'}</td>
+                      )}
+                      {vs.has('date') && (
+                        <td className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>
+                      )}
+                      {vs.has('validite') && (
+                        <td className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateValidite)}</td>
+                      )}
+                      {vs.has('totalHT') && (
+                        <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>
+                      )}
+                      {vs.has('marge') && (
+                        <td className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>
+                          {totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}
+                        </td>
+                      )}
+                      {vs.has('port') && (
+                        <td className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>
+                      )}
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-0.5 justify-end">
+                          <button onClick={() => setPreviewDevis(d)} title="Aperçu" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Eye className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => { openEdit(d); }} title="Modifier" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {sortedTable.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucun devis</p>}
+          {sortedTable.length > 0 && <p className="px-4 py-2 text-xs text-muted-foreground border-t border-border">{sortedTable.length} devis</p>}
+        </div>
+      )}
+
+      {/* ══ Vue Liste (cartes) ════════════════════════════════════════════════ */}
+      {devisView === 'liste' && <div className="space-y-3">
         {sorted.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
@@ -1225,7 +1484,7 @@ export default function Devis() {
           );
         })}
         {sorted.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
-      </div>
+      </div>}
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {

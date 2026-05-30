@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEntrepots, type Entrepot } from '@/lib/store';
+import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/pages/Devis';
 import {
   DASHBOARD_TILES,
   type DashboardTileDef,
@@ -20,6 +21,35 @@ import {
 export default function Parametres() {
   const hidden = useHiddenTiles();
   const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
+
+  // ── Paramètres Devis ─────────────────────────────────────────────────────────
+  const [devisView, setDevisViewState] = useState<'liste' | 'tableau'>(() => {
+    try { return (localStorage.getItem('devis_view') as 'liste' | 'tableau') || 'liste'; } catch { return 'liste'; }
+  });
+  function setDevisView(v: 'liste' | 'tableau') {
+    setDevisViewState(v);
+    try { localStorage.setItem('devis_view', v); } catch {}
+  }
+  const [visDevisTableCols, setVisDevisTableColsState] = useState<Set<DevisTableColKey>>(() => {
+    try {
+      const s = localStorage.getItem('devis_table_cols');
+      if (s) { const p = JSON.parse(s) as DevisTableColKey[]; if (Array.isArray(p) && p.length > 0) return new Set(p); }
+    } catch {}
+    return new Set(DEFAULT_DEVIS_TABLE_COLS);
+  });
+  function toggleDevisTableCol(k: DevisTableColKey) {
+    setVisDevisTableColsState(prev => {
+      const n = new Set(prev);
+      n.has(k) ? n.delete(k) : n.add(k);
+      try { localStorage.setItem('devis_table_cols', JSON.stringify([...n])); } catch {}
+      return n;
+    });
+  }
+  function resetDevisTableCols() {
+    const s = new Set(DEFAULT_DEVIS_TABLE_COLS);
+    setVisDevisTableColsState(s);
+    try { localStorage.setItem('devis_table_cols', JSON.stringify([...s])); } catch {}
+  }
 
   // ── État dialog entrepôt ────────────────────────────────────────────────────
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -162,6 +192,56 @@ export default function Parametres() {
             ))}
           </div>
         )}
+      </div>
+
+      {/* ══ Section Devis ════════════════════════════════════════════════════ */}
+      <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+        <div>
+          <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+            <FileText className="w-5 h-5 text-primary" /> Devis
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">Vue par défaut et colonnes visibles en mode tableau.</p>
+        </div>
+
+        {/* Vue par défaut */}
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Vue par défaut</p>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setDevisView('liste')}
+              className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all', devisView === 'liste' ? 'border-primary bg-primary/5 text-foreground' : 'border-border text-muted-foreground hover:border-primary/50')}
+            >
+              <LayoutList className="w-4 h-4" /> Liste (cartes)
+            </button>
+            <button
+              onClick={() => setDevisView('tableau')}
+              className={cn('flex items-center gap-2 px-4 py-2.5 rounded-lg border text-sm font-medium transition-all', devisView === 'tableau' ? 'border-primary bg-primary/5 text-foreground' : 'border-border text-muted-foreground hover:border-primary/50')}
+            >
+              <Table2 className="w-4 h-4" /> Tableau (colonnes)
+            </button>
+          </div>
+        </div>
+
+        {/* Colonnes du tableau */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Colonnes du tableau</p>
+            <Button variant="ghost" size="sm" className="text-xs h-7" onClick={resetDevisTableCols}>
+              <RotateCcw className="w-3 h-3 mr-1" /> Réinitialiser
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+            {DEVIS_TABLE_COLS_DEF.map(col => {
+              const visible = visDevisTableCols.has(col.key);
+              return (
+                <label key={col.key} htmlFor={`dc-${col.key}`} className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
+                  <Switch id={`dc-${col.key}`} checked={visible} onCheckedChange={() => toggleDevisTableCol(col.key)} />
+                  <span className={`text-sm ${visible ? '' : 'text-muted-foreground'}`}>{col.label}</span>
+                </label>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* ══ Section Tableau de bord ══════════════════════════════════════════ */}
