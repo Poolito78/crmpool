@@ -1196,6 +1196,27 @@ export default function Devis() {
                       if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
                       const fVal = colFiltersD[col.key] || '';
                       const isNV = fVal === '!empty';
+                      // Statut : liste déroulante (comme la vue liste)
+                      if (col.key === 'statut') {
+                        return (
+                          <td key={col.key} className="px-3 py-1">
+                            <select
+                              value={fVal}
+                              onChange={e => setFilterD('statut', e.target.value)}
+                              className="h-6 text-xs w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                            >
+                              <option value="">Tous</option>
+                              <option value="brouillon">Brouillon</option>
+                              <option value="envoyé">Envoyé</option>
+                              <option value="accepté">Accepté</option>
+                              <option value="refusé">Refusé</option>
+                              <option value="expiré">Expiré</option>
+                              <option value="archivé">Archivé</option>
+                              <option value="système">Système</option>
+                            </select>
+                          </td>
+                        );
+                      }
                       return (
                         <td key={col.key} className="px-3 py-1">
                           {isNV ? (
