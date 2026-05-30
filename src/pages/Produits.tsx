@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings } from 'lucide-react';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -87,6 +87,8 @@ export default function Produits() {
   });
   const [colChooserOpen, setColChooserOpen] = useState(false);
   const colChooserRef = useRef<HTMLDivElement>(null);
+  const [gearMenuOpen, setGearMenuOpen] = useState(false);
+  const gearMenuRef = useRef<HTMLDivElement>(null);
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -142,6 +144,16 @@ export default function Produits() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [colChooserOpen]);
+
+  // Close gear menu on outside click
+  useEffect(() => {
+    if (!gearMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) setGearMenuOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [gearMenuOpen]);
 
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -785,54 +797,11 @@ export default function Produits() {
               <span className="sm:hidden">{selected.size}</span>
             </Button>
           )}
-          {produits.length > 0 && selected.size === 0 && (
-            <Button variant="destructive" size="sm" className="hidden sm:inline-flex" onClick={() => { toggleAll(); }}>
-              <Trash2 className="w-4 h-4 mr-2" /> Tout sélectionner
-            </Button>
-          )}
           {Object.values(columnFilters).some(v => v) && (
             <Button variant="ghost" size="sm" onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }}>
               <X className="w-4 h-4 mr-1" /> Effacer
             </Button>
           )}
-          {/* Sélecteur de colonnes — masqué sur mobile */}
-          <div className="relative hidden sm:block" ref={colChooserRef}>
-            <Button variant="outline" size="sm" onClick={() => setColChooserOpen(v => !v)}>
-              <Columns2 className="w-4 h-4 mr-2" /> Colonnes
-            </Button>
-            {colChooserOpen && (
-              <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[190px]">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
-                {COLUMNS.map(col => (
-                  <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={visibleCols.has(col.key)}
-                      onChange={() => setVisibleCols(prev => {
-                        const next = new Set(prev);
-                        next.has(col.key) ? next.delete(col.key) : next.add(col.key);
-                        return next;
-                      })}
-                      className="rounded border-input accent-primary"
-                    />
-                    {col.label}
-                  </label>
-                ))}
-                <button
-                  className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
-                  onClick={() => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS))}
-                >
-                  Réinitialiser
-                </button>
-              </div>
-            )}
-          </div>
-          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => fileInputRef.current?.click()}>
-            <Upload className="w-4 h-4 mr-2" /> Importer
-          </Button>
-          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}>
-            <Download className="w-4 h-4 mr-2" /> Exporter
-          </Button>
           <Button size="sm" onClick={openNew}>
             <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Nouveau produit</span>
@@ -879,7 +848,72 @@ export default function Produits() {
                     </th>
                   );
                 })}
-                <th className="px-3 py-3"></th>
+                <th className="px-3 py-2 text-right whitespace-nowrap">
+                  <div className="flex items-center gap-1 justify-end">
+                    {/* Sélecteur de colonnes */}
+                    <div className="relative" ref={colChooserRef}>
+                      <button
+                        onClick={() => { setColChooserOpen(v => !v); setGearMenuOpen(false); }}
+                        title="Choisir les colonnes"
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Columns2 className="w-4 h-4" />
+                      </button>
+                      {colChooserOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[190px] text-left font-normal">
+                          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
+                          {COLUMNS.map(col => (
+                            <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
+                              <input
+                                type="checkbox"
+                                checked={visibleCols.has(col.key)}
+                                onChange={() => setVisibleCols(prev => {
+                                  const next = new Set(prev);
+                                  next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                                  return next;
+                                })}
+                                className="rounded border-input accent-primary"
+                              />
+                              {col.label}
+                            </label>
+                          ))}
+                          <button
+                            className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
+                            onClick={() => setVisibleCols(new Set(DEFAULT_VISIBLE_COLS))}
+                          >
+                            Réinitialiser
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {/* Roue crantée : Importer / Exporter */}
+                    <div className="relative" ref={gearMenuRef}>
+                      <button
+                        onClick={() => { setGearMenuOpen(v => !v); setColChooserOpen(false); }}
+                        title="Importer / Exporter"
+                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      {gearMenuOpen && (
+                        <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[170px] text-left font-normal">
+                          <button
+                            onClick={() => { setGearMenuOpen(false); fileInputRef.current?.click(); }}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
+                          >
+                            <Upload className="w-4 h-4 text-muted-foreground" /> Importer
+                          </button>
+                          <button
+                            onClick={() => { setGearMenuOpen(false); exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits'); }}
+                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
+                          >
+                            <Download className="w-4 h-4 text-muted-foreground" /> Exporter
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </th>
               </tr>
               {openFilterCols.size > 0 && (
                 <tr className="border-b border-border bg-muted/20">
