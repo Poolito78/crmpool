@@ -2169,6 +2169,9 @@ export default function Produits() {
                                       const v = parseInt(entrepotStockEdit.value);
                                       if (!isNaN(v) && v >= 0) {
                                         await upsertStockEntrepot(editing.id, e.id, v);
+                                        const newTotal = stockEntrepots.filter(s => s.produitId === editing.id && s.entrepotId !== e.id).reduce((a, s) => a + s.stock, 0) + v;
+                                        setForm(p => ({ ...p, stock: newTotal }));
+                                        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, stock: newTotal } : p));
                                         toast.success('Stock mis à jour');
                                       }
                                       setEntrepotStockEdit(null);
@@ -2183,6 +2186,9 @@ export default function Produits() {
                                     const v = parseInt(entrepotStockEdit.value);
                                     if (!isNaN(v) && v >= 0) {
                                       await upsertStockEntrepot(editing.id, e.id, v);
+                                      const newTotal = stockEntrepots.filter(s => s.produitId === editing.id && s.entrepotId !== e.id).reduce((a, s) => a + s.stock, 0) + v;
+                                      setForm(p => ({ ...p, stock: newTotal }));
+                                      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, stock: newTotal } : p));
                                       toast.success('Stock mis à jour');
                                     }
                                     setEntrepotStockEdit(null);

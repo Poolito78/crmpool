@@ -108,7 +108,7 @@ function applyFilter(val: string, test: (nonVide: boolean, v: string) => boolean
 
 export default function Stock() {
   const navigate = useNavigate();
-  const { produits, fournisseurs, produitFournisseurs } = useCRM();
+  const { produits, fournisseurs, produitFournisseurs, updateProduits } = useCRM();
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
   const [tab, setTab] = useState<TabId>('global');
@@ -254,6 +254,11 @@ export default function Stock() {
     if (isNaN(val) || val < 0) { toast.error('Valeur invalide'); return; }
     const err = await upsertStock(editingStock.produitId, editingStock.entrepotId, val);
     if (err) { toast.error('Erreur : ' + err.message); return; }
+    // Sync stock total produit = somme de tous les entrepôts
+    const newTotal = stockEntrepots
+      .filter(s => s.produitId === editingStock.produitId && s.entrepotId !== editingStock.entrepotId)
+      .reduce((a, s) => a + s.stock, 0) + val;
+    updateProduits(prev => prev.map(p => p.id === editingStock.produitId ? { ...p, stock: newTotal } : p));
     setEditingStock(null);
   }
   function getTotauxEntrepot(entrepotId: string) {
