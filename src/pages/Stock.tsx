@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant, calculerFournisseurPrioritaire, useEntrepots, type Entrepot } from '@/lib/store';
 import { AlertTriangle, CheckCircle, Package, Truck, Download, Star, Warehouse, Plus, Edit2, Trash2, Save, X, Building2, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Search, Filter } from 'lucide-react';
@@ -53,6 +54,7 @@ function FilterCell({ value, onChange, align = 'left' }: { value: string; onChan
 type TabId = 'global' | 'entrepots' | 'stockistes';
 
 export default function Stock() {
+  const navigate = useNavigate();
   const { produits, fournisseurs, produitFournisseurs } = useCRM();
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
@@ -427,7 +429,12 @@ export default function Stock() {
                   </thead>
                   <tbody>
                     {sortedFiltered.map(({ p, info, low, qteReappro, proprioFourn }) => (
-                      <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={p.id}
+                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer"
+                        onClick={() => navigate(`/produits?highlight=${p.id}`)}
+                        title="Ouvrir la fiche produit"
+                      >
                         <td className="px-3 py-3">
                           {low ? <AlertTriangle className="w-4 h-4 text-warning" /> : <CheckCircle className="w-4 h-4 text-success" />}
                         </td>
@@ -572,7 +579,12 @@ export default function Stock() {
                             ? fournisseurs.find(f => f.id === p.proprietaireFournisseurId)
                             : null;
                           return (
-                            <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
+                            <tr
+                              key={p.id}
+                              className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer"
+                              onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; navigate(`/produits?highlight=${p.id}`); }}
+                              title="Ouvrir la fiche produit"
+                            >
                               <td className="px-4 py-2.5">
                                 <p className="font-medium">{p.description}</p>
                                 <p className="text-xs text-muted-foreground font-mono">{p.reference}</p>
