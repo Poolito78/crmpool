@@ -1303,8 +1303,12 @@ export default function Devis() {
                       )}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-0.5 justify-end">
+                          <button onClick={() => openArchiveDialog(d)} title="Archiver" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-muted-foreground hover:text-foreground"><Archive className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setEmailDevis(d)} title="Envoyer par email" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Mail className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => duplicate(d)} title="Dupliquer" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
                           <button onClick={() => setPreviewDevis(d)} title="Aperçu" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Eye className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => { openEdit(d); }} title="Modifier" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Pencil className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => setChatterDevis(d)} title="Notes & fichiers" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><MessageSquare className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => confirmRemove(d.id)} title="Supprimer" className="p-1 rounded hover:bg-destructive/10 text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       </td>
                     </tr>
