@@ -156,7 +156,7 @@ export default function Clients() {
   const [filterContact, setFilterContact] = useState('');
   const [filterRevendeur, setFilterRevendeur] = useState<'' | 'oui' | 'non'>('');
   const [filterHasAdresse, setFilterHasAdresse] = useState<'' | 'oui' | 'non'>('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [openFilterCols, setOpenFilterCols] = useState<Set<'societe' | 'contacts' | 'ville' | 'adresses'>>(new Set());
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState(emptyClient);
@@ -193,6 +193,16 @@ export default function Clients() {
     else { setSortCol(col); setSortDir('asc'); }
   }
 
+  function toggleFilterCol(col: 'societe' | 'contacts' | 'ville' | 'adresses') {
+    setOpenFilterCols(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+  }
+
+  function clearAllFilters() {
+    setFilterVille(''); setFilterDepartement(''); setFilterSociete('');
+    setFilterContact(''); setFilterRevendeur(''); setFilterHasAdresse('');
+    setOpenFilterCols(new Set());
+  }
+
   const villes = useMemo(() => Array.from(new Set(clients.map(c => c.ville).filter(Boolean))).sort(), [clients]);
   const departements = useMemo(() => Array.from(new Set(clients.map(c => c.codePostal?.substring(0, 2)).filter(Boolean))).sort(), [clients]);
   const societes = useMemo(() => Array.from(new Set(clients.map(c => c.societe).filter(Boolean))).sort() as string[], [clients]);
@@ -207,9 +217,9 @@ export default function Clients() {
         const inContacts = (c.contacts || []).some(ct => [ct.nom, ct.prenom, ct.email, ct.telephone, ct.fonction].some(v => v?.toLowerCase().includes(s)));
         if (!inBase && !inContacts) return false;
       }
-      if (filterVille && c.ville !== filterVille) return false;
+      if (filterVille && !c.ville?.toLowerCase().includes(filterVille.toLowerCase())) return false;
       if (filterDepartement && !c.codePostal?.startsWith(filterDepartement)) return false;
-      if (filterSociete && c.societe !== filterSociete) return false;
+      if (filterSociete && !(c.societe || c.nom)?.toLowerCase().includes(filterSociete.toLowerCase())) return false;
       if (filterContact.trim()) {
         const fc = filterContact.trim().toLowerCase();
         const inContacts = (c.contacts || []).some(ct =>
@@ -224,7 +234,7 @@ export default function Clients() {
       if (filterHasAdresse === 'non' && c.adressesLivraison && c.adressesLivraison.length > 0) return false;
       return true;
     });
-  }, [clients, search, filterVille, filterDepartement, filterSociete, filterRevendeur, filterHasAdresse]);
+  }, [clients, search, filterVille, filterDepartement, filterSociete, filterContact, filterRevendeur, filterHasAdresse]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortCol) return filtered;
@@ -596,12 +606,11 @@ export default function Clients() {
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className="relative">
-            <Filter className="w-4 h-4 mr-2" /> Filtres
-            {activeFilterCount > 0 && (
-              <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-[10px]">{activeFilterCount}</Badge>
-            )}
-          </Button>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters}>
+              <X className="w-4 h-4 mr-1" /> Effacer
+            </Button>
+          )}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
           <Button variant="outline" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
@@ -609,68 +618,6 @@ export default function Clients() {
         </div>
       </div>
 
-      {showFilters && (
-        <div className="flex flex-wrap gap-3 items-center bg-muted/30 rounded-lg border border-border p-3">
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Département :</Label>
-            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)}>
-              <option value="">Tous</option>
-              {departements.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Ville :</Label>
-            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterVille} onChange={e => setFilterVille(e.target.value)}>
-              <option value="">Toutes</option>
-              {villes.map(v => <option key={v} value={v}>{v}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Société :</Label>
-            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterSociete} onChange={e => setFilterSociete(e.target.value)}>
-              <option value="">Toutes</option>
-              {societes.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Contact :</Label>
-            <div className="relative">
-              <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
-              <input
-                type="text"
-                value={filterContact}
-                onChange={e => setFilterContact(e.target.value)}
-                placeholder="Nom, email, tél..."
-                className="text-sm rounded border border-input bg-background pl-6 pr-6 py-1.5 w-44 focus:outline-none focus:ring-1 focus:ring-ring"
-              />
-              {filterContact && (
-                <button onClick={() => setFilterContact('')} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Revendeur :</Label>
-            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}>
-              <option value="">Tous</option>
-              <option value="oui">Oui</option>
-              <option value="non">Non</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
-            <Label className="text-xs text-muted-foreground whitespace-nowrap">Adresses :</Label>
-            <select className="text-sm rounded border border-input bg-background px-2 py-1.5" value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')}>
-              <option value="">Tous</option>
-              <option value="oui">Avec adresses</option>
-              <option value="non">Sans adresses</option>
-            </select>
-          </div>
-          {activeFilterCount > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterVille(''); setFilterDepartement(''); setFilterSociete(''); setFilterContact(''); setFilterRevendeur(''); setFilterHasAdresse(''); }}>
-              Réinitialiser
-            </Button>
-          )}
-        </div>
-      )}
 
       {/* Desktop table */}
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
@@ -678,27 +625,100 @@ export default function Clients() {
           <thead>
             <tr className="border-b border-border bg-muted/50">
               {([
-                { col: 'societe', label: 'Société', align: 'left' },
-                { col: null, label: 'Contacts', align: 'left' },
-                { col: 'ville', label: 'Ville', align: 'left' },
-                { col: 'adresses', label: 'Adresses liv.', align: 'left' },
-                { col: 'devis', label: 'Devis', align: 'left' },
-                { col: 'encours', label: 'Encours dû', align: 'right' },
-              ] as const).map(({ col, label, align }) => (
-                <th key={label} className={`px-4 py-3 font-medium text-muted-foreground text-${align}${col ? ' cursor-pointer select-none hover:text-foreground' : ''}`}
-                  onClick={col ? () => toggleSort(col) : undefined}>
-                  <span className="inline-flex items-center gap-1">
-                    {label}
-                    {col && (
-                      sortCol === col
-                        ? (sortDir === 'asc' ? <ChevronUp className="w-3.5 h-3.5 text-primary" /> : <ChevronDown className="w-3.5 h-3.5 text-primary" />)
-                        : <ChevronsUpDown className="w-3.5 h-3.5 opacity-40" />
-                    )}
-                  </span>
-                </th>
-              ))}
-              <th className="px-4 py-3"></th>
+                { col: 'societe' as const,   label: 'Société',       align: 'left',  filterCol: 'societe'  as const },
+                { col: null,                  label: 'Contacts',      align: 'left',  filterCol: 'contacts' as const },
+                { col: 'ville' as const,      label: 'Ville',         align: 'left',  filterCol: 'ville'    as const },
+                { col: 'adresses' as const,   label: 'Adresses liv.', align: 'left',  filterCol: 'adresses' as const },
+                { col: 'devis' as const,      label: 'Devis',         align: 'left',  filterCol: null },
+                { col: 'encours' as const,    label: 'Encours dû',    align: 'right', filterCol: null },
+              ]).map(({ col, label, align, filterCol }) => {
+                const hasFilter = filterCol === 'societe' ? !!filterSociete
+                  : filterCol === 'contacts' ? !!(filterContact || filterRevendeur)
+                  : filterCol === 'ville' ? !!(filterVille || filterDepartement)
+                  : filterCol === 'adresses' ? !!filterHasAdresse : false;
+                const isFilterOpen = filterCol ? openFilterCols.has(filterCol) : false;
+                const SortIcon = sortCol === col
+                  ? (sortDir === 'asc' ? ChevronUp : ChevronDown)
+                  : ChevronsUpDown;
+                return (
+                  <th key={label} className={`px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap`}>
+                    <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''}`}>
+                      {col ? (
+                        <button className="flex items-center gap-1 hover:text-foreground cursor-pointer" onClick={() => toggleSort(col)}>
+                          {align === 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === col ? 'text-primary' : 'opacity-40'}`} />}
+                          <span>{label}</span>
+                          {align !== 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === col ? 'text-primary' : 'opacity-40'}`} />}
+                        </button>
+                      ) : (
+                        <span>{label}</span>
+                      )}
+                      {filterCol && (
+                        <button
+                          onClick={() => toggleFilterCol(filterCol)}
+                          title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
+                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
+                        >
+                          <Filter className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </th>
+                );
+              })}
+              <th className="px-4 py-2"></th>
             </tr>
+            {openFilterCols.size > 0 && (
+              <tr className="border-b border-border bg-muted/20">
+                {/* Société */}
+                <td className="px-4 py-1">
+                  {openFilterCols.has('societe') && (
+                    <input placeholder="Filtrer..." value={filterSociete} onChange={e => setFilterSociete(e.target.value)}
+                      className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />
+                  )}
+                </td>
+                {/* Contacts */}
+                <td className="px-4 py-1">
+                  {openFilterCols.has('contacts') && (
+                    <div className="flex items-center gap-1">
+                      <input placeholder="Nom, email..." value={filterContact} onChange={e => setFilterContact(e.target.value)}
+                        className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
+                      <select value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}
+                        className="h-6 text-xs rounded border border-input bg-background px-1">
+                        <option value="">Tous</option>
+                        <option value="oui">Rev.</option>
+                        <option value="non">Non rev.</option>
+                      </select>
+                    </div>
+                  )}
+                </td>
+                {/* Ville */}
+                <td className="px-4 py-1">
+                  {openFilterCols.has('ville') && (
+                    <div className="flex items-center gap-1">
+                      <input placeholder="Ville..." value={filterVille} onChange={e => setFilterVille(e.target.value)}
+                        className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
+                      <input placeholder="Dép." value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)}
+                        className="h-6 text-xs w-10 rounded border border-input bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" maxLength={3} />
+                    </div>
+                  )}
+                </td>
+                {/* Adresses */}
+                <td className="px-4 py-1">
+                  {openFilterCols.has('adresses') && (
+                    <select value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')}
+                      className="h-6 text-xs rounded border border-input bg-background px-1 w-full">
+                      <option value="">Toutes</option>
+                      <option value="oui">Avec</option>
+                      <option value="non">Sans</option>
+                    </select>
+                  )}
+                </td>
+                {/* Devis / Encours / Actions */}
+                <td className="px-4 py-1" />
+                <td className="px-4 py-1" />
+                <td className="px-4 py-1" />
+              </tr>
+            )}
           </thead>
           <tbody>
             {sortedFiltered.map(c => {
