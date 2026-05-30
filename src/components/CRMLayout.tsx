@@ -35,11 +35,11 @@ const NAV: NavEntry[] = [
   },
   { type: 'link',  label: 'Stock',            icon: BarChart3,       path: '/stock' },
   { type: 'link',  label: 'Calcul Transport', icon: Calculator,      path: '/calculateur-ups' },
-  { type: 'link',  label: 'Historique GED',   icon: History,         path: '/ged' },
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
       { type: 'link', label: 'Tableau de bord', icon: LayoutDashboard, path: '/parametres' },
+      { type: 'link', label: 'Historique GED',  icon: History,         path: '/ged' },
     ],
   },
 ];
