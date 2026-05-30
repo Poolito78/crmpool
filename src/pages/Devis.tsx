@@ -122,28 +122,6 @@ export default function Devis() {
   function setFilterD(col: DevisTableColKey, val: string) { setColFiltersD(prev => ({ ...prev, [col]: val })); }
   function hasActiveFiltersD() { return Object.values(colFiltersD).some(v => v); }
 
-  // Tableau trié+filtré (colonne sort → remplace le sortBy select en mode tableau)
-  const sortedTable = (() => {
-    const NON_VIDE = '!empty';
-    let arr = sorted;
-    if (hasActiveFiltersD()) {
-      arr = arr.filter(d => {
-        const cl = clients.find(c => c.id === d.clientId);
-        const fNum = colFiltersD.numero || '';
-        if (fNum) { const nv = fNum === NON_VIDE; if (nv ? !d.numero?.trim() : !d.numero?.toLowerCase().includes(fNum.toLowerCase())) return false; }
-        const fSt = colFiltersD.statut || '';
-        if (fSt) { const nv = fSt === NON_VIDE; if (nv ? !d.statut : !d.statut.toLowerCase().includes(fSt.toLowerCase())) return false; }
-        const fCl = colFiltersD.client || '';
-        if (fCl) { const nv = fCl === NON_VIDE; const cn = (cl?.societe || cl?.nom || '').toLowerCase(); if (nv ? !cn : !cn.includes(fCl.toLowerCase())) return false; }
-        const fRef = colFiltersD.refAffaire || '';
-        if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
-        const fSys = colFiltersD.systeme || '';
-        if (fSys) { const nv = fSys === NON_VIDE; if (nv ? !d.systeme?.trim() : !(d.systeme || '').toLowerCase().includes(fSys.toLowerCase())) return false; }
-        return true;
-      });
-    }
-    return arr;
-  })();
   const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => {
     try {
       const s = localStorage.getItem('devis_ligne_cols');
@@ -289,6 +267,30 @@ export default function Devis() {
       default: return 0;
     }
   });
+
+  // Tableau trié+filtré (colonne sort → remplace le sortBy select en mode tableau)
+  // ⚠️ DOIT être déclaré APRÈS `sorted` : cette IIFE lit `sorted` à l'exécution.
+  const sortedTable = (() => {
+    const NON_VIDE = '!empty';
+    let arr = sorted;
+    if (hasActiveFiltersD()) {
+      arr = arr.filter(d => {
+        const cl = clients.find(c => c.id === d.clientId);
+        const fNum = colFiltersD.numero || '';
+        if (fNum) { const nv = fNum === NON_VIDE; if (nv ? !d.numero?.trim() : !d.numero?.toLowerCase().includes(fNum.toLowerCase())) return false; }
+        const fSt = colFiltersD.statut || '';
+        if (fSt) { const nv = fSt === NON_VIDE; if (nv ? !d.statut : !d.statut.toLowerCase().includes(fSt.toLowerCase())) return false; }
+        const fCl = colFiltersD.client || '';
+        if (fCl) { const nv = fCl === NON_VIDE; const cn = (cl?.societe || cl?.nom || '').toLowerCase(); if (nv ? !cn : !cn.includes(fCl.toLowerCase())) return false; }
+        const fRef = colFiltersD.refAffaire || '';
+        if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
+        const fSys = colFiltersD.systeme || '';
+        if (fSys) { const nv = fSys === NON_VIDE; if (nv ? !d.systeme?.trim() : !(d.systeme || '').toLowerCase().includes(fSys.toLowerCase())) return false; }
+        return true;
+      });
+    }
+    return arr;
+  })();
 
   const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
 
