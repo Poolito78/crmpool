@@ -443,11 +443,6 @@ export default function Produits() {
     setDeleteTarget(id || null);
     setDeleteConfirmOpen(true);
   }
-  
-  function removeSelected() {
-    if (selected.size === 0) return;
-    confirmDelete();
-  }
 
   function executeDelete() {
     if (deleteTarget) {
