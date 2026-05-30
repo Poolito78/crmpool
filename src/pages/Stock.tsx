@@ -143,6 +143,7 @@ export default function Stock() {
   const [openFilterColsE, setOpenFilterColsE] = useState<Set<EntrepotColKey>>(new Set());
   const [colFiltersE, setColFiltersE] = useState<Partial<Record<EntrepotColKey, string>>>({});
   const [visE, setVisE] = useState<Set<EntrepotColKey>>(() => new Set(ALL_ENTREPOT_COLS.map(c => c.key)));
+  const eCols = useTableColumns<EntrepotColKey>('stock_entrepot_cols', ALL_ENTREPOT_COLS.map(c => c.key));
   const [colMenuE, setColMenuE] = useState(false);
 
   function handleSortE(col: EntrepotColKey) {
@@ -162,6 +163,7 @@ export default function Stock() {
   const [openFilterColsSt, setOpenFilterColsSt] = useState<Set<StockisteColKey>>(new Set());
   const [colFiltersSt, setColFiltersSt] = useState<Partial<Record<StockisteColKey, string>>>({});
   const [visSt, setVisSt] = useState<Set<StockisteColKey>>(() => new Set(ALL_STOCKISTE_COLS.map(c => c.key)));
+  const stCols = useTableColumns<StockisteColKey>('stock_stockistes', ALL_STOCKISTE_COLS.map(c => c.key));
   const [colMenuSt, setColMenuSt] = useState(false);
 
   function handleSortSt(col: StockisteColKey) {
@@ -482,21 +484,28 @@ export default function Stock() {
           const SI = isSorted ? (sortDirE === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
           const hasFilter = !!(colFiltersE[col]);
           const isOpen = openFilterColsE.has(col);
+          const isDragOver = eCols.dragOverKey === col && eCols.dragKey !== col;
           return (
-            <th className="px-4 py-2.5 font-medium text-muted-foreground select-none whitespace-nowrap">
-              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : '')}>
-                <button onClick={() => handleSortE(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer">
+            <th {...eCols.thProps(col)} style={eCols.widthStyle(col)} className={cn('relative px-4 py-2.5 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', eCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+              {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : '', eCols.widthStyle(col) ? 'overflow-hidden' : '')}>
+                <button onClick={() => handleSortE(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
                   {align === 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterColE(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                <button onClick={() => toggleFilterColE(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
                   <Filter className="w-3 h-3" />
                 </button>
               </div>
+              <ColResizeHandle {...eCols.resizeHandleProps(col)} />
             </th>
           );
         }
+        const ENT_LABELS: Record<EntrepotColKey, { label: string; align?: string }> = {
+          produit: { label: 'Produit' }, categorie: { label: 'Catégorie' }, proprietaire: { label: 'Propriétaire' },
+          stockEntrepot: { label: 'Stock entrepôt', align: 'right' }, stockTotal: { label: 'Stock total', align: 'right' }, valeur: { label: 'Valeur', align: 'right' },
+        };
 
         // ── Données filtrées/triées ──────────────────────────────────────────
         const baseList = [...produits].sort((a, b) => { const aLow = a.stock < a.stockMin ? 0 : 1; const bLow = b.stock < b.stockMin ? 0 : 1; return aLow - bLow || a.description.localeCompare(b.description); });
@@ -607,21 +616,15 @@ export default function Stock() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/20">
-                            {ve.has('produit') && <SortThE col="produit" label="Produit" />}
-                            {ve.has('categorie') && <SortThE col="categorie" label="Catégorie" />}
-                            {ve.has('proprietaire') && <SortThE col="proprietaire" label="Propriétaire" />}
-                            {ve.has('stockEntrepot') && <SortThE col="stockEntrepot" label="Stock entrepôt" align="right" />}
-                            {ve.has('stockTotal') && <SortThE col="stockTotal" label="Stock total" align="right" />}
-                            {ve.has('valeur') && <SortThE col="valeur" label="Valeur" align="right" />}
+                            {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => <SortThE key={col.key} col={col.key} label={ENT_LABELS[col.key].label} align={ENT_LABELS[col.key].align} />)}
                           </tr>
                           {openFilterColsE.size > 0 && (
                             <tr className="border-b border-border bg-muted/20">
-                              {ve.has('produit') && <td className="px-4 py-1">{openFilterColsE.has('produit') && <FilterCell value={colFiltersE.produit || ''} onChange={v => setFilterE('produit', v)} />}</td>}
-                              {ve.has('categorie') && <td className="px-4 py-1">{openFilterColsE.has('categorie') && <FilterCell value={colFiltersE.categorie || ''} onChange={v => setFilterE('categorie', v)} />}</td>}
-                              {ve.has('proprietaire') && <td className="px-4 py-1">{openFilterColsE.has('proprietaire') && <FilterCell value={colFiltersE.proprietaire || ''} onChange={v => setFilterE('proprietaire', v)} />}</td>}
-                              {ve.has('stockEntrepot') && <td className="px-4 py-1">{openFilterColsE.has('stockEntrepot') && <FilterCell value={colFiltersE.stockEntrepot || ''} onChange={v => setFilterE('stockEntrepot', v)} align="right" />}</td>}
-                              {ve.has('stockTotal') && <td className="px-4 py-1">{openFilterColsE.has('stockTotal') && <FilterCell value={colFiltersE.stockTotal || ''} onChange={v => setFilterE('stockTotal', v)} align="right" />}</td>}
-                              {ve.has('valeur') && <td className="px-4 py-1">{openFilterColsE.has('valeur') && <FilterCell value={colFiltersE.valeur || ''} onChange={v => setFilterE('valeur', v)} align="right" />}</td>}
+                              {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => (
+                                <td key={col.key} style={eCols.widthStyle(col.key)} className="px-4 py-1">
+                                  {openFilterColsE.has(col.key) && <FilterCell value={colFiltersE[col.key] || ''} onChange={v => setFilterE(col.key, v)} align={ENT_LABELS[col.key].align === 'right' ? 'right' : 'left'} />}
+                                </td>
+                              ))}
                             </tr>
                           )}
                         </thead>
@@ -630,12 +633,13 @@ export default function Stock() {
                             const stockIci = getStockInEntrepot(p.id, activeEntrepot.id);
                             const isEditing = editingStock?.produitId === p.id && editingStock?.entrepotId === activeEntrepot.id;
                             const proprioFourn = p.proprietaire === 'fournisseur' && p.proprietaireFournisseurId ? fournisseurs.find(f => f.id === p.proprietaireFournisseurId) : null;
-                            return (
-                              <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; navigate(`/produits?highlight=${p.id}`); }} title="Ouvrir la fiche produit">
-                                {ve.has('produit') && <td className="px-4 py-2.5"><p className="font-medium">{p.description}</p><p className="text-xs text-muted-foreground font-mono">{p.reference}</p></td>}
-                                {ve.has('categorie') && <td className="px-4 py-2.5 text-muted-foreground">{p.categorie || '—'}</td>}
-                                {ve.has('proprietaire') && <td className="px-4 py-2.5">{p.proprietaire === 'fournisseur' ? <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full">{proprioFourn?.societe || 'Fournisseur'}</span> : <span className="text-xs text-muted-foreground">ISOSIGN</span>}</td>}
-                                {ve.has('stockEntrepot') && <td className="px-4 py-2.5 text-right">{isEditing ? (
+                            const renderE = (key: EntrepotColKey) => {
+                              const ws = eCols.widthStyle(key);
+                              switch (key) {
+                                case 'produit': return <td style={ws} className={`px-4 py-2.5${ws ? ' truncate' : ''}`}><p className="font-medium truncate">{p.description}</p><p className="text-xs text-muted-foreground font-mono truncate">{p.reference}</p></td>;
+                                case 'categorie': return <td style={ws} className={`px-4 py-2.5 text-muted-foreground${ws ? ' truncate' : ''}`}>{p.categorie || '—'}</td>;
+                                case 'proprietaire': return <td style={ws} className="px-4 py-2.5">{p.proprietaire === 'fournisseur' ? <span className="text-xs bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400 px-2 py-0.5 rounded-full">{proprioFourn?.societe || 'Fournisseur'}</span> : <span className="text-xs text-muted-foreground">ISOSIGN</span>}</td>;
+                                case 'stockEntrepot': return <td style={ws} className="px-4 py-2.5 text-right">{isEditing ? (
                                   <div className="flex items-center justify-end gap-1">
                                     <Input type="number" min={0} className="w-20 h-7 text-right text-sm" value={editingStock.value} onChange={e => setEditingStock({ ...editingStock, value: e.target.value })} onKeyDown={e => { if (e.key === 'Enter') commitStockEdit(); if (e.key === 'Escape') setEditingStock(null); }} autoFocus />
                                     <button onClick={commitStockEdit} className="p-1 rounded text-success hover:bg-success/10"><Save className="w-3.5 h-3.5" /></button>
@@ -643,9 +647,15 @@ export default function Stock() {
                                   </div>
                                 ) : (
                                   <button onClick={() => setEditingStock({ produitId: p.id, entrepotId: activeEntrepot.id, value: String(stockIci) })} className="font-semibold hover:text-primary transition-colors px-2 py-0.5 rounded hover:bg-primary/5">{stockIci} {p.unite}</button>
-                                )}</td>}
-                                {ve.has('stockTotal') && <td className="px-4 py-2.5 text-right text-muted-foreground"><span className={p.stock < p.stockMin ? 'text-warning font-medium' : ''}>{p.stock} {p.unite}</span></td>}
-                                {ve.has('valeur') && <td className="px-4 py-2.5 text-right text-muted-foreground">{formatMontant(stockIci * p.prixHT)}</td>}
+                                )}</td>;
+                                case 'stockTotal': return <td style={ws} className="px-4 py-2.5 text-right text-muted-foreground"><span className={p.stock < p.stockMin ? 'text-warning font-medium' : ''}>{p.stock} {p.unite}</span></td>;
+                                case 'valeur': return <td style={ws} className="px-4 py-2.5 text-right text-muted-foreground">{formatMontant(stockIci * p.prixHT)}</td>;
+                                default: return <td style={ws} className="px-4 py-2.5" />;
+                              }
+                            };
+                            return (
+                              <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; navigate(`/produits?highlight=${p.id}`); }} title="Ouvrir la fiche produit">
+                                {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => <Fragment key={col.key}>{renderE(col.key)}</Fragment>)}
                               </tr>
                             );
                           })}
@@ -670,21 +680,28 @@ export default function Stock() {
           const SI = isSorted ? (sortDirSt === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
           const hasFilter = !!(colFiltersSt[col]);
           const isOpen = openFilterColsSt.has(col);
+          const isDragOver = stCols.dragOverKey === col && stCols.dragKey !== col;
           return (
-            <th className="px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap">
-              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '')}>
-                <button onClick={() => handleSortSt(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer">
+            <th {...stCols.thProps(col)} style={stCols.widthStyle(col)} className={cn('relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', stCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+              {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '', stCols.widthStyle(col) ? 'overflow-hidden' : '')}>
+                <button onClick={() => handleSortSt(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
                   {align === 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
-                  <span>{label}</span>
+                  <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterColSt(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                <button onClick={() => toggleFilterColSt(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
                   <Filter className="w-3 h-3" />
                 </button>
               </div>
+              <ColResizeHandle {...stCols.resizeHandleProps(col)} />
             </th>
           );
         }
+        const ST_LABELS: Record<StockisteColKey, { label: string; align?: string }> = {
+          produit: { label: 'Produit' }, refFourn: { label: 'Réf. fourn.' }, prixAchat: { label: 'Prix achat', align: 'right' },
+          condMin: { label: 'Cond. min.', align: 'right' }, stockActuel: { label: 'Stock actuel', align: 'right' }, delai: { label: 'Délai livr.', align: 'center' },
+        };
 
         const vs = visSt;
 
@@ -767,35 +784,38 @@ export default function Stock() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-border bg-muted/10">
-                                {vs.has('produit') && <SortThSt col="produit" label="Produit" />}
-                                {vs.has('refFourn') && <SortThSt col="refFourn" label="Réf. fourn." />}
-                                {vs.has('prixAchat') && <SortThSt col="prixAchat" label="Prix achat" align="right" />}
-                                {vs.has('condMin') && <SortThSt col="condMin" label="Cond. min." align="right" />}
-                                {vs.has('stockActuel') && <SortThSt col="stockActuel" label="Stock actuel" align="right" />}
-                                {vs.has('delai') && <SortThSt col="delai" label="Délai livr." align="center" />}
+                                {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => <SortThSt key={col.key} col={col.key} label={ST_LABELS[col.key].label} align={ST_LABELS[col.key].align} />)}
                               </tr>
                               {openFilterColsSt.size > 0 && (
                                 <tr className="border-b border-border bg-muted/20">
-                                  {vs.has('produit') && <td className="px-4 py-1">{openFilterColsSt.has('produit') && <FilterCell value={colFiltersSt.produit || ''} onChange={v => setFilterSt('produit', v)} />}</td>}
-                                  {vs.has('refFourn') && <td className="px-4 py-1">{openFilterColsSt.has('refFourn') && <FilterCell value={colFiltersSt.refFourn || ''} onChange={v => setFilterSt('refFourn', v)} />}</td>}
-                                  {vs.has('prixAchat') && <td className="px-4 py-1">{openFilterColsSt.has('prixAchat') && <FilterCell value={colFiltersSt.prixAchat || ''} onChange={v => setFilterSt('prixAchat', v)} align="right" />}</td>}
-                                  {vs.has('condMin') && <td className="px-4 py-1">{openFilterColsSt.has('condMin') && <FilterCell value={colFiltersSt.condMin || ''} onChange={v => setFilterSt('condMin', v)} align="right" />}</td>}
-                                  {vs.has('stockActuel') && <td className="px-4 py-1">{openFilterColsSt.has('stockActuel') && <FilterCell value={colFiltersSt.stockActuel || ''} onChange={v => setFilterSt('stockActuel', v)} align="right" />}</td>}
-                                  {vs.has('delai') && <td className="px-4 py-1">{openFilterColsSt.has('delai') && <FilterCell value={colFiltersSt.delai || ''} onChange={v => setFilterSt('delai', v)} align="center" />}</td>}
+                                  {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => (
+                                    <td key={col.key} style={stCols.widthStyle(col.key)} className="px-4 py-1">
+                                      {openFilterColsSt.has(col.key) && <FilterCell value={colFiltersSt[col.key] || ''} onChange={v => setFilterSt(col.key, v)} align={ST_LABELS[col.key].align === 'right' ? 'right' : ST_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
+                                    </td>
+                                  ))}
                                 </tr>
                               )}
                             </thead>
                             <tbody>
-                              {sortedProduits.map(({ produit, pf }) => (
-                                <tr key={pf.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => navigate(`/produits?highlight=${produit.id}`)} title="Ouvrir la fiche produit">
-                                  {vs.has('produit') && <td className="px-4 py-2.5"><p className="font-medium">{produit.description}</p><p className="text-xs text-muted-foreground font-mono">{produit.reference}</p></td>}
-                                  {vs.has('refFourn') && <td className="px-4 py-2.5 text-muted-foreground font-mono text-xs">{pf.referenceFournisseur || '—'}</td>}
-                                  {vs.has('prixAchat') && <td className="px-4 py-2.5 text-right font-medium">{formatMontant(pf.prixAchat)}/{produit.unite}</td>}
-                                  {vs.has('condMin') && <td className="px-4 py-2.5 text-right text-muted-foreground">{pf.conditionnementMin} {produit.unite}</td>}
-                                  {vs.has('stockActuel') && <td className="px-4 py-2.5 text-right"><span className={cn('font-medium', produit.stock < produit.stockMin ? 'text-warning' : 'text-success')}>{produit.stock} {produit.unite}</span></td>}
-                                  {vs.has('delai') && <td className="px-4 py-2.5 text-center"><span className={cn('inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium', pf.delaiLivraison <= (delai || 3) ? 'bg-success/10 text-success' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400')}><Clock className="w-3 h-3" />{pf.delaiLivraison}j</span></td>}
-                                </tr>
-                              ))}
+                              {sortedProduits.map(({ produit, pf }) => {
+                                const renderSt = (key: StockisteColKey) => {
+                                  const ws = stCols.widthStyle(key);
+                                  switch (key) {
+                                    case 'produit': return <td style={ws} className={`px-4 py-2.5${ws ? ' truncate' : ''}`}><p className="font-medium truncate">{produit.description}</p><p className="text-xs text-muted-foreground font-mono truncate">{produit.reference}</p></td>;
+                                    case 'refFourn': return <td style={ws} className={`px-4 py-2.5 text-muted-foreground font-mono text-xs${ws ? ' truncate' : ''}`}>{pf.referenceFournisseur || '—'}</td>;
+                                    case 'prixAchat': return <td style={ws} className="px-4 py-2.5 text-right font-medium">{formatMontant(pf.prixAchat)}/{produit.unite}</td>;
+                                    case 'condMin': return <td style={ws} className="px-4 py-2.5 text-right text-muted-foreground">{pf.conditionnementMin} {produit.unite}</td>;
+                                    case 'stockActuel': return <td style={ws} className="px-4 py-2.5 text-right"><span className={cn('font-medium', produit.stock < produit.stockMin ? 'text-warning' : 'text-success')}>{produit.stock} {produit.unite}</span></td>;
+                                    case 'delai': return <td style={ws} className="px-4 py-2.5 text-center"><span className={cn('inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium', pf.delaiLivraison <= (delai || 3) ? 'bg-success/10 text-success' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400')}><Clock className="w-3 h-3" />{pf.delaiLivraison}j</span></td>;
+                                    default: return <td style={ws} className="px-4 py-2.5" />;
+                                  }
+                                };
+                                return (
+                                  <tr key={pf.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={() => navigate(`/produits?highlight=${produit.id}`)} title="Ouvrir la fiche produit">
+                                    {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => <Fragment key={col.key}>{renderSt(col.key)}</Fragment>)}
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
