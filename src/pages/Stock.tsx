@@ -61,7 +61,7 @@ export default function Stock() {
   const [tab, setTab] = useState<TabId>('global');
   // ── Stock global : tri + filtres ────────────────────────────────────────────
   const [globalSearch, setGlobalSearch] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
+  const [openFilterCols, setOpenFilterCols] = useState<Set<StockColKey>>(new Set());
   const [colFilters, setColFilters] = useState<Partial<Record<StockColKey, string>>>({});
   const [sortCol, setSortCol] = useState<StockColKey | null>('statut');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -69,6 +69,13 @@ export default function Stock() {
   function handleSort(col: StockColKey) {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortCol(col); setSortDir('asc'); }
+  }
+  function toggleFilterCol(col: StockColKey) {
+    setOpenFilterCols(prev => {
+      const next = new Set(prev);
+      if (next.has(col)) next.delete(col); else next.add(col);
+      return next;
+    });
   }
   function setFilter(col: StockColKey, val: string) {
     setColFilters(prev => ({ ...prev, [col]: val }));
@@ -277,19 +284,33 @@ export default function Stock() {
           }
         });
 
-        // ── En-tête triable ────────────────────────────────────────────────────
+        // ── En-tête triable + filtre inline ───────────────────────────────────
         function SortTh({ col, label, align = 'left', className = '' }: { col: StockColKey; label: string; align?: string; className?: string }) {
           const isSorted = sortCol === col;
-          const Icon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+          const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+          const hasFilter = !!(colFilters[col]);
+          const isFilterOpen = openFilterCols.has(col);
           return (
-            <th
-              onClick={() => handleSort(col)}
-              className={cn('px-3 py-3 font-medium text-muted-foreground cursor-pointer select-none hover:text-foreground whitespace-nowrap', `text-${align}`, className)}
-            >
-              <div className={cn('flex items-center gap-1', align === 'right' && 'justify-end')}>
-                {align === 'right' && <Icon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
-                {label}
-                {align !== 'right' && <Icon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
+            <th className={cn('px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap', className)}>
+              <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '')}>
+                <button
+                  onClick={() => handleSort(col)}
+                  className="flex items-center gap-1 hover:text-foreground cursor-pointer"
+                >
+                  {align === 'right' && <SortIcon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
+                  <span>{label}</span>
+                  {align !== 'right' && <SortIcon className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
+                </button>
+                <button
+                  onClick={() => toggleFilterCol(col)}
+                  title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
+                  className={cn(
+                    'p-0.5 rounded transition-colors hover:bg-muted/80',
+                    hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'
+                  )}
+                >
+                  <Filter className="w-3 h-3" />
+                </button>
               </div>
             </th>
           );
@@ -368,17 +389,8 @@ export default function Stock() {
                 />
               </div>
               <div className="flex gap-2 shrink-0">
-                <Button
-                  variant={showFilters ? 'secondary' : 'outline'}
-                  size="sm"
-                  onClick={() => { setShowFilters(s => !s); if (showFilters) setColFilters({}); }}
-                >
-                  <Filter className="w-4 h-4 sm:mr-1.5" />
-                  <span className="hidden sm:inline">Filtres</span>
-                  {hasActiveFilters() && !showFilters && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">!</span>}
-                </Button>
                 {hasActiveFilters() && (
-                  <Button variant="ghost" size="sm" onClick={() => { setColFilters({}); setGlobalSearch(''); }}>
+                  <Button variant="ghost" size="sm" onClick={() => { setColFilters({}); setGlobalSearch(''); setOpenFilterCols(new Set()); }}>
                     <X className="w-4 h-4 mr-1" /> Effacer
                   </Button>
                 )}
@@ -412,18 +424,18 @@ export default function Stock() {
                       <SortTh col="fournisseur" label="Fourn. optimal" className="hidden md:table-cell" />
                       <SortTh col="valeur" label="Valeur" align="right" className="hidden md:table-cell" />
                     </tr>
-                    {showFilters && (
+                    {openFilterCols.size > 0 && (
                       <tr className="border-b border-border bg-muted/20">
-                        <td className="px-3 py-1"><FilterCell value={colFilters.statut || ''} onChange={v => setFilter('statut', v)} /></td>
-                        <td className="px-3 py-1"><FilterCell value={colFilters.description || ''} onChange={v => setFilter('description', v)} /></td>
-                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.categorie || ''} onChange={v => setFilter('categorie', v)} /></td>
-                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.disponibleVente || ''} onChange={v => setFilter('disponibleVente', v)} align="center" /></td>
-                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.proprietaire || ''} onChange={v => setFilter('proprietaire', v)} /></td>
-                        <td className="px-3 py-1"><FilterCell value={colFilters.stock || ''} onChange={v => setFilter('stock', v)} align="right" /></td>
-                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.stockMin || ''} onChange={v => setFilter('stockMin', v)} align="right" /></td>
-                        <td className="px-3 py-1 hidden sm:table-cell"><FilterCell value={colFilters.qteReappro || ''} onChange={v => setFilter('qteReappro', v)} align="right" /></td>
-                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.fournisseur || ''} onChange={v => setFilter('fournisseur', v)} /></td>
-                        <td className="px-3 py-1 hidden md:table-cell"><FilterCell value={colFilters.valeur || ''} onChange={v => setFilter('valeur', v)} align="right" /></td>
+                        <td className="px-3 py-1">{openFilterCols.has('statut') && <FilterCell value={colFilters.statut || ''} onChange={v => setFilter('statut', v)} />}</td>
+                        <td className="px-3 py-1">{openFilterCols.has('description') && <FilterCell value={colFilters.description || ''} onChange={v => setFilter('description', v)} />}</td>
+                        <td className="px-3 py-1 hidden sm:table-cell">{openFilterCols.has('categorie') && <FilterCell value={colFilters.categorie || ''} onChange={v => setFilter('categorie', v)} />}</td>
+                        <td className="px-3 py-1 hidden sm:table-cell">{openFilterCols.has('disponibleVente') && <FilterCell value={colFilters.disponibleVente || ''} onChange={v => setFilter('disponibleVente', v)} align="center" />}</td>
+                        <td className="px-3 py-1 hidden md:table-cell">{openFilterCols.has('proprietaire') && <FilterCell value={colFilters.proprietaire || ''} onChange={v => setFilter('proprietaire', v)} />}</td>
+                        <td className="px-3 py-1">{openFilterCols.has('stock') && <FilterCell value={colFilters.stock || ''} onChange={v => setFilter('stock', v)} align="right" />}</td>
+                        <td className="px-3 py-1 hidden sm:table-cell">{openFilterCols.has('stockMin') && <FilterCell value={colFilters.stockMin || ''} onChange={v => setFilter('stockMin', v)} align="right" />}</td>
+                        <td className="px-3 py-1 hidden sm:table-cell">{openFilterCols.has('qteReappro') && <FilterCell value={colFilters.qteReappro || ''} onChange={v => setFilter('qteReappro', v)} align="right" />}</td>
+                        <td className="px-3 py-1 hidden md:table-cell">{openFilterCols.has('fournisseur') && <FilterCell value={colFilters.fournisseur || ''} onChange={v => setFilter('fournisseur', v)} />}</td>
+                        <td className="px-3 py-1 hidden md:table-cell">{openFilterCols.has('valeur') && <FilterCell value={colFilters.valeur || ''} onChange={v => setFilter('valeur', v)} align="right" />}</td>
                       </tr>
                     )}
                   </thead>
