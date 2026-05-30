@@ -286,6 +286,13 @@ export default function Devis() {
         if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
         const fSys = colFiltersD.systeme || '';
         if (fSys) { const nv = fSys === NON_VIDE; if (nv ? !d.systeme?.trim() : !(d.systeme || '').toLowerCase().includes(fSys.toLowerCase())) return false; }
+        const fVal = colFiltersD.validite || '';
+        if (fVal) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const horsDelai = !!d.dateValidite && d.dateValidite < todayStr;
+          if (fVal === 'oui' && !horsDelai) return false;
+          if (fVal === 'non' && horsDelai) return false;
+        }
         return true;
       });
     }
@@ -1167,7 +1174,7 @@ export default function Devis() {
                     const isDesc = sortBy === `${sortKey}_desc`;
                     const isSorted = isAsc || isDesc;
                     const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme'].includes(col.key);
+                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
                     const hasFilter = !!(colFiltersD[col.key]);
                     const isFilterOpen = openFilterColsD.has(col.key);
                     return (
@@ -1192,7 +1199,7 @@ export default function Devis() {
                 {openFilterColsD.size > 0 && (
                   <tr className="border-b border-border bg-muted/20">
                     {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
-                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme'].includes(col.key);
+                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
                       if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
                       const fVal = colFiltersD[col.key] || '';
                       const isNV = fVal === '!empty';
@@ -1213,6 +1220,23 @@ export default function Devis() {
                               <option value="expiré">Expiré</option>
                               <option value="archivé">Archivé</option>
                               <option value="système">Système</option>
+                            </select>
+                          </td>
+                        );
+                      }
+                      // Validité : filtre Hors délais (Oui / Non)
+                      if (col.key === 'validite') {
+                        return (
+                          <td key={col.key} className="px-3 py-1">
+                            <select
+                              value={fVal}
+                              onChange={e => setFilterD('validite', e.target.value)}
+                              className="h-6 text-xs w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-ring"
+                              title="Hors délais = date de validité dépassée"
+                            >
+                              <option value="">Tous</option>
+                              <option value="oui">Hors délais</option>
+                              <option value="non">Dans les délais</option>
                             </select>
                           </td>
                         );
@@ -1287,9 +1311,14 @@ export default function Devis() {
                       {vs.has('date') && (
                         <td className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>
                       )}
-                      {vs.has('validite') && (
-                        <td className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateValidite)}</td>
-                      )}
+                      {vs.has('validite') && (() => {
+                        const horsDelai = !!d.dateValidite && d.dateValidite < new Date().toISOString().split('T')[0] && !['accepté', 'refusé', 'archivé', 'système'].includes(d.statut);
+                        return (
+                          <td className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>
+                            {formatDate(d.dateValidite)}
+                          </td>
+                        );
+                      })()}
                       {vs.has('totalHT') && (
                         <td className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>
                       )}
