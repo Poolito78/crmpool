@@ -1,5 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
@@ -15,10 +17,24 @@ import { toast } from 'sonner';
 
 const allStatuts = Object.keys(STATUTS_FACTURE_FOURNISSEUR) as StatutFactureFournisseur[];
 
+type FFColKey = 'numero' | 'numFacture' | 'fournisseur' | 'bc' | 'reception' | 'echeance' | 'paiement' | 'montant' | 'statut';
+const FF_COLS: { key: FFColKey; label: string; cls: string }[] = [
+  { key: 'numero', label: 'N° interne', cls: 'text-left' },
+  { key: 'numFacture', label: 'N° Facture', cls: 'text-left' },
+  { key: 'fournisseur', label: 'Fournisseur', cls: 'text-left' },
+  { key: 'bc', label: 'BC lié', cls: 'text-left hidden sm:table-cell' },
+  { key: 'reception', label: 'Réception', cls: 'text-left hidden md:table-cell' },
+  { key: 'echeance', label: 'Échéance', cls: 'text-left hidden lg:table-cell' },
+  { key: 'paiement', label: 'Paiement', cls: 'text-left hidden lg:table-cell' },
+  { key: 'montant', label: 'Montant TTC', cls: 'text-right' },
+  { key: 'statut', label: 'Statut', cls: 'text-center' },
+];
+
 export default function FacturesFournisseur() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { facturesFournisseur, updateFacturesFournisseur, fournisseurs, commandesFournisseur, devis } = useCRM();
+  const ffCols = useTableColumns<FFColKey>('factures_fourn_table', FF_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
@@ -235,15 +251,16 @@ export default function FacturesFournisseur() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">N° interne</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">N° Facture</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Fournisseur</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">BC lié</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Réception</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Échéance</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Paiement</th>
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Montant TTC</th>
-              <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
+              {ffCols.ordered(FF_COLS).map(col => {
+                const isDragOver = ffCols.dragOverKey === col.key && ffCols.dragKey !== col.key;
+                return (
+                  <th key={col.key} {...ffCols.thProps(col.key)} style={ffCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${ffCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                    {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                    <span className="truncate">{col.label}</span>
+                    <ColResizeHandle {...ffCols.resizeHandleProps(col.key)} />
+                  </th>
+                );
+              })}
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -254,53 +271,26 @@ export default function FacturesFournisseur() {
               const dv = cf?.devisId ? devis.find(d => d.id === cf.devisId) : undefined;
               const statutInfo = STATUTS_FACTURE_FOURNISSEUR[f.statut];
               const isOverdue = f.statut !== 'payée' && f.dateEcheance && new Date(f.dateEcheance) < new Date();
+              const renderFF = (key: FFColKey) => {
+                const ws = ffCols.widthStyle(key);
+                const col = FF_COLS.find(c => c.key === key)!;
+                const base = `py-3 px-4 ${col.cls}`;
+                switch (key) {
+                  case 'numero': return <td style={ws} className={`${base} font-mono text-xs`}>{f.numero}</td>;
+                  case 'numFacture': return <td style={ws} className={`${base} font-medium text-sm`}>{f.numeroFacture || <span className="text-muted-foreground">—</span>}</td>;
+                  case 'fournisseur': return <td style={ws} className={base}><div className="font-medium truncate">{fourn?.societe || fourn?.nom || '—'}</div></td>;
+                  case 'bc': return <td style={ws} className={base}><div className="flex items-center gap-1 flex-wrap">{cf && <button onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20"><ShoppingCart className="w-2.5 h-2.5" />{cf.numero}</button>}{dv && <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dv.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20">{dv.numero}</button>}</div></td>;
+                  case 'reception': return <td style={ws} className={`${base} text-xs text-muted-foreground`}>{formatDate(f.dateReception)}</td>;
+                  case 'echeance': return <td style={ws} className={base}>{f.dateEcheance ? <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>{formatDate(f.dateEcheance)}{isOverdue && <span className="block text-[10px]">Échu</span>}</span> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                  case 'paiement': return <td style={ws} className={`${base} text-xs text-muted-foreground`}>{f.datePaiement ? formatDate(f.datePaiement) : '—'}</td>;
+                  case 'montant': return <td style={ws} className={`${base} font-semibold`}>{formatMontant(f.montantTTC)}</td>;
+                  case 'statut': return <td style={ws} className={base}><select value={f.statut} onChange={e => updateStatut(f.id, e.target.value as StatutFactureFournisseur)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_FACTURE_FOURNISSEUR[s].label}</option>)}</select></td>;
+                  default: return <td style={ws} className={base} />;
+                }
+              };
               return (
                 <tr key={f.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  <td className="py-3 px-4 font-mono text-xs">{f.numero}</td>
-                  <td className="py-3 px-4 font-medium text-sm">{f.numeroFacture || <span className="text-muted-foreground">—</span>}</td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium">{fourn?.societe || fourn?.nom || '—'}</div>
-                  </td>
-                  <td className="py-3 px-4 hidden sm:table-cell">
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {cf && (
-                        <button onClick={() => navigate(`/commandes?search=${encodeURIComponent(cf.numero)}`)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-info/10 text-info font-medium hover:bg-info/20">
-                          <ShoppingCart className="w-2.5 h-2.5" />{cf.numero}
-                        </button>
-                      )}
-                      {dv && (
-                        <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dv.numero)}`)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20">
-                          {dv.numero}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 hidden md:table-cell text-xs text-muted-foreground">{formatDate(f.dateReception)}</td>
-                  <td className="py-3 px-4 hidden lg:table-cell">
-                    {f.dateEcheance ? (
-                      <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
-                        {formatDate(f.dateEcheance)}
-                        {isOverdue && <span className="block text-[10px]">Échu</span>}
-                      </span>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="py-3 px-4 hidden lg:table-cell text-xs text-muted-foreground">
-                    {f.datePaiement ? formatDate(f.datePaiement) : '—'}
-                  </td>
-                  <td className="py-3 px-4 text-right font-semibold">{formatMontant(f.montantTTC)}</td>
-                  <td className="py-3 px-4 text-center">
-                    <select
-                      value={f.statut}
-                      onChange={e => updateStatut(f.id, e.target.value as StatutFactureFournisseur)}
-                      className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}
-                    >
-                      {allStatuts.map(s => (
-                        <option key={s} value={s}>{STATUTS_FACTURE_FOURNISSEUR[s].label}</option>
-                      ))}
-                    </select>
-                  </td>
+                  {ffCols.ordered(FF_COLS).map(col => <Fragment key={col.key}>{renderFF(col.key)}</Fragment>)}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {f.statut !== 'payée' && (

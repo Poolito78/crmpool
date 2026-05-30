@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
@@ -19,10 +21,23 @@ const allStatuts = Object.keys(STATUTS_FACTURE_CLIENT) as StatutFactureClient[];
 
 type ViewMode = 'toutes' | 'factures' | 'proformas';
 
+type FCColKey = 'numero' | 'client' | 'ref' | 'date' | 'echeance' | 'paiement' | 'total' | 'statut';
+const FC_COLS: { key: FCColKey; label: string; cls: string }[] = [
+  { key: 'numero', label: 'N°', cls: 'text-left' },
+  { key: 'client', label: 'Client', cls: 'text-left' },
+  { key: 'ref', label: 'Réf. / Liens', cls: 'text-left hidden sm:table-cell' },
+  { key: 'date', label: 'Date', cls: 'text-left hidden md:table-cell' },
+  { key: 'echeance', label: 'Échéance', cls: 'text-left hidden lg:table-cell' },
+  { key: 'paiement', label: 'Paiement', cls: 'text-left hidden lg:table-cell' },
+  { key: 'total', label: 'Total TTC', cls: 'text-right' },
+  { key: 'statut', label: 'Statut', cls: 'text-center' },
+];
+
 export default function FacturesClient() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { facturesClient, updateFacturesClient, clients, devis, commandesClient } = useCRM();
+  const fcCols = useTableColumns<FCColKey>('factures_client_table', FC_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
@@ -261,14 +276,16 @@ export default function FacturesClient() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">N°</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground">Client</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden sm:table-cell">Réf. / Liens</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden md:table-cell">Date</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Échéance</th>
-              <th className="text-left py-3 px-4 font-medium text-muted-foreground hidden lg:table-cell">Paiement</th>
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Total TTC</th>
-              <th className="text-center py-3 px-4 font-medium text-muted-foreground">Statut</th>
+              {fcCols.ordered(FC_COLS).map(col => {
+                const isDragOver = fcCols.dragOverKey === col.key && fcCols.dragKey !== col.key;
+                return (
+                  <th key={col.key} {...fcCols.thProps(col.key)} style={fcCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${fcCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                    {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                    <span className="truncate">{col.label}</span>
+                    <ColResizeHandle {...fcCols.resizeHandleProps(col.key)} />
+                  </th>
+                );
+              })}
               <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
             </tr>
           </thead>
@@ -279,67 +296,25 @@ export default function FacturesClient() {
               const cc = f.commandeClientId ? commandesClient.find(c => c.id === f.commandeClientId) : undefined;
               const statutInfo = STATUTS_FACTURE_CLIENT[f.statut];
               const isOverdue = f.statut === 'envoyée' && f.dateEcheance && new Date(f.dateEcheance) < new Date();
+              const renderFC = (key: FCColKey) => {
+                const ws = fcCols.widthStyle(key);
+                const col = FC_COLS.find(c => c.key === key)!;
+                const base = `py-3 px-4 ${col.cls}`;
+                switch (key) {
+                  case 'numero': return <td style={ws} className={base}><div className="flex items-center gap-1.5"><span className="font-mono text-xs font-semibold">{f.numero}</span>{f.estProforma && <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-bold tracking-wide">PROFORMA</span>}</div></td>;
+                  case 'client': return <td style={ws} className={base}><div className="font-medium truncate">{client?.nom || '—'}</div>{client?.societe && <div className="text-xs text-muted-foreground truncate">{client.societe}</div>}</td>;
+                  case 'ref': return <td style={ws} className={base}><div className="text-xs text-muted-foreground">{f.referenceAffaire || ''}</div><div className="flex items-center gap-1 flex-wrap mt-0.5">{dv && <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dv.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20"><FileText className="w-2.5 h-2.5" />{dv.numero}</button>}{cc && <button onClick={() => navigate(`/commandes-client?search=${encodeURIComponent(cc.numero)}`)} className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20">{cc.numero}</button>}</div></td>;
+                  case 'date': return <td style={ws} className={`${base} text-muted-foreground text-xs`}>{formatDate(f.dateCreation)}</td>;
+                  case 'echeance': return <td style={ws} className={base}>{f.dateEcheance ? <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>{formatDate(f.dateEcheance)}{isOverdue && <span className="block text-[10px]">Échu</span>}</span> : <span className="text-muted-foreground text-xs">—</span>}</td>;
+                  case 'paiement': return <td style={ws} className={`${base} text-xs text-muted-foreground`}>{f.datePaiement ? formatDate(f.datePaiement) : '—'}</td>;
+                  case 'total': return <td style={ws} className={`${base} font-semibold`}>{formatMontant(f.totalTTC)}</td>;
+                  case 'statut': return <td style={ws} className={base}>{f.estProforma ? <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">{STATUTS_FACTURE_CLIENT[f.statut].label}</span> : <select value={f.statut} onChange={e => updateStatut(f.id, e.target.value as StatutFactureClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>)}</select>}</td>;
+                  default: return <td style={ws} className={base} />;
+                }
+              };
               return (
                 <tr key={f.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${f.estProforma ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}`}>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-mono text-xs font-semibold">{f.numero}</span>
-                      {f.estProforma && (
-                        <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-bold tracking-wide">PROFORMA</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium">{client?.nom || '—'}</div>
-                    {client?.societe && <div className="text-xs text-muted-foreground">{client.societe}</div>}
-                  </td>
-                  <td className="py-3 px-4 hidden sm:table-cell">
-                    <div className="text-xs text-muted-foreground">{f.referenceAffaire || ''}</div>
-                    <div className="flex items-center gap-1 flex-wrap mt-0.5">
-                      {dv && (
-                        <button onClick={() => navigate(`/devis?search=${encodeURIComponent(dv.numero)}`)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-success/10 text-success font-medium hover:bg-success/20">
-                          <FileText className="w-2.5 h-2.5" />{dv.numero}
-                        </button>
-                      )}
-                      {cc && (
-                        <button onClick={() => navigate(`/commandes-client?search=${encodeURIComponent(cc.numero)}`)}
-                          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium hover:bg-primary/20">
-                          {cc.numero}
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 hidden md:table-cell text-muted-foreground text-xs">{formatDate(f.dateCreation)}</td>
-                  <td className="py-3 px-4 hidden lg:table-cell">
-                    {f.dateEcheance ? (
-                      <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>
-                        {formatDate(f.dateEcheance)}
-                        {isOverdue && <span className="block text-[10px]">Échu</span>}
-                      </span>
-                    ) : <span className="text-muted-foreground text-xs">—</span>}
-                  </td>
-                  <td className="py-3 px-4 hidden lg:table-cell text-xs text-muted-foreground">
-                    {f.datePaiement ? formatDate(f.datePaiement) : '—'}
-                  </td>
-                  <td className="py-3 px-4 text-right font-semibold">{formatMontant(f.totalTTC)}</td>
-                  <td className="py-3 px-4 text-center">
-                    {f.estProforma ? (
-                      <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">
-                        {STATUTS_FACTURE_CLIENT[f.statut].label}
-                      </span>
-                    ) : (
-                      <select
-                        value={f.statut}
-                        onChange={e => updateStatut(f.id, e.target.value as StatutFactureClient)}
-                        className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}
-                      >
-                        {allStatuts.map(s => (
-                          <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>
-                        ))}
-                      </select>
-                    )}
-                  </td>
+                  {fcCols.ordered(FC_COLS).map(col => <Fragment key={col.key}>{renderFC(col.key)}</Fragment>)}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {f.estProforma && (
