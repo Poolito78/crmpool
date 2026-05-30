@@ -3,7 +3,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, calculerFournisseurPrioritaire,
   getPfPrixPourQuantite, getPfTransportPourMontant,
-  type ProduitFournisseur, type PrixPalier, type PalierPort,
+  type ProduitFournisseur, type PrixPalier, type PalierPort, type Fournisseur,
 } from '@/lib/store';
 import {
   Plus, Trash2, Star, Truck, Clock, Package,
@@ -20,9 +20,11 @@ interface Props {
 }
 
 export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }: Props) {
-  const { fournisseurs, produits, updateProduits, produitFournisseurs, updateProduitFournisseurs } = useCRM();
+  const { fournisseurs, produits, updateProduits, produitFournisseurs, updateProduitFournisseurs, updateFournisseurs } = useCRM();
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
+  const [creatingNewFourn, setCreatingNewFourn] = useState(false);
+  const [newFournForm, setNewFournForm] = useState({ societe: '', nom: '', email: '', telephone: '' });
   const [expandedPrix, setExpandedPrix]   = useState<Set<string>>(new Set());
   const [expandedPort, setExpandedPort]   = useState<Set<string>>(new Set());
 
@@ -71,7 +73,31 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     updateProduitFournisseurs(prev => [...prev, newPf]);
     setForm({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
     setAdding(false);
+    setCreatingNewFourn(false);
     toast.success('Fournisseur ajouté');
+  }
+
+  function createAndSelectFournisseur() {
+    if (!newFournForm.societe.trim()) { toast.error('Le nom de la société est requis'); return; }
+    const newF: Fournisseur = {
+      id: generateId(),
+      societe: newFournForm.societe.trim(),
+      nom: newFournForm.nom.trim(),
+      email: newFournForm.email.trim(),
+      telephone: newFournForm.telephone.trim(),
+      adresse: '',
+      ville: '',
+      codePostal: '',
+      francoPort: 0,
+      coutTransport: 0,
+      delaiReglement: '',
+      dateCreation: new Date().toISOString(),
+    };
+    updateFournisseurs(prev => [...prev, newF]);
+    setForm(p => ({ ...p, fournisseurId: newF.id }));
+    setCreatingNewFourn(false);
+    setNewFournForm({ societe: '', nom: '', email: '', telephone: '' });
+    toast.success(`Fournisseur "${newF.societe}" créé`);
   }
 
   function removePf(id: string) {
@@ -167,11 +193,9 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             </span>
           )}
         </p>
-        {availableFournisseurs.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
-            <Plus className="w-3 h-3 mr-1" /> Ajouter
-          </Button>
-        )}
+        <Button variant="outline" size="sm" onClick={() => { setAdding(true); setCreatingNewFourn(false); }}>
+          <Plus className="w-3 h-3 mr-1" /> Ajouter
+        </Button>
       </div>
 
       {/* Prix de référence produit */}
@@ -389,19 +413,60 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
       {adding && (
         <div className="border border-dashed border-primary/50 rounded-lg p-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">
+            {/* Sélecteur fournisseur + bouton créer nouveau */}
             <div className="col-span-2">
               <Label className="text-xs">Fournisseur</Label>
-              <select
-                value={form.fournisseurId}
-                onChange={e => setForm(p => ({ ...p, fournisseurId: e.target.value }))}
-                className="w-full h-8 text-xs rounded border border-input bg-background px-2"
-              >
-                <option value="">— Sélectionner —</option>
-                {availableFournisseurs.map(f => (
-                  <option key={f.id} value={f.id}>{f.societe}</option>
-                ))}
-              </select>
+              <div className="flex gap-1.5">
+                <select
+                  value={form.fournisseurId}
+                  onChange={e => setForm(p => ({ ...p, fournisseurId: e.target.value }))}
+                  className="flex-1 h-8 text-xs rounded border border-input bg-background px-2"
+                >
+                  <option value="">— Sélectionner —</option>
+                  {availableFournisseurs.map(f => (
+                    <option key={f.id} value={f.id}>{f.societe}</option>
+                  ))}
+                </select>
+                <Button
+                  type="button"
+                  variant={creatingNewFourn ? 'secondary' : 'outline'}
+                  size="sm"
+                  className="h-8 px-2 shrink-0"
+                  onClick={() => { setCreatingNewFourn(o => !o); setNewFournForm({ societe: '', nom: '', email: '', telephone: '' }); }}
+                  title="Créer un nouveau fournisseur"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </Button>
+              </div>
             </div>
+
+            {/* Mini-form création fournisseur */}
+            {creatingNewFourn && (
+              <div className="col-span-2 border border-border rounded-lg p-2.5 bg-muted/30 space-y-2">
+                <p className="text-xs font-semibold text-foreground">Nouveau fournisseur</p>
+                <Input
+                  placeholder="Société *"
+                  value={newFournForm.societe}
+                  onChange={e => setNewFournForm(p => ({ ...p, societe: e.target.value }))}
+                  onKeyDown={e => e.key === 'Enter' && createAndSelectFournisseur()}
+                  className="h-7 text-xs"
+                  autoFocus
+                />
+                <div className="grid grid-cols-2 gap-1.5">
+                  <Input placeholder="Nom contact" value={newFournForm.nom} onChange={e => setNewFournForm(p => ({ ...p, nom: e.target.value }))} className="h-7 text-xs" />
+                  <Input placeholder="Email" value={newFournForm.email} onChange={e => setNewFournForm(p => ({ ...p, email: e.target.value }))} className="h-7 text-xs" />
+                </div>
+                <Input placeholder="Téléphone" value={newFournForm.telephone} onChange={e => setNewFournForm(p => ({ ...p, telephone: e.target.value }))} className="h-7 text-xs" />
+                <p className="text-[10px] text-muted-foreground">Adresse, franco de port et autres infos modifiables dans la fiche fournisseur.</p>
+                <div className="flex gap-1.5 justify-end">
+                  <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setCreatingNewFourn(false)}>Annuler</Button>
+                  <Button size="sm" className="h-7 text-xs" onClick={createAndSelectFournisseur}>
+                    <Plus className="w-3 h-3 mr-1" /> Créer et sélectionner
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div>
               <Label className="text-xs">Réf. fournisseur</Label>
               <Input value={form.referenceFournisseur}
@@ -422,7 +487,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
             </div>
           </div>
           <div className="flex gap-2 justify-end">
-            <Button variant="outline" size="sm" onClick={() => setAdding(false)}>Annuler</Button>
+            <Button variant="outline" size="sm" onClick={() => { setAdding(false); setCreatingNewFourn(false); }}>Annuler</Button>
             <Button size="sm" onClick={addFournisseur}>Ajouter</Button>
           </div>
         </div>
