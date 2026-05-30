@@ -16,6 +16,19 @@ import { exportToExcel } from '@/lib/exportExcel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { Fragment } from 'react';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
+
+type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours';
+const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; sortable: boolean; filterCol: 'societe' | 'contacts' | 'ville' | 'adresses' | null }[] = [
+  { key: 'societe',  label: 'Société',       align: 'left',  sortable: true,  filterCol: 'societe' },
+  { key: 'contacts', label: 'Contacts',      align: 'left',  sortable: false, filterCol: 'contacts' },
+  { key: 'ville',    label: 'Ville',         align: 'left',  sortable: true,  filterCol: 'ville' },
+  { key: 'adresses', label: 'Adresses liv.', align: 'left',  sortable: true,  filterCol: 'adresses' },
+  { key: 'devis',    label: 'Devis',         align: 'left',  sortable: true,  filterCol: null },
+  { key: 'encours',  label: 'Encours dû',    align: 'right', sortable: true,  filterCol: null },
+];
 
 const DELAI_REGLEMENT_OPTIONS = [
   { value: 'Comptant', label: 'Comptant',  conditions: 'Paiement comptant à réception de facture.' },
@@ -157,6 +170,7 @@ export default function Clients() {
   const [filterRevendeur, setFilterRevendeur] = useState<'' | 'oui' | 'non'>('');
   const [filterHasAdresse, setFilterHasAdresse] = useState<'' | 'oui' | 'non'>('');
   const [openFilterCols, setOpenFilterCols] = useState<Set<'societe' | 'contacts' | 'ville' | 'adresses'>>(new Set());
+  const cCols = useTableColumns<ClientColKey>('clients_table', CLIENT_COLS.map(c => c.key));
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [form, setForm] = useState(emptyClient);
@@ -624,14 +638,8 @@ export default function Clients() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              {([
-                { col: 'societe' as const,   label: 'Société',       align: 'left',  filterCol: 'societe'  as const },
-                { col: null,                  label: 'Contacts',      align: 'left',  filterCol: 'contacts' as const },
-                { col: 'ville' as const,      label: 'Ville',         align: 'left',  filterCol: 'ville'    as const },
-                { col: 'adresses' as const,   label: 'Adresses liv.', align: 'left',  filterCol: 'adresses' as const },
-                { col: 'devis' as const,      label: 'Devis',         align: 'left',  filterCol: null },
-                { col: 'encours' as const,    label: 'Encours dû',    align: 'right', filterCol: null },
-              ]).map(({ col, label, align, filterCol }) => {
+              {cCols.ordered(CLIENT_COLS).map(({ key, label, align, sortable, filterCol }) => {
+                const col = sortable ? key : null;
                 const hasFilter = filterCol === 'societe' ? !!filterSociete
                   : filterCol === 'contacts' ? !!(filterContact || filterRevendeur)
                   : filterCol === 'ville' ? !!(filterVille || filterDepartement)
@@ -640,28 +648,31 @@ export default function Clients() {
                 const SortIcon = sortCol === col
                   ? (sortDir === 'asc' ? ChevronUp : ChevronDown)
                   : ChevronsUpDown;
+                const isDragOver = cCols.dragOverKey === key && cCols.dragKey !== key;
                 return (
-                  <th key={label} className={`px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap`}>
-                    <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''}`}>
+                  <th key={key} {...cCols.thProps(key)} style={cCols.widthStyle(key)} className={`relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${cCols.dragKey === key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                    {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                    <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''} ${cCols.widthStyle(key) ? 'overflow-hidden' : ''}`}>
                       {col ? (
-                        <button className="flex items-center gap-1 hover:text-foreground cursor-pointer" onClick={() => toggleSort(col)}>
+                        <button className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0" onClick={() => toggleSort(col)}>
                           {align === 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === col ? 'text-primary' : 'opacity-40'}`} />}
-                          <span>{label}</span>
+                          <span className="truncate">{label}</span>
                           {align !== 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === col ? 'text-primary' : 'opacity-40'}`} />}
                         </button>
                       ) : (
-                        <span>{label}</span>
+                        <span className="truncate">{label}</span>
                       )}
                       {filterCol && (
                         <button
                           onClick={() => toggleFilterCol(filterCol)}
                           title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
-                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
+                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
                         >
                           <Filter className="w-3 h-3" />
                         </button>
                       )}
                     </div>
+                    <ColResizeHandle {...cCols.resizeHandleProps(key)} />
                   </th>
                 );
               })}
@@ -669,53 +680,26 @@ export default function Clients() {
             </tr>
             {openFilterCols.size > 0 && (
               <tr className="border-b border-border bg-muted/20">
-                {/* Société */}
-                <td className="px-4 py-1">
-                  {openFilterCols.has('societe') && (
-                    <input placeholder="Filtrer..." value={filterSociete} onChange={e => setFilterSociete(e.target.value)}
-                      className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />
-                  )}
-                </td>
-                {/* Contacts */}
-                <td className="px-4 py-1">
-                  {openFilterCols.has('contacts') && (
+                {cCols.ordered(CLIENT_COLS).map(({ key }) => {
+                  const ws = cCols.widthStyle(key);
+                  if (key === 'societe') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('societe') && <input placeholder="Filtrer..." value={filterSociete} onChange={e => setFilterSociete(e.target.value)} className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />}</td>;
+                  if (key === 'contacts') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('contacts') && (
                     <div className="flex items-center gap-1">
-                      <input placeholder="Nom, email..." value={filterContact} onChange={e => setFilterContact(e.target.value)}
-                        className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
-                      <select value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')}
-                        className="h-6 text-xs rounded border border-input bg-background px-1">
-                        <option value="">Tous</option>
-                        <option value="oui">Rev.</option>
-                        <option value="non">Non rev.</option>
-                      </select>
+                      <input placeholder="Nom, email..." value={filterContact} onChange={e => setFilterContact(e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
+                      <select value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')} className="h-6 text-xs rounded border border-input bg-background px-1"><option value="">Tous</option><option value="oui">Rev.</option><option value="non">Non rev.</option></select>
                     </div>
-                  )}
-                </td>
-                {/* Ville */}
-                <td className="px-4 py-1">
-                  {openFilterCols.has('ville') && (
+                  )}</td>;
+                  if (key === 'ville') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('ville') && (
                     <div className="flex items-center gap-1">
-                      <input placeholder="Ville..." value={filterVille} onChange={e => setFilterVille(e.target.value)}
-                        className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
-                      <input placeholder="Dép." value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)}
-                        className="h-6 text-xs w-10 rounded border border-input bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" maxLength={3} />
+                      <input placeholder="Ville..." value={filterVille} onChange={e => setFilterVille(e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
+                      <input placeholder="Dép." value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)} className="h-6 text-xs w-10 rounded border border-input bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" maxLength={3} />
                     </div>
-                  )}
-                </td>
-                {/* Adresses */}
-                <td className="px-4 py-1">
-                  {openFilterCols.has('adresses') && (
-                    <select value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')}
-                      className="h-6 text-xs rounded border border-input bg-background px-1 w-full">
-                      <option value="">Toutes</option>
-                      <option value="oui">Avec</option>
-                      <option value="non">Sans</option>
-                    </select>
-                  )}
-                </td>
-                {/* Devis / Encours / Actions */}
-                <td className="px-4 py-1" />
-                <td className="px-4 py-1" />
+                  )}</td>;
+                  if (key === 'adresses') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('adresses') && (
+                    <select value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')} className="h-6 text-xs rounded border border-input bg-background px-1 w-full"><option value="">Toutes</option><option value="oui">Avec</option><option value="non">Sans</option></select>
+                  )}</td>;
+                  return <td key={key} style={ws} className="px-4 py-1" />;
+                })}
                 <td className="px-4 py-1" />
               </tr>
             )}
@@ -723,77 +707,51 @@ export default function Clients() {
           <tbody>
             {sortedFiltered.map(c => {
               const contacts = c.contacts || [];
-              const primary = contacts[0];
+              const renderC = (key: ClientColKey) => {
+                const ws = cCols.widthStyle(key);
+                const trunc = ws ? ' truncate' : '';
+                switch (key) {
+                  case 'societe': return <td style={ws} className={`px-4 py-3${trunc}`}><p className="font-semibold truncate">{c.societe || c.nom}</p>{c.adresse && <p className="text-xs text-muted-foreground truncate">{c.adresse}</p>}{c.estRevendeur && <Badge variant="secondary" className="mt-0.5 text-[10px] px-1.5 py-0">Revendeur</Badge>}</td>;
+                  case 'contacts': return <td style={ws} className="px-4 py-3">{contacts.length > 0 ? (
+                    <div className="space-y-0.5">
+                      {contacts.slice(0, 2).map((ct, i) => (
+                        <div key={ct.id} className="text-xs">
+                          <span className="font-medium">{[ct.prenom, ct.nom].filter(Boolean).join(' ')}</span>
+                          {ct.fonction && <span className="text-muted-foreground"> · {ct.fonction}</span>}
+                          {i === 0 && ct.email && <span className="text-muted-foreground block">{ct.email}</span>}
+                          {i === 0 && (ct.telephone || ct.telephoneMobile) && <span className="text-muted-foreground block">{ct.telephone || ct.telephoneMobile}</span>}
+                        </div>
+                      ))}
+                      {contacts.length > 2 && <span className="text-xs text-muted-foreground">+{contacts.length - 2} autre{contacts.length - 2 > 1 ? 's' : ''}</span>}
+                    </div>
+                  ) : (c.nom || c.email || c.telephone) ? (
+                    <div className="text-xs space-y-0.5">{c.nom && <p className="font-medium">{c.nom}</p>}{c.email && <p className="text-muted-foreground">{c.email}</p>}{c.telephone && <p className="text-muted-foreground">{c.telephone}</p>}</div>
+                  ) : <span className="text-xs text-muted-foreground">—</span>}</td>;
+                  case 'ville': return <td style={ws} className="px-4 py-3 text-muted-foreground text-xs">{c.ville && <p className="truncate">{c.ville}</p>}{c.codePostal && <p className="text-muted-foreground/70">{c.codePostal}</p>}</td>;
+                  case 'adresses': return <td style={ws} className="px-4 py-3">{(c.adressesLivraison?.length || 0) > 0 ? (
+                    <button onClick={e => { e.stopPropagation(); setExpandedClient(expandedClient === c.id ? null : c.id); }} className="flex items-center gap-1 text-primary hover:underline text-xs">
+                      <MapPin className="w-3 h-3" />{c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}{expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                    </button>
+                  ) : <span className="text-xs text-muted-foreground">—</span>}</td>;
+                  case 'devis': return <td style={ws} className="px-4 py-3">{(() => {
+                    const clientDevis = devis.filter(d => d.clientId === c.id);
+                    if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
+                    return <button onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(c.societe || c.nom)}`); }} className="flex items-center gap-1 text-primary hover:underline text-xs"><FileText className="w-3 h-3" />{clientDevis.length} devis</button>;
+                  })()}</td>;
+                  case 'encours': return <td style={ws} className="px-4 py-3 text-right">{(() => {
+                    const encours = encoursDuParClient[c.id];
+                    const montantDu = encours?.montant || 0;
+                    const montantDepasse = (encours?.echeances.filter(e => new Date(e.date) < new Date()) || []).reduce((s, e) => s + e.montant, 0);
+                    if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
+                    return <div><span className="font-medium text-xs">{formatMontant(montantDu)}</span>{montantDepasse > 0 && <div className="text-xs text-destructive font-medium">{formatMontant(montantDepasse)} échu</div>}</div>;
+                  })()}</td>;
+                  default: return <td style={ws} className="px-4 py-3" />;
+                }
+              };
               return (
-                <>
-                  <tr key={c.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
-                    <td className="px-4 py-3">
-                      <p className="font-semibold">{c.societe || c.nom}</p>
-                      {c.adresse && <p className="text-xs text-muted-foreground">{c.adresse}</p>}
-                      {c.estRevendeur && <Badge variant="secondary" className="mt-0.5 text-[10px] px-1.5 py-0">Revendeur</Badge>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {contacts.length > 0 ? (
-                        <div className="space-y-0.5">
-                          {contacts.slice(0, 2).map((ct, i) => (
-                            <div key={ct.id} className="text-xs">
-                              <span className="font-medium">{[ct.prenom, ct.nom].filter(Boolean).join(' ')}</span>
-                              {ct.fonction && <span className="text-muted-foreground"> · {ct.fonction}</span>}
-                              {i === 0 && ct.email && <span className="text-muted-foreground block">{ct.email}</span>}
-                              {i === 0 && (ct.telephone || ct.telephoneMobile) && <span className="text-muted-foreground block">{ct.telephone || ct.telephoneMobile}</span>}
-                            </div>
-                          ))}
-                          {contacts.length > 2 && <span className="text-xs text-muted-foreground">+{contacts.length - 2} autre{contacts.length - 2 > 1 ? 's' : ''}</span>}
-                        </div>
-                      ) : (c.nom || c.email || c.telephone) ? (
-                        <div className="text-xs space-y-0.5">
-                          {c.nom && <p className="font-medium">{c.nom}</p>}
-                          {c.email && <p className="text-muted-foreground">{c.email}</p>}
-                          {c.telephone && <p className="text-muted-foreground">{c.telephone}</p>}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs">
-                      {c.ville && <p>{c.ville}</p>}
-                      {c.codePostal && <p className="text-muted-foreground/70">{c.codePostal}</p>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(c.adressesLivraison?.length || 0) > 0 ? (
-                        <button onClick={e => { e.stopPropagation(); setExpandedClient(expandedClient === c.id ? null : c.id); }} className="flex items-center gap-1 text-primary hover:underline text-xs">
-                          <MapPin className="w-3 h-3" />
-                          {c.adressesLivraison.length} adresse{c.adressesLivraison.length > 1 ? 's' : ''}
-                          {expandedClient === c.id ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                        </button>
-                      ) : <span className="text-xs text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-4 py-3">
-                      {(() => {
-                        const clientDevis = devis.filter(d => d.clientId === c.id);
-                        if (clientDevis.length === 0) return <span className="text-xs text-muted-foreground">—</span>;
-                        return (
-                          <button onClick={e => { e.stopPropagation(); navigate(`/devis?search=${encodeURIComponent(c.societe || c.nom)}`); }} className="flex items-center gap-1 text-primary hover:underline text-xs">
-                            <FileText className="w-3 h-3" />{clientDevis.length} devis
-                          </button>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      {(() => {
-                        const encours = encoursDuParClient[c.id];
-                        const montantDu = encours?.montant || 0;
-                        const echeancesDepassees = encours?.echeances.filter(e => new Date(e.date) < new Date()) || [];
-                        const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
-                        if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
-                        return (
-                          <div>
-                            <span className="font-medium text-xs">{formatMontant(montantDu)}</span>
-                            {montantDepasse > 0 && <div className="text-xs text-destructive font-medium">{formatMontant(montantDepasse)} échu</div>}
-                          </div>
-                        );
-                      })()}
-                    </td>
+                <Fragment key={c.id}>
+                  <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
+                    {cCols.ordered(CLIENT_COLS).map(col => <Fragment key={col.key}>{renderC(col.key)}</Fragment>)}
                     <td className="px-4 py-3">
                       <div className="flex gap-1 justify-end">
                         <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
@@ -821,7 +779,7 @@ export default function Clients() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>
