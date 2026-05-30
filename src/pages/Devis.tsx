@@ -28,8 +28,6 @@ import VarianteSelect from '@/components/VarianteSelect';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
-export { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS };
-export type { DevisTableColKey };
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -538,7 +536,7 @@ export default function Devis() {
       totalAchatMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
     }
     if (totalVenteMMA <= 0) {
-      import('sonner').then(({ toast }) => toast.warning('Aucun produit MMA trouvé dans le devis.'));
+      toast.warning('Aucun produit MMA trouvé dans le devis.');
       return;
     }
     saveSnapshot();
@@ -563,7 +561,7 @@ export default function Devis() {
       totalAchatHorsMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
     }
     if (totalVenteHorsMMA <= 0) {
-      import('sonner').then(({ toast }) => toast.warning('Aucun produit hors MMA trouvé dans le devis.'));
+      toast.warning('Aucun produit hors MMA trouvé dans le devis.');
       return;
     }
     saveSnapshot();

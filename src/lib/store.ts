@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -1148,14 +1149,14 @@ export function useStore() {
         if (added.length) supabase.from('devis').insert(added.map(d => devisToDb(d, userId)) as any).then(({ error }) => {
           if (error) {
             console.error('[devis insert]', error.message, error.details);
-            import('sonner').then(({ toast }) => toast.error(`Erreur sauvegarde devis : ${error.message}`));
+            toast.error(`Erreur sauvegarde devis : ${error.message}`);
           }
         });
         if (updated.length) {
           updated.forEach(d => supabase.from('devis').update(devisToDb(d, userId) as any).eq('id', d.id).then(({ error }) => {
             if (error) {
               console.error('[devis update]', d.id, error.message, error.details);
-              import('sonner').then(({ toast }) => toast.error(`Erreur mise à jour devis ${d.numero} : ${error.message}`));
+              toast.error(`Erreur mise à jour devis ${d.numero} : ${error.message}`);
             }
           }));
         }
