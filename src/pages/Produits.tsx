@@ -5,7 +5,9 @@ import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQ
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
-import FilterChoiceInput from '@/components/FilterChoiceInput';
+import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
+import ColResizeHandle from '@/components/ColResizeHandle';
+import { useTableColumns } from '@/hooks/useTableColumns';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -93,28 +95,8 @@ export default function Produits() {
   const gearMenuRef = useRef<HTMLDivElement>(null);
   const [rowMenuId, setRowMenuId] = useState<string | null>(null);
   const rowMenuRef = useRef<HTMLDivElement>(null);
-  // Largeurs de colonnes redimensionnables (persistées)
-  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
-    try { const s = localStorage.getItem('produits_col_widths'); if (s) return JSON.parse(s); } catch { /* ignore */ }
-    return {};
-  });
-  const resizingRef = useRef<{ key: string; startX: number; startW: number } | null>(null);
-  // Ordre des colonnes (persisté) — drag de l'en-tête pour réordonner
-  const [colOrder, setColOrder] = useState<ColKey[]>(() => {
-    try {
-      const s = localStorage.getItem('produits_col_order');
-      if (s) {
-        const saved = JSON.parse(s) as ColKey[];
-        const valid = saved.filter(k => COLUMNS.some(c => c.key === k));
-        // Ajoute en fin toute colonne absente de l'ordre sauvegardé
-        const missing = COLUMNS.map(c => c.key).filter(k => !valid.includes(k));
-        return [...valid, ...missing];
-      }
-    } catch { /* ignore */ }
-    return COLUMNS.map(c => c.key);
-  });
-  const [dragColKey, setDragColKey] = useState<ColKey | null>(null);
-  const [dragOverColKey, setDragOverColKey] = useState<ColKey | null>(null);
+  // Colonnes : largeur (resize) + ordre (drag) via le hook partagé (persistés sous produits_col_*)
+  const prodCols = useTableColumns<ColKey>('produits_col', COLUMNS.map(c => c.key));
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -196,60 +178,8 @@ export default function Produits() {
     else { setSortCol(key); setSortDir('asc'); }
   }
 
-  // ── Redimensionnement de colonnes (drag sur la bordure droite) ──────────────
-  function startColResize(e: React.MouseEvent, key: string, currentW: number) {
-    e.preventDefault();
-    e.stopPropagation();
-    resizingRef.current = { key, startX: e.clientX, startW: currentW };
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    const onMove = (ev: MouseEvent) => {
-      const r = resizingRef.current;
-      if (!r) return;
-      const w = Math.max(50, Math.round(r.startW + (ev.clientX - r.startX)));
-      setColWidths(prev => ({ ...prev, [r.key]: w }));
-    };
-    const onUp = () => {
-      resizingRef.current = null;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      setColWidths(prev => { try { localStorage.setItem('produits_col_widths', JSON.stringify(prev)); } catch { /* ignore */ } return prev; });
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
-  function resetColWidth(key: string) {
-    setColWidths(prev => {
-      const next = { ...prev };
-      delete next[key];
-      try { localStorage.setItem('produits_col_widths', JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
-  }
-
-  // ── Réordonnancement des colonnes (drag de l'en-tête) ───────────────────────
-  // Colonnes visibles dans l'ordre choisi par l'utilisateur
-  const orderedVisibleCols = colOrder
-    .map(k => COLUMNS.find(c => c.key === k))
-    .filter((c): c is typeof COLUMNS[number] => !!c && visibleCols.has(c.key));
-
-  function handleColDrop(targetKey: ColKey) {
-    if (!dragColKey || dragColKey === targetKey) { setDragColKey(null); setDragOverColKey(null); return; }
-    setColOrder(prev => {
-      const next = [...prev];
-      const from = next.indexOf(dragColKey);
-      const to = next.indexOf(targetKey);
-      if (from === -1 || to === -1) return prev;
-      next.splice(from, 1);
-      next.splice(to, 0, dragColKey);
-      try { localStorage.setItem('produits_col_order', JSON.stringify(next)); } catch { /* ignore */ }
-      return next;
-    });
-    setDragColKey(null);
-    setDragOverColKey(null);
-  }
+  // Colonnes visibles dans l'ordre choisi par l'utilisateur (via le hook partagé)
+  const orderedVisibleCols = prodCols.ordered(COLUMNS, k => visibleCols.has(k));
 
   function toggleFilterCol(col: ColKey) {
     setOpenFilterCols(prev => {
@@ -932,6 +862,28 @@ export default function Produits() {
       </div>
 
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+        {Object.values(columnFilters).some(v => v) && (
+          <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+            {Object.entries(columnFilters).filter(([, v]) => v).map(([k, v]) => {
+              const label = COLUMNS.find(c => c.key === k)?.label || k;
+              let display = v;
+              if (v === '!empty') display = '≠ vide';
+              else if (k === 'disponibleVente') display = v === 'oui' ? 'Disponible' : v === 'non' ? 'Non dispo' : v;
+              else {
+                const cs = parseChoiceFilter(v);
+                if (cs.mode === 'exclude') display = `sauf ${cs.excluded.join(', ')}`;
+              }
+              return (
+                <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {label} : {display}
+                  <button onClick={() => { setColumnFilters(prev => { const n = { ...prev }; delete n[k as ColKey]; return n; }); setOpenFilterCols(prev => { const n = new Set(prev); n.delete(k as ColKey); return n; }); }}><X className="w-3 h-3" /></button>
+                </span>
+              );
+            })}
+            <button onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -944,19 +896,14 @@ export default function Produits() {
                   const SortIcon = isSorted ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
                   const hasFilter = !!(columnFilters[col.key]);
                   const isFilterOpen = openFilterCols.has(col.key);
-                  const cw = colWidths[col.key];
-                  const isDragOver = dragOverColKey === col.key && dragColKey !== col.key;
+                  const cw = prodCols.widths[col.key];
+                  const isDragOver = prodCols.dragOverKey === col.key && prodCols.dragKey !== col.key;
                   return (
                     <th
                       key={col.key}
-                      draggable={!resizingRef.current}
-                      onDragStart={e => { setDragColKey(col.key); e.dataTransfer.effectAllowed = 'move'; try { e.dataTransfer.setData('text/plain', col.key); } catch { /* ignore */ } }}
-                      onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; if (dragOverColKey !== col.key) setDragOverColKey(col.key); }}
-                      onDragLeave={() => { if (dragOverColKey === col.key) setDragOverColKey(null); }}
-                      onDrop={e => { e.preventDefault(); handleColDrop(col.key); }}
-                      onDragEnd={() => { setDragColKey(null); setDragOverColKey(null); }}
-                      style={cw ? { width: cw, minWidth: cw, maxWidth: cw } : undefined}
-                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.align === 'right' ? 'text-right' : 'text-left'} ${dragColKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}
+                      {...prodCols.thProps(col.key)}
+                      style={prodCols.widthStyle(col.key)}
+                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.align === 'right' ? 'text-right' : 'text-left'} ${prodCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}
                     >
                       {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                       <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${cw ? 'overflow-hidden' : ''}`}>
@@ -986,15 +933,7 @@ export default function Produits() {
                           </button>
                         )}
                       </div>
-                      {/* Poignée de redimensionnement (non draggable pour ne pas déclencher le réordonnancement) */}
-                      <div
-                        draggable={false}
-                        onDragStart={e => { e.preventDefault(); e.stopPropagation(); }}
-                        onMouseDown={e => startColResize(e, col.key, cw || (e.currentTarget.parentElement as HTMLElement)?.offsetWidth || 120)}
-                        onDoubleClick={() => resetColWidth(col.key)}
-                        title="Glisser pour redimensionner · double-clic pour réinitialiser"
-                        className="absolute top-0 right-0 h-full w-1.5 cursor-col-resize hover:bg-primary/40 active:bg-primary/60 z-10"
-                      />
+                      <ColResizeHandle {...prodCols.resizeHandleProps(col.key)} />
                     </th>
                   );
                 })}
@@ -1035,12 +974,7 @@ export default function Produits() {
                           </button>
                           <button
                             className="mt-1 w-full text-xs text-muted-foreground hover:text-foreground text-left"
-                            onClick={() => {
-                              const def = COLUMNS.map(c => c.key) as ColKey[];
-                              setColOrder(def);
-                              setColWidths({});
-                              try { localStorage.setItem('produits_col_order', JSON.stringify(def)); localStorage.removeItem('produits_col_widths'); } catch { /* ignore */ }
-                            }}
+                            onClick={() => prodCols.reset()}
                           >
                             Réinitialiser l'ordre et les largeurs
                           </button>
@@ -1114,7 +1048,7 @@ export default function Produits() {
                     <td className="px-2 py-2.5"><input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleSelect(p.id)} className="rounded border-input" /></td>
                     {orderedVisibleCols.map(col => {
                       const cell = renderCell(col.key) as ReactElement<any>;
-                      const cw = colWidths[col.key];
+                      const cw = prodCols.widths[col.key];
                       if (cw && cell) {
                         const prevCls = (cell.props.className || '') as string;
                         const cls = prevCls.includes('truncate') ? prevCls : `${prevCls} truncate`;
