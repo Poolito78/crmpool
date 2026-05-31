@@ -1108,7 +1108,7 @@ export default function Devis() {
   }
 
   return (
-    <div className={devisView === 'tableau' ? 'flex flex-col flex-1 min-h-0 gap-2' : 'space-y-4'}>
+    <div className="flex flex-col flex-1 min-h-0 gap-2">
       <PageHeaderSlot>
           <div className="relative w-32 sm:w-48 md:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1137,30 +1137,6 @@ export default function Devis() {
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
-
-      {devisView !== 'tableau' && (
-      <div className="flex flex-wrap gap-2">
-          <div className="relative md:hidden">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={filterProduit}
-              onChange={e => setFilterProduit(e.target.value)}
-              placeholder="Filtrer par produit..."
-              className="text-sm rounded-md border border-input bg-background pl-8 pr-3 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            {filterProduit && (
-              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
-            )}
-          </div>
-          {/* Tri + période gérés par la barre d'en-têtes (sort par colonne, période via le filtre Date) */}
-          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
-              Réinitialiser les filtres
-            </Button>
-          )}
-      </div>
-      )}
 
       {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
       {devisView === 'tableau' && (
@@ -1318,9 +1294,9 @@ export default function Devis() {
       )}
 
       {/* ══ Vue Liste (cartes) ════════════════════════════════════════════════ */}
-      {devisView === 'liste' && <div className="space-y-3">
-        {/* Bandeau d'en-têtes collant en haut */}
-        <div className="sticky top-0 z-20 -mx-4 md:-mx-6 -mt-2 px-4 md:px-6 pt-2 pb-2 bg-background space-y-2">
+      {devisView === 'liste' && <div className="flex flex-col flex-1 min-h-0 gap-2 -mt-2">
+        {/* Bandeau d'en-têtes fixe au-dessus des cartes */}
+        <div className="shrink-0 space-y-2 bg-background -mx-4 md:-mx-6 px-4 md:px-6 pb-1">
         {/* Barre tri + filtres (reprend l'en-tête du tableau) */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
@@ -1379,6 +1355,7 @@ export default function Devis() {
           </div>
         )}
         </div>
+        <div className="flex-1 min-h-0 overflow-auto space-y-3 pr-0.5">
         {sortedTable.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
@@ -1553,6 +1530,7 @@ export default function Devis() {
           );
         })}
         {sortedTable.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
+        </div>
       </div>}
 
       {/* Create/Edit Dialog */}
