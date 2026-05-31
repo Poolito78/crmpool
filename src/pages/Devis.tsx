@@ -302,7 +302,6 @@ export default function Devis() {
     return arr;
   })();
 
-  const uniqueClients = [...new Set(devis.map(d => d.clientId))].map(id => clients.find(c => c.id === id)).filter(Boolean);
 
 
 
@@ -1098,10 +1097,6 @@ export default function Devis() {
             <Archive className="w-3.5 h-3.5" />
             {showArchived ? 'Masquer archivés' : 'Voir archivés'}
           </button>
-          <select value={filterClient} onChange={e => { setFilterClient(e.target.value); setFilterContact(''); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-            <option value="tous">Tous les clients</option>
-            {uniqueClients.map(c => c && <option key={c.id} value={c.id}>{c.societe || c.nom}</option>)}
-          </select>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -1244,6 +1239,24 @@ export default function Devis() {
                               <option value="oui">Hors délais</option>
                               <option value="non">Dans les délais</option>
                             </select>
+                          </td>
+                        );
+                      }
+                      // Client : saisie libre + liste de suggestions (datalist), sans ≠∅
+                      if (col.key === 'client') {
+                        return (
+                          <td key={col.key} className="px-3 py-1">
+                            <input
+                              list="devis-clients-list"
+                              placeholder="Filtrer client…"
+                              value={fVal === '!empty' ? '' : fVal}
+                              onChange={e => setFilterD('client', e.target.value)}
+                              className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
+                              autoFocus
+                            />
+                            <datalist id="devis-clients-list">
+                              {clients.map(c => <option key={c.id} value={c.societe || c.nom} />)}
+                            </datalist>
                           </td>
                         );
                       }
