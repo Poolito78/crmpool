@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -50,6 +50,11 @@ const NAV_FLAT: NavLink[] = NAV.flatMap(e => e.type === 'group' ? e.items : [e])
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
+  // Sidebar desktop repliée (icônes seules) — persistée
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try { return localStorage.getItem('crm_sidebar_collapsed') === '1'; } catch { return false; }
+  });
+  const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
   const { clients, produits, fournisseurs, devis } = useCRM();
 
@@ -71,7 +76,30 @@ export default function CRMLayout() {
     setOpenGroups(prev => prev.includes(label) ? prev.filter(l => l !== label) : [...prev, label]);
   }
 
-  function renderNavEntries(entries: NavEntry[], onLinkClick?: () => void) {
+  function renderNavEntries(entries: NavEntry[], onLinkClick?: () => void, iconsOnly = false) {
+    // Mode replié : liste à plat d'icônes (liens + items de groupes), avec tooltip title
+    if (iconsOnly) {
+      const flat: NavLink[] = entries.flatMap(e => e.type === 'group' ? e.items : [e]);
+      return flat.map(item => {
+        const active = location.pathname === item.path;
+        return (
+          <Link
+            key={item.path}
+            to={item.path}
+            onClick={onLinkClick}
+            title={item.label}
+            className={cn(
+              'flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all duration-150',
+              active
+                ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-sm'
+                : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+            )}
+          >
+            <item.icon className="w-5 h-5 shrink-0" />
+          </Link>
+        );
+      });
+    }
     return entries.map(entry => {
       if (entry.type === 'link') {
         const active = location.pathname === entry.path;
@@ -157,37 +185,59 @@ export default function CRMLayout() {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:fixed md:inset-y-0 bg-sidebar text-sidebar-foreground z-30">
-        <div className="flex items-center gap-3 px-6 h-16 border-b border-sidebar-border">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+      <aside className={cn(
+        'hidden md:flex md:flex-col md:fixed md:inset-y-0 bg-sidebar text-sidebar-foreground z-30 transition-[width] duration-200',
+        collapsed ? 'md:w-16' : 'md:w-64'
+      )}>
+        <div className={cn('flex items-center h-16 border-b border-sidebar-border', collapsed ? 'justify-center px-2' : 'gap-3 px-6')}>
+          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
             <FileText className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-heading font-bold text-lg tracking-tight">MonCRM</span>
+          {!collapsed && <span className="font-heading font-bold text-lg tracking-tight flex-1">MonCRM</span>}
+          <button
+            onClick={toggleCollapsed}
+            title={collapsed ? 'Déplier le menu' : 'Replier le menu'}
+            className={cn('rounded-lg p-1.5 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors', collapsed && 'absolute top-3 right-2')}
+          >
+            {collapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
+          </button>
         </div>
-        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {renderNavEntries(NAV)}
+        <nav className={cn('flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden', collapsed ? 'px-2' : 'px-3')}>
+          {renderNavEntries(NAV, undefined, collapsed)}
           <button
             onClick={() => setAnalyseOpen(true)}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150"
+            title="Analyse de document"
+            className={cn(
+              'rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150',
+              collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
+            )}
           >
             <ScanText className="w-5 h-5 shrink-0" />
-            Analyse de document
+            {!collapsed && 'Analyse de document'}
           </button>
         </nav>
-        <div className="px-3 pb-4 space-y-1">
+        <div className={cn('pb-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
           <button
             onClick={exportGlobal}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors"
+            title="Export global"
+            className={cn(
+              'rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
+              collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
+            )}
           >
             <Download className="w-5 h-5 shrink-0" />
-            Export global
+            {!collapsed && 'Export global'}
           </button>
           <button
             onClick={() => supabase.auth.signOut()}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
+            title="Déconnexion"
+            className={cn(
+              'rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-colors',
+              collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
+            )}
           >
             <LogOut className="w-5 h-5 shrink-0" />
-            Déconnexion
+            {!collapsed && 'Déconnexion'}
           </button>
         </div>
       </aside>
@@ -221,7 +271,7 @@ export default function CRMLayout() {
       </aside>
 
       {/* Main content */}
-      <div className="flex-1 md:ml-64 flex flex-col min-h-screen">
+      <div className={cn('flex-1 flex flex-col min-h-screen transition-[margin] duration-200', collapsed ? 'md:ml-16' : 'md:ml-64')}>
         {/* Top bar */}
         <header className="sticky top-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
           <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
