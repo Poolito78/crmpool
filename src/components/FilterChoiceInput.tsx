@@ -55,7 +55,7 @@ export default function FilterChoiceInput({
   // Libellé court affiché dans le bouton (pas de "Sauf : …" permanent)
   const summary = (() => {
     if (mode === 'only') return options.find(o => o.value === only)?.label || placeholder;
-    if (mode === 'exclude') return `Sauf (${excluded.length})`;
+    if (mode === 'exclude') return `(${excluded.length})`;
     return placeholder;
   })();
 
