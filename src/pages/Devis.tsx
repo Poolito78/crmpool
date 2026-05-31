@@ -1183,7 +1183,7 @@ export default function Devis() {
 
       {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
       {devisView === 'tableau' && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col flex-1 min-h-0">
+        <div className="bg-card overflow-hidden flex flex-col flex-1 min-h-0 rounded-xl border border-border md:rounded-none md:border-0 md:absolute md:inset-0">
           {(hasActiveFiltersD()) && (
             <div className="px-4 py-2 border-b border-border flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Filtres actifs :</span>
