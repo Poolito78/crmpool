@@ -197,7 +197,12 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
 - En-tête = libellé + flèche de tri + **icône filtre**. Clic sur l'icône → contrôle de filtre affiché **inline dans l'en-tête** (pas de ligne dédiée qui pousse le contenu).
 - Fermé **sans** valeur → la colonne se replie sur l'icône seule (`onClose` retire la clé de `openFilterCols`). Avec valeur → le contrôle reste visible.
 - Une barre **« Filtres actifs »** au-dessus du tableau liste les filtres en cours (chips avec ✕) + bouton « Effacer ».
-- Référence d'implémentation complète : **`Devis.tsx`** (`renderFilterControl`, `sortedTable`, barre filtres actifs). Tables déjà converties : Produits, Devis, Stock (×3), Clients, Commandes Client, Factures Client/Fournisseur.
+- **Sélecteur de colonnes (`Columns2`) + roue crantée (`Settings`)** dans la dernière colonne d'en-tête : choix des colonnes visibles, réinitialiser ordre/largeurs (`cols.reset()`), import/export. À reproduire sur toute vue tableau.
+
+**Bandeau titre fixe + en-tête sticky (à respecter partout)** :
+- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe de `CRMLayout`, à droite du titre de page. Y placer la **barre de recherche** et le **bouton d'action principal** (ex. « Nouveau … ») + actions contextuelles → restent visibles au scroll. (Le layout rend `<PageHeaderSlotTarget />`.)
+- L'**en-tête du tableau est sticky** : conteneur de scroll `overflow-auto max-h-[calc(100vh-9rem)]`, et chaque `<th>` en `sticky top-0 z-10 bg-muted` → la ligne d'en-tête reste figée pendant le défilement.
+- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Tables converties à ce jour : **Devis, Produits**. À convertir : Stock (×3), Clients, Commandes Client, Factures Client/Fournisseur.
 
 ### TypeScript conventions
 
