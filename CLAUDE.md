@@ -179,6 +179,26 @@ const saved = JSON.parse(localStorage.getItem(KEY) || '[]');
 const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_COLS.includes(k))])];
 ```
 
+### Tableaux de données — colonnes & filtres (CONVENTION OBLIGATOIRE)
+
+**Toute vue en tableau (desktop) DOIT** utiliser l'infrastructure partagée plutôt que des `<th>`/`<td>` codés en dur. Réutiliser systématiquement dans les futurs développements :
+
+- **`useTableColumns<K>(storageKey, allKeys)`** (`src/hooks/useTableColumns.tsx`) : largeur (resize) + ordre (drag) des colonnes, persistés en localStorage (`${storageKey}_widths`, `${storageKey}_order`). API : `ordered(allCols, isVisible?)`, `widthStyle(key)`, `thProps(key)`, `resizeHandleProps(key)`, `dragKey`, `dragOverKey`.
+- **`<ColResizeHandle {...cols.resizeHandleProps(key)} />`** : poignée de redimensionnement à poser dans un `<th class="relative">`.
+- En-tête, ligne de filtres ET corps doivent tous itérer via `cols.ordered(...)` (même ordre partout, sinon colonnes désalignées).
+
+**Filtres de colonne** — composants partagés, menus rendus en **portail** (position fixe, échappent à l'`overflow` du tableau) :
+- **`FilterSuggestInput`** — texte libre + liste de suggestions (ouverte au focus). Pour colonnes texte.
+- **`FilterChoiceInput`** — choix fixes ; `excludable` active le mode exclusion (clic prolongé/clic droit = masquer, valeur encodée `!a,b`). Helper `parseChoiceFilter`.
+- **`FilterDateInput`** — Le / Avant / Après / Entre (calendrier). Helper `matchDateFilter`.
+- **`FilterAmountInput`** — = / < / > / Entre (montant). Helper `matchAmountFilter`.
+
+**Comportement attendu (à respecter partout)** :
+- En-tête = libellé + flèche de tri + **icône filtre**. Clic sur l'icône → contrôle de filtre affiché **inline dans l'en-tête** (pas de ligne dédiée qui pousse le contenu).
+- Fermé **sans** valeur → la colonne se replie sur l'icône seule (`onClose` retire la clé de `openFilterCols`). Avec valeur → le contrôle reste visible.
+- Une barre **« Filtres actifs »** au-dessus du tableau liste les filtres en cours (chips avec ✕) + bouton « Effacer ».
+- Référence d'implémentation complète : **`Devis.tsx`** (`renderFilterControl`, `sortedTable`, barre filtres actifs). Tables déjà converties : Produits, Devis, Stock (×3), Clients, Commandes Client, Factures Client/Fournisseur.
+
 ### TypeScript conventions
 
 - **Never use `enum`** — always prefer string literal unions:
