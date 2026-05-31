@@ -31,6 +31,8 @@ import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey }
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
+import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -297,6 +299,10 @@ export default function Devis() {
           if (fVal === 'oui' && !horsDelai) return false;
           if (fVal === 'non' && horsDelai) return false;
         }
+        const fDate = colFiltersD.date || '';
+        if (fDate && !matchDateFilter(fDate, d.dateCreation)) return false;
+        const fTotal = colFiltersD.totalHT || '';
+        if (fTotal && !matchAmountFilter(fTotal, calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20).totalHT)) return false;
         return true;
       });
     }
@@ -1173,7 +1179,7 @@ export default function Devis() {
                     const isDesc = sortBy === `${sortKey}_desc`;
                     const isSorted = isAsc || isDesc;
                     const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
+                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
                     const hasFilter = !!(colFiltersD[col.key]);
                     const isFilterOpen = openFilterColsD.has(col.key);
                     const isDragOver = devisCols.dragOverKey === col.key && devisCols.dragKey !== col.key;
@@ -1201,7 +1207,7 @@ export default function Devis() {
                 {openFilterColsD.size > 0 && (
                   <tr className="border-b border-border bg-muted/20">
                     {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => {
-                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite'].includes(col.key);
+                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
                       if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
                       const fVal = colFiltersD[col.key] || '';
                       const isNV = fVal === '!empty';
@@ -1242,6 +1248,14 @@ export default function Devis() {
                             </select>
                           </td>
                         );
+                      }
+                      // Date : filtre calendaire (le / avant / après / entre)
+                      if (col.key === 'date') {
+                        return <td key={col.key} className="px-3 py-1"><FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} /></td>;
+                      }
+                      // Total HT : filtre montant (= / < / > / entre)
+                      if (col.key === 'totalHT') {
+                        return <td key={col.key} className="px-3 py-1"><FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} /></td>;
                       }
                       // Colonnes texte : champ + liste de suggestions ouverte au focus
                       const suggSource: Record<string, string[]> = {
