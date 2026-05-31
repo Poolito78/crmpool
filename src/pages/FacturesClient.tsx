@@ -2,6 +2,7 @@ import { useState, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
@@ -243,22 +244,25 @@ export default function FacturesClient() {
             </button>
           ))}
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => openNew(true)} size="sm" variant="outline" className="border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">
-            <FileText className="w-4 h-4 mr-1" />Proforma
-          </Button>
-          <Button onClick={() => openNew(false)} size="sm">
-            <Plus className="w-4 h-4 mr-1" />Facture
-          </Button>
-        </div>
       </div>
 
-      {/* Recherche + filtre statut */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <PageHeaderSlot>
+        <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
+        <div className="ml-auto flex gap-2 items-center shrink-0">
+          <Button onClick={() => openNew(true)} size="sm" variant="outline" className="border-amber-400 text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950">
+            <FileText className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Proforma</span>
+          </Button>
+          <Button onClick={() => openNew(false)} size="sm">
+            <Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Facture</span>
+          </Button>
+        </div>
+      </PageHeaderSlot>
+
+      {/* Filtre statut */}
+      <div className="flex flex-col sm:flex-row gap-3">
         <div className="flex flex-wrap gap-1.5">
           <button onClick={() => setFilterStatut('tous')} className={`px-3 py-1 rounded text-xs font-medium transition-colors ${filterStatut === 'tous' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/80'}`}>
             Tous
@@ -272,21 +276,21 @@ export default function FacturesClient() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
               {fcCols.ordered(FC_COLS).map(col => {
                 const isDragOver = fcCols.dragOverKey === col.key && fcCols.dragKey !== col.key;
                 return (
-                  <th key={col.key} {...fcCols.thProps(col.key)} style={fcCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${fcCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                  <th key={col.key} {...fcCols.thProps(col.key)} style={fcCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.cls} ${isDragOver ? 'bg-primary/10' : fcCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                     <span className="truncate">{col.label}</span>
                     <ColResizeHandle {...fcCols.resizeHandleProps(col.key)} />
                   </th>
                 );
               })}
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
+              <th className="text-right py-3 px-4 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Actions</th>
             </tr>
           </thead>
           <tbody>

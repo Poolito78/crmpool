@@ -339,7 +339,7 @@ export default function Stock() {
           const isOpen = openFilterCols.has(col);
           const isDragOver = gCols.dragOverKey === col && gCols.dragKey !== col;
           return (
-            <th {...gCols.thProps(col)} style={gCols.widthStyle(col)} className={cn('relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', gCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+            <th {...gCols.thProps(col)} style={gCols.widthStyle(col)} className={cn('relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10', isDragOver ? 'bg-primary/10' : 'bg-muted', gCols.dragKey === col ? 'opacity-40' : '')}>
               {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
               <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '', gCols.widthStyle(col) ? 'overflow-hidden' : '')}>
                 <button onClick={() => handleSort(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
@@ -426,7 +426,7 @@ export default function Stock() {
 
             {/* Tableau */}
             <div className="bg-card rounded-xl border border-border overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-auto max-h-[calc(100vh-12rem)]">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
@@ -435,7 +435,7 @@ export default function Stock() {
                     {openFilterCols.size > 0 && (
                       <tr className="border-b border-border bg-muted/20">
                         {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => (
-                          <td key={col.key} style={gCols.widthStyle(col.key)} className="px-3 py-1">
+                          <td key={col.key} style={gCols.widthStyle(col.key)} className="px-3 py-1 sticky top-9 z-10 bg-muted">
                             {openFilterCols.has(col.key) && <FilterCell value={colFilters[col.key] || ''} onChange={v => setFilter(col.key, v)} align={GLOBAL_LABELS[col.key].align === 'right' ? 'right' : GLOBAL_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
                           </td>
                         ))}
@@ -486,7 +486,7 @@ export default function Stock() {
           const isOpen = openFilterColsE.has(col);
           const isDragOver = eCols.dragOverKey === col && eCols.dragKey !== col;
           return (
-            <th {...eCols.thProps(col)} style={eCols.widthStyle(col)} className={cn('relative px-4 py-2.5 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', eCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+            <th {...eCols.thProps(col)} style={eCols.widthStyle(col)} className={cn('relative px-4 py-2.5 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10', isDragOver ? 'bg-primary/10' : 'bg-muted', eCols.dragKey === col ? 'opacity-40' : '')}>
               {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
               <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : '', eCols.widthStyle(col) ? 'overflow-hidden' : '')}>
                 <button onClick={() => handleSortE(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
@@ -612,7 +612,7 @@ export default function Stock() {
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto">
+                    <div className="overflow-auto max-h-[calc(100vh-12rem)]">
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/20">
@@ -621,7 +621,7 @@ export default function Stock() {
                           {openFilterColsE.size > 0 && (
                             <tr className="border-b border-border bg-muted/20">
                               {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => (
-                                <td key={col.key} style={eCols.widthStyle(col.key)} className="px-4 py-1">
+                                <td key={col.key} style={eCols.widthStyle(col.key)} className="px-4 py-1 sticky top-9 z-10 bg-muted">
                                   {openFilterColsE.has(col.key) && <FilterCell value={colFiltersE[col.key] || ''} onChange={v => setFilterE(col.key, v)} align={ENT_LABELS[col.key].align === 'right' ? 'right' : 'left'} />}
                                 </td>
                               ))}
@@ -682,7 +682,7 @@ export default function Stock() {
           const isOpen = openFilterColsSt.has(col);
           const isDragOver = stCols.dragOverKey === col && stCols.dragKey !== col;
           return (
-            <th {...stCols.thProps(col)} style={stCols.widthStyle(col)} className={cn('relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing', stCols.dragKey === col ? 'opacity-40' : '', isDragOver ? 'bg-primary/10' : '')}>
+            <th {...stCols.thProps(col)} style={stCols.widthStyle(col)} className={cn('relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10', isDragOver ? 'bg-primary/10' : 'bg-muted', stCols.dragKey === col ? 'opacity-40' : '')}>
               {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
               <div className={cn('flex items-center gap-0.5', align === 'right' ? 'justify-end' : align === 'center' ? 'justify-center' : '', stCols.widthStyle(col) ? 'overflow-hidden' : '')}>
                 <button onClick={() => handleSortSt(col)} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
@@ -780,7 +780,7 @@ export default function Stock() {
                       {allProduits.length === 0 ? (
                         <p className="px-4 py-4 text-sm text-muted-foreground">Aucun produit lié à ce fournisseur.</p>
                       ) : (
-                        <div className="overflow-x-auto">
+                        <div className="overflow-auto max-h-[calc(100vh-12rem)]">
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-border bg-muted/10">
@@ -789,7 +789,7 @@ export default function Stock() {
                               {openFilterColsSt.size > 0 && (
                                 <tr className="border-b border-border bg-muted/20">
                                   {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => (
-                                    <td key={col.key} style={stCols.widthStyle(col.key)} className="px-4 py-1">
+                                    <td key={col.key} style={stCols.widthStyle(col.key)} className="px-4 py-1 sticky top-9 z-10 bg-muted">
                                       {openFilterColsSt.has(col.key) && <FilterCell value={colFiltersSt[col.key] || ''} onChange={v => setFilterSt(col.key, v)} align={ST_LABELS[col.key].align === 'right' ? 'right' : ST_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
                                     </td>
                                   ))}

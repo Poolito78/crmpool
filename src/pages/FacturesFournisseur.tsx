@@ -2,6 +2,7 @@ import { useState, useEffect, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
@@ -222,14 +223,13 @@ export default function FacturesFournisseur() {
         </div>
       </div>
 
-      {/* Filters + actions */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="relative w-full sm:w-72">
+      <PageHeaderSlot>
+        <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher fournisseur, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Rechercher fournisseur, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <Button onClick={() => openNew()} size="sm"><Plus className="w-4 h-4 mr-1" />Saisir une facture</Button>
-      </div>
+        <Button onClick={() => openNew()} size="sm" className="ml-auto shrink-0"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Saisir une facture</span></Button>
+      </PageHeaderSlot>
 
       {/* Statut filters */}
       <div className="flex flex-wrap gap-1.5">
@@ -247,21 +247,21 @@ export default function FacturesFournisseur() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
               {ffCols.ordered(FF_COLS).map(col => {
                 const isDragOver = ffCols.dragOverKey === col.key && ffCols.dragKey !== col.key;
                 return (
-                  <th key={col.key} {...ffCols.thProps(col.key)} style={ffCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${ffCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                  <th key={col.key} {...ffCols.thProps(col.key)} style={ffCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.cls} ${isDragOver ? 'bg-primary/10' : ffCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                     <span className="truncate">{col.label}</span>
                     <ColResizeHandle {...ffCols.resizeHandleProps(col.key)} />
                   </th>
                 );
               })}
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
+              <th className="text-right py-3 px-4 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Actions</th>
             </tr>
           </thead>
           <tbody>

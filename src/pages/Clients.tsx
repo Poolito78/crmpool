@@ -19,6 +19,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Fragment } from 'react';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 
 type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours';
 const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; sortable: boolean; filterCol: 'societe' | 'contacts' | 'ville' | 'adresses' | null }[] = [
@@ -614,27 +615,28 @@ export default function Clients() {
           <span className="text-sm text-muted-foreground">Vous consultez la fiche client depuis l'édition d'un devis</span>
         </div>
       )}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-72">
+      <PageHeaderSlot>
+        <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap gap-2 items-center">
           {activeFilterCount > 0 && (
             <Button variant="ghost" size="sm" onClick={clearAllFilters}>
               <X className="w-4 h-4 mr-1" /> Effacer
             </Button>
           )}
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
-          <Button variant="outline" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nouveau client</Button>
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Importer</span></Button>
+          <Button variant="outline" size="sm" onClick={() => exportToExcel(clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code postal': c.codePostal, Notes: c.notes || '', Revendeur: c.estRevendeur ? 'Oui' : 'Non' })), 'clients', 'Clients')}><Download className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Exporter</span></Button>
+          <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Nouveau client</span><span className="sm:hidden">Nouveau</span></Button>
         </div>
-      </div>
+      </PageHeaderSlot>
 
 
       {/* Desktop table */}
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+        <div className="overflow-auto max-h-[calc(100vh-9rem)]">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
@@ -650,7 +652,7 @@ export default function Clients() {
                   : ChevronsUpDown;
                 const isDragOver = cCols.dragOverKey === key && cCols.dragKey !== key;
                 return (
-                  <th key={key} {...cCols.thProps(key)} style={cCols.widthStyle(key)} className={`relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${cCols.dragKey === key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                  <th key={key} {...cCols.thProps(key)} style={cCols.widthStyle(key)} className={`relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${isDragOver ? 'bg-primary/10' : cCols.dragKey === key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                     <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''} ${cCols.widthStyle(key) ? 'overflow-hidden' : ''}`}>
                       {col ? (
@@ -676,31 +678,31 @@ export default function Clients() {
                   </th>
                 );
               })}
-              <th className="px-4 py-2"></th>
+              <th className="px-4 py-2 sticky top-0 z-10 bg-muted"></th>
             </tr>
             {openFilterCols.size > 0 && (
               <tr className="border-b border-border bg-muted/20">
                 {cCols.ordered(CLIENT_COLS).map(({ key }) => {
                   const ws = cCols.widthStyle(key);
-                  if (key === 'societe') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('societe') && <input placeholder="Filtrer..." value={filterSociete} onChange={e => setFilterSociete(e.target.value)} className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />}</td>;
-                  if (key === 'contacts') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('contacts') && (
+                  if (key === 'societe') return <td key={key} style={ws} className="px-4 py-1 sticky top-9 z-10 bg-muted">{openFilterCols.has('societe') && <input placeholder="Filtrer..." value={filterSociete} onChange={e => setFilterSociete(e.target.value)} className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />}</td>;
+                  if (key === 'contacts') return <td key={key} style={ws} className="px-4 py-1 sticky top-9 z-10 bg-muted">{openFilterCols.has('contacts') && (
                     <div className="flex items-center gap-1">
                       <input placeholder="Nom, email..." value={filterContact} onChange={e => setFilterContact(e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
                       <select value={filterRevendeur} onChange={e => setFilterRevendeur(e.target.value as '' | 'oui' | 'non')} className="h-6 text-xs rounded border border-input bg-background px-1"><option value="">Tous</option><option value="oui">Rev.</option><option value="non">Non rev.</option></select>
                     </div>
                   )}</td>;
-                  if (key === 'ville') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('ville') && (
+                  if (key === 'ville') return <td key={key} style={ws} className="px-4 py-1 sticky top-9 z-10 bg-muted">{openFilterCols.has('ville') && (
                     <div className="flex items-center gap-1">
                       <input placeholder="Ville..." value={filterVille} onChange={e => setFilterVille(e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" />
                       <input placeholder="Dép." value={filterDepartement} onChange={e => setFilterDepartement(e.target.value)} className="h-6 text-xs w-10 rounded border border-input bg-background px-1 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" maxLength={3} />
                     </div>
                   )}</td>;
-                  if (key === 'adresses') return <td key={key} style={ws} className="px-4 py-1">{openFilterCols.has('adresses') && (
+                  if (key === 'adresses') return <td key={key} style={ws} className="px-4 py-1 sticky top-9 z-10 bg-muted">{openFilterCols.has('adresses') && (
                     <select value={filterHasAdresse} onChange={e => setFilterHasAdresse(e.target.value as '' | 'oui' | 'non')} className="h-6 text-xs rounded border border-input bg-background px-1 w-full"><option value="">Toutes</option><option value="oui">Avec</option><option value="non">Sans</option></select>
                   )}</td>;
-                  return <td key={key} style={ws} className="px-4 py-1" />;
+                  return <td key={key} style={ws} className="px-4 py-1 sticky top-9 z-10 bg-muted" />;
                 })}
-                <td className="px-4 py-1" />
+                <td className="px-4 py-1 sticky top-9 z-10 bg-muted" />
               </tr>
             )}
           </thead>
@@ -784,6 +786,7 @@ export default function Clients() {
             })}
           </tbody>
         </table>
+        </div>
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun client trouvé</p>}
       </div>
 

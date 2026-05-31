@@ -2,6 +2,7 @@ import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -312,29 +313,28 @@ export default function CommandesClient() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex flex-wrap gap-2 flex-1">
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={filterProduit}
-              onChange={e => setFilterProduit(e.target.value)}
-              placeholder="Filtrer par produit..."
-              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-2 w-52 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            {filterProduit && (
-              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
-            )}
-          </div>
+      <PageHeaderSlot>
+        <div className="relative w-32 sm:w-48 md:w-72">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex gap-2 shrink-0">
-          <Button onClick={openNew} size="sm"><Plus className="w-4 h-4 mr-1" />Nouvelle commande</Button>
+        <div className="ml-auto flex gap-2 items-center shrink-0">
+          <Button onClick={openNew} size="sm"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Nouvelle commande</span></Button>
         </div>
+      </PageHeaderSlot>
+
+      <div className="relative w-full sm:w-72">
+        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+        <input
+          type="text"
+          value={filterProduit}
+          onChange={e => setFilterProduit(e.target.value)}
+          placeholder="Filtrer par produit..."
+          className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-2 w-full focus:outline-none focus:ring-1 focus:ring-ring"
+        />
+        {filterProduit && (
+          <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
+        )}
       </div>
 
       {/* Filter by status */}
@@ -368,21 +368,21 @@ export default function CommandesClient() {
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
               {ccCols.ordered(CC_COLS).map(col => {
                 const isDragOver = ccCols.dragOverKey === col.key && ccCols.dragKey !== col.key;
                 return (
-                  <th key={col.key} {...ccCols.thProps(col.key)} style={ccCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.cls} ${ccCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                  <th key={col.key} {...ccCols.thProps(col.key)} style={ccCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.cls} ${isDragOver ? 'bg-primary/10' : ccCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                     <span className="truncate">{col.label}</span>
                     <ColResizeHandle {...ccCols.resizeHandleProps(col.key)} />
                   </th>
                 );
               })}
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground">Actions</th>
+              <th className="text-right py-3 px-4 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Actions</th>
             </tr>
           </thead>
           <tbody>
