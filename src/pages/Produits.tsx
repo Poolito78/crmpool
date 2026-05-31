@@ -8,6 +8,7 @@ import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import { useTableColumns } from '@/hooks/useTableColumns';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -825,12 +826,12 @@ export default function Produits() {
           <span className="text-sm text-muted-foreground">Vous consultez la fiche produit depuis l'édition d'un devis</span>
         </div>
       )}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:w-72">
+      <PageHeaderSlot>
+        <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="ml-auto flex flex-wrap gap-2 items-center">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           {selected.size > 0 && (
             <>
@@ -859,7 +860,7 @@ export default function Produits() {
             <span className="sm:hidden">Nouveau</span>
           </Button>
         </div>
-      </div>
+      </PageHeaderSlot>
 
       <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
         {Object.values(columnFilters).some(v => v) && (
@@ -884,11 +885,11 @@ export default function Produits() {
             <button onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
           </div>
         )}
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[calc(100vh-9rem)]">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="px-2 py-2.5 w-8">
+                <th className="px-2 py-2.5 w-8 sticky top-0 z-10 bg-muted">
                   <input type="checkbox" checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length} onChange={toggleAll} className="rounded border-input" />
                 </th>
                 {orderedVisibleCols.map(col => {
@@ -903,7 +904,7 @@ export default function Produits() {
                       key={col.key}
                       {...prodCols.thProps(col.key)}
                       style={prodCols.widthStyle(col.key)}
-                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${col.align === 'right' ? 'text-right' : 'text-left'} ${prodCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}
+                      className={`relative px-2 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.align === 'right' ? 'text-right' : 'text-left'} ${isDragOver ? 'bg-primary/10' : prodCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}
                     >
                       {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                       <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${cw ? 'overflow-hidden' : ''}`}>
@@ -937,7 +938,7 @@ export default function Produits() {
                     </th>
                   );
                 })}
-                <th className="px-3 py-2 text-right whitespace-nowrap">
+                <th className="px-3 py-2 text-right whitespace-nowrap sticky top-0 z-10 bg-muted">
                   <div className="flex items-center gap-1 justify-end">
                     {/* Sélecteur de colonnes */}
                     <div className="relative" ref={colChooserRef}>

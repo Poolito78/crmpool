@@ -7,6 +7,7 @@ import { calculerTotalDevis } from '@/lib/store';
 import { exportMultiSheet } from '@/lib/exportExcel';
 import { supabase } from '@/integrations/supabase/client';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
+import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 
 type NavLink = { type: 'link'; label: string; icon: any; path: string };
 type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
@@ -277,9 +278,10 @@ export default function CRMLayout() {
           <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
           </button>
-          <h1 className="font-heading font-semibold text-lg truncate flex-1">
+          <h1 className="font-heading font-semibold text-lg truncate shrink-0">
             {currentLabel}
           </h1>
+          <PageHeaderSlotTarget />
           {location.pathname === '/' && (
             <button
               onClick={() => setAnalyseOpen(true)}
