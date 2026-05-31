@@ -43,9 +43,11 @@ const LIGNE_COLS = [
   { key: 'surface', label: 'Surface (m²)' },
   { key: 'conso',   label: 'Conso. (kg/m²)' },
   { key: 'poids',   label: 'Poids (kg)' },
+  { key: 'remise',  label: 'Rem. %' },
+  { key: 'netht',   label: 'Net HT' },
 ] as const;
 type LigneColKey = typeof LIGNE_COLS[number]['key'];
-const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso'];
+const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso', 'remise', 'netht'];
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -143,7 +145,7 @@ export default function Devis() {
 
   const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => {
     try {
-      const s = localStorage.getItem('devis_ligne_cols');
+      const s = localStorage.getItem('devis_ligne_cols_v2');
       if (s) {
         const parsed = JSON.parse(s) as LigneColKey[];
         if (Array.isArray(parsed) && parsed.length > 0) return new Set(parsed);
@@ -633,7 +635,7 @@ export default function Devis() {
   }, [colChooserOpen]);
 
   useEffect(() => {
-    localStorage.setItem('devis_ligne_cols', JSON.stringify([...visibleLigneCols]));
+    localStorage.setItem('devis_ligne_cols_v2', JSON.stringify([...visibleLigneCols]));
   }, [visibleLigneCols]);
 
   function insertKit(kitProd: Produit) {
@@ -2139,15 +2141,19 @@ export default function Devis() {
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
                               </div>
                               {/* Remise % */}
+                              {visibleLigneCols.has('remise') && (
                               <div className="w-16 shrink-0">
                                 <Label className="text-xs">Rem. %</Label>
                                 <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
                               </div>
+                              )}
                               {/* Net HT */}
+                              {visibleLigneCols.has('netht') && (
                               <div className="w-24 shrink-0">
                                 <Label className="text-xs">Net HT</Label>
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
                               </div>
+                              )}
                               {/* Total HT + actions */}
                               <div className="shrink-0 flex flex-col items-end">
                                 <Label className="text-xs">Total HT</Label>
