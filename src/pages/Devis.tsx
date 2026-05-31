@@ -1098,15 +1098,6 @@ export default function Devis() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => { setShowArchived(v => !v); if (filterStatut === 'archivé') setFilterStatut('tous'); }}
-            className={`flex items-center gap-1.5 text-sm rounded-md border px-3 py-1.5 transition-colors ${showArchived ? 'bg-slate-100 border-slate-300 text-slate-700 dark:bg-slate-800 dark:border-slate-600 dark:text-slate-300' : 'border-input bg-background text-muted-foreground hover:text-foreground'}`}
-            title={showArchived ? 'Masquer les archivés' : 'Afficher les archivés'}
-          >
-            <Archive className="w-3.5 h-3.5" />
-            {showArchived ? 'Masquer archivés' : 'Voir archivés'}
-          </button>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
