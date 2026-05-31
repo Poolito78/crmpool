@@ -1487,11 +1487,78 @@ export default function Devis() {
       }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
-          {/* Onglets */}
-          <div className="flex gap-1 border-b border-border shrink-0">
-            <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
-            <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
-            {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+          {/* Onglets + actions (barre fixe) */}
+          <div className="flex items-end justify-between gap-2 border-b border-border shrink-0 flex-wrap">
+            <div className="flex gap-1">
+              <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
+              <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+              {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+            </div>
+            {/* Boutons d'action regroupés à droite */}
+            <div className="flex items-center gap-1.5 pb-1.5 pr-1">
+              <Button variant="outline" size="sm" onClick={() => {
+                const existing = editingId ? devis.find(d => d.id === editingId) : null;
+                const preview: DevisType = {
+                  id: editingId || 'preview',
+                  numero: existing?.numero || 'APERÇU',
+                  clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
+                  dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
+                  fraisPortHT, fraisPortTVA, modeCalcul,
+                  surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
+                };
+                setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
+                setPreviewDevis(preview);
+              }} title="Aperçu"><Eye className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Aperçu</span></Button>
+              {editingId && (
+                <Button variant="outline" size="sm" title="Envoyer par mail" onClick={() => {
+                  save(true);
+                  const existing = devis.find(d => d.id === editingId);
+                  const current: DevisType = {
+                    id: editingId, numero: existing?.numero || editingId,
+                    clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+                    dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
+                    systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                    surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                  };
+                  setEmailDevis(current);
+                }}><Mail className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Mail</span></Button>
+              )}
+              {editingId && (
+                <Button variant="outline" size="sm" title="Envoyer vers Odoo" onClick={async () => {
+                  try {
+                    save(true);
+                    const selectedClient = clients.find(c => c.id === clientId);
+                    if (!selectedClient) { toast.error('Client introuvable'); return; }
+                    const defaultName = selectedClient.societe || selectedClient.nom;
+                    const odooNom = promptOdooPartnerName(clientId, defaultName);
+                    if (odooNom === null) return;
+                    const allContacts = selectedClient.contacts || [];
+                    const contact = allContacts.find(ct => ct.id === contactId);
+                    const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+                    const current: DevisType = {
+                      id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
+                      clientId, contactId: contactId || undefined,
+                      dateCreation, dateValidite, statut, lignes, referenceAffaire,
+                      systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                      surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                    };
+                    const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
+                    await navigator.clipboard.writeText(script);
+                    toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
+                  } catch (err) {
+                    toast.error('Erreur lors de la génération du script Odoo');
+                    console.error(err);
+                  }
+                }}><Send className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Odoo</span></Button>
+              )}
+              <span className="w-px h-6 bg-border mx-0.5" />
+              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button size="sm" onClick={() => save()}>
+                <FileText className="w-4 h-4 sm:mr-1.5" />
+                <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
+                <span className="sm:hidden">{editingId ? 'Enreg.' : 'Créer'}</span>
+              </Button>
+            </div>
           </div>
           <div ref={scrollContainerRef} className={`space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1 ${dialogTab !== 'devis' ? 'hidden' : ''}`} onDragOver={e => { dragClientYRef.current = e.clientY; }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -2731,88 +2798,6 @@ export default function Devis() {
             );
           })()}
 
-          <div className="flex items-center justify-between gap-2 shrink-0 pt-3 border-t border-border">
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => {
-                const existing = editingId ? devis.find(d => d.id === editingId) : null;
-                const preview: DevisType = {
-                  id: editingId || 'preview',
-                  numero: existing?.numero || 'APERÇU',
-                  clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
-                  dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
-                  fraisPortHT, fraisPortTVA, modeCalcul,
-                  surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
-                };
-                setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
-                setPreviewDevis(preview);
-              }}>
-                <Eye className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Aperçu</span>
-              </Button>
-              {editingId && (
-                <Button variant="outline" size="sm" onClick={() => {
-                  save(true);
-                  const existing = devis.find(d => d.id === editingId);
-                  const current: DevisType = {
-                    id: editingId,
-                    numero: existing?.numero || editingId,
-                    clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
-                    dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
-                    systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                    surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                  };
-                  setEmailDevis(current);
-                }}>
-                  <Mail className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Envoyer par mail</span>
-                </Button>
-              )}
-              {editingId && (
-                <Button variant="outline" size="sm" title="Générer le script Odoo et copier dans le presse-papier" onClick={async () => {
-                  try {
-                    save(true);
-                    const selectedClient = clients.find(c => c.id === clientId);
-                    if (!selectedClient) { toast.error('Client introuvable'); return; }
-                    const defaultName = selectedClient.societe || selectedClient.nom;
-                    const odooNom = promptOdooPartnerName(clientId, defaultName);
-                    if (odooNom === null) return; // annulé
-                    const allContacts = selectedClient.contacts || [];
-                    const contact = allContacts.find(ct => ct.id === contactId);
-                    const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
-                    const current: DevisType = {
-                      id: editingId,
-                      numero: devis.find(d => d.id === editingId)?.numero || editingId,
-                      clientId, contactId: contactId || undefined,
-                      dateCreation, dateValidite, statut, lignes, referenceAffaire,
-                      systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                      surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                    };
-                    const script = genererScriptOdoo(current, selectedClient, produits, {
-                      surface: surfaceGlobaleM2 || 0,
-                      contactNom,
-                      odooPartnerName: odooNom,
-                    });
-                    await navigator.clipboard.writeText(script);
-                    toast.success('Script Odoo copié !', {
-                      description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée',
-                      duration: 6000,
-                    });
-                  } catch (err) {
-                    toast.error('Erreur lors de la génération du script Odoo');
-                    console.error(err);
-                  }
-                }}>
-                  <Send className="w-4 h-4 sm:mr-2" /><span className="hidden sm:inline">Envoyer vers Odoo</span>
-                </Button>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Annuler</Button>
-              <Button size="sm" onClick={() => save()}>
-                <FileText className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
-                <span className="sm:hidden">{editingId ? 'Enregistrer' : 'Créer'}</span>
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
 
