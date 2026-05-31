@@ -62,7 +62,6 @@ export default function Devis() {
   const _savedFilters = (() => { try { const s = localStorage.getItem('crm_devis_filters'); return s ? JSON.parse(s) : {}; } catch { return {}; } })();
   const [filterStatut, setFilterStatut] = useState<string>(_savedFilters.filterStatut ?? 'tous');
   const [filterClient, setFilterClient] = useState<string>(_savedFilters.filterClient ?? 'tous');
-  const [filterContact, setFilterContact] = useState<string>('');
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [filterPeriode, setFilterPeriode] = useState<string>(_savedFilters.filterPeriode ?? 'tous');
   const [sortBy, setSortBy] = useState<string>(_savedFilters.sortBy ?? 'date_desc');
@@ -227,15 +226,6 @@ export default function Devis() {
     if (filterStatut === 'tous' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
-    if (filterContact.trim()) {
-      const fc = filterContact.trim().toLowerCase();
-      const client = clients.find(c => c.id === d.clientId);
-      const ct = d.contactId ? (client?.contacts || []).find(c => c.id === d.contactId) : null;
-      const inContact = ct
-        ? [ct.nom, ct.prenom, ct.email, ct.telephone, ct.fonction].some(v => v?.toLowerCase().includes(fc))
-        : [client?.nom, client?.email].some(v => v?.toLowerCase().includes(fc));
-      if (!inContact) return false;
-    }
     if (filterProduit.trim()) {
       const fp = filterProduit.trim().toLowerCase();
       const inLignes = d.lignes.some(l => {
@@ -298,7 +288,16 @@ export default function Devis() {
         const fSt = colFiltersD.statut || '';
         if (fSt) { const nv = fSt === NON_VIDE; if (nv ? !d.statut : !d.statut.toLowerCase().includes(fSt.toLowerCase())) return false; }
         const fCl = colFiltersD.client || '';
-        if (fCl) { const nv = fCl === NON_VIDE; const cn = (cl?.societe || cl?.nom || '').toLowerCase(); if (nv ? !cn : !cn.includes(fCl.toLowerCase())) return false; }
+        if (fCl && fCl !== NON_VIDE) {
+          const q = fCl.toLowerCase();
+          const cn = (cl?.societe || cl?.nom || '').toLowerCase();
+          // Recherche aussi dans les contacts du client (nom, prénom, email, tél, fonction)
+          const ct = d.contactId ? (cl?.contacts || []).find(c => c.id === d.contactId) : null;
+          const inContact = ct
+            ? [ct.nom, ct.prenom, ct.email, ct.telephone, ct.telephoneMobile, ct.fonction].some(v => v?.toLowerCase().includes(q))
+            : (cl?.contacts || []).some(c => [c.nom, c.prenom, c.email, c.telephone, c.telephoneMobile, c.fonction].some(v => v?.toLowerCase().includes(q)));
+          if (!cn.includes(q) && !inContact) return false;
+        }
         const fRef = colFiltersD.refAffaire || '';
         if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
         const fSys = colFiltersD.systeme || '';
@@ -1119,19 +1118,6 @@ export default function Devis() {
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
               type="text"
-              value={filterContact}
-              onChange={e => setFilterContact(e.target.value)}
-              placeholder="Filtrer par contact..."
-              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-1.5 w-48 focus:outline-none focus:ring-1 focus:ring-ring"
-            />
-            {filterContact && (
-              <button onClick={() => setFilterContact('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
-            )}
-          </div>
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
               value={filterProduit}
               onChange={e => setFilterProduit(e.target.value)}
               placeholder="Filtrer par produit..."
@@ -1157,8 +1143,8 @@ export default function Devis() {
             <option value="client_asc">Client A→Z</option>
             <option value="client_desc">Client Z→A</option>
           </select>
-          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterContact !== '' || filterProduit !== '' || filterPeriode !== 'tous') && (
-            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterContact(''); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
+          {(filterStatut !== 'tous' || filterClient !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
+            <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
             </Button>
           )}
@@ -1260,8 +1246,13 @@ export default function Devis() {
                         return <td key={col.key} className="px-3 py-1"><FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} /></td>;
                       }
                       // Colonnes texte : champ + liste de suggestions ouverte au focus
+                      // Client : suggestions = clients + contacts (double recherche)
+                      const clientSugg = [
+                        ...clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
+                        ...clients.flatMap(c => (c.contacts || []).map(ct => [ct.prenom, ct.nom].filter(Boolean).join(' ')).filter(Boolean)),
+                      ];
                       const suggSource: Record<string, string[]> = {
-                        client: clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
+                        client: clientSugg,
                         numero: devis.map(d => d.numero).filter(Boolean),
                         refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
                         systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
@@ -1273,8 +1264,7 @@ export default function Devis() {
                             value={fVal}
                             onChange={v => setFilterD(col.key, v)}
                             suggestions={sugg}
-                            placeholder={`Filtrer ${col.label.toLowerCase()}…`}
-                            allowNonEmpty={col.key !== 'client'}
+                            placeholder={col.key === 'client' ? 'Client ou contact…' : `Filtrer ${col.label.toLowerCase()}…`}
                           />
                         </td>
                       );
