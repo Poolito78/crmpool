@@ -25,12 +25,14 @@ export default function FilterChoiceInput({
   options,
   placeholder = 'Tous',
   excludable = false,
+  onClose,
 }: {
   value: string;
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   placeholder?: string;
   excludable?: boolean;
+  onClose?: () => void;
 }) {
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
@@ -75,6 +77,7 @@ export default function FilterChoiceInput({
     <FilterPopover
       defaultOpen
       width={200}
+      onOpenChange={o => { if (!o) onClose?.(); }}
       trigger={({ toggle }) => (
         <button
           onClick={toggle}

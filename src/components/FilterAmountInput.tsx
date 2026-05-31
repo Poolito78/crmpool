@@ -23,7 +23,7 @@ export function matchAmountFilter(v: string, amount: number): boolean {
 
 const OP_LABELS: Record<string, string> = { eq: '=', lt: '<', gt: '>', between: 'Entre' };
 
-export default function FilterAmountInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export default function FilterAmountInput({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose?: () => void }) {
   const { op, n1, n2 } = parseAmountFilter(value);
   const summary = !op ? '' :
     op === 'between' ? `${n1 || '…'} – ${n2 || '…'} €` :
@@ -37,6 +37,7 @@ export default function FilterAmountInput({ value, onChange }: { value: string; 
       align="right"
       width={208}
       defaultOpen
+      onOpenChange={o => { if (!o) onClose?.(); }}
       trigger={({ toggle }) => (
         <button onClick={toggle} className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center gap-1 ${op ? 'border-primary text-primary' : 'border-input text-muted-foreground'} bg-background hover:border-primary/60`}>
           <Euro className="w-3 h-3 shrink-0" />

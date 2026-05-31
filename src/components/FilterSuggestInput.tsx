@@ -10,11 +10,13 @@ export default function FilterSuggestInput({
   onChange,
   suggestions,
   placeholder = 'Filtrer…',
+  onClose,
 }: {
   value: string;
   onChange: (v: string) => void;
   suggestions: string[];
   placeholder?: string;
+  onClose?: () => void;
   /** @deprecated conservé pour compat — ≠∅ retiré */
   allowNonEmpty?: boolean;
   autoFocus?: boolean;
@@ -46,6 +48,7 @@ export default function FilterSuggestInput({
       if (wrapRef.current?.contains(e.target as Node)) return;
       if (listRef.current?.contains(e.target as Node)) return;
       setOpen(false);
+      onClose?.();
     };
     window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onScroll);

@@ -1061,10 +1061,16 @@ export default function Devis() {
   }
 
   // Contrôle de filtre par colonne (rendu dans un popover ancré à l'icône filtre)
+  // onClose : si fermé sans filtre actif → replie la colonne (retour à l'icône seule)
   function renderFilterControl(colKey: DevisTableColKey) {
     const fVal = colFiltersD[colKey] || '';
+    const handleClose = () => {
+      if (!colFiltersD[colKey]) {
+        setOpenFilterColsD(prev => { const n = new Set(prev); n.delete(colKey); return n; });
+      }
+    };
     if (colKey === 'statut') {
-      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} excludable options={[
+      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} onClose={handleClose} excludable options={[
         { value: '', label: 'Tous' },
         { value: 'brouillon', label: 'Brouillon' },
         { value: 'envoyé', label: 'Envoyé' },
@@ -1076,14 +1082,14 @@ export default function Devis() {
       ]} />;
     }
     if (colKey === 'validite') {
-      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('validite', v)} options={[
+      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('validite', v)} onClose={handleClose} options={[
         { value: '', label: 'Tous' },
         { value: 'oui', label: 'Hors délais' },
         { value: 'non', label: 'Dans les délais' },
       ]} />;
     }
-    if (colKey === 'date') return <FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} />;
-    if (colKey === 'totalHT') return <FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} />;
+    if (colKey === 'date') return <FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} onClose={handleClose} />;
+    if (colKey === 'totalHT') return <FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} onClose={handleClose} />;
     const clientSugg = [
       ...clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
       ...clients.flatMap(c => (c.contacts || []).map(ct => [ct.prenom, ct.nom].filter(Boolean).join(' ')).filter(Boolean)),
@@ -1094,7 +1100,7 @@ export default function Devis() {
       refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
       systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
     };
-    return <FilterSuggestInput value={fVal} onChange={v => setFilterD(colKey, v)} suggestions={suggSource[colKey] || []} placeholder={colKey === 'client' ? 'Client ou contact…' : 'Filtrer…'} />;
+    return <FilterSuggestInput value={fVal} onChange={v => setFilterD(colKey, v)} onClose={handleClose} suggestions={suggSource[colKey] || []} placeholder={colKey === 'client' ? 'Client ou contact…' : 'Filtrer…'} />;
   }
 
   return (

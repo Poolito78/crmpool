@@ -24,7 +24,7 @@ export function matchDateFilter(v: string, dateStr: string | undefined): boolean
 
 const OP_LABELS: Record<string, string> = { eq: 'Le', before: 'Avant', after: 'Après', between: 'Entre' };
 
-export default function FilterDateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export default function FilterDateInput({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose?: () => void }) {
   const { op, d1, d2 } = parseDateFilter(value);
   const fmt = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('fr-FR') : '';
   const summary = !op ? '' :
@@ -39,6 +39,7 @@ export default function FilterDateInput({ value, onChange }: { value: string; on
       align="left"
       width={224}
       defaultOpen
+      onOpenChange={o => { if (!o) onClose?.(); }}
       trigger={({ toggle }) => (
         <button onClick={toggle} className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center gap-1 ${op ? 'border-primary text-primary' : 'border-input text-muted-foreground'} bg-background hover:border-primary/60`}>
           <Calendar className="w-3 h-3 shrink-0" />
