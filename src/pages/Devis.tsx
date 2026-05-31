@@ -31,7 +31,7 @@ import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey }
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
-import FilterChoiceInput from '@/components/FilterChoiceInput';
+import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
 
@@ -221,10 +221,11 @@ export default function Devis() {
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
       || d.lignes.some(l => l.variantesChoisies && Object.values(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
-    // Archivés masqués par défaut sauf si showArchived ou filtre explicite (top select OU colonne)
-    if (!showArchived && filterStatut !== 'archivé' && colFiltersD.statut !== 'archivé' && d.statut === 'archivé') return false;
-    // Système (modèles) masqués par défaut sauf si ciblés explicitement (top select OU colonne)
-    if (filterStatut === 'tous' && colFiltersD.statut !== 'système' && d.statut === 'système') return false;
+    const cs = parseChoiceFilter(colFiltersD.statut || '');
+    // Archivés masqués par défaut sauf si showArchived ou ciblés explicitement (colonne "only" archivé)
+    if (!showArchived && filterStatut !== 'archivé' && cs.only !== 'archivé' && d.statut === 'archivé') return false;
+    // Système (modèles) masqués par défaut sauf si ciblés explicitement (colonne "only" système)
+    if (filterStatut === 'tous' && cs.only !== 'système' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterProduit.trim()) {
@@ -286,8 +287,9 @@ export default function Devis() {
         const cl = clients.find(c => c.id === d.clientId);
         const fNum = colFiltersD.numero || '';
         if (fNum) { const nv = fNum === NON_VIDE; if (nv ? !d.numero?.trim() : !d.numero?.toLowerCase().includes(fNum.toLowerCase())) return false; }
-        const fSt = colFiltersD.statut || '';
-        if (fSt) { const nv = fSt === NON_VIDE; if (nv ? !d.statut : !d.statut.toLowerCase().includes(fSt.toLowerCase())) return false; }
+        const cSt = parseChoiceFilter(colFiltersD.statut || '');
+        if (cSt.mode === 'only' && d.statut !== cSt.only) return false;
+        if (cSt.mode === 'exclude' && cSt.excluded.includes(d.statut)) return false;
         const fCl = colFiltersD.client || '';
         if (fCl && fCl !== NON_VIDE) {
           const q = fCl.toLowerCase();
@@ -1203,7 +1205,7 @@ export default function Devis() {
                       if (col.key === 'statut') {
                         return (
                           <td key={col.key} className="px-3 py-1">
-                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} options={[
+                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} excludable options={[
                               { value: '', label: 'Tous' },
                               { value: 'brouillon', label: 'Brouillon' },
                               { value: 'envoyé', label: 'Envoyé' },
