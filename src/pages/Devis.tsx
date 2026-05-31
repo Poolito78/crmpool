@@ -123,7 +123,17 @@ export default function Devis() {
   }, [colMenuDevis]);
 
   function toggleFilterColD(col: DevisTableColKey) {
-    setOpenFilterColsD(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+    setOpenFilterColsD(prev => {
+      const n = new Set(prev);
+      if (n.has(col)) {
+        // Fermeture → on efface aussi le filtre en cours de cette colonne
+        n.delete(col);
+        setColFiltersD(f => { const nf = { ...f }; delete nf[col]; return nf; });
+      } else {
+        n.add(col);
+      }
+      return n;
+    });
   }
   function setFilterD(col: DevisTableColKey, val: string) { setColFiltersD(prev => ({ ...prev, [col]: val })); }
   function hasActiveFiltersD() { return Object.values(colFiltersD).some(v => v); }
