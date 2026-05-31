@@ -202,7 +202,7 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
 **Bandeau titre fixe + en-tête sticky (à respecter partout)** :
 - **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe de `CRMLayout`, à droite du titre de page. Y placer la **barre de recherche** et le **bouton d'action principal** (ex. « Nouveau … ») + actions contextuelles → restent visibles au scroll. (Le layout rend `<PageHeaderSlotTarget />`.)
 - L'**en-tête du tableau est sticky** : conteneur de scroll `overflow-auto max-h-[calc(100vh-9rem)]`, et chaque `<th>` en `sticky top-0 z-10 bg-muted` → la ligne d'en-tête reste figée pendant le défilement.
-- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Tables converties à ce jour : **Devis, Produits**. À convertir : Stock (×3), Clients, Commandes Client, Factures Client/Fournisseur.
+- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Filtres inline en-tête + barre « Filtres actifs » faits sur : **Devis, Produits, Clients, Stock (×3)**. Bandeau fixe + sticky sur toutes les vues tableau. Commandes Client / Factures Client / Factures Fournisseur ont bandeau fixe + sticky mais pas encore de filtres de colonne.
 
 ### TypeScript conventions
 

@@ -130,7 +130,7 @@ export default function Stock() {
     if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('asc'); }
   }
   function toggleFilterCol(col: StockColKey) {
-    setOpenFilterCols(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+    setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilters(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
   }
   function setFilter(col: StockColKey, val: string) { setColFilters(prev => ({ ...prev, [col]: val })); }
   function hasActiveFilters() { return globalSearch.trim() !== '' || Object.values(colFilters).some(v => v); }
@@ -150,7 +150,7 @@ export default function Stock() {
     if (sortColE === col) setSortDirE(d => d === 'asc' ? 'desc' : 'asc'); else { setSortColE(col); setSortDirE('asc'); }
   }
   function toggleFilterColE(col: EntrepotColKey) {
-    setOpenFilterColsE(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+    setOpenFilterColsE(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFiltersE(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
   }
   function setFilterE(col: EntrepotColKey, val: string) { setColFiltersE(prev => ({ ...prev, [col]: val })); }
   function hasActiveFiltersE() { return searchE.trim() !== '' || Object.values(colFiltersE).some(v => v); }
@@ -170,7 +170,7 @@ export default function Stock() {
     if (sortColSt === col) setSortDirSt(d => d === 'asc' ? 'desc' : 'asc'); else { setSortColSt(col); setSortDirSt('asc'); }
   }
   function toggleFilterColSt(col: StockisteColKey) {
-    setOpenFilterColsSt(prev => { const n = new Set(prev); n.has(col) ? n.delete(col) : n.add(col); return n; });
+    setOpenFilterColsSt(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFiltersSt(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
   }
   function setFilterSt(col: StockisteColKey, val: string) { setColFiltersSt(prev => ({ ...prev, [col]: val })); }
   function hasActiveFiltersSt() { return searchSt.trim() !== '' || Object.values(colFiltersSt).some(v => v); }
@@ -347,9 +347,16 @@ export default function Stock() {
                   <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterCol(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
-                  <Filter className="w-3 h-3" />
-                </button>
+                {isOpen ? (
+                  <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                    <span className="w-24 min-w-0"><FilterCell value={colFilters[col] || ''} onChange={v => setFilter(col, v)} align={align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'} /></span>
+                    <button onClick={() => toggleFilterCol(col)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                  </span>
+                ) : (
+                  <button onClick={() => toggleFilterCol(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                    <Filter className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <ColResizeHandle {...gCols.resizeHandleProps(col)} />
             </th>
@@ -426,21 +433,24 @@ export default function Stock() {
 
             {/* Tableau */}
             <div className="bg-card rounded-xl border border-border overflow-hidden">
+              {Object.values(colFilters).some(v => v) && (
+                <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+                  {(Object.entries(colFilters).filter(([, v]) => v) as [StockColKey, string][]).map(([k, v]) => (
+                    <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                      {GLOBAL_LABELS[k].label} : {v === NON_VIDE ? '≠ vide' : v}
+                      <button onClick={() => setFilter(k, '')}><X className="w-3 h-3" /></button>
+                    </span>
+                  ))}
+                  <button onClick={() => { setColFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+                </div>
+              )}
               <div className="overflow-auto max-h-[calc(100vh-12rem)]">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
                       {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => <SortTh key={col.key} col={col.key} label={GLOBAL_LABELS[col.key].label} align={GLOBAL_LABELS[col.key].align} />)}
                     </tr>
-                    {openFilterCols.size > 0 && (
-                      <tr className="border-b border-border bg-muted/20">
-                        {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => (
-                          <td key={col.key} style={gCols.widthStyle(col.key)} className="px-3 py-1 sticky top-9 z-10 bg-muted">
-                            {openFilterCols.has(col.key) && <FilterCell value={colFilters[col.key] || ''} onChange={v => setFilter(col.key, v)} align={GLOBAL_LABELS[col.key].align === 'right' ? 'right' : GLOBAL_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
-                          </td>
-                        ))}
-                      </tr>
-                    )}
                   </thead>
                   <tbody>
                     {sortedFiltered.map(({ p, info, low, qteReappro, proprioFourn }) => {
@@ -494,9 +504,16 @@ export default function Stock() {
                   <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterColE(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
-                  <Filter className="w-3 h-3" />
-                </button>
+                {isOpen ? (
+                  <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                    <span className="w-24 min-w-0"><FilterCell value={colFiltersE[col] || ''} onChange={v => setFilterE(col, v)} align={align === 'right' ? 'right' : 'left'} /></span>
+                    <button onClick={() => toggleFilterColE(col)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                  </span>
+                ) : (
+                  <button onClick={() => toggleFilterColE(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                    <Filter className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <ColResizeHandle {...eCols.resizeHandleProps(col)} />
             </th>
@@ -611,6 +628,18 @@ export default function Stock() {
                         {colMenuE && <ColDropdown cols={ALL_ENTREPOT_COLS} visible={ve as Set<string>} onToggle={toggleVisE} onClose={() => setColMenuE(false)} />}
                       </div>
                     </div>
+                    {Object.values(colFiltersE).some(v => v) && (
+                      <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+                        <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+                        {(Object.entries(colFiltersE).filter(([, v]) => v) as [EntrepotColKey, string][]).map(([k, v]) => (
+                          <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                            {ENT_LABELS[k].label} : {v === NON_VIDE ? '≠ vide' : v}
+                            <button onClick={() => setFilterE(k, '')}><X className="w-3 h-3" /></button>
+                          </span>
+                        ))}
+                        <button onClick={() => { setColFiltersE({}); setOpenFilterColsE(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+                      </div>
+                    )}
 
                     <div className="overflow-auto max-h-[calc(100vh-12rem)]">
                       <table className="w-full text-sm">
@@ -618,15 +647,6 @@ export default function Stock() {
                           <tr className="border-b border-border bg-muted/20">
                             {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => <SortThE key={col.key} col={col.key} label={ENT_LABELS[col.key].label} align={ENT_LABELS[col.key].align} />)}
                           </tr>
-                          {openFilterColsE.size > 0 && (
-                            <tr className="border-b border-border bg-muted/20">
-                              {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => (
-                                <td key={col.key} style={eCols.widthStyle(col.key)} className="px-4 py-1 sticky top-9 z-10 bg-muted">
-                                  {openFilterColsE.has(col.key) && <FilterCell value={colFiltersE[col.key] || ''} onChange={v => setFilterE(col.key, v)} align={ENT_LABELS[col.key].align === 'right' ? 'right' : 'left'} />}
-                                </td>
-                              ))}
-                            </tr>
-                          )}
                         </thead>
                         <tbody>
                           {sortedE.map(p => {
@@ -690,9 +710,16 @@ export default function Stock() {
                   <span className="truncate">{label}</span>
                   {align !== 'right' && <SI className={cn('w-3 h-3 shrink-0', isSorted ? 'text-primary' : 'opacity-40')} />}
                 </button>
-                <button onClick={() => toggleFilterColSt(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : isOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
-                  <Filter className="w-3 h-3" />
-                </button>
+                {isOpen ? (
+                  <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                    <span className="w-24 min-w-0"><FilterCell value={colFiltersSt[col] || ''} onChange={v => setFilterSt(col, v)} align={align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'} /></span>
+                    <button onClick={() => toggleFilterColSt(col)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                  </span>
+                ) : (
+                  <button onClick={() => toggleFilterColSt(col)} className={cn('p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0', hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60')}>
+                    <Filter className="w-3 h-3" />
+                  </button>
+                )}
               </div>
               <ColResizeHandle {...stCols.resizeHandleProps(col)} />
             </th>
@@ -733,6 +760,19 @@ export default function Stock() {
                     </div>
                   </div>
                 </div>
+
+                {Object.values(colFiltersSt).some(v => v) && (
+                  <div className="bg-card rounded-xl border border-border px-4 py-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+                    {(Object.entries(colFiltersSt).filter(([, v]) => v) as [StockisteColKey, string][]).map(([k, v]) => (
+                      <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                        {ST_LABELS[k].label} : {v === NON_VIDE ? '≠ vide' : v}
+                        <button onClick={() => setFilterSt(k, '')}><X className="w-3 h-3" /></button>
+                      </span>
+                    ))}
+                    <button onClick={() => { setColFiltersSt({}); setOpenFilterColsSt(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+                  </div>
+                )}
 
                 {stockistes.map(f => {
                   const allProduits = produitsParStockiste.get(f.id) || [];
@@ -786,15 +826,6 @@ export default function Stock() {
                               <tr className="border-b border-border bg-muted/10">
                                 {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => <SortThSt key={col.key} col={col.key} label={ST_LABELS[col.key].label} align={ST_LABELS[col.key].align} />)}
                               </tr>
-                              {openFilterColsSt.size > 0 && (
-                                <tr className="border-b border-border bg-muted/20">
-                                  {stCols.ordered(ALL_STOCKISTE_COLS, k => vs.has(k)).map(col => (
-                                    <td key={col.key} style={stCols.widthStyle(col.key)} className="px-4 py-1 sticky top-9 z-10 bg-muted">
-                                      {openFilterColsSt.has(col.key) && <FilterCell value={colFiltersSt[col.key] || ''} onChange={v => setFilterSt(col.key, v)} align={ST_LABELS[col.key].align === 'right' ? 'right' : ST_LABELS[col.key].align === 'center' ? 'center' : 'left'} />}
-                                    </td>
-                                  ))}
-                                </tr>
-                              )}
                             </thead>
                             <tbody>
                               {sortedProduits.map(({ produit, pf }) => {
