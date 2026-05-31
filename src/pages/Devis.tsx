@@ -30,6 +30,7 @@ import VarianteSelect from '@/components/VarianteSelect';
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
@@ -1106,13 +1107,12 @@ export default function Devis() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative w-full sm:w-72">
+      <PageHeaderSlot>
+          <div className="relative w-32 sm:w-48 md:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
-          <div className="flex gap-2 shrink-0 flex-wrap justify-end items-center">
+          <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
             {/* Vue liste / tableau */}
             <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
               <button onClick={() => setDevisView('liste')} title="Vue liste (cartes)" className={`px-2.5 py-1.5 transition-colors ${devisView === 'liste' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-4 h-4" /></button>
@@ -1140,8 +1140,9 @@ export default function Devis() {
             <Button variant="outline" onClick={() => setEmailAnalyzerOpen(true)} className="hidden sm:flex shrink-0"><Mail className="w-4 h-4 mr-2" /> Analyser un mail</Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
+      </PageHeaderSlot>
+
+      <div className="flex flex-wrap gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
@@ -1181,7 +1182,6 @@ export default function Devis() {
               Réinitialiser les filtres
             </Button>
           )}
-        </div>
       </div>
 
       {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
@@ -1207,7 +1207,7 @@ export default function Devis() {
               <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
             </div>
           )}
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[calc(100vh-9rem)]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
@@ -1222,7 +1222,7 @@ export default function Devis() {
                     const isFilterOpen = openFilterColsD.has(col.key);
                     const isDragOver = devisCols.dragOverKey === col.key && devisCols.dragKey !== col.key;
                     return (
-                      <th key={col.key} {...devisCols.thProps(col.key)} style={devisCols.widthStyle(col.key)} className={`relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${devisCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                      <th key={col.key} {...devisCols.thProps(col.key)} style={devisCols.widthStyle(col.key)} className={`relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${isDragOver ? 'bg-primary/10' : devisCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                         {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                         <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
                           <button onClick={() => { const asc = `${sortKey}_asc`; const desc = `${sortKey}_desc`; setSortBy(isAsc ? desc : asc); }} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
@@ -1251,7 +1251,7 @@ export default function Devis() {
                       </th>
                     );
                   })}
-                  <th className="px-3 py-2 w-8"></th>
+                  <th className="px-3 py-2 w-8 sticky top-0 z-10 bg-muted"></th>
                 </tr>
               </thead>
               <tbody>
