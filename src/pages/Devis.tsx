@@ -1112,6 +1112,19 @@ export default function Devis() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
           </div>
+          <div className="relative hidden md:block shrink-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+            <input
+              type="text"
+              value={filterProduit}
+              onChange={e => setFilterProduit(e.target.value)}
+              placeholder="Filtrer par produit..."
+              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-1.5 h-9 w-44 lg:w-52 focus:outline-none focus:ring-1 focus:ring-ring"
+            />
+            {filterProduit && (
+              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
+            )}
+          </div>
           <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
             {/* Vue liste / tableau */}
             <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
@@ -1124,7 +1137,7 @@ export default function Devis() {
       </PageHeaderSlot>
 
       <div className="flex flex-wrap gap-2">
-          <div className="relative">
+          <div className="relative md:hidden">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
             <input
               type="text"
