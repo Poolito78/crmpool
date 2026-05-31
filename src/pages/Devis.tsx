@@ -221,9 +221,10 @@ export default function Devis() {
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
       || d.lignes.some(l => l.variantesChoisies && Object.values(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
-    // Archivés masqués par défaut sauf si showArchived ou filtre explicite
-    if (!showArchived && filterStatut !== 'archivé' && d.statut === 'archivé') return false;
-    if (filterStatut === 'tous' && d.statut === 'système') return false;
+    // Archivés masqués par défaut sauf si showArchived ou filtre explicite (top select OU colonne)
+    if (!showArchived && filterStatut !== 'archivé' && colFiltersD.statut !== 'archivé' && d.statut === 'archivé') return false;
+    // Système (modèles) masqués par défaut sauf si ciblés explicitement (top select OU colonne)
+    if (filterStatut === 'tous' && colFiltersD.statut !== 'système' && d.statut === 'système') return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterProduit.trim()) {
@@ -1095,16 +1096,6 @@ export default function Devis() {
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
-          <select value={filterStatut} onChange={e => { setFilterStatut(e.target.value); if (e.target.value === 'archivé') setShowArchived(true); }} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-            <option value="tous">Tous les statuts</option>
-            <option value="brouillon">Brouillon</option>
-            <option value="envoyé">Envoyé</option>
-            <option value="accepté">Accepté</option>
-            <option value="refusé">Refusé</option>
-            <option value="expiré">Expiré</option>
-            <option value="archivé">🗄 Archivés</option>
-            <option value="système">Système (modèles)</option>
-          </select>
           <button
             type="button"
             onClick={() => { setShowArchived(v => !v); if (filterStatut === 'archivé') setFilterStatut('tous'); }}
@@ -1219,8 +1210,8 @@ export default function Devis() {
                               { value: 'accepté', label: 'Accepté' },
                               { value: 'refusé', label: 'Refusé' },
                               { value: 'expiré', label: 'Expiré' },
-                              { value: 'archivé', label: 'Archivé' },
-                              { value: 'système', label: 'Système' },
+                              { value: 'archivé', label: '🗄 Archivés' },
+                              { value: 'système', label: 'Système (modèles)' },
                             ]} />
                           </td>
                         );
