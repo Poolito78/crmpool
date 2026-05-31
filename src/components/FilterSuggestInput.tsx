@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X as XIcon } from 'lucide-react';
 
 // Champ de filtre de colonne avec liste déroulante de suggestions qui s'ouvre
-// dès le focus (sélection au clic OU saisie libre). Optionnellement un bouton ≠∅.
+// dès le focus. La liste est rendue via portail (position fixe) pour échapper
+// au conteneur scrollable du tableau.
 export default function FilterSuggestInput({
   value,
   onChange,
@@ -18,18 +20,41 @@ export default function FilterSuggestInput({
   autoFocus?: boolean;
 }) {
   const [open, setOpen] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; width: number } | null>(null);
 
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
+  useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const computePos = () => {
+    const el = inputRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = Math.max(r.width, 160);
+    let left = Math.min(r.left, window.innerWidth - w - 8);
+    left = Math.max(8, left);
+    setPos({ top: r.bottom + 4, left, width: w });
+  };
+
+  useLayoutEffect(() => { if (open) computePos(); }, [open, value]);
 
   useEffect(() => {
     if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
+    const onScroll = () => computePos();
+    const onDown = (e: MouseEvent) => {
+      if (wrapRef.current?.contains(e.target as Node)) return;
+      if (listRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+    };
+    window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
+    document.addEventListener('mousedown', onDown);
+    return () => {
+      window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
+      document.removeEventListener('mousedown', onDown);
+    };
   }, [open]);
 
   const q = value.toLowerCase();
@@ -40,7 +65,7 @@ export default function FilterSuggestInput({
     .slice(0, 50);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative" ref={wrapRef}>
       <input
         ref={inputRef}
         placeholder={placeholder}
@@ -49,8 +74,12 @@ export default function FilterSuggestInput({
         onFocus={() => setOpen(true)}
         className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
       />
-      {open && list.length > 0 && (
-        <div className="absolute left-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto min-w-full w-max max-w-[280px]">
+      {open && list.length > 0 && pos && createPortal(
+        <div
+          ref={listRef}
+          style={{ position: 'fixed', top: pos.top, left: pos.left, minWidth: pos.width }}
+          className="z-[60] bg-card border border-border rounded-lg shadow-xl max-h-60 overflow-y-auto w-max max-w-[280px]"
+        >
           {value && (
             <button onClick={() => { onChange(''); setOpen(false); }} className="flex items-center gap-1 w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 border-b border-border">
               <XIcon className="w-3 h-3" /> Effacer le filtre
@@ -61,7 +90,8 @@ export default function FilterSuggestInput({
               {n}
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

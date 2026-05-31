@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
 import { X as XIcon, Euro } from 'lucide-react';
+import FilterPopover from './FilterPopover';
 
 // Filtre de colonne montant. Valeur encodée : "op|n1|n2"
 //   op ∈ '' | 'eq' | 'lt' | 'gt' | 'between'
@@ -24,49 +24,44 @@ export function matchAmountFilter(v: string, amount: number): boolean {
 const OP_LABELS: Record<string, string> = { eq: '=', lt: '<', gt: '>', between: 'Entre' };
 
 export default function FilterAmountInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
   const { op, n1, n2 } = parseAmountFilter(value);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
-
   const summary = !op ? '' :
     op === 'between' ? `${n1 || '…'} – ${n2 || '…'} €` :
     `${OP_LABELS[op]} ${n1 || '…'} €`;
-
   const setOp = (newOp: string) => onChange(`${newOp}|${n1}|${n2}`);
   const setN1 = (v: string) => onChange(`${op || 'eq'}|${v}|${n2}`);
   const setN2 = (v: string) => onChange(`${op || 'between'}|${n1}|${v}`);
 
   return (
-    <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)} className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center gap-1 ${op ? 'border-primary text-primary' : 'border-input text-muted-foreground'} bg-background hover:border-primary/60`}>
-        <Euro className="w-3 h-3 shrink-0" />
-        <span className="truncate flex-1 text-left">{summary || 'Filtrer montant…'}</span>
-        {op && <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); onChange(''); }} className="shrink-0 hover:text-destructive cursor-pointer"><XIcon className="w-3 h-3" /></span>}
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg p-2 w-52 space-y-2">
+    <FilterPopover
+      align="right"
+      width={208}
+      defaultOpen
+      trigger={({ toggle }) => (
+        <button onClick={toggle} className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center gap-1 ${op ? 'border-primary text-primary' : 'border-input text-muted-foreground'} bg-background hover:border-primary/60`}>
+          <Euro className="w-3 h-3 shrink-0" />
+          <span className="truncate flex-1 text-left">{summary || 'Filtrer montant…'}</span>
+          {op && <span role="button" tabIndex={0} onClick={e => { e.stopPropagation(); onChange(''); }} className="shrink-0 hover:text-destructive cursor-pointer"><XIcon className="w-3 h-3" /></span>}
+        </button>
+      )}
+    >
+      {({ close }) => (
+        <div className="p-2 space-y-2">
           <div className="grid grid-cols-4 gap-1">
             {(['eq', 'lt', 'gt', 'between'] as const).map(o => (
               <button key={o} onClick={() => setOp(o)} className={`text-xs px-1 py-1 rounded ${op === o ? 'bg-primary text-primary-foreground' : 'bg-muted/50 hover:bg-muted text-foreground'}`}>{OP_LABELS[o]}</button>
             ))}
           </div>
           <div className="space-y-1">
-            <input type="number" step="0.01" placeholder="Montant €" value={n1} onChange={e => setN1(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+            <input type="number" step="0.01" placeholder="Montant €" value={n1} onChange={e => setN1(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />
             {op === 'between' && <input type="number" step="0.01" placeholder="Montant max €" value={n2} onChange={e => setN2(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />}
           </div>
           <div className="flex justify-between">
-            <button onClick={() => { onChange(''); setOpen(false); }} className="text-xs text-muted-foreground hover:text-foreground">Effacer</button>
-            <button onClick={() => setOpen(false)} className="text-xs text-primary font-medium">OK</button>
+            <button onClick={() => { onChange(''); close(); }} className="text-xs text-muted-foreground hover:text-foreground">Effacer</button>
+            <button onClick={close} className="text-xs text-primary font-medium">OK</button>
           </div>
         </div>
       )}
-    </div>
+    </FilterPopover>
   );
 }

@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef } from 'react';
+import FilterPopover from './FilterPopover';
 
 // Filtre de colonne à choix fixes, dont la liste s'ouvre directement à l'affichage.
 //
@@ -31,17 +32,8 @@ export default function FilterChoiceInput({
   placeholder?: string;
   excludable?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
-  const ref = useRef<HTMLDivElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressed = useRef(false);
-
-  useEffect(() => {
-    if (!open) return;
-    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [open]);
 
   const { mode, only, excluded } = parseChoiceFilter(value);
 
@@ -79,50 +71,56 @@ export default function FilterChoiceInput({
   function endPress() {
     if (pressTimer.current) { clearTimeout(pressTimer.current); pressTimer.current = null; }
   }
-  function handleClick(v: string) {
-    if (longPressed.current) { longPressed.current = false; return; } // clic prolongé déjà traité
-    selectOnly(v);
-    setOpen(false);
-  }
-
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(o => !o)}
-        title={fullSummary}
-        className={`h-6 text-xs w-auto max-w-[160px] rounded border px-2 py-0.5 flex items-center gap-1 bg-background hover:border-primary/60 ${mode !== 'none' ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
-      >
-        <span className="truncate">{summary}</span>
-        <span className="opacity-50">▾</span>
-      </button>
-      {open && (
-        <div className="absolute left-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg max-h-72 overflow-y-auto min-w-full w-max">
-          {options.map(o => {
-            const isExcluded = excluded.includes(o.value);
-            const isOnly = mode === 'only' && only === o.value;
-            return (
-              <button
-                key={o.value || '__all'}
-                onClick={() => handleClick(o.value)}
-                onMouseDown={() => startPress(o.value)}
-                onMouseUp={endPress}
-                onMouseLeave={endPress}
-                onContextMenu={e => { if (excludable && o.value) { e.preventDefault(); toggleExclude(o.value); } }}
-                title={excludable && o.value ? 'Clic = afficher seulement · clic prolongé / clic droit = masquer' : undefined}
-                className={`flex items-center justify-between gap-2 w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${isOnly ? 'bg-primary/10 text-primary font-medium' : ''} ${isExcluded ? 'line-through text-muted-foreground/60' : ''}`}
-              >
-                <span>{o.label}</span>
-                {isExcluded && <span className="text-[10px] text-destructive shrink-0">masqué</span>}
-              </button>
-            );
-          })}
-          {excludable && (
-            <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-border leading-tight">
-              Clic = afficher seulement.<br />Clic prolongé = masquer (barré).
-            </p>
-          )}
-        </div>
+    <FilterPopover
+      defaultOpen
+      width={200}
+      trigger={({ toggle }) => (
+        <button
+          onClick={toggle}
+          title={fullSummary}
+          className={`h-6 text-xs w-auto max-w-[160px] rounded border px-2 py-0.5 flex items-center gap-1 bg-background hover:border-primary/60 ${mode !== 'none' ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
+        >
+          <span className="truncate">{summary}</span>
+          <span className="opacity-50">▾</span>
+        </button>
       )}
-    </div>
+    >
+      {({ close }) => {
+        const handleClick = (v: string) => {
+          if (longPressed.current) { longPressed.current = false; return; }
+          selectOnly(v);
+          close();
+        };
+        return (
+          <div className="max-h-72 overflow-y-auto">
+            {options.map(o => {
+              const isExcluded = excluded.includes(o.value);
+              const isOnly = mode === 'only' && only === o.value;
+              return (
+                <button
+                  key={o.value || '__all'}
+                  onClick={() => handleClick(o.value)}
+                  onMouseDown={() => startPress(o.value)}
+                  onMouseUp={endPress}
+                  onMouseLeave={endPress}
+                  onContextMenu={e => { if (excludable && o.value) { e.preventDefault(); toggleExclude(o.value); } }}
+                  title={excludable && o.value ? 'Clic = afficher seulement · clic prolongé / clic droit = masquer' : undefined}
+                  className={`flex items-center justify-between gap-2 w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 ${isOnly ? 'bg-primary/10 text-primary font-medium' : ''} ${isExcluded ? 'line-through text-muted-foreground/60' : ''}`}
+                >
+                  <span>{o.label}</span>
+                  {isExcluded && <span className="text-[10px] text-destructive shrink-0">masqué</span>}
+                </button>
+              );
+            })}
+            {excludable && (
+              <p className="px-3 py-1.5 text-[10px] text-muted-foreground border-t border-border leading-tight">
+                Clic = afficher seulement.<br />Clic prolongé = masquer (barré).
+              </p>
+            )}
+          </div>
+        );
+      }}
+    </FilterPopover>
   );
 }
