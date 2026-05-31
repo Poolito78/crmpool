@@ -153,6 +153,11 @@ export default function Devis() {
     } catch { /* ignore */ }
     return new Set(DEFAULT_LIGNE_COLS);
   });
+  // Affichage des lignes : cartes (défaut) ou tableau compact à colonnes
+  const [lignesView, setLignesView] = useState<'cartes' | 'tableau'>(() => {
+    try { return (localStorage.getItem('devis_lignes_view') as 'cartes' | 'tableau') || 'cartes'; } catch { return 'cartes'; }
+  });
+  useEffect(() => { try { localStorage.setItem('devis_lignes_view', lignesView); } catch { /* ignore */ } }, [lignesView]);
 
   // Auto-open devis editor via ?editDevis=<id> URL param
   const editDevisHandledRef = useRef(false);
@@ -1872,6 +1877,11 @@ export default function Devis() {
                     )}
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
+                  {/* Bascule cartes / tableau */}
+                  <div className="flex rounded-md border border-border overflow-hidden">
+                    <button type="button" onClick={() => setLignesView('cartes')} title="Affichage cartes" className={`px-2 py-1.5 transition-colors ${lignesView === 'cartes' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-3.5 h-3.5" /></button>
+                    <button type="button" onClick={() => setLignesView('tableau')} title="Affichage tableau (colonnes)" className={`px-2 py-1.5 border-l border-border transition-colors ${lignesView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-3.5 h-3.5" /></button>
+                  </div>
                   <div ref={colChooserRef} className="relative">
                     <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Choisir les colonnes optionnelles sur chaque ligne">
                       <Columns2 className="w-3 h-3 mr-1" /> Colonnes
@@ -1905,7 +1915,24 @@ export default function Devis() {
                   </div>
                 </div>
               </div>
-              <div className="flex flex-col gap-2">
+              {lignesView === 'tableau' && (
+                <div className="flex items-end gap-1 px-1 pb-1 mb-1 text-[11px] font-medium text-muted-foreground border-b border-border">
+                  <span className="w-3.5 shrink-0" />
+                  <span className="w-6 shrink-0">#</span>
+                  <span className="w-48 shrink-0">Réf.</span>
+                  <span className="flex-1 min-w-[120px]">Description</span>
+                  {visibleLigneCols.has('surface') && <span className="w-20 shrink-0">Surface m²</span>}
+                  {visibleLigneCols.has('conso') && <span className="w-20 shrink-0">Conso. kg/m²</span>}
+                  {visibleLigneCols.has('poids') && <span className="w-16 shrink-0">Poids kg</span>}
+                  <span className="w-16 shrink-0">Qté</span>
+                  <span className="w-14 shrink-0">Unité</span>
+                  <span className="w-24 shrink-0">Prix HT</span>
+                  {visibleLigneCols.has('remise') && <span className="w-16 shrink-0">Rem. %</span>}
+                  {visibleLigneCols.has('netht') && <span className="w-24 shrink-0">Net HT</span>}
+                  <span className="shrink-0 w-24 text-right">Total HT</span>
+                </div>
+              )}
+              <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30' : 'flex flex-col gap-2'}>
                 {(() => {
                   // Appartenance groupe : entre en-tête et marqueur soustotal
                   let curGrp: string | null = null;
