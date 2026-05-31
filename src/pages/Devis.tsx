@@ -31,6 +31,7 @@ import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey }
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import RowActionsMenu from '@/components/RowActionsMenu';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
@@ -1311,13 +1312,15 @@ export default function Devis() {
                     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
                       {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => <Fragment key={col.key}>{renderCellD(col.key)}</Fragment>)}
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-0.5 justify-end">
-                          <button onClick={() => openArchiveDialog(d)} title="Archiver" className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 text-muted-foreground hover:text-foreground"><Archive className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => setEmailDevis(d)} title="Envoyer par email" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Mail className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => duplicate(d)} title="Dupliquer" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => setPreviewDevis(d)} title="Aperçu" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><Eye className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => setChatterDevis(d)} title="Notes & fichiers" className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"><MessageSquare className="w-3.5 h-3.5" /></button>
-                          <button onClick={() => confirmRemove(d.id)} title="Supprimer" className="p-1 rounded hover:bg-destructive/10 text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <div className="flex items-center justify-end">
+                          <RowActionsMenu actions={[
+                            { icon: <Eye className="w-4 h-4" />, label: 'Aperçu', onClick: () => setPreviewDevis(d) },
+                            { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
+                            { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
+                            { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                            { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
+                            { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
+                          ]} />
                         </div>
                       </td>
                     </tr>
