@@ -1060,6 +1060,43 @@ export default function Devis() {
     toast.success('Image(s) collée(s)');
   }
 
+  // Contrôle de filtre par colonne (rendu dans un popover ancré à l'icône filtre)
+  function renderFilterControl(colKey: DevisTableColKey) {
+    const fVal = colFiltersD[colKey] || '';
+    if (colKey === 'statut') {
+      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} excludable options={[
+        { value: '', label: 'Tous' },
+        { value: 'brouillon', label: 'Brouillon' },
+        { value: 'envoyé', label: 'Envoyé' },
+        { value: 'accepté', label: 'Accepté' },
+        { value: 'refusé', label: 'Refusé' },
+        { value: 'expiré', label: 'Expiré' },
+        { value: 'archivé', label: '🗄 Archivés' },
+        { value: 'système', label: 'Système (modèles)' },
+      ]} />;
+    }
+    if (colKey === 'validite') {
+      return <FilterChoiceInput value={fVal} onChange={v => setFilterD('validite', v)} options={[
+        { value: '', label: 'Tous' },
+        { value: 'oui', label: 'Hors délais' },
+        { value: 'non', label: 'Dans les délais' },
+      ]} />;
+    }
+    if (colKey === 'date') return <FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} />;
+    if (colKey === 'totalHT') return <FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} />;
+    const clientSugg = [
+      ...clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
+      ...clients.flatMap(c => (c.contacts || []).map(ct => [ct.prenom, ct.nom].filter(Boolean).join(' ')).filter(Boolean)),
+    ];
+    const suggSource: Record<string, string[]> = {
+      client: clientSugg,
+      numero: devis.map(d => d.numero).filter(Boolean),
+      refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
+      systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
+    };
+    return <FilterSuggestInput value={fVal} onChange={v => setFilterD(colKey, v)} suggestions={suggSource[colKey] || []} placeholder={colKey === 'client' ? 'Client ou contact…' : 'Filtrer…'} />;
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3">
@@ -1175,16 +1212,23 @@ export default function Devis() {
                     return (
                       <th key={col.key} {...devisCols.thProps(col.key)} style={devisCols.widthStyle(col.key)} className={`relative px-3 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing ${devisCols.dragKey === col.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
                         {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
-                        <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''} ${devisCols.widthStyle(col.key) ? 'overflow-hidden' : ''}`}>
+                        <div className={`flex items-center gap-0.5 ${col.align === 'right' ? 'justify-end' : ''}`}>
                           <button onClick={() => { const asc = `${sortKey}_asc`; const desc = `${sortKey}_desc`; setSortBy(isAsc ? desc : asc); }} className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0">
                             {col.align === 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                             <span className="truncate">{col.label}</span>
                             {col.align !== 'right' && <SI className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                           </button>
                           {isFilterable && (
-                            <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
-                              <Filter className="w-3 h-3" />
-                            </button>
+                            <span className="relative shrink-0">
+                              <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
+                                <Filter className="w-3 h-3" />
+                              </button>
+                              {isFilterOpen && (
+                                <div className={`absolute top-full mt-1 z-40 ${col.align === 'right' ? 'right-0' : 'left-0'} min-w-[180px] font-normal`} onClick={e => e.stopPropagation()}>
+                                  {renderFilterControl(col.key)}
+                                </div>
+                              )}
+                            </span>
                           )}
                         </div>
                         <ColResizeHandle {...devisCols.resizeHandleProps(col.key)} />
@@ -1193,77 +1237,6 @@ export default function Devis() {
                   })}
                   <th className="px-3 py-2 w-8"></th>
                 </tr>
-                {openFilterColsD.size > 0 && (
-                  <tr className="border-b border-border bg-muted/20">
-                    {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => {
-                      const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
-                      if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
-                      const fVal = colFiltersD[col.key] || '';
-                      const isNV = fVal === '!empty';
-                      // Statut : choix fixes, liste ouverte directement
-                      if (col.key === 'statut') {
-                        return (
-                          <td key={col.key} className="px-3 py-1">
-                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} excludable options={[
-                              { value: '', label: 'Tous' },
-                              { value: 'brouillon', label: 'Brouillon' },
-                              { value: 'envoyé', label: 'Envoyé' },
-                              { value: 'accepté', label: 'Accepté' },
-                              { value: 'refusé', label: 'Refusé' },
-                              { value: 'expiré', label: 'Expiré' },
-                              { value: 'archivé', label: '🗄 Archivés' },
-                              { value: 'système', label: 'Système (modèles)' },
-                            ]} />
-                          </td>
-                        );
-                      }
-                      // Validité : Hors délais / Dans les délais, liste ouverte directement
-                      if (col.key === 'validite') {
-                        return (
-                          <td key={col.key} className="px-3 py-1">
-                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('validite', v)} options={[
-                              { value: '', label: 'Tous' },
-                              { value: 'oui', label: 'Hors délais' },
-                              { value: 'non', label: 'Dans les délais' },
-                            ]} />
-                          </td>
-                        );
-                      }
-                      // Date : filtre calendaire (le / avant / après / entre)
-                      if (col.key === 'date') {
-                        return <td key={col.key} className="px-3 py-1"><FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} /></td>;
-                      }
-                      // Total HT : filtre montant (= / < / > / entre)
-                      if (col.key === 'totalHT') {
-                        return <td key={col.key} className="px-3 py-1"><FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} /></td>;
-                      }
-                      // Colonnes texte : champ + liste de suggestions ouverte au focus
-                      // Client : suggestions = clients + contacts (double recherche)
-                      const clientSugg = [
-                        ...clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
-                        ...clients.flatMap(c => (c.contacts || []).map(ct => [ct.prenom, ct.nom].filter(Boolean).join(' ')).filter(Boolean)),
-                      ];
-                      const suggSource: Record<string, string[]> = {
-                        client: clientSugg,
-                        numero: devis.map(d => d.numero).filter(Boolean),
-                        refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
-                        systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
-                      };
-                      const sugg = suggSource[col.key] || [];
-                      return (
-                        <td key={col.key} className="px-3 py-1">
-                          <FilterSuggestInput
-                            value={fVal}
-                            onChange={v => setFilterD(col.key, v)}
-                            suggestions={sugg}
-                            placeholder={col.key === 'client' ? 'Client ou contact…' : `Filtrer ${col.label.toLowerCase()}…`}
-                          />
-                        </td>
-                      );
-                    })}
-                    <td className="px-3 py-1" />
-                  </tr>
-                )}
               </thead>
               <tbody>
                 {sortedTable.map(d => {
