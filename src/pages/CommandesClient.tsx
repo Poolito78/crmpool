@@ -3,10 +3,13 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
+import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -40,6 +43,12 @@ export default function CommandesClient() {
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
+  const [colFilters, setColFilters] = useState<Partial<Record<CCColKey, string>>>({});
+  const [openFilterCols, setOpenFilterCols] = useState<Set<CCColKey>>(new Set());
+  function toggleFilterCol(col: CCColKey) {
+    setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilters(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
+  }
+  function setColFilter(col: CCColKey, v: string) { setColFilters(prev => ({ ...prev, [col]: v })); }
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -301,15 +310,54 @@ export default function CommandesClient() {
         });
         if (!inLignes) return false;
       }
+      const client = clients.find(cl => cl.id === c.clientId);
+      // Filtres de colonne
+      for (const [k, v] of Object.entries(colFilters)) {
+        if (!v) continue;
+        const lv = v.toLowerCase();
+        switch (k as CCColKey) {
+          case 'numero': if (!c.numero.toLowerCase().includes(lv)) return false; break;
+          case 'client': if (!`${client?.nom || ''} ${client?.societe || ''}`.toLowerCase().includes(lv)) return false; break;
+          case 'ref': if (!(c.referenceAffaire || '').toLowerCase().includes(lv)) return false; break;
+          case 'date': if (!matchDateFilter(v, c.dateCreation)) return false; break;
+          case 'livraison': if (!matchDateFilter(v, c.dateLivraisonPrevue || c.dateDepart)) return false; break;
+          case 'echeance': if (!matchDateFilter(v, c.dateEcheance)) return false; break;
+          case 'total': if (!matchAmountFilter(v, c.totalHT)) return false; break;
+        }
+      }
       if (!search) return true;
       const s = search.toLowerCase();
-      const client = clients.find(cl => cl.id === c.clientId);
       return c.numero.toLowerCase().includes(s) ||
         client?.nom.toLowerCase().includes(s) ||
         client?.societe?.toLowerCase().includes(s) ||
         c.referenceAffaire?.toLowerCase().includes(s);
     })
     .sort((a, b) => b.dateCreation.localeCompare(a.dateCreation));
+
+  // Suggestions pour les filtres texte
+  const ccNumeros = useMemo(() => commandesClient.map(c => c.numero).filter(Boolean), [commandesClient]);
+  const ccClients = useMemo(() => commandesClient.map(c => { const cl = clients.find(x => x.id === c.clientId); return cl?.societe || cl?.nom || ''; }).filter(Boolean), [commandesClient, clients]);
+  const ccRefs = useMemo(() => commandesClient.map(c => c.referenceAffaire || '').filter(Boolean), [commandesClient]);
+
+  // Contrôle de filtre inline par colonne
+  function renderCCFilter(key: CCColKey) {
+    const v = colFilters[key] || '';
+    switch (key) {
+      case 'numero': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ccNumeros} placeholder="N°…" />;
+      case 'client': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ccClients} placeholder="Client…" />;
+      case 'ref': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ccRefs} placeholder="Réf…" />;
+      case 'date': case 'livraison': case 'echeance': return <FilterDateInput value={v} onChange={x => setColFilter(key, x)} />;
+      case 'total': return <FilterAmountInput value={v} onChange={x => setColFilter(key, x)} />;
+      default: return null;
+    }
+  }
+
+  // Résumé court d'un filtre pour les chips « Filtres actifs »
+  function ccChipText(key: CCColKey, v: string): string {
+    if (key === 'total') { const { op, n1, n2 } = parseAmountFilter(v); if (!op) return v; return op === 'between' ? `${n1}–${n2} €` : `${({ eq: '=', lt: '<', gt: '>' } as Record<string, string>)[op] || ''} ${n1} €`; }
+    if (key === 'date' || key === 'livraison' || key === 'echeance') { const { op, d1, d2 } = parseDateFilter(v); if (!op) return v; const fmt = (s: string) => s ? formatDate(s) : '…'; return op === 'between' ? `${fmt(d1)}–${fmt(d2)}` : `${({ eq: 'Le', before: 'Avant', after: 'Après' } as Record<string, string>)[op] || ''} ${fmt(d1)}`; }
+    return v;
+  }
 
   return (
     <div className="space-y-4">
@@ -367,6 +415,20 @@ export default function CommandesClient() {
         })}
       </div>
 
+      {/* Filtres actifs */}
+      {Object.values(colFilters).some(v => v) && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-card px-4 py-2">
+          <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+          {(Object.entries(colFilters).filter(([, v]) => v) as [CCColKey, string][]).map(([k, v]) => (
+            <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+              {CC_COLS.find(c => c.key === k)?.label} : {ccChipText(k, v)}
+              <button onClick={() => setColFilter(k, '')}><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+          <button onClick={() => { setColFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
         <table className="w-full text-sm">
@@ -374,10 +436,26 @@ export default function CommandesClient() {
             <tr className="border-b border-border bg-muted/50">
               {ccCols.ordered(CC_COLS).map(col => {
                 const isDragOver = ccCols.dragOverKey === col.key && ccCols.dragKey !== col.key;
+                const filterable = col.key !== 'statut';
+                const hasFilter = !!colFilters[col.key];
+                const isFilterOpen = openFilterCols.has(col.key);
+                const alignRight = col.cls.includes('text-right');
                 return (
                   <th key={col.key} {...ccCols.thProps(col.key)} style={ccCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.cls} ${isDragOver ? 'bg-primary/10' : ccCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
-                    <span className="truncate">{col.label}</span>
+                    <div className={`flex items-center gap-0.5 ${alignRight ? 'justify-end' : ''}`}>
+                      <span className="truncate">{col.label}</span>
+                      {filterable && (
+                        isFilterOpen ? (
+                          <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                            {renderCCFilter(col.key)}
+                            <button onClick={() => toggleFilterCol(col.key)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                          </span>
+                        ) : (
+                          <button onClick={() => toggleFilterCol(col.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
+                        )
+                      )}
+                    </div>
                     <ColResizeHandle {...ccCols.resizeHandleProps(col.key)} />
                   </th>
                 );

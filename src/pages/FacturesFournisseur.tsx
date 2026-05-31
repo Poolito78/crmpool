@@ -1,14 +1,17 @@
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
+import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
   STATUTS_FACTURE_FOURNISSEUR, type FactureFournisseur, type StatutFactureFournisseur,
 } from '@/lib/store';
-import { Plus, Search, Trash2, Pencil, ShoppingCart, CheckCircle2, AlertCircle, Euro, Clock } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, ShoppingCart, CheckCircle2, AlertCircle, Euro, Clock, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -39,6 +42,12 @@ export default function FacturesFournisseur() {
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
+  const [colFilters, setColFilters] = useState<Partial<Record<FFColKey, string>>>({});
+  const [openFilterCols, setOpenFilterCols] = useState<Set<FFColKey>>(new Set());
+  function toggleFilterCol(col: FFColKey) {
+    setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilters(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
+  }
+  function setColFilter(col: FFColKey, v: string) { setColFilters(prev => ({ ...prev, [col]: v })); }
 
   // Auto-open dialog pre-filled if ?cf=<commandeFournisseurId> is in URL
   useEffect(() => {
@@ -182,15 +191,49 @@ export default function FacturesFournisseur() {
   const filtered = facturesFournisseur
     .filter(f => {
       if (filterStatut !== 'tous' && f.statut !== filterStatut) return false;
+      const fourn = fournisseurs.find(fu => fu.id === f.fournisseurId);
+      for (const [k, v] of Object.entries(colFilters)) {
+        if (!v) continue;
+        const lv = v.toLowerCase();
+        switch (k as FFColKey) {
+          case 'numero': if (!f.numero.toLowerCase().includes(lv)) return false; break;
+          case 'numFacture': if (!(f.numeroFacture || '').toLowerCase().includes(lv)) return false; break;
+          case 'fournisseur': if (!`${fourn?.nom || ''} ${fourn?.societe || ''}`.toLowerCase().includes(lv)) return false; break;
+          case 'reception': if (!matchDateFilter(v, f.dateReception)) return false; break;
+          case 'echeance': if (!matchDateFilter(v, f.dateEcheance)) return false; break;
+          case 'paiement': if (!matchDateFilter(v, f.datePaiement)) return false; break;
+          case 'montant': if (!matchAmountFilter(v, f.montantTTC)) return false; break;
+        }
+      }
       if (!search) return true;
       const s = search.toLowerCase();
-      const fourn = fournisseurs.find(fu => fu.id === f.fournisseurId);
       return f.numero.toLowerCase().includes(s) ||
         f.numeroFacture.toLowerCase().includes(s) ||
         fourn?.nom.toLowerCase().includes(s) ||
         fourn?.societe?.toLowerCase().includes(s);
     })
     .sort((a, b) => b.dateReception.localeCompare(a.dateReception));
+
+  const ffNumeros = useMemo(() => facturesFournisseur.map(f => f.numero).filter(Boolean), [facturesFournisseur]);
+  const ffNumFactures = useMemo(() => facturesFournisseur.map(f => f.numeroFacture || '').filter(Boolean), [facturesFournisseur]);
+  const ffFournisseurs = useMemo(() => facturesFournisseur.map(f => { const fu = fournisseurs.find(x => x.id === f.fournisseurId); return fu?.societe || fu?.nom || ''; }).filter(Boolean), [facturesFournisseur, fournisseurs]);
+
+  function renderFFFilter(key: FFColKey) {
+    const v = colFilters[key] || '';
+    switch (key) {
+      case 'numero': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ffNumeros} placeholder="N°…" />;
+      case 'numFacture': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ffNumFactures} placeholder="N° facture…" />;
+      case 'fournisseur': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ffFournisseurs} placeholder="Fournisseur…" />;
+      case 'reception': case 'echeance': case 'paiement': return <FilterDateInput value={v} onChange={x => setColFilter(key, x)} />;
+      case 'montant': return <FilterAmountInput value={v} onChange={x => setColFilter(key, x)} />;
+      default: return null;
+    }
+  }
+  function ffChipText(key: FFColKey, v: string): string {
+    if (key === 'montant') { const { op, n1, n2 } = parseAmountFilter(v); if (!op) return v; return op === 'between' ? `${n1}–${n2} €` : `${({ eq: '=', lt: '<', gt: '>' } as Record<string, string>)[op] || ''} ${n1} €`; }
+    if (key === 'reception' || key === 'echeance' || key === 'paiement') { const { op, d1, d2 } = parseDateFilter(v); if (!op) return v; const fmt = (s: string) => s ? formatDate(s) : '…'; return op === 'between' ? `${fmt(d1)}–${fmt(d2)}` : `${({ eq: 'Le', before: 'Avant', after: 'Après' } as Record<string, string>)[op] || ''} ${fmt(d1)}`; }
+    return v;
+  }
 
   // Pour le formulaire : filtrer les CF par fournisseur sélectionné
   const cfFiltered = fournisseurId
@@ -246,6 +289,20 @@ export default function FacturesFournisseur() {
         })}
       </div>
 
+      {/* Filtres actifs */}
+      {Object.values(colFilters).some(v => v) && (
+        <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-card px-4 py-2">
+          <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+          {(Object.entries(colFilters).filter(([, v]) => v) as [FFColKey, string][]).map(([k, v]) => (
+            <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+              {FF_COLS.find(c => c.key === k)?.label} : {ffChipText(k, v)}
+              <button onClick={() => setColFilter(k, '')}><X className="w-3 h-3" /></button>
+            </span>
+          ))}
+          <button onClick={() => { setColFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+        </div>
+      )}
+
       {/* Table */}
       <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
         <table className="w-full text-sm">
@@ -253,10 +310,26 @@ export default function FacturesFournisseur() {
             <tr className="border-b border-border bg-muted/50">
               {ffCols.ordered(FF_COLS).map(col => {
                 const isDragOver = ffCols.dragOverKey === col.key && ffCols.dragKey !== col.key;
+                const filterable = col.key !== 'statut' && col.key !== 'bc';
+                const hasFilter = !!colFilters[col.key];
+                const isFilterOpen = openFilterCols.has(col.key);
+                const alignRight = col.cls.includes('text-right');
                 return (
                   <th key={col.key} {...ffCols.thProps(col.key)} style={ffCols.widthStyle(col.key)} className={`relative py-3 px-4 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${col.cls} ${isDragOver ? 'bg-primary/10' : ffCols.dragKey === col.key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
                     {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
-                    <span className="truncate">{col.label}</span>
+                    <div className={`flex items-center gap-0.5 ${alignRight ? 'justify-end' : ''}`}>
+                      <span className="truncate">{col.label}</span>
+                      {filterable && (
+                        isFilterOpen ? (
+                          <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                            {renderFFFilter(col.key)}
+                            <button onClick={() => toggleFilterCol(col.key)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                          </span>
+                        ) : (
+                          <button onClick={() => toggleFilterCol(col.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
+                        )
+                      )}
+                    </div>
                     <ColResizeHandle {...ffCols.resizeHandleProps(col.key)} />
                   </th>
                 );
