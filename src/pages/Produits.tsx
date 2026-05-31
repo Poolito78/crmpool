@@ -4,6 +4,8 @@ import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings } from 'lucide-react';
+import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterChoiceInput from '@/components/FilterChoiceInput';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -252,9 +254,35 @@ export default function Produits() {
   function toggleFilterCol(col: ColKey) {
     setOpenFilterCols(prev => {
       const n = new Set(prev);
-      n.has(col) ? n.delete(col) : n.add(col);
+      if (n.has(col)) {
+        n.delete(col);
+        // efface le filtre de la colonne quand on referme
+        setColumnFilters(f => { const nf = { ...f }; delete nf[col]; return nf; });
+      } else {
+        n.add(col);
+      }
       return n;
     });
+  }
+
+  // Contrôle de filtre par colonne (affiché inline dans l'en-tête)
+  function renderProdFilter(colKey: ColKey) {
+    const fVal = columnFilters[colKey] || '';
+    const set = (v: string) => setColumnFilters(prev => ({ ...prev, [colKey]: v }));
+    if (colKey === 'disponibleVente') {
+      return <FilterChoiceInput value={fVal} onChange={set} options={[
+        { value: '', label: 'Tous' },
+        { value: 'oui', label: 'Disponible' },
+        { value: 'non', label: 'Non dispo' },
+      ]} />;
+    }
+    const suggSource: Partial<Record<ColKey, string[]>> = {
+      reference: produits.map(p => p.reference).filter(Boolean),
+      description: produits.map(p => p.description).filter(Boolean),
+      categorie: produits.map(p => p.categorie).filter(Boolean) as string[],
+      fournisseur: fournisseurs.map(f => f.societe || f.nom).filter(Boolean) as string[],
+    };
+    return <FilterSuggestInput value={fVal} onChange={set} suggestions={suggSource[colKey] || []} placeholder="Filtrer…" />;
   }
 
   // Auto-open product from query param (e.g. from devis)
@@ -940,13 +968,23 @@ export default function Produits() {
                           <span className="truncate">{col.label}</span>
                           {col.align !== 'right' && <SortIcon className={`w-3 h-3 shrink-0 ${isSorted ? 'text-primary' : 'opacity-40'}`} />}
                         </button>
-                        <button
-                          onClick={() => toggleFilterCol(col.key)}
-                          title={isFilterOpen ? 'Masquer le filtre' : 'Filtrer'}
-                          className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
-                        >
-                          <Filter className="w-3 h-3" />
-                        </button>
+                        {isFilterOpen ? (() => {
+                          const isChoice = col.key === 'disponibleVente';
+                          return (
+                            <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                              <span className={isChoice ? 'shrink-0' : 'min-w-0 w-28'}>{renderProdFilter(col.key)}</span>
+                              <button onClick={() => toggleFilterCol(col.key)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                            </span>
+                          );
+                        })() : (
+                          <button
+                            onClick={() => toggleFilterCol(col.key)}
+                            title="Filtrer"
+                            className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}
+                          >
+                            <Filter className="w-3 h-3" />
+                          </button>
+                        )}
                       </div>
                       {/* Poignée de redimensionnement (non draggable pour ne pas déclencher le réordonnancement) */}
                       <div
@@ -1038,43 +1076,6 @@ export default function Produits() {
                   </div>
                 </th>
               </tr>
-              {openFilterCols.size > 0 && (
-                <tr className="border-b border-border bg-muted/20">
-                  <th className="px-3 py-1"></th>
-                  {orderedVisibleCols.map(col => {
-                    if (!openFilterCols.has(col.key)) return <th key={col.key} className="px-3 py-1" />;
-                    const fVal = columnFilters[col.key] || '';
-                    const isNV = fVal === '!empty';
-                    return (
-                      <th key={col.key} className="px-3 py-1">
-                        {isNV ? (
-                          <button
-                            onClick={() => setColumnFilters(prev => ({ ...prev, [col.key]: '' }))}
-                            className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap"
-                          >
-                            ≠ vide <X className="w-3 h-3" />
-                          </button>
-                        ) : (
-                          <div className="flex items-center gap-0.5">
-                            <Input
-                              placeholder="Filtrer..."
-                              value={fVal}
-                              onChange={e => setColumnFilters(prev => ({ ...prev, [col.key]: e.target.value }))}
-                              className={`h-6 text-xs flex-1 min-w-0 ${col.align === 'right' ? 'text-right' : ''}`}
-                            />
-                            <button
-                              onClick={() => setColumnFilters(prev => ({ ...prev, [col.key]: '!empty' }))}
-                              title="Non vide"
-                              className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 rounded leading-none"
-                            >≠∅</button>
-                          </div>
-                        )}
-                      </th>
-                    );
-                  })}
-                  <th className="px-3 py-1" />
-                </tr>
-              )}
             </thead>
             <tbody>
               {sortedFiltered.map(p => {
