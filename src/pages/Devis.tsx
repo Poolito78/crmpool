@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, SlidersHorizontal } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1118,25 +1118,6 @@ export default function Devis() {
               <button onClick={() => setDevisView('liste')} title="Vue liste (cartes)" className={`px-2.5 py-1.5 transition-colors ${devisView === 'liste' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-4 h-4" /></button>
               <button onClick={() => setDevisView('tableau')} title="Vue tableau (colonnes)" className={`px-2.5 py-1.5 border-l border-border transition-colors ${devisView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-4 h-4" /></button>
             </div>
-            {devisView === 'tableau' && (
-              <div className="relative shrink-0" ref={colMenuDevisRef}>
-                <Button variant="outline" size="sm" onClick={() => setColMenuDevis(o => !o)}>
-                  <SlidersHorizontal className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Colonnes</span>
-                  {visDevisTableCols.size < DEVIS_TABLE_COLS_DEF.length && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">{visDevisTableCols.size}</span>}
-                </Button>
-                {colMenuDevis && (
-                  <div className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-xl shadow-lg py-1 min-w-44">
-                    {DEVIS_TABLE_COLS_DEF.map(c => (
-                      <label key={c.key} className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/50 cursor-pointer text-sm select-none">
-                        <input type="checkbox" checked={visDevisTableCols.has(c.key)} onChange={() => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })} className="rounded accent-primary w-3.5 h-3.5" />
-                        {c.label}
-                      </label>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <Button variant="outline" onClick={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')} className="hidden sm:flex"><Download className="w-4 h-4 mr-2" /> Exporter</Button>
             <Button variant="outline" onClick={() => setEmailAnalyzerOpen(true)} className="hidden sm:flex shrink-0"><Mail className="w-4 h-4 mr-2" /> Analyser un mail</Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
@@ -1251,7 +1232,29 @@ export default function Devis() {
                       </th>
                     );
                   })}
-                  <th className="px-3 py-2 w-8 sticky top-0 z-10 bg-muted"></th>
+                  <th className="px-2 py-2 sticky top-0 z-10 bg-muted text-right whitespace-nowrap">
+                    <div className="relative inline-block" ref={colMenuDevisRef}>
+                      <button onClick={() => setColMenuDevis(o => !o)} title="Colonnes & export" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
+                        <Settings className="w-4 h-4" />
+                      </button>
+                      {colMenuDevis && (
+                        <div className="absolute right-0 top-full mt-1 z-40 bg-card border border-border rounded-xl shadow-lg py-1 min-w-48 text-left font-normal">
+                          <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Colonnes affichées</p>
+                          <div className="max-h-72 overflow-y-auto">
+                            {DEVIS_TABLE_COLS_DEF.map(c => (
+                              <label key={c.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm select-none">
+                                <input type="checkbox" checked={visDevisTableCols.has(c.key)} onChange={() => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })} className="rounded accent-primary w-3.5 h-3.5" />
+                                {c.label}
+                              </label>
+                            ))}
+                          </div>
+                          <button onClick={() => { setColMenuDevis(false); exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis'); }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground border-t border-border mt-1">
+                            <Download className="w-4 h-4 text-muted-foreground" /> Exporter (Excel)
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody>
