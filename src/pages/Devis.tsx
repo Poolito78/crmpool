@@ -1152,27 +1152,7 @@ export default function Devis() {
               <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
             )}
           </div>
-          {/* En vue tableau : période gérée par le filtre de la colonne Date, tri par les en-têtes */}
-          {devisView !== 'tableau' && (
-            <>
-              <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-                <option value="tous">Toutes les périodes</option>
-                <option value="mois">Ce mois</option>
-                <option value="trimestre">Ce trimestre</option>
-                <option value="annee">Cette année</option>
-              </select>
-              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-                <option value="date_desc">Date ↓</option>
-                <option value="date_asc">Date ↑</option>
-                <option value="total_desc">Montant ↓</option>
-                <option value="total_asc">Montant ↑</option>
-                <option value="numero_desc">Numéro ↓</option>
-                <option value="numero_asc">Numéro ↑</option>
-                <option value="client_asc">Client A→Z</option>
-                <option value="client_desc">Client Z→A</option>
-              </select>
-            </>
-          )}
+          {/* Tri + période gérés par la barre d'en-têtes (sort par colonne, période via le filtre Date) */}
           {(filterStatut !== 'tous' || filterClient !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres
@@ -1338,7 +1318,56 @@ export default function Devis() {
 
       {/* ══ Vue Liste (cartes) ════════════════════════════════════════════════ */}
       {devisView === 'liste' && <div className="space-y-3">
-        {sorted.map(d => {
+        {/* Barre tri + filtres (reprend l'en-tête du tableau) */}
+        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2">
+          <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
+          {DEVIS_TABLE_COLS_DEF.map(col => {
+            const sortKey = col.key === 'totalHT' ? 'total' : col.key;
+            const isAsc = sortBy === `${sortKey}_asc`;
+            const isDesc = sortBy === `${sortKey}_desc`;
+            const isSorted = isAsc || isDesc;
+            const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
+            const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
+            const hasFilter = !!(colFiltersD[col.key]);
+            const isFilterOpen = openFilterColsD.has(col.key);
+            const isChoice = col.key === 'statut' || col.key === 'validite';
+            return (
+              <div key={col.key} className="flex items-center gap-0.5 rounded-md border border-border/60 bg-background pl-2 pr-1 py-0.5">
+                <button onClick={() => setSortBy(isAsc ? `${sortKey}_desc` : `${sortKey}_asc`)} className="flex items-center gap-1 text-xs hover:text-foreground">
+                  <span>{col.label}</span>
+                  <SI className={`w-3 h-3 ${isSorted ? 'text-primary' : 'opacity-40'}`} />
+                </button>
+                {isFilterable && (
+                  isFilterOpen ? (
+                    <span className="font-normal inline-flex items-center gap-0.5 min-w-0">
+                      <span className={isChoice ? 'shrink-0' : 'min-w-0 w-32'}>{renderFilterControl(col.key)}</span>
+                      <button onClick={() => toggleFilterColD(col.key)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><XIcon className="w-3 h-3" /></button>
+                    </span>
+                  ) : (
+                    <button onClick={() => toggleFilterColD(col.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/30 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {hasActiveFiltersD() && (
+          <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-card px-3 py-2">
+            <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+            {Object.entries(colFiltersD).filter(([, v]) => v).map(([k, v]) => {
+              let display = v;
+              if (k === 'statut') { const cs = parseChoiceFilter(v); display = cs.mode === 'exclude' ? `sauf ${cs.excluded.join(', ')}` : cs.only; }
+              return (
+                <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {DEVIS_TABLE_COLS_DEF.find(c => c.key === k)?.label} : {display}
+                  <button onClick={() => setFilterD(k as DevisTableColKey, '')}><XIcon className="w-3 h-3" /></button>
+                </span>
+              );
+            })}
+            <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
+          </div>
+        )}
+        {sortedTable.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           const totalAchatD = d.lignes.reduce((acc, l) => {
@@ -1509,7 +1538,7 @@ export default function Devis() {
             </div>
           );
         })}
-        {sorted.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
+        {sortedTable.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun devis</p>}
       </div>}
 
       {/* Create/Edit Dialog */}
