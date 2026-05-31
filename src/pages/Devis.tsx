@@ -1107,7 +1107,7 @@ export default function Devis() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className={devisView === 'tableau' ? 'flex flex-col flex-1 min-h-0 gap-2' : 'space-y-4'}>
       <PageHeaderSlot>
           <div className="relative w-32 sm:w-48 md:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1137,6 +1137,7 @@ export default function Devis() {
           </div>
       </PageHeaderSlot>
 
+      {devisView !== 'tableau' && (
       <div className="flex flex-wrap gap-2">
           <div className="relative md:hidden">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
@@ -1178,10 +1179,11 @@ export default function Devis() {
             </Button>
           )}
       </div>
+      )}
 
       {/* ══ Vue Tableau ══════════════════════════════════════════════════════ */}
       {devisView === 'tableau' && (
-        <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="bg-card rounded-xl border border-border overflow-hidden flex flex-col flex-1 min-h-0">
           {(hasActiveFiltersD()) && (
             <div className="px-4 py-2 border-b border-border flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Filtres actifs :</span>
@@ -1202,7 +1204,7 @@ export default function Devis() {
               <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
             </div>
           )}
-          <div className="overflow-auto max-h-[calc(100vh-9rem)]">
+          <div className="flex-1 min-h-0 overflow-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
