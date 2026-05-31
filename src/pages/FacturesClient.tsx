@@ -262,7 +262,7 @@ export default function FacturesClient() {
   const enRetard = factures.filter(f => f.statut === 'envoyée' && f.dateEcheance && new Date(f.dateEcheance) < new Date());
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="stat-card text-center">
@@ -343,7 +343,7 @@ export default function FacturesClient() {
       )}
 
       {/* Table */}
-      <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
+      <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">

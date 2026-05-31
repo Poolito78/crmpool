@@ -371,7 +371,7 @@ export default function CommandesClient() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       <PageHeaderSlot>
         <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -441,7 +441,7 @@ export default function CommandesClient() {
       )}
 
       {/* Table */}
-      <div className="overflow-auto max-h-[calc(100vh-9rem)] rounded-lg border border-border">
+      <div className="flex-1 min-h-0 overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">

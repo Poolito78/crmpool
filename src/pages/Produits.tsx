@@ -851,7 +851,7 @@ export default function Produits() {
         </div>
       </PageHeaderSlot>
 
-      <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+      <div className="hidden md:flex md:flex-col md:absolute md:inset-0 bg-card overflow-hidden">
         {Object.values(columnFilters).some(v => v) && (
           <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">Filtres actifs :</span>
@@ -874,7 +874,7 @@ export default function Produits() {
             <button onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
           </div>
         )}
-        <div className="overflow-auto max-h-[calc(100vh-9rem)]">
+        <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50">

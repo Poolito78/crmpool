@@ -199,9 +199,14 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
 - Une barre **« Filtres actifs »** au-dessus du tableau liste les filtres en cours (chips avec ✕) + bouton « Effacer ».
 - **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** (`src/components/TableGearMenu.tsx`) = choix des colonnes visibles + export Excel. Utilisé par Commandes Client, Factures Client/Fournisseur. (Produits/Devis ont leur propre variante inline ; `Produits` ajoute aussi `Columns2` + reset ordre/largeurs via `cols.reset()`.) À reproduire sur toute vue tableau.
 
-**Bandeau titre fixe + en-tête sticky (à respecter partout)** :
-- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe de `CRMLayout`, à droite du titre de page. Y placer la **barre de recherche** et le **bouton d'action principal** (ex. « Nouveau … ») + actions contextuelles → restent visibles au scroll. (Le layout rend `<PageHeaderSlotTarget />`.)
-- L'**en-tête du tableau est sticky** : conteneur de scroll `overflow-auto max-h-[calc(100vh-9rem)]`, et chaque `<th>` en `sticky top-0 z-10 bg-muted` → la ligne d'en-tête reste figée pendant le défilement.
+**Bandeau titre fixe + en-tête sticky + pleine page (PRINCIPE D'AFFICHAGE — à respecter partout)** :
+- **Coquille `CRMLayout`** : la racine est en **`h-screen overflow-hidden`** (hauteur d'écran exacte, la page ne défile pas globalement). Le bandeau titre (`<header>`) est `shrink-0`, et **`<main>` est l'unique zone qui défile** (`relative flex flex-col min-h-0 overflow-x-hidden`). → un seul scrollbar, le bandeau du haut reste fixe.
+- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe, à droite du titre. Y placer la **recherche** + le **bouton d'action principal** + actions contextuelles. (Le layout rend `<PageHeaderSlotTarget />`.)
+- **Le tableau remplit tout l'espace disponible (largeur + hauteur), en-tête figé sous le bandeau, scroll unique** :
+  - Page « tableau seul » (Devis, Produits, Clients) → la carte du tableau en **`md:absolute md:inset-0 md:flex md:flex-col bg-card overflow-hidden`** (plein écran, ignore le padding de `main` ; bord/arrondi retirés en md). Conteneur de scroll interne en **`flex-1 min-h-0 overflow-auto`** (PAS de `max-h`).
+  - Page multi-sections (Commandes Client, Factures Client/Fournisseur) → racine en **`flex flex-col flex-1 min-h-0 gap-4`** ; contenu au-dessus (cartes résumé, filtres statut) auto ; conteneur de tableau en **`flex-1 min-h-0 overflow-auto`** → le tableau remplit la hauteur restante.
+  - Chaque `<th>` reste `sticky top-0 z-10 bg-muted`.
+  - ⚠️ Ne PAS utiliser `max-h-[calc(...)]` sur le conteneur de scroll (cause un double scrollbar). Exception connue : `Stock.tsx` (3 onglets) conserve encore `max-h` (structure tabulée multi-sections, refonte à faire).
 - Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Filtres inline en-tête + barre « Filtres actifs » + bandeau fixe + sticky faits sur **toutes** les vues tableau : Devis, Produits, Clients, Stock (×3), Commandes Client, Factures Client, Factures Fournisseur. Pour les colonnes date/montant, utiliser `FilterDateInput`/`FilterAmountInput` (helpers `matchDateFilter`/`matchAmountFilter` côté logique de filtrage).
 
 ### TypeScript conventions
