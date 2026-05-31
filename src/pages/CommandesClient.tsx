@@ -7,6 +7,7 @@ import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
 import TableGearMenu from '@/components/TableGearMenu';
+import RowActionsMenu from '@/components/RowActionsMenu';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
@@ -511,29 +512,17 @@ export default function CommandesClient() {
               return (
                 <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                   {ccCols.ordered(CC_COLS, k => visCols.has(k)).map(col => <Fragment key={col.key}>{renderCC(col.key)}</Fragment>)}
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1 flex-wrap">
-                      <button onClick={() => openCmdFournisseur(cmd)} className="p-1.5 rounded hover:bg-muted" title="Cmd Fournisseur">
-                        <ShoppingCart className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => openArDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Envoi AR + Dates">
-                        <Send className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => openFactureDialog(cmd)} className="p-1.5 rounded hover:bg-muted" title="Facturer">
-                        <Receipt className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => openEmailFacture(cmd)} className="p-1.5 rounded hover:bg-muted" title="Envoyer par email">
-                        <Mail className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => setPreviewCommande(cmd)} className="p-1.5 rounded hover:bg-muted" title="Aperçu">
-                        <Eye className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => openEdit(cmd)} className="p-1.5 rounded hover:bg-muted" title="Modifier">
-                        <Pencil className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => { setDeleteTargetId(cmd.id); setDeleteConfirmOpen(true); }} className="p-1.5 rounded hover:bg-destructive/10" title="Supprimer">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
+                  <td className="py-2 px-2 text-right">
+                    <div className="flex items-center justify-end">
+                      <RowActionsMenu actions={[
+                        { icon: <Eye className="w-4 h-4" />, label: 'Aperçu', onClick: () => setPreviewCommande(cmd) },
+                        { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(cmd) },
+                        { icon: <ShoppingCart className="w-4 h-4" />, label: 'Cmd Fournisseur', onClick: () => openCmdFournisseur(cmd) },
+                        { icon: <Send className="w-4 h-4" />, label: 'Envoi AR + Dates', onClick: () => openArDialog(cmd) },
+                        { icon: <Receipt className="w-4 h-4" />, label: 'Facturer', onClick: () => openFactureDialog(cmd) },
+                        { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => openEmailFacture(cmd) },
+                        { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(cmd.id); setDeleteConfirmOpen(true); }, danger: true },
+                      ]} />
                     </div>
                   </td>
                 </tr>

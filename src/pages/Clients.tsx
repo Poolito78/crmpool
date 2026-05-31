@@ -22,6 +22,7 @@ import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
+import RowActionsMenu from '@/components/RowActionsMenu';
 
 type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours';
 const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; sortable: boolean; filterCol: 'societe' | 'contacts' | 'ville' | 'adresses' | null }[] = [
@@ -792,10 +793,12 @@ export default function Clients() {
                 <Fragment key={c.id}>
                   <tr className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(c)}>
                     {cCols.ordered(CLIENT_COLS).map(col => <Fragment key={col.key}>{renderC(col.key)}</Fragment>)}
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1 justify-end">
-                        <button onClick={e => { e.stopPropagation(); openEdit(c); }} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={e => { e.stopPropagation(); confirmRemove(c.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
+                    <td className="px-2 py-2">
+                      <div className="flex justify-end" onClick={e => e.stopPropagation()}>
+                        <RowActionsMenu actions={[
+                          { icon: <Edit2 className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(c) },
+                          { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(c.id), danger: true },
+                        ]} />
                       </div>
                     </td>
                   </tr>

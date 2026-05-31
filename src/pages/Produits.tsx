@@ -9,6 +9,7 @@ import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceI
 import ColResizeHandle from '@/components/ColResizeHandle';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import RowActionsMenu from '@/components/RowActionsMenu';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
@@ -94,8 +95,6 @@ export default function Produits() {
   const colChooserRef = useRef<HTMLDivElement>(null);
   const [gearMenuOpen, setGearMenuOpen] = useState(false);
   const gearMenuRef = useRef<HTMLDivElement>(null);
-  const [rowMenuId, setRowMenuId] = useState<string | null>(null);
-  const rowMenuRef = useRef<HTMLDivElement>(null);
   // Colonnes : largeur (resize) + ordre (drag) via le hook partagé (persistés sous produits_col_*)
   const prodCols = useTableColumns<ColKey>('produits_col', COLUMNS.map(c => c.key));
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
@@ -163,16 +162,6 @@ export default function Produits() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [gearMenuOpen]);
-
-  // Close row action menu on outside click
-  useEffect(() => {
-    if (!rowMenuId) return;
-    const handler = (e: MouseEvent) => {
-      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) setRowMenuId(null);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [rowMenuId]);
 
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -1059,31 +1048,11 @@ export default function Produits() {
                     })}
                     <td className="px-2 py-2.5">
                       <div className="flex justify-end">
-                        <div className="relative" ref={rowMenuId === p.id ? rowMenuRef : undefined}>
-                          <button
-                            onClick={() => setRowMenuId(rowMenuId === p.id ? null : p.id)}
-                            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground"
-                            title="Actions"
-                          >
-                            <Settings className="w-4 h-4" />
-                          </button>
-                          {rowMenuId === p.id && (
-                            <div className="absolute right-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[150px] text-left">
-                              <button
-                                onClick={() => { setRowMenuId(null); duplicate(p); }}
-                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
-                              >
-                                <Copy className="w-4 h-4 text-muted-foreground" /> Dupliquer
-                              </button>
-                              <button
-                                onClick={() => { setRowMenuId(null); remove(p.id); }}
-                                className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-destructive/10 text-destructive"
-                              >
-                                <Trash2 className="w-4 h-4" /> Supprimer
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        <RowActionsMenu actions={[
+                          { icon: <Edit2 className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(p) },
+                          { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(p) },
+                          { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => remove(p.id), danger: true },
+                        ]} />
                       </div>
                     </td>
                   </tr>

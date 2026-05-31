@@ -7,6 +7,7 @@ import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
 import TableGearMenu from '@/components/TableGearMenu';
+import RowActionsMenu from '@/components/RowActionsMenu';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
@@ -403,27 +404,14 @@ export default function FacturesClient() {
               return (
                 <tr key={f.id} className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${f.estProforma ? 'bg-amber-50/30 dark:bg-amber-950/10' : ''}`}>
                   {fcCols.ordered(FC_COLS, k => visCols.has(k)).map(col => <Fragment key={col.key}>{renderFC(col.key)}</Fragment>)}
-                  <td className="py-3 px-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {f.estProforma && (
-                        <button
-                          onClick={() => { setConvertTarget(f); setConvertConfirmOpen(true); }}
-                          className="p-1.5 rounded hover:bg-muted" title="Convertir en facture"
-                        >
-                          <ArrowRight className="w-4 h-4 text-amber-600" />
-                        </button>
-                      )}
-                      {!f.estProforma && f.statut !== 'payée' && (
-                        <button onClick={() => openPaiement(f)} className="p-1.5 rounded hover:bg-muted" title="Marquer payée">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        </button>
-                      )}
-                      <button onClick={() => openEdit(f)} className="p-1.5 rounded hover:bg-muted" title="Modifier">
-                        <Pencil className="w-4 h-4 text-muted-foreground" />
-                      </button>
-                      <button onClick={() => { setDeleteTargetId(f.id); setDeleteConfirmOpen(true); }} className="p-1.5 rounded hover:bg-destructive/10" title="Supprimer">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </button>
+                  <td className="py-2 px-2 text-right">
+                    <div className="flex items-center justify-end">
+                      <RowActionsMenu actions={[
+                        { icon: <ArrowRight className="w-4 h-4 text-amber-600" />, label: 'Convertir en facture', onClick: () => { setConvertTarget(f); setConvertConfirmOpen(true); }, hidden: !f.estProforma },
+                        { icon: <CheckCircle2 className="w-4 h-4 text-emerald-600" />, label: 'Marquer payée', onClick: () => openPaiement(f), hidden: f.estProforma || f.statut === 'payée' },
+                        { icon: <Pencil className="w-4 h-4" />, label: 'Modifier', onClick: () => openEdit(f) },
+                        { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => { setDeleteTargetId(f.id); setDeleteConfirmOpen(true); }, danger: true },
+                      ]} />
                     </div>
                   </td>
                 </tr>
