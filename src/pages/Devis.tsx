@@ -31,6 +31,7 @@ import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey }
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterChoiceInput from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
 
@@ -1221,41 +1222,32 @@ export default function Devis() {
                       if (!isFilterable || !openFilterColsD.has(col.key)) return <td key={col.key} className="px-3 py-1" />;
                       const fVal = colFiltersD[col.key] || '';
                       const isNV = fVal === '!empty';
-                      // Statut : liste déroulante (comme la vue liste)
+                      // Statut : choix fixes, liste ouverte directement
                       if (col.key === 'statut') {
                         return (
                           <td key={col.key} className="px-3 py-1">
-                            <select
-                              value={fVal}
-                              onChange={e => setFilterD('statut', e.target.value)}
-                              className="h-6 text-xs w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                            >
-                              <option value="">Tous</option>
-                              <option value="brouillon">Brouillon</option>
-                              <option value="envoyé">Envoyé</option>
-                              <option value="accepté">Accepté</option>
-                              <option value="refusé">Refusé</option>
-                              <option value="expiré">Expiré</option>
-                              <option value="archivé">Archivé</option>
-                              <option value="système">Système</option>
-                            </select>
+                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('statut', v)} options={[
+                              { value: '', label: 'Tous' },
+                              { value: 'brouillon', label: 'Brouillon' },
+                              { value: 'envoyé', label: 'Envoyé' },
+                              { value: 'accepté', label: 'Accepté' },
+                              { value: 'refusé', label: 'Refusé' },
+                              { value: 'expiré', label: 'Expiré' },
+                              { value: 'archivé', label: 'Archivé' },
+                              { value: 'système', label: 'Système' },
+                            ]} />
                           </td>
                         );
                       }
-                      // Validité : filtre Hors délais (Oui / Non)
+                      // Validité : Hors délais / Dans les délais, liste ouverte directement
                       if (col.key === 'validite') {
                         return (
                           <td key={col.key} className="px-3 py-1">
-                            <select
-                              value={fVal}
-                              onChange={e => setFilterD('validite', e.target.value)}
-                              className="h-6 text-xs w-full rounded border border-input bg-background px-1 focus:outline-none focus:ring-1 focus:ring-ring"
-                              title="Hors délais = date de validité dépassée"
-                            >
-                              <option value="">Tous</option>
-                              <option value="oui">Hors délais</option>
-                              <option value="non">Dans les délais</option>
-                            </select>
+                            <FilterChoiceInput value={fVal} onChange={v => setFilterD('validite', v)} options={[
+                              { value: '', label: 'Tous' },
+                              { value: 'oui', label: 'Hors délais' },
+                              { value: 'non', label: 'Dans les délais' },
+                            ]} />
                           </td>
                         );
                       }
