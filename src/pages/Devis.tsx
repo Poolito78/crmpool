@@ -32,6 +32,7 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import RowActionsMenu from '@/components/RowActionsMenu';
+import TableGearMenu from '@/components/TableGearMenu';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
@@ -1323,7 +1324,7 @@ export default function Devis() {
         {/* Barre tri + filtres (reprend l'en-tête du tableau) */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
-          {DEVIS_TABLE_COLS_DEF.map(col => {
+          {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
             const sortKey = col.key === 'totalHT' ? 'total' : col.key;
             const isAsc = sortBy === `${sortKey}_asc`;
             const isDesc = sortBy === `${sortKey}_desc`;
@@ -1352,6 +1353,14 @@ export default function Devis() {
               </div>
             );
           })}
+          <div className="ml-auto shrink-0">
+            <TableGearMenu
+              cols={DEVIS_TABLE_COLS_DEF}
+              visible={visDevisTableCols}
+              onToggle={k => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; })}
+              onExport={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}
+            />
+          </div>
         </div>
         {hasActiveFiltersD() && (
           <div className="flex items-center gap-2 flex-wrap rounded-lg border border-border bg-card px-3 py-2">
@@ -1406,17 +1415,17 @@ export default function Devis() {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="font-heading font-semibold">{d.numero}</p>
-                    {d.referenceAffaire && (
+                    {visDevisTableCols.has('refAffaire') && d.referenceAffaire && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
                         {d.referenceAffaire}
                       </span>
                     )}
-                    {d.systeme && (
+                    {visDevisTableCols.has('systeme') && d.systeme && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground font-medium">
                         {d.systeme}
                       </span>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>
+                    {visDevisTableCols.has('statut') && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>}
                     {d.statut === 'système' && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-300 dark:border-violet-700 tracking-wide">
                         MODÈLE
@@ -1503,7 +1512,7 @@ export default function Devis() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  {totalAchatD > 0 && (
+                  {visDevisTableCols.has('marge') && totalAchatD > 0 && (
                     <div className="text-right text-xs hidden sm:block">
                       <p className={`font-semibold ${coeffD == null ? 'text-muted-foreground' : coeffD >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffD >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>
                         {formatMontant(margeD)} · {tauxMargeD.toFixed(1)}%
@@ -1515,7 +1524,7 @@ export default function Devis() {
                     <p className="font-heading font-bold text-lg">{formatMontant(t.totalHT)}</p>
                     <p className="text-xs text-muted-foreground">HT</p>
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 items-center">
                     <select
                       className="text-xs rounded border border-input bg-background px-2 py-1"
                       value={d.statut}
@@ -1529,12 +1538,14 @@ export default function Devis() {
                       <option value="archivé">🗄 Archivé</option>
                       <option value="système">Système</option>
                     </select>
-                    <button onClick={() => openArchiveDialog(d)} className="p-1.5 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800 text-muted-foreground" title="Archiver ce devis"><Archive className="w-4 h-4" /></button>
-                    <button onClick={() => setEmailDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Envoyer par email"><Mail className="w-4 h-4" /></button>
-                    <button onClick={() => duplicate(d)} className="p-1.5 rounded-md hover:bg-muted" title="Dupliquer"><Copy className="w-4 h-4" /></button>
-                    <button onClick={() => setPreviewDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Aperçu"><Eye className="w-4 h-4" /></button>
-                    <button onClick={() => setChatterDevis(d)} className="p-1.5 rounded-md hover:bg-muted" title="Notes & fichiers"><MessageSquare className="w-4 h-4" /></button>
-                    <button onClick={() => confirmRemove(d.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-4 h-4" /></button>
+                    <RowActionsMenu actions={[
+                      { icon: <Eye className="w-4 h-4" />, label: 'Aperçu', onClick: () => setPreviewDevis(d) },
+                      { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
+                      { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
+                      { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                      { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
+                      { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
+                    ]} />
                   </div>
                 </div>
               </div>
