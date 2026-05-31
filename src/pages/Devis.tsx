@@ -30,6 +30,7 @@ import VarianteSelect from '@/components/VarianteSelect';
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import FilterSuggestInput from '@/components/FilterSuggestInput';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -101,14 +102,6 @@ export default function Devis() {
   useEffect(() => { try { localStorage.setItem('devis_view', devisView); } catch {} }, [devisView]);
   const [openFilterColsD, setOpenFilterColsD] = useState<Set<DevisTableColKey>>(new Set());
   const [colFiltersD, setColFiltersD] = useState<Partial<Record<DevisTableColKey, string>>>({});
-  const [clientDropdownOpen, setClientDropdownOpen] = useState(false);
-  const clientFilterRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!clientDropdownOpen) return;
-    const h = (e: MouseEvent) => { if (clientFilterRef.current && !clientFilterRef.current.contains(e.target as Node)) setClientDropdownOpen(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [clientDropdownOpen]);
   const [visDevisTableCols, setVisDevisTableCols] = useState<Set<DevisTableColKey>>(() => {
     try {
       const s = localStorage.getItem('devis_table_cols');
@@ -1250,54 +1243,23 @@ export default function Devis() {
                           </td>
                         );
                       }
-                      // Client : champ + liste déroulante personnalisée (s'ouvre au focus), sans ≠∅
-                      if (col.key === 'client') {
-                        const q = (fVal === '!empty' ? '' : fVal).toLowerCase();
-                        const suggestions = clients
-                          .map(c => c.societe || c.nom)
-                          .filter((n, i, arr) => n && arr.indexOf(n) === i)
-                          .filter(n => !q || n.toLowerCase().includes(q))
-                          .sort((a, b) => a.localeCompare(b))
-                          .slice(0, 50);
-                        return (
-                          <td key={col.key} className="px-3 py-1">
-                            <div className="relative" ref={clientFilterRef}>
-                              <input
-                                placeholder="Filtrer client…"
-                                value={fVal === '!empty' ? '' : fVal}
-                                onChange={e => { setFilterD('client', e.target.value); setClientDropdownOpen(true); }}
-                                onFocus={() => setClientDropdownOpen(true)}
-                                className="h-6 text-xs w-full rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring"
-                                autoFocus
-                              />
-                              {clientDropdownOpen && suggestions.length > 0 && (
-                                <div className="absolute left-0 top-full mt-1 z-30 bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-y-auto min-w-full w-max max-w-[260px]">
-                                  {fVal && fVal !== '!empty' && (
-                                    <button onClick={() => { setFilterD('client', ''); setClientDropdownOpen(false); }} className="flex items-center gap-1 w-full text-left px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/60 border-b border-border">
-                                      <XIcon className="w-3 h-3" /> Effacer le filtre
-                                    </button>
-                                  )}
-                                  {suggestions.map(n => (
-                                    <button key={n} onClick={() => { setFilterD('client', n); setClientDropdownOpen(false); }} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-muted/60 truncate">
-                                      {n}
-                                    </button>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </td>
-                        );
-                      }
+                      // Colonnes texte : champ + liste de suggestions ouverte au focus
+                      const suggSource: Record<string, string[]> = {
+                        client: clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
+                        numero: devis.map(d => d.numero).filter(Boolean),
+                        refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
+                        systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
+                      };
+                      const sugg = suggSource[col.key] || [];
                       return (
                         <td key={col.key} className="px-3 py-1">
-                          {isNV ? (
-                            <button onClick={() => setFilterD(col.key, '')} className="flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full whitespace-nowrap">≠ vide <XIcon className="w-3 h-3" /></button>
-                          ) : (
-                            <div className="flex items-center gap-0.5">
-                              <input placeholder="Filtrer..." value={fVal} onChange={e => setFilterD(col.key, e.target.value)} className="h-6 text-xs flex-1 min-w-0 rounded border border-input bg-background px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-ring" autoFocus />
-                              <button onClick={() => setFilterD(col.key, '!empty')} title="Non vide" className="shrink-0 text-xs text-muted-foreground hover:text-primary px-0.5 rounded leading-none">≠∅</button>
-                            </div>
-                          )}
+                          <FilterSuggestInput
+                            value={fVal}
+                            onChange={v => setFilterD(col.key, v)}
+                            suggestions={sugg}
+                            placeholder={`Filtrer ${col.label.toLowerCase()}…`}
+                            allowNonEmpty={col.key !== 'client'}
+                          />
                         </td>
                       );
                     })}
