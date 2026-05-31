@@ -1832,7 +1832,7 @@ export default function Devis() {
 
             {/* Lines */}
             <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
-              <div className="sticky top-0 z-20 bg-background border-b border-border py-2 -mx-1 px-1 mb-2">
+              <div className="sticky top-0 z-20 bg-background border-b border-border py-2 -mx-4 px-4 mb-2">
                 <div className="flex items-center justify-between">
                 <Label className="text-base font-semibold">Lignes du devis</Label>
                 <div className="flex items-center gap-1">
