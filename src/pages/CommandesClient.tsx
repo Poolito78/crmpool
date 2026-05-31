@@ -6,6 +6,8 @@ import PageHeaderSlot from '@/components/PageHeaderSlot';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
+import TableGearMenu from '@/components/TableGearMenu';
+import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -45,6 +47,14 @@ export default function CommandesClient() {
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [colFilters, setColFilters] = useState<Partial<Record<CCColKey, string>>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<CCColKey>>(new Set());
+  const [visCols, setVisCols] = useState<Set<CCColKey>>(() => {
+    try { const s = localStorage.getItem('commandes_client_visible'); if (s) return new Set(JSON.parse(s) as CCColKey[]); } catch { /* ignore */ }
+    return new Set(CC_COLS.map(c => c.key));
+  });
+  function toggleVisCol(k: CCColKey) { setVisCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('commandes_client_visible', JSON.stringify([...n])); } catch { /* ignore */ } return n; }); }
+  function exportCC() {
+    exportToExcel(filtered.map(c => { const cl = clients.find(x => x.id === c.clientId); return { 'N°': c.numero, Client: cl?.nom || '', Société: cl?.societe || '', 'Réf. Affaire': c.referenceAffaire || '', Date: c.dateCreation, 'Date départ': c.dateDepart || '', 'Date livraison': c.dateLivraisonPrevue || '', Échéance: c.dateEcheance || '', 'Total HT': c.totalHT, Statut: STATUTS_COMMANDE_CLIENT[c.statut]?.label || c.statut }; }), 'commandes_client', 'Commandes');
+  }
   function toggleFilterCol(col: CCColKey) {
     setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilters(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
   }
@@ -434,7 +444,7 @@ export default function CommandesClient() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              {ccCols.ordered(CC_COLS).map(col => {
+              {ccCols.ordered(CC_COLS, k => visCols.has(k)).map(col => {
                 const isDragOver = ccCols.dragOverKey === col.key && ccCols.dragKey !== col.key;
                 const filterable = col.key !== 'statut';
                 const hasFilter = !!colFilters[col.key];
@@ -460,7 +470,9 @@ export default function CommandesClient() {
                   </th>
                 );
               })}
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Actions</th>
+              <th className="text-right py-2 px-2 font-medium text-muted-foreground sticky top-0 z-10 bg-muted whitespace-nowrap">
+                <TableGearMenu cols={CC_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportCC} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -498,7 +510,7 @@ export default function CommandesClient() {
               };
               return (
                 <tr key={cmd.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  {ccCols.ordered(CC_COLS).map(col => <Fragment key={col.key}>{renderCC(col.key)}</Fragment>)}
+                  {ccCols.ordered(CC_COLS, k => visCols.has(k)).map(col => <Fragment key={col.key}>{renderCC(col.key)}</Fragment>)}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1 flex-wrap">
                       <button onClick={() => openCmdFournisseur(cmd)} className="p-1.5 rounded hover:bg-muted" title="Cmd Fournisseur">

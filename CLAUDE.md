@@ -197,7 +197,7 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
 - En-tête = libellé + flèche de tri + **icône filtre**. Clic sur l'icône → contrôle de filtre affiché **inline dans l'en-tête** (pas de ligne dédiée qui pousse le contenu).
 - Fermé **sans** valeur → la colonne se replie sur l'icône seule (`onClose` retire la clé de `openFilterCols`). Avec valeur → le contrôle reste visible.
 - Une barre **« Filtres actifs »** au-dessus du tableau liste les filtres en cours (chips avec ✕) + bouton « Effacer ».
-- **Sélecteur de colonnes (`Columns2`) + roue crantée (`Settings`)** dans la dernière colonne d'en-tête : choix des colonnes visibles, réinitialiser ordre/largeurs (`cols.reset()`), import/export. À reproduire sur toute vue tableau.
+- **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** (`src/components/TableGearMenu.tsx`) = choix des colonnes visibles + export Excel. Utilisé par Commandes Client, Factures Client/Fournisseur. (Produits/Devis ont leur propre variante inline ; `Produits` ajoute aussi `Columns2` + reset ordre/largeurs via `cols.reset()`.) À reproduire sur toute vue tableau.
 
 **Bandeau titre fixe + en-tête sticky (à respecter partout)** :
 - **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe de `CRMLayout`, à droite du titre de page. Y placer la **barre de recherche** et le **bouton d'action principal** (ex. « Nouveau … ») + actions contextuelles → restent visibles au scroll. (Le layout rend `<PageHeaderSlotTarget />`.)

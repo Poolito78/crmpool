@@ -6,6 +6,8 @@ import PageHeaderSlot from '@/components/PageHeaderSlot';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
+import TableGearMenu from '@/components/TableGearMenu';
+import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, formatDate,
@@ -44,6 +46,13 @@ export default function FacturesFournisseur() {
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [colFilters, setColFilters] = useState<Partial<Record<FFColKey, string>>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<FFColKey>>(new Set());
+  const [visCols, setVisCols] = useState<Set<FFColKey>>(() => {
+    try { const s = localStorage.getItem('factures_fourn_visible'); if (s) return new Set(JSON.parse(s) as FFColKey[]); } catch { /* ignore */ }
+    return new Set(FF_COLS.map(c => c.key));
+  });
+  function toggleVisCol(k: FFColKey) { setVisCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('factures_fourn_visible', JSON.stringify([...n])); } catch { /* ignore */ } return n; }); }
+  function exportFF() {
+    exportToExcel(filtered.map(f => { const fu = fournisseurs.find(x => x.id === f.fournisseurId); return { 'N° interne': f.numero, 'N° Facture': f.numeroFacture || '', Fournisseur: fu?.societe || fu?.nom || '', Réception: f.dateReception || '', Échéance: f.dateEcheance || '', Paiement: f.datePaiement || '', 'Montant TTC': f.montantTTC, Statut: STATUTS_FACTURE_FOURNISSEUR[f.statut]?.label || f.statut }; }), 'factures_fournisseur', 'Factures'); }
   function toggleFilterCol(col: FFColKey) {
     setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilters(f => { const nf = { ...f }; delete nf[col]; return nf; }); } else n.add(col); return n; });
   }
@@ -308,7 +317,7 @@ export default function FacturesFournisseur() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              {ffCols.ordered(FF_COLS).map(col => {
+              {ffCols.ordered(FF_COLS, k => visCols.has(k)).map(col => {
                 const isDragOver = ffCols.dragOverKey === col.key && ffCols.dragKey !== col.key;
                 const filterable = col.key !== 'statut' && col.key !== 'bc';
                 const hasFilter = !!colFilters[col.key];
@@ -334,7 +343,9 @@ export default function FacturesFournisseur() {
                   </th>
                 );
               })}
-              <th className="text-right py-3 px-4 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Actions</th>
+              <th className="text-right py-2 px-2 font-medium text-muted-foreground sticky top-0 z-10 bg-muted whitespace-nowrap">
+                <TableGearMenu cols={FF_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFF} />
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -363,7 +374,7 @@ export default function FacturesFournisseur() {
               };
               return (
                 <tr key={f.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                  {ffCols.ordered(FF_COLS).map(col => <Fragment key={col.key}>{renderFF(col.key)}</Fragment>)}
+                  {ffCols.ordered(FF_COLS, k => visCols.has(k)).map(col => <Fragment key={col.key}>{renderFF(col.key)}</Fragment>)}
                   <td className="py-3 px-4 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {f.statut !== 'payée' && (
