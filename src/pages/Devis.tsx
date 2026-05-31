@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Columns2, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,6 +45,7 @@ const LIGNE_COLS = [
   { key: 'poids',   label: 'Poids (kg)' },
   { key: 'remise',  label: 'Rem. %' },
   { key: 'netht',   label: 'Net HT' },
+  { key: 'marge',   label: 'Marge / Coeff' },
 ] as const;
 type LigneColKey = typeof LIGNE_COLS[number]['key'];
 const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso', 'remise', 'netht'];
@@ -1831,7 +1832,8 @@ export default function Devis() {
 
             {/* Lines */}
             <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
-              <div className="flex items-center justify-between sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border py-2 -mx-1 px-1 mb-2">
+              <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm border-b border-border py-2 -mx-1 px-1 mb-2">
+                <div className="flex items-center justify-between">
                 <Label className="text-base font-semibold">Lignes du devis</Label>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
@@ -1877,18 +1879,19 @@ export default function Devis() {
                     )}
                   </div>
                   <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
-                  {/* Bascule cartes / tableau */}
-                  <div className="flex rounded-md border border-border overflow-hidden">
-                    <button type="button" onClick={() => setLignesView('cartes')} title="Affichage cartes" className={`px-2 py-1.5 transition-colors ${lignesView === 'cartes' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-3.5 h-3.5" /></button>
-                    <button type="button" onClick={() => setLignesView('tableau')} title="Affichage tableau (colonnes)" className={`px-2 py-1.5 border-l border-border transition-colors ${lignesView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-3.5 h-3.5" /></button>
-                  </div>
+                  {/* Roue crantée : affichage + colonnes */}
                   <div ref={colChooserRef} className="relative">
-                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Choisir les colonnes optionnelles sur chaque ligne">
-                      <Columns2 className="w-3 h-3 mr-1" /> Colonnes
+                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Affichage & colonnes">
+                      <Settings className="w-3.5 h-3.5" />
                     </Button>
                     {colChooserOpen && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[180px]">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
+                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Affichage</p>
+                        <div className="flex rounded-md border border-border overflow-hidden mb-3">
+                          <button type="button" onClick={() => setLignesView('cartes')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${lignesView === 'cartes' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-3.5 h-3.5" /> Cartes</button>
+                          <button type="button" onClick={() => setLignesView('tableau')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs border-l border-border transition-colors ${lignesView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-3.5 h-3.5" /> Tableau</button>
+                        </div>
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Colonnes visibles</p>
                         {LIGNE_COLS.map(col => (
                           <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
                             <input
@@ -1914,24 +1917,26 @@ export default function Devis() {
                     )}
                   </div>
                 </div>
-              </div>
-              {lignesView === 'tableau' && (
-                <div className="flex items-end gap-1 px-1 pb-1 mb-1 text-[11px] font-medium text-muted-foreground border-b border-border">
-                  <span className="w-3.5 shrink-0" />
-                  <span className="w-6 shrink-0">#</span>
-                  <span className="w-48 shrink-0">Réf.</span>
-                  <span className="flex-1 min-w-[120px]">Description</span>
-                  {visibleLigneCols.has('surface') && <span className="w-20 shrink-0">Surface m²</span>}
-                  {visibleLigneCols.has('conso') && <span className="w-20 shrink-0">Conso. kg/m²</span>}
-                  {visibleLigneCols.has('poids') && <span className="w-16 shrink-0">Poids kg</span>}
-                  <span className="w-16 shrink-0">Qté</span>
-                  <span className="w-14 shrink-0">Unité</span>
-                  <span className="w-24 shrink-0">Prix HT</span>
-                  {visibleLigneCols.has('remise') && <span className="w-16 shrink-0">Rem. %</span>}
-                  {visibleLigneCols.has('netht') && <span className="w-24 shrink-0">Net HT</span>}
-                  <span className="shrink-0 w-24 text-right">Total HT</span>
                 </div>
-              )}
+                {lignesView === 'tableau' && (
+                  <div className="flex items-end gap-1 px-1 pt-2 text-[11px] font-medium text-muted-foreground">
+                    <span className="w-3.5 shrink-0" />
+                    <span className="w-6 shrink-0">#</span>
+                    <span className="w-48 shrink-0">Réf.</span>
+                    <span className="flex-1 min-w-[120px]">Description</span>
+                    {visibleLigneCols.has('surface') && <span className="w-20 shrink-0">Surface m²</span>}
+                    {visibleLigneCols.has('conso') && <span className="w-20 shrink-0">Conso. kg/m²</span>}
+                    {visibleLigneCols.has('poids') && <span className="w-16 shrink-0">Poids kg</span>}
+                    <span className="w-16 shrink-0">Qté</span>
+                    <span className="w-14 shrink-0">Unité</span>
+                    <span className="w-24 shrink-0">Prix HT</span>
+                    {visibleLigneCols.has('remise') && <span className="w-16 shrink-0">Rem. %</span>}
+                    {visibleLigneCols.has('netht') && <span className="w-24 shrink-0">Net HT</span>}
+                    {visibleLigneCols.has('marge') && <span className="w-24 shrink-0 text-right">Marge / Coeff</span>}
+                    <span className="shrink-0 w-24 text-right">Total HT</span>
+                  </div>
+                )}
+              </div>
               <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30' : 'flex flex-col gap-2'}>
                 {(() => {
                   // Appartenance groupe : entre en-tête et marqueur soustotal
@@ -2181,6 +2186,21 @@ export default function Devis() {
                                 <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
                               </div>
                               )}
+                              {/* Marge / Coeff — col visible */}
+                              {visibleLigneCols.has('marge') && (() => {
+                                const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) : 0);
+                                const margeLigne = t.totalHT - achatLigne;
+                                const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
+                                return (
+                                  <div className="w-24 shrink-0">
+                                    <Label className="text-xs">Marge / Coeff</Label>
+                                    <div className="h-8 flex flex-col justify-center text-right leading-tight">
+                                      <span className={`text-xs font-medium ${coeffLigne == null ? 'text-muted-foreground' : coeffLigne >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffLigne >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>{formatMontant(margeLigne)}</span>
+                                      <span className="text-[10px] text-muted-foreground">× {coeffLigne != null ? coeffLigne.toFixed(2) : '—'}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                               {/* Total HT + actions */}
                               <div className="shrink-0 flex flex-col items-end">
                                 <Label className="text-xs">Total HT</Label>
