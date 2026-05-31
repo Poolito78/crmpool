@@ -1141,12 +1141,20 @@ export default function Devis() {
           {(hasActiveFiltersD()) && (
             <div className="px-4 py-2 border-b border-border flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Filtres actifs :</span>
-              {Object.entries(colFiltersD).filter(([, v]) => v).map(([k, v]) => (
-                <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
-                  {DEVIS_TABLE_COLS_DEF.find(c => c.key === k)?.label} : {v}
-                  <button onClick={() => setFilterD(k as DevisTableColKey, '')}><XIcon className="w-3 h-3" /></button>
-                </span>
-              ))}
+              {Object.entries(colFiltersD).filter(([, v]) => v).map(([k, v]) => {
+                let display = v;
+                if (k === 'statut') {
+                  const cs = parseChoiceFilter(v);
+                  if (cs.mode === 'exclude') display = `sauf ${cs.excluded.join(', ')}`;
+                  else display = cs.only;
+                }
+                return (
+                  <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {DEVIS_TABLE_COLS_DEF.find(c => c.key === k)?.label} : {display}
+                    <button onClick={() => setFilterD(k as DevisTableColKey, '')}><XIcon className="w-3 h-3" /></button>
+                  </span>
+                );
+              })}
               <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
             </div>
           )}

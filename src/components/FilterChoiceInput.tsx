@@ -45,12 +45,18 @@ export default function FilterChoiceInput({
 
   const { mode, only, excluded } = parseChoiceFilter(value);
 
-  const summary = (() => {
+  // Résumé complet (pour l'infobulle au survol)
+  const fullSummary = (() => {
     if (mode === 'none') return placeholder;
     if (mode === 'only') return options.find(o => o.value === only)?.label || placeholder;
-    // exclude
     const labels = excluded.map(v => options.find(o => o.value === v)?.label || v);
     return `Sauf : ${labels.join(', ')}`;
+  })();
+  // Libellé court affiché dans le bouton (pas de "Sauf : …" permanent)
+  const summary = (() => {
+    if (mode === 'only') return options.find(o => o.value === only)?.label || placeholder;
+    if (mode === 'exclude') return `Sauf (${excluded.length})`;
+    return placeholder;
   })();
 
   function toggleExclude(v: string) {
@@ -83,6 +89,7 @@ export default function FilterChoiceInput({
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen(o => !o)}
+        title={fullSummary}
         className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center justify-between gap-1 bg-background hover:border-primary/60 ${mode !== 'none' ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
       >
         <span className="truncate">{summary}</span>
