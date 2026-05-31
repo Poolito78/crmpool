@@ -2056,6 +2056,34 @@ export default function Devis() {
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
                     const hasAutoCalc = !!(surfaceVal > 0 && consoLigne != null && consoLigne > 0 && prod?.poids && prod.poids > 0);
 
+                    // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
+                    const variantEls = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
+                      <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
+                        <span className="text-xs truncate block text-muted-foreground">{dim.nom || 'Variante'}</span>
+                        <VarianteSelect
+                          dimension={dim}
+                          value={l.variantesChoisies?.[dim.id] || (dim.options[0]?.label ?? '')}
+                          onChange={label => {
+                            setLignes(prev => prev.map(li => {
+                              if (li.id !== l.id) return li;
+                              const validIds = new Set(prod.variantes!.map(d => d.id));
+                              const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k)));
+                              const variantesChoisies = { ...cleaned, [dim.id]: label };
+                              const totalDiff = prod.variantes!.reduce((sum, d) => {
+                                const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
+                                const o = d.options.find(x => x.label === chosenLabel);
+                                return sum + (o?.prixDiff ?? 0);
+                              }, 0);
+                              const client = clients.find(c => c.id === clientId);
+                              const palierPrix = getPrixPourQuantite(prod, li.quantite);
+                              const basePrix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+                              return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
+                            }));
+                          }}
+                        />
+                      </div>
+                    )) : null;
+
                     const card = (
                       <div
                         draggable
@@ -2091,36 +2119,8 @@ export default function Devis() {
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />
                               </div>
-                              {/* Variantes — dropdowns par dimension si le produit en a */}
-                              {prod?.variantes && prod.variantes.length > 0 && prod.variantes.map(dim => (
-                                <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
-                                  <Label className="text-xs truncate block">{dim.nom || 'Variante'}</Label>
-                                  <VarianteSelect
-                                    dimension={dim}
-                                    value={l.variantesChoisies?.[dim.id] || (dim.options[0]?.label ?? '')}
-                                    onChange={label => {
-                                      setLignes(prev => prev.map(li => {
-                                        if (li.id !== l.id) return li;
-                                        // Nettoyer les clés obsolètes (anciennes dimensions supprimées/renommées)
-                                        const validIds = new Set(prod.variantes!.map(d => d.id));
-                                        const cleaned = Object.fromEntries(
-                                          Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k))
-                                        );
-                                        const variantesChoisies = { ...cleaned, [dim.id]: label };
-                                        const totalDiff = prod.variantes!.reduce((sum, d) => {
-                                          const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
-                                          const o = d.options.find(x => x.label === chosenLabel);
-                                          return sum + (o?.prixDiff ?? 0);
-                                        }, 0);
-                                        const client = clients.find(c => c.id === clientId);
-                                        const palierPrix = getPrixPourQuantite(prod, li.quantite);
-                                        const basePrix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
-                                        return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
-                                      }));
-                                    }}
-                                  />
-                                </div>
-                              ))}
+                              {/* Variantes — inline en mode cartes, en sous-ligne en mode tableau */}
+                              {lignesView !== 'tableau' && variantEls}
                               {/* Surface m² — col visible */}
                               {visibleLigneCols.has('surface') && (
                                 <div className="w-20 shrink-0">
@@ -2213,6 +2213,10 @@ export default function Devis() {
                                 </div>
                               </div>
                             </div>
+                            {/* Variantes en sous-ligne (mode tableau) */}
+                            {lignesView === 'tableau' && variantEls && (
+                              <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}</div>
+                            )}
                             {/* Note */}
                             <div className="mt-1 pl-9">
                               <textarea
