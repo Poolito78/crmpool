@@ -1923,7 +1923,7 @@ export default function Devis() {
                     <span className="w-3.5 shrink-0" />
                     <span className="w-6 shrink-0">#</span>
                     <span className="w-48 shrink-0">Réf.</span>
-                    <span className="flex-1 min-w-[120px]">Description</span>
+                    <span className="flex-1 min-w-0">Description</span>
                     {visibleLigneCols.has('surface') && <span className="w-20 shrink-0">Surface m²</span>}
                     {visibleLigneCols.has('conso') && <span className="w-20 shrink-0">Conso. kg/m²</span>}
                     {visibleLigneCols.has('poids') && <span className="w-16 shrink-0">Poids kg</span>}
@@ -2069,7 +2069,7 @@ export default function Devis() {
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
                         <>
                             {/* ── Ligne unifiée (surface + standard) ── */}
-                            <div className="flex items-end gap-1 flex-wrap">
+                            <div className={`flex items-end gap-1 ${lignesView === 'tableau' ? 'flex-nowrap' : 'flex-wrap'}`}>
                               <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
                               <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0">#{ligneNums[l.id]}</span>
                               {/* Réf. */}
@@ -2087,7 +2087,7 @@ export default function Devis() {
                                 </div>
                               </div>
                               {/* Description */}
-                              <div className="flex-1 min-w-[120px]">
+                              <div className={`flex-1 ${lignesView === 'tableau' ? 'min-w-0' : 'min-w-[120px]'}`}>
                                 <Label className="text-xs">Description</Label>
                                 <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />
                               </div>
