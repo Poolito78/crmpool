@@ -184,7 +184,7 @@ export default function CRMLayout() {
     ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="h-screen overflow-hidden flex bg-background">
       {/* Desktop Sidebar */}
       <aside className={cn(
         'hidden md:flex md:flex-col md:fixed md:inset-y-0 bg-sidebar text-sidebar-foreground z-30 transition-[width] duration-200',
@@ -272,9 +272,9 @@ export default function CRMLayout() {
       </aside>
 
       {/* Main content */}
-      <div className={cn('flex-1 flex flex-col min-h-screen transition-[margin] duration-200', collapsed ? 'md:ml-16' : 'md:ml-64')}>
+      <div className={cn('flex-1 flex flex-col min-h-0 min-w-0 transition-[margin] duration-200', collapsed ? 'md:ml-16' : 'md:ml-64')}>
         {/* Top bar */}
-        <header className="sticky top-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
+        <header className="shrink-0 z-20 h-16 flex items-center px-4 md:px-6 bg-card/80 backdrop-blur-md border-b border-border gap-3">
           <button className="md:hidden mr-3 p-2 rounded-lg hover:bg-muted" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
           </button>
