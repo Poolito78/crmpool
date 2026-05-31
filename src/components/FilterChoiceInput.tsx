@@ -90,7 +90,7 @@ export default function FilterChoiceInput({
       <button
         onClick={() => setOpen(o => !o)}
         title={fullSummary}
-        className={`h-6 text-xs w-full rounded border px-2 py-0.5 flex items-center justify-between gap-1 bg-background hover:border-primary/60 ${mode !== 'none' ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
+        className={`h-6 text-xs w-auto max-w-[160px] rounded border px-2 py-0.5 flex items-center gap-1 bg-background hover:border-primary/60 ${mode !== 'none' ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
       >
         <span className="truncate">{summary}</span>
         <span className="opacity-50">▾</span>

@@ -1223,11 +1223,15 @@ export default function Devis() {
                               <button onClick={() => toggleFilterColD(col.key)} className={`p-0.5 rounded hover:bg-muted/80 transition-colors ${hasFilter ? 'text-primary' : isFilterOpen ? 'text-muted-foreground/60' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
                                 <Filter className="w-3 h-3" />
                               </button>
-                              {isFilterOpen && (
-                                <div className={`absolute top-full mt-1 z-40 ${col.align === 'right' ? 'right-0' : 'left-0'} min-w-[180px] font-normal`} onClick={e => e.stopPropagation()}>
-                                  {renderFilterControl(col.key)}
-                                </div>
-                              )}
+                              {isFilterOpen && (() => {
+                                // Choix fixes (statut/validité) : largeur auto. Autres : min 180px.
+                                const isChoice = col.key === 'statut' || col.key === 'validite';
+                                return (
+                                  <div className={`absolute top-full mt-1 z-40 ${col.align === 'right' ? 'right-0' : 'left-0'} ${isChoice ? 'w-max' : 'min-w-[180px]'} font-normal`} onClick={e => e.stopPropagation()}>
+                                    {renderFilterControl(col.key)}
+                                  </div>
+                                );
+                              })()}
                             </span>
                           )}
                         </div>
