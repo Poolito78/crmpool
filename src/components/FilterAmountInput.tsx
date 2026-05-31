@@ -24,7 +24,7 @@ export function matchAmountFilter(v: string, amount: number): boolean {
 const OP_LABELS: Record<string, string> = { eq: '=', lt: '<', gt: '>', between: 'Entre' };
 
 export default function FilterAmountInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
   const { op, n1, n2 } = parseAmountFilter(value);
 

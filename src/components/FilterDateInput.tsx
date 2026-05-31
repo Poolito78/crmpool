@@ -25,7 +25,7 @@ export function matchDateFilter(v: string, dateStr: string | undefined): boolean
 const OP_LABELS: Record<string, string> = { eq: 'Le', before: 'Avant', after: 'Après', between: 'Entre' };
 
 export default function FilterDateInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
   const ref = useRef<HTMLDivElement>(null);
   const { op, d1, d2 } = parseDateFilter(value);
 
