@@ -1318,6 +1318,8 @@ export default function Devis() {
 
       {/* ══ Vue Liste (cartes) ════════════════════════════════════════════════ */}
       {devisView === 'liste' && <div className="space-y-3">
+        {/* Bandeau d'en-têtes collant en haut */}
+        <div className="sticky top-0 z-20 -mx-4 md:-mx-6 -mt-2 px-4 md:px-6 pt-2 pb-2 bg-background space-y-2">
         {/* Barre tri + filtres (reprend l'en-tête du tableau) */}
         <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2">
           <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
@@ -1367,6 +1369,7 @@ export default function Devis() {
             <button onClick={() => { setColFiltersD({}); setOpenFilterColsD(new Set()); }} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><XIcon className="w-3 h-3" /> Effacer</button>
           </div>
         )}
+        </div>
         {sortedTable.map(d => {
           const client = clients.find(c => c.id === d.clientId);
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
