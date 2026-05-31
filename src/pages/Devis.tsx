@@ -237,7 +237,8 @@ export default function Devis() {
       });
       if (!inLignes) return false;
     }
-    if (filterPeriode !== 'tous') {
+    // En vue tableau, la période est gérée par le filtre de la colonne Date
+    if (filterPeriode !== 'tous' && devisView !== 'tableau') {
       const now = new Date();
       const dateD = new Date(d.dateCreation);
       if (filterPeriode === 'mois' && (dateD.getMonth() !== now.getMonth() || dateD.getFullYear() !== now.getFullYear())) return false;
@@ -1154,22 +1155,27 @@ export default function Devis() {
               <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
             )}
           </div>
-          <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-            <option value="tous">Toutes les périodes</option>
-            <option value="mois">Ce mois</option>
-            <option value="trimestre">Ce trimestre</option>
-            <option value="annee">Cette année</option>
-          </select>
-          <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
-            <option value="date_desc">Date ↓</option>
-            <option value="date_asc">Date ↑</option>
-            <option value="total_desc">Montant ↓</option>
-            <option value="total_asc">Montant ↑</option>
-            <option value="numero_desc">Numéro ↓</option>
-            <option value="numero_asc">Numéro ↑</option>
-            <option value="client_asc">Client A→Z</option>
-            <option value="client_desc">Client Z→A</option>
-          </select>
+          {/* En vue tableau : période gérée par le filtre de la colonne Date, tri par les en-têtes */}
+          {devisView !== 'tableau' && (
+            <>
+              <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+                <option value="tous">Toutes les périodes</option>
+                <option value="mois">Ce mois</option>
+                <option value="trimestre">Ce trimestre</option>
+                <option value="annee">Cette année</option>
+              </select>
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+                <option value="date_desc">Date ↓</option>
+                <option value="date_asc">Date ↑</option>
+                <option value="total_desc">Montant ↓</option>
+                <option value="total_asc">Montant ↑</option>
+                <option value="numero_desc">Numéro ↓</option>
+                <option value="numero_asc">Numéro ↑</option>
+                <option value="client_asc">Client A→Z</option>
+                <option value="client_desc">Client Z→A</option>
+              </select>
+            </>
+          )}
           {(filterStatut !== 'tous' || filterClient !== 'tous' || filterProduit !== '' || filterPeriode !== 'tous') && (
             <Button variant="ghost" size="sm" onClick={() => { setFilterStatut('tous'); setFilterClient('tous'); setFilterProduit(''); setFilterPeriode('tous'); }} className="text-xs text-muted-foreground">
               Réinitialiser les filtres

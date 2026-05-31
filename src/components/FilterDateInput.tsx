@@ -3,6 +3,7 @@ import FilterPopover from './FilterPopover';
 
 // Filtre de colonne date. Valeur encodée : "op|d1|d2"
 //   op ∈ '' | 'eq' | 'before' | 'after' | 'between'  (dates au format YYYY-MM-DD)
+//        | 'mois' | 'trimestre' | 'annee'            (périodes relatives à aujourd'hui)
 // parseDateFilter / matchDateFilter exportés pour la logique de filtrage.
 export function parseDateFilter(v: string): { op: string; d1: string; d2: string } {
   const [op = '', d1 = '', d2 = ''] = (v || '').split('|');
@@ -13,21 +14,29 @@ export function matchDateFilter(v: string, dateStr: string | undefined): boolean
   if (!op) return true;
   const d = (dateStr || '').split('T')[0];
   if (!d) return false;
+  const [y, m] = d.split('-').map(Number);
+  const now = new Date();
   switch (op) {
     case 'eq': return !d1 || d === d1;
     case 'before': return !d1 || d < d1;
     case 'after': return !d1 || d > d1;
     case 'between': return (!d1 || d >= d1) && (!d2 || d <= d2);
+    case 'mois': return y === now.getFullYear() && m === now.getMonth() + 1;
+    case 'trimestre': return y === now.getFullYear() && Math.floor((m - 1) / 3) === Math.floor(now.getMonth() / 3);
+    case 'annee': return y === now.getFullYear();
     default: return true;
   }
 }
 
-const OP_LABELS: Record<string, string> = { eq: 'Le', before: 'Avant', after: 'Après', between: 'Entre' };
+const OP_LABELS: Record<string, string> = { eq: 'Le', before: 'Avant', after: 'Après', between: 'Entre', mois: 'Ce mois', trimestre: 'Ce trimestre', annee: 'Cette année' };
+const PERIOD_OPS = ['mois', 'trimestre', 'annee'] as const;
 
 export default function FilterDateInput({ value, onChange, onClose }: { value: string; onChange: (v: string) => void; onClose?: () => void }) {
   const { op, d1, d2 } = parseDateFilter(value);
+  const isPeriod = (PERIOD_OPS as readonly string[]).includes(op);
   const fmt = (s: string) => s ? new Date(s + 'T00:00:00').toLocaleDateString('fr-FR') : '';
   const summary = !op ? '' :
+    isPeriod ? OP_LABELS[op] :
     op === 'between' ? `${fmt(d1)} – ${fmt(d2)}` :
     `${OP_LABELS[op]} ${fmt(d1)}`;
   const setOp = (newOp: string) => onChange(`${newOp}|${d1}|${d2}`);
@@ -55,9 +64,19 @@ export default function FilterDateInput({ value, onChange, onClose }: { value: s
               <button key={o} onClick={() => setOp(o)} className={`text-xs px-2 py-1 rounded ${op === o ? 'bg-primary text-primary-foreground' : 'bg-muted/50 hover:bg-muted text-foreground'}`}>{OP_LABELS[o]}</button>
             ))}
           </div>
-          <div className="space-y-1">
-            <input type="date" value={d1} onChange={e => setD1(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />
-            {op === 'between' && <input type="date" value={d2} onChange={e => setD2(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />}
+          {!isPeriod && (
+            <div className="space-y-1">
+              <input type="date" value={d1} onChange={e => setD1(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />
+              {op === 'between' && <input type="date" value={d2} onChange={e => setD2(e.target.value)} className="h-7 text-xs w-full rounded border border-input bg-background px-2 focus:outline-none focus:ring-1 focus:ring-ring" />}
+            </div>
+          )}
+          <div className="border-t border-border pt-1.5">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Période</p>
+            <div className="grid grid-cols-3 gap-1">
+              {PERIOD_OPS.map(o => (
+                <button key={o} onClick={() => onChange(`${o}||`)} className={`text-xs px-1.5 py-1 rounded ${op === o ? 'bg-primary text-primary-foreground' : 'bg-muted/50 hover:bg-muted text-foreground'}`}>{OP_LABELS[o]}</button>
+              ))}
+            </div>
           </div>
           <div className="flex justify-between">
             <button onClick={() => { onChange(''); close(); }} className="text-xs text-muted-foreground hover:text-foreground">Effacer</button>
