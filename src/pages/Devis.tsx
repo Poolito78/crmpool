@@ -2128,8 +2128,10 @@ export default function Devis() {
                           onDrop={() => dropLigne(l.id)}
                           onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                           className={`flex items-center gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
+                            ${selectedLignes.has(l.id) ? 'ring-2 ring-primary/50' : ''}
                             ${draggedId === l.id ? 'opacity-40 border-primary/20 bg-primary/5' : ''}
                             ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-primary/5 border-primary/20'}`}>
+                          <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
                           <GripVertical className="w-4 h-4 text-primary/30 shrink-0" />
                           <span className="flex-1 text-sm font-semibold text-primary italic">
                             Sous-total{titre ? ` — ${titre}` : ''}
@@ -2148,8 +2150,10 @@ export default function Devis() {
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                         className={`flex items-start gap-2 rounded-lg px-3 py-2 cursor-grab active:cursor-grabbing transition-all border
+                          ${selectedLignes.has(l.id) ? 'ring-2 ring-primary/50' : ''}
                           ${draggedId === l.id ? 'opacity-40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-amber-400 border-2 shadow-md bg-amber-50/50 dark:bg-amber-900/10' : draggedId === l.id ? '' : 'bg-amber-50/40 dark:bg-amber-900/10 border-amber-300/40'}`}>
+                        <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 mt-0.5 rounded border-input accent-primary cursor-pointer" />
                         <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0 mt-0.5" />
                         <StickyNote className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                         <textarea
@@ -2178,8 +2182,10 @@ export default function Devis() {
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
                         className={`flex items-center gap-2 bg-primary/10 border rounded-lg px-3 py-2.5 mt-1 cursor-grab active:cursor-grabbing transition-all
+                          ${selectedLignes.has(l.id) ? 'ring-2 ring-primary/50' : ''}
                           ${draggedId === l.id ? 'opacity-40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md' : 'border-primary/30'}`}>
+                        <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
                         <GripVertical className="w-4 h-4 text-primary/40 shrink-0" />
                         <FolderPlus className="w-4 h-4 text-primary shrink-0" />
                         <input type="text" value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
