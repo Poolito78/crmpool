@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import { useState, useEffect, useRef, useCallback, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
@@ -48,6 +48,25 @@ const LIGNE_COLS = [
   { key: 'marge',   label: 'Marge / Coeff' },
 ] as const;
 type LigneColKey = typeof LIGNE_COLS[number]['key'];
+
+// ── Vue tableau éditable : colonnes redimensionnables + déplaçables ───────────
+// (les colonnes optionnelles surface/conso/poids/remise/netht/marge ne sont
+//  rendues que si présentes dans visibleLigneCols)
+type TLCKey = 'ref' | 'description' | 'surface' | 'conso' | 'poids' | 'qte' | 'unite' | 'prixht' | 'remise' | 'netht' | 'marge' | 'total';
+const TABLE_LIGNE_COLS: { key: TLCKey; label: string; width: number; optional?: LigneColKey; align?: 'right' }[] = [
+  { key: 'ref',         label: 'Réf.',          width: 192 },
+  { key: 'description', label: 'Description',   width: 320 },
+  { key: 'surface',     label: 'Surface m²',    width: 80,  optional: 'surface' },
+  { key: 'conso',       label: 'Conso. kg/m²',  width: 80,  optional: 'conso' },
+  { key: 'poids',       label: 'Poids kg',      width: 64,  optional: 'poids' },
+  { key: 'qte',         label: 'Qté',           width: 64 },
+  { key: 'unite',       label: 'Unité',         width: 56 },
+  { key: 'prixht',      label: 'Prix HT',       width: 96 },
+  { key: 'remise',      label: 'Rem. %',        width: 64,  optional: 'remise' },
+  { key: 'netht',       label: 'Net HT',        width: 96,  optional: 'netht' },
+  { key: 'marge',       label: 'Marge / Coeff', width: 96,  optional: 'marge', align: 'right' },
+  { key: 'total',       label: 'Total HT',      width: 96,  align: 'right' },
+];
 const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso', 'remise', 'netht'];
 
 const statutColors: Record<string, string> = {
@@ -119,6 +138,8 @@ export default function Devis() {
   });
   useEffect(() => { try { localStorage.setItem('devis_table_cols', JSON.stringify([...visDevisTableCols])); } catch {} }, [visDevisTableCols]);
   const devisCols = useTableColumns<DevisTableColKey>('devis_table', DEVIS_TABLE_COLS_DEF.map(c => c.key));
+  // Colonnes de la vue tableau éditable des lignes (resize + ordre persistés)
+  const ligneTableCols = useTableColumns<TLCKey>('devis_lignes_table', TABLE_LIGNE_COLS.map(c => c.key));
   const [colMenuDevis, setColMenuDevis] = useState(false);
   const colMenuDevisRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -1918,27 +1939,25 @@ export default function Devis() {
                   </div>
                 </div>
                 </div>
-                {lignesView === 'tableau' && (
-                  <div className="flex items-end gap-1 px-1 pt-2 text-[11px] font-medium text-muted-foreground">
-                    <span className="w-3.5 shrink-0" />
-                    <span className="w-6 shrink-0">#</span>
-                    <span className="w-48 shrink-0">Réf.</span>
-                    <span className="flex-1 min-w-0">Description</span>
-                    {visibleLigneCols.has('surface') && <span className="w-20 shrink-0">Surface m²</span>}
-                    {visibleLigneCols.has('conso') && <span className="w-20 shrink-0">Conso. kg/m²</span>}
-                    {visibleLigneCols.has('poids') && <span className="w-16 shrink-0">Poids kg</span>}
-                    <span className="w-16 shrink-0">Qté</span>
-                    <span className="w-14 shrink-0">Unité</span>
-                    <span className="w-24 shrink-0">Prix HT</span>
-                    {visibleLigneCols.has('remise') && <span className="w-16 shrink-0">Rem. %</span>}
-                    {visibleLigneCols.has('netht') && <span className="w-24 shrink-0">Net HT</span>}
-                    {visibleLigneCols.has('marge') && <span className="w-24 shrink-0 text-right">Marge / Coeff</span>}
-                    <span className="shrink-0 w-24 text-right">Total HT</span>
-                    <span className="shrink-0 w-[76px]" />
-                  </div>
-                )}
               </div>
-              <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30' : 'flex flex-col gap-2'}>
+              <div className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
+              {lignesView === 'tableau' && (
+                <div className="flex items-center gap-1 px-1 pb-1 mb-1 min-w-max text-[11px] font-medium text-muted-foreground border-b border-border sticky top-0 bg-background z-[5]">
+                  <span className="w-3.5 shrink-0" />
+                  <span className="w-6 shrink-0">#</span>
+                  {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => { const c = TABLE_LIGNE_COLS.find(x => x.key === k)!; return !c.optional || visibleLigneCols.has(c.optional); }).map(c => {
+                    const isDragOver = ligneTableCols.dragOverKey === c.key && ligneTableCols.dragKey !== c.key;
+                    return (
+                      <div key={c.key} {...ligneTableCols.thProps(c.key)} style={ligneTableCols.widthStyle(c.key)} className={`relative shrink-0 cursor-grab active:cursor-grabbing select-none ${c.align === 'right' ? 'text-right' : ''} ${ligneTableCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                        <span className="truncate block pr-1">{c.label}</span>
+                        <ColResizeHandle {...ligneTableCols.resizeHandleProps(c.key)} />
+                      </div>
+                    );
+                  })}
+                  <span className="shrink-0 w-[76px]" />
+                </div>
+              )}
+              <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30 min-w-max' : 'flex flex-col gap-2'}>
                 {(() => {
                   // Appartenance groupe : entre en-tête et marqueur soustotal
                   let curGrp: string | null = null;
@@ -2098,143 +2117,104 @@ export default function Devis() {
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
                         <>
-                            {/* ── Ligne unifiée (surface + standard) ── */}
-                            <div className={`flex items-end gap-1 ${lignesView === 'tableau' ? 'flex-nowrap' : 'flex-wrap'}`}>
-                              <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
-                              <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0 w-6">#{ligneNums[l.id]}</span>
-                              {/* Réf. */}
-                              <div className="w-48 shrink-0">
-                                <Label className="text-xs">Réf.</Label>
-                                <div className="flex gap-0.5 items-center">
-                                  <div className="flex-1 min-w-0">
-                                    <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
-                                  </div>
-                                  {l.produitId && (
-                                    <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
-                                      <ExternalLink className="w-3 h-3" />
-                                    </Button>
-                                  )}
-                                </div>
-                              </div>
-                              {/* Description */}
-                              <div className={`flex-1 ${lignesView === 'tableau' ? 'min-w-0' : 'min-w-[120px]'}`}>
-                                <Label className="text-xs">Description</Label>
-                                <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />
-                              </div>
-                              {/* Variantes — inline en mode cartes, en sous-ligne en mode tableau */}
-                              {lignesView !== 'tableau' && variantEls}
-                              {/* Surface m² — col visible */}
-                              {visibleLigneCols.has('surface') && (
-                                <div className="w-20 shrink-0">
-                                  <Label className="text-xs">Surface m²</Label>
-                                  <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
-                                    const surface = parseFloat(e.target.value) || 0;
-                                    const conso = l.consommation ?? prod?.consommation;
-                                    const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
-                                    const client = clients.find(c => c.id === clientId);
-                                    const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
-                                  }} className="h-8 text-sm" placeholder="m²" />
-                                </div>
-                              )}
-                              {/* Conso. kg/m² — col visible */}
-                              {visibleLigneCols.has('conso') && (
-                                <div className="w-20 shrink-0">
-                                  <Label className="text-xs">Conso. kg/m²</Label>
-                                  <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onFocus={e => e.target.select()} onChange={e => {
-                                    const raw = e.target.value;
-                                    const conso = raw === '' ? undefined : parseFloat(raw);
-                                    const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                    const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
-                                    const client = clients.find(c => c.id === clientId);
-                                    const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                    setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
-                                  }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />
-                                </div>
-                              )}
-                              {/* Poids — col visible */}
-                              {visibleLigneCols.has('poids') && (
-                                <div className="w-16 shrink-0">
-                                  <Label className="text-xs text-muted-foreground">Poids kg</Label>
-                                  <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />
-                                </div>
-                              )}
-                              {/* Qté — auto si surface+conso renseignées */}
-                              <div className="w-16 shrink-0">
-                                <Label className="text-xs">{hasAutoCalc ? 'Qté auto' : 'Qté'}</Label>
-                                <Input type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />
-                              </div>
-                              {/* Unité */}
-                              <div className="w-14 shrink-0">
-                                <Label className="text-xs">Unité</Label>
-                                <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />
-                              </div>
-                              {/* Prix HT */}
-                              <div className="w-24 shrink-0">
-                                <Label className="text-xs">Prix HT</Label>
-                                <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
-                              </div>
-                              {/* Remise % */}
-                              {visibleLigneCols.has('remise') && (
-                              <div className="w-16 shrink-0">
-                                <Label className="text-xs">Rem. %</Label>
-                                <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />
-                              </div>
-                              )}
-                              {/* Net HT */}
-                              {visibleLigneCols.has('netht') && (
-                              <div className="w-24 shrink-0">
-                                <Label className="text-xs">Net HT</Label>
-                                <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />
-                              </div>
-                              )}
-                              {/* Marge / Coeff — col visible */}
-                              {visibleLigneCols.has('marge') && (() => {
-                                const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) : 0);
-                                const margeLigne = t.totalHT - achatLigne;
-                                const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
-                                return (
-                                  <div className="w-24 shrink-0">
-                                    <Label className="text-xs">Marge / Coeff</Label>
-                                    <div className="h-8 flex flex-col justify-center text-right leading-tight">
-                                      <span className={`text-xs font-medium ${coeffLigne == null ? 'text-muted-foreground' : coeffLigne >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffLigne >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>{formatMontant(margeLigne)}</span>
-                                      <span className="text-[10px] text-muted-foreground">× {coeffLigne != null ? coeffLigne.toFixed(2) : '—'}</span>
+                            {/* ── Cellules (contenu réutilisé cartes + tableau) ── */}
+                            {(() => {
+                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) : 0);
+                              const margeLigne = t.totalHT - achatLigne;
+                              const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
+                              const cell: Record<TLCKey, ReactNode> = {
+                                ref: (
+                                  <div className="flex gap-0.5 items-center">
+                                    <div className="flex-1 min-w-0">
+                                      <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
                                     </div>
+                                    {l.produitId && (
+                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
+                                        <ExternalLink className="w-3 h-3" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ),
+                                description: <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
+                                surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
+                                  const surface = parseFloat(e.target.value) || 0;
+                                  const conso = l.consommation ?? prod?.consommation;
+                                  const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
+                                  const client = clients.find(c => c.id === clientId);
+                                  const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
+                                }} className="h-8 text-sm" placeholder="m²" />,
+                                conso: <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onFocus={e => e.target.select()} onChange={e => {
+                                  const raw = e.target.value;
+                                  const conso = raw === '' ? undefined : parseFloat(raw);
+                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                  const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
+                                  const client = clients.find(c => c.id === clientId);
+                                  const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
+                                }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
+                                poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
+                                qte: <Input type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />,
+                                unite: <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />,
+                                prixht: <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />,
+                                remise: <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />,
+                                netht: <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />,
+                                marge: (
+                                  <div className="h-8 flex flex-col justify-center text-right leading-tight">
+                                    <span className={`text-xs font-medium ${coeffLigne == null ? 'text-muted-foreground' : coeffLigne >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffLigne >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>{formatMontant(margeLigne)}</span>
+                                    <span className="text-[10px] text-muted-foreground">× {coeffLigne != null ? coeffLigne.toFixed(2) : '—'}</span>
+                                  </div>
+                                ),
+                                total: <span className="text-sm font-semibold h-8 flex items-center justify-end text-right">{formatMontant(t.totalHT)}</span>,
+                              };
+                              const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: 'Surface m²', conso: 'Conso. kg/m²', poids: 'Poids kg', qte: hasAutoCalc ? 'Qté auto' : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
+                              const actionsCell = (
+                                <div className="flex items-center h-8 gap-0.5">
+                                  <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                                  <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                                </div>
+                              );
+                              const colVisible = (c: typeof TABLE_LIGNE_COLS[number]) => !c.optional || visibleLigneCols.has(c.optional);
+
+                              // ── Mode TABLEAU : colonnes redimensionnables + déplaçables, une seule ligne ──
+                              if (lignesView === 'tableau') {
+                                return (
+                                  <div className="flex items-center gap-1 flex-nowrap">
+                                    <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
+                                    <span className="text-xs font-medium text-muted-foreground shrink-0 w-6">#{ligneNums[l.id]}</span>
+                                    {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => colVisible(TABLE_LIGNE_COLS.find(c => c.key === k)!)).map(c => (
+                                      <div key={c.key} style={ligneTableCols.widthStyle(c.key)} className={`shrink-0 ${c.align === 'right' ? 'text-right' : ''}`}>
+                                        {cell[c.key]}
+                                      </div>
+                                    ))}
+                                    <div className="shrink-0 w-[76px] flex justify-end">{actionsCell}</div>
                                   </div>
                                 );
-                              })()}
-                              {lignesView === 'tableau' ? (
-                                <>
-                                  {/* Total HT (colonne alignée) */}
-                                  <div className="shrink-0 w-24 flex flex-col items-end">
+                              }
+
+                              // ── Mode CARTES : libellés par cellule, retour à la ligne ──
+                              return (
+                                <div className="flex items-end gap-1 flex-wrap">
+                                  <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
+                                  <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0 w-6">#{ligneNums[l.id]}</span>
+                                  <div className="w-48 shrink-0"><Label className="text-xs">Réf.</Label>{cell.ref}</div>
+                                  <div className="flex-1 min-w-[120px]"><Label className="text-xs">Description</Label>{cell.description}</div>
+                                  {variantEls}
+                                  {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
+                                    <div key={c.key} style={{ width: c.width }} className="shrink-0"><Label className="text-xs">{labels[c.key]}</Label>{cell[c.key]}</div>
+                                  ))}
+                                  <div className="shrink-0 flex flex-col items-end">
                                     <Label className="text-xs">Total HT</Label>
-                                    <span className="text-sm font-semibold h-8 flex items-center text-right">{formatMontant(t.totalHT)}</span>
-                                  </div>
-                                  {/* Actions (colonne dédiée) */}
-                                  <div className="shrink-0 w-[76px] flex flex-col items-end">
-                                    <Label className="text-xs">&nbsp;</Label>
                                     <div className="flex items-center h-8 gap-0.5">
-                                      <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                                      <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                                      <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
-                                      <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                                      <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
+                                      {actionsCell}
                                     </div>
                                   </div>
-                                </>
-                              ) : (
-                                /* Total HT + actions (mode cartes) */
-                                <div className="shrink-0 flex flex-col items-end">
-                                  <Label className="text-xs">Total HT</Label>
-                                  <div className="flex items-center h-8 gap-0.5">
-                                    <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
-                                    <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
-                                    <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
-                                  </div>
                                 </div>
-                              )}
-                            </div>
+                              );
+                            })()}
                             {/* Variantes en sous-ligne (mode tableau) */}
                             {lignesView === 'tableau' && variantEls && (
                               <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}</div>
@@ -2296,6 +2276,7 @@ export default function Devis() {
                     return card;
                   });
                 })()}
+              </div>
               </div>
             </div>
 
