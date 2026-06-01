@@ -1396,6 +1396,7 @@ export default function Devis() {
                       case 'marge': return <td style={ws} className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>{totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}</td>;
                       case 'port': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>;
                       case 'reussite': return <td style={ws} className="px-3 py-2.5 text-right text-sm whitespace-nowrap">{d.probabiliteReussite != null ? <span className={`font-medium ${d.probabiliteReussite >= 75 ? 'text-success' : d.probabiliteReussite >= 50 ? 'text-warning' : d.probabiliteReussite > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{d.probabiliteReussite}%</span> : <span className="text-muted-foreground">—</span>}</td>;
+                      case 'realisation': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>;
                       default: return <td style={ws} className="px-3 py-2.5" />;
                     }
                   };
