@@ -229,7 +229,7 @@ export function VeilleContent() {
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
-  const [editingProduitForm, setEditingProduitForm] = useState({ nom: '', reference: '', categorie: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [editingProduitForm, setEditingProduitForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdOpen, setAddProdOpen] = useState(false);
   const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
@@ -634,13 +634,13 @@ export function VeilleContent() {
 
                     function startEdit() {
                       setEditingProduitId(p.id);
-                      setEditingProduitForm({ nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '', clientNom: p.clientNom || '', informateur: p.informateur || '', dateRenseignement: p.dateRenseignement || '' });
+                      setEditingProduitForm({ concurrentId: p.concurrentId, nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '', clientNom: p.clientNom || '', informateur: p.informateur || '', dateRenseignement: p.dateRenseignement || '' });
                     }
 
                     async function saveEdit() {
                       if (!editingProduitForm.nom.trim()) return;
                       const prixHT = editingProduitForm.prixHT ? parseFloat(editingProduitForm.prixHT.replace(',', '.')) : undefined;
-                      await updateProduit({ ...p, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, prixHT, description: editingProduitForm.description || undefined, clientId: editingProduitForm.clientId || undefined, clientNom: editingProduitForm.clientNom || undefined, informateur: editingProduitForm.informateur || undefined, dateRenseignement: editingProduitForm.dateRenseignement || undefined });
+                      await updateProduit({ ...p, concurrentId: editingProduitForm.concurrentId || p.concurrentId, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, prixHT, description: editingProduitForm.description || undefined, clientId: editingProduitForm.clientId || undefined, clientNom: editingProduitForm.clientNom || undefined, informateur: editingProduitForm.informateur || undefined, dateRenseignement: editingProduitForm.dateRenseignement || undefined });
                       setEditingProduitId(null);
                       toast.success('Produit mis à jour');
                     }
@@ -648,7 +648,11 @@ export function VeilleContent() {
                     if (isEditing) {
                       return (
                         <TableRow key={p.id} className="bg-muted/20">
-                          <TableCell className="hidden sm:table-cell font-medium text-sm">{conc?.nom || '—'}</TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            <select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" title="Concurrent" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }}>
+                              {concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
+                            </select>
+                          </TableCell>
                           <TableCell>
                             <Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-28" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingProduitId(null); }} />
                           </TableCell>
