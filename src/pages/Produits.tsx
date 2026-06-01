@@ -806,9 +806,9 @@ export default function Produits() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       {fromDevis && (
-        <div className="flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
+        <div className="shrink-0 flex items-center gap-3 bg-primary/10 border border-primary/20 rounded-lg px-4 py-3">
           <Button variant="outline" size="sm" onClick={() => { setFromDevis(false); navigate(returnDevisId ? `/devis?editDevis=${returnDevisId}` : '/devis'); }}>
             <ArrowLeft className="w-4 h-4 mr-2" /> Retour au devis
           </Button>
@@ -851,7 +851,7 @@ export default function Produits() {
         </div>
       </PageHeaderSlot>
 
-      <div className="hidden md:flex md:flex-col md:absolute md:inset-0 bg-card overflow-hidden">
+      <div className="hidden md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden">
         {Object.values(columnFilters).some(v => v) && (
           <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">Filtres actifs :</span>
