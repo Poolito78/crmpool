@@ -1101,9 +1101,12 @@ export function useStore() {
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId)) as any).then(({ error }) => { if (error) console.error('[clients insert]', error.message, error.details); });
+        // upsert (insert ou update) pour éviter toute course insert/update
+        // (ex. société créée à la volée puis modifiée aussitôt → la ligne peut
+        //  ne pas encore exister au moment de l'update).
+        if (added.length) supabase.from('clients').upsert(added.map(c => clientToDb(c, userId)) as any).then(({ error }) => { if (error) console.error('[clients insert]', error.message, error.details); });
         if (updated.length) {
-          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId) as any).eq('id', c.id).then(({ error }) => { if (error) console.error('[clients update]', error.message, error.details); }));
+          supabase.from('clients').upsert(updated.map(c => clientToDb(c, userId)) as any).then(({ error }) => { if (error) console.error('[clients update]', error.message, error.details); });
         }
         if (removed.length) supabase.from('clients').delete().in('id', removed.map(c => c.id)).then(({ error }) => { if (error) console.error('[clients delete]', error.message, error.details); });
       }
