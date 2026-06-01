@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis, formatMontant, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
+import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -19,6 +19,7 @@ export default function Dashboard() {
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
+  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel'>('overview');
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -183,6 +184,16 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Onglets tableau de bord ── */}
+      <div className="flex gap-1 border-b border-border">
+        <button onClick={() => setDashTab('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
+        <button onClick={() => setDashTab('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>
+      </div>
+
+      {dashTab === 'previsionnel' ? (
+        <PrevisionnelDevis devis={devis} clients={clients} />
+      ) : (
+      <>
       {/* ── Alertes prioritaires ── */}
       {((commandesATraiter.length > 0 && !hidden.has('alerte-commandes')) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -492,6 +503,91 @@ export default function Dashboard() {
           )}
         </div>
         )}
+      </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+// ── Onglet « Prévisionnel devis » : devis avec % réussite, montant et montant pondéré ──
+function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM>['devis']; clients: ReturnType<typeof useCRM>['clients'] }) {
+  // Devis en cours (hors refusé/archivé/système) ayant une probabilité renseignée
+  const rows = devis
+    .filter(d => !['refusé', 'archivé', 'système'].includes(d.statut))
+    .map(d => {
+      const client = clients.find(c => c.id === d.clientId);
+      const montant = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
+      const proba = d.probabiliteReussite ?? 0;
+      return { d, client, montant, proba, pondere: montant * proba / 100 };
+    })
+    .sort((a, b) => b.pondere - a.pondere);
+
+  const totalMontant = rows.reduce((s, r) => s + r.montant, 0);
+  const totalPondere = rows.reduce((s, r) => s + r.pondere, 0);
+
+  return (
+    <div className="space-y-4">
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="stat-card">
+          <p className="text-xs text-muted-foreground">Montant total (en cours)</p>
+          <p className="text-2xl font-heading font-bold">{formatMontant(totalMontant)}</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-xs text-muted-foreground">Montant pondéré (× % réussite)</p>
+          <p className="text-2xl font-heading font-bold text-primary">{formatMontant(totalPondere)}</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-xs text-muted-foreground">Devis suivis</p>
+          <p className="text-2xl font-heading font-bold">{rows.length}</p>
+        </div>
+      </div>
+
+      {/* Tableau */}
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-muted-foreground">
+                <th className="text-left px-4 py-2 font-medium">N°</th>
+                <th className="text-left px-4 py-2 font-medium">Client</th>
+                <th className="text-left px-4 py-2 font-medium">Statut</th>
+                <th className="text-left px-4 py-2 font-medium">Réalisation</th>
+                <th className="text-right px-4 py-2 font-medium">% réussite</th>
+                <th className="text-right px-4 py-2 font-medium">Montant HT</th>
+                <th className="text-right px-4 py-2 font-medium">Montant pondéré</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map(({ d, client, montant, proba, pondere }) => (
+                <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                  <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
+                  <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
+                  <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d.statut}</span></td>
+                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    <span className={`font-medium ${proba >= 75 ? 'text-success' : proba >= 50 ? 'text-warning' : proba > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{proba}%</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(montant)}</td>
+                  <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap text-primary">{formatMontant(pondere)}</td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Aucun devis en cours</td></tr>
+              )}
+            </tbody>
+            {rows.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 border-border bg-muted/30 font-semibold">
+                  <td colSpan={5} className="px-4 py-2.5 text-right">Total</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(totalMontant)}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap text-primary">{formatMontant(totalPondere)}</td>
+                </tr>
+              </tfoot>
+            )}
+          </table>
+        </div>
       </div>
     </div>
   );
