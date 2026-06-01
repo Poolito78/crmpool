@@ -209,6 +209,7 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
+  const [probabiliteReussite, setProbabiliteReussite] = useState<number>(0);
   const [moGenerating, setMoGenerating] = useState(false);
   const moPrintRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
@@ -382,6 +383,7 @@ export default function Devis() {
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setMoContent(d.moContent || '');
+    setProbabiliteReussite(d.probabiliteReussite ?? 0);
     setLignes(d.lignes.map(l => {
       // Recalculer le prix des lignes dont la variante choisie a un prixDiff
       // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
@@ -434,6 +436,7 @@ export default function Devis() {
     setNotes('');
     setConditions('Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setMoContent('');
+    setProbabiliteReussite(0);
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
@@ -883,7 +886,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -894,7 +897,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -993,12 +996,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -1959,14 +1962,19 @@ export default function Devis() {
                 <Label>Système</Label>
                 <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
               </div>
-              {/* Surface globale — si renseignée + conso produit → calcul auto quantité */}
+              {/* Surface globale + % de réussite */}
               <div className="border border-border rounded-lg p-3 bg-muted/30">
-                <div className="flex items-center gap-4">
-                  <div className="w-48">
+                <div className="flex items-end gap-4 flex-wrap">
+                  <div className="w-32">
                     <Label className="text-xs">Surface globale (m²)</Label>
-                    <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" />
+                    <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" title="Si surface + conso. renseignées → quantité calculée automatiquement" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-4">Si surface + conso. renseignées → quantité calculée automatiquement</p>
+                  <div className="w-32">
+                    <Label className="text-xs">% de réussite</Label>
+                    <select value={probabiliteReussite} onChange={e => setProbabiliteReussite(Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
+                      {[0, 25, 50, 75, 100].map(p => <option key={p} value={p}>{p}%</option>)}
+                    </select>
+                  </div>
                 </div>
               </div>
               </div>{/* fin colonne droite */}

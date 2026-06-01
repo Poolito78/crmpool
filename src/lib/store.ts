@@ -383,6 +383,7 @@ export interface Devis {
   notes?: string;
   conditions?: string;
   moContent?: string; // Mise en œuvre — document HTML riche (récap groupes/notes/lignes)
+  probabiliteReussite?: number; // % de réussite estimé (0,25,50,75,100)
   fraisPortHT?: number;
   fraisPortTVA?: number;
   fraisPortAuto?: boolean;
@@ -641,6 +642,7 @@ function dbToDevis(r: any): Devis {
     notes: r.notes || undefined,
     conditions: r.conditions || undefined,
     moContent: r.mo_content || undefined,
+    probabiliteReussite: r.probabilite_reussite != null ? Number(r.probabilite_reussite) : undefined,
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
     fraisPortAuto: r.frais_port_auto != null ? Boolean(r.frais_port_auto) : undefined,
@@ -673,6 +675,7 @@ function devisToDb(d: Devis, userId: string) {
     notes: d.notes || null,
     conditions: d.conditions || null,
     mo_content: d.moContent || null,
+    ...(d.probabiliteReussite !== undefined ? { probabilite_reussite: d.probabiliteReussite } : {}),
     frais_port_ht: d.fraisPortHT ?? 0,
     frais_port_tva: d.fraisPortTVA ?? 20,
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
