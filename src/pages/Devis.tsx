@@ -929,9 +929,11 @@ export default function Devis() {
   }
   async function exportMoPdf() {
     if (!moPrintRef.current) return;
+    // S'assure que le devis est enregistré (pour disposer d'un id auquel rattacher la PJ)
+    const devisId = editingId || save(true);
     setMoGenerating(true);
     try {
-      const numero = (editingId ? devis.find(d => d.id === editingId)?.numero : '') || 'devis';
+      const numero = (devisId ? devis.find(d => d.id === devisId)?.numero : '') || 'devis';
       const fileName = `MO_${numero}${systeme ? '_' + systeme.replace(/[^\w-]+/g, '_') : ''}.pdf`;
       const base64 = await generatePdfFromElement(moPrintRef.current, { docTitle: `Mise en œuvre — ${numero}` });
       const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
@@ -939,9 +941,32 @@ export default function Devis() {
       const blobUrl = URL.createObjectURL(blob);
       window.open(blobUrl, '_blank');
       setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      // Enregistre dans le même dossier que les devis
       const res = await writeFileToFolder(fileName, bytes, false);
-      if (res.ok) toast.success(`PDF Mise en œuvre sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
-      else toast.success('PDF Mise en œuvre généré', { description: fileName, duration: 4000 });
+      // Joint le PDF aux Notes & Fichiers du devis (CRM)
+      let attached = false;
+      if (devisId) {
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          const uid = user?.id;
+          if (uid) {
+            const path = `${uid}/${devisId}/${Date.now()}_${fileName}`;
+            const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, blob, { upsert: false, contentType: 'application/pdf' });
+            if (!upErr) {
+              const { data: signedData } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+              const url = signedData?.signedUrl ?? path;
+              const { error: dbErr } = await supabase.from('devis_pieces_jointes').insert({
+                user_id: uid, devis_id: devisId, type: 'fichier',
+                fichier_nom: fileName, fichier_url: url, fichier_taille: bytes.length, fichier_mime: 'application/pdf',
+              });
+              attached = !dbErr;
+            }
+          }
+        } catch (e) { console.error('[MO PJ]', e); }
+      }
+      const suffix = attached ? ' · ajouté aux Notes & Fichiers' : '';
+      if (res.ok) toast.success(`PDF Mise en œuvre sauvegardé dans "${res.folderName}"${suffix}`, { description: fileName, duration: 6000 });
+      else toast.success(`PDF Mise en œuvre généré${suffix}`, { description: fileName, duration: 4000 });
     } catch (err) {
       console.error(err);
       toast.error('Erreur lors de la génération du PDF Mise en œuvre');
