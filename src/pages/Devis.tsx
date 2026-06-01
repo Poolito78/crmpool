@@ -213,6 +213,9 @@ export default function Devis() {
   const lignesRef = useRef<LigneDevis[]>([]);
   lignesRef.current = lignes;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  // Synchronisation du défilement horizontal en-tête ↔ lignes (vue tableau)
+  const ligneHeaderScrollRef = useRef<HTMLDivElement>(null);
+  const ligneBodyScrollRef = useRef<HTMLDivElement>(null);
   const dragScrollRafRef = useRef<number | null>(null);
   const dragClientYRef = useRef<number>(0);
   const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'crm'>('devis');
@@ -1938,25 +1941,28 @@ export default function Devis() {
                     )}
                   </div>
                 </div>
+                {/* En-tête de colonnes (figé avec les boutons), défilement H synchronisé avec les lignes */}
+                {lignesView === 'tableau' && (
+                  <div ref={ligneHeaderScrollRef} className="overflow-x-hidden mt-1.5 -mb-2 pb-1">
+                    <div className="flex items-center gap-1 px-1 py-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border">
+                      <span className="w-3.5 shrink-0" />
+                      <span className="w-6 shrink-0">#</span>
+                      {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => { const c = TABLE_LIGNE_COLS.find(x => x.key === k)!; return !c.optional || visibleLigneCols.has(c.optional); }).map(c => {
+                        const isDragOver = ligneTableCols.dragOverKey === c.key && ligneTableCols.dragKey !== c.key;
+                        return (
+                          <div key={c.key} {...ligneTableCols.thProps(c.key)} style={ligneTableCols.widthStyle(c.key)} className={`relative shrink-0 cursor-grab active:cursor-grabbing select-none ${c.align === 'right' ? 'text-right' : ''} ${ligneTableCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                            <span className="truncate block pr-1">{c.label}</span>
+                            <ColResizeHandle {...ligneTableCols.resizeHandleProps(c.key)} />
+                          </div>
+                        );
+                      })}
+                      <span className="shrink-0 w-[76px]" />
+                    </div>
+                  </div>
+                )}
                 </div>
               </div>
-              <div className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
-              {lignesView === 'tableau' && (
-                <div className="flex items-center gap-1 px-1 py-1.5 mb-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border sticky top-0 bg-background z-[5]">
-                  <span className="w-3.5 shrink-0" />
-                  <span className="w-6 shrink-0">#</span>
-                  {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => { const c = TABLE_LIGNE_COLS.find(x => x.key === k)!; return !c.optional || visibleLigneCols.has(c.optional); }).map(c => {
-                    const isDragOver = ligneTableCols.dragOverKey === c.key && ligneTableCols.dragKey !== c.key;
-                    return (
-                      <div key={c.key} {...ligneTableCols.thProps(c.key)} style={ligneTableCols.widthStyle(c.key)} className={`relative shrink-0 cursor-grab active:cursor-grabbing select-none ${c.align === 'right' ? 'text-right' : ''} ${ligneTableCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
-                        <span className="truncate block pr-1">{c.label}</span>
-                        <ColResizeHandle {...ligneTableCols.resizeHandleProps(c.key)} />
-                      </div>
-                    );
-                  })}
-                  <span className="shrink-0 w-[76px]" />
-                </div>
-              )}
+              <div ref={ligneBodyScrollRef} onScroll={e => { if (ligneHeaderScrollRef.current) ligneHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft; }} className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
               <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30 min-w-max' : 'flex flex-col gap-2'}>
                 {(() => {
                   // Appartenance groupe : entre en-tête et marqueur soustotal
