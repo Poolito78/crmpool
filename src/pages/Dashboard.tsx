@@ -552,7 +552,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
       const totalHTLignes = calculerTotalDevis(d.lignes, 0, 0).totalHT;
       const marge = totalHTLignes - totalAchat;
       const proba = d.probabiliteReussite ?? 0;
-      return { d, client, montant, proba, pondere: montant * proba / 100, marge, margePondere: marge * proba / 100 };
+      return { d, client, montant, proba, pondere: montant * proba / 100, marge, margePondere: marge * proba / 100, cout: totalAchat, coutPondere: totalAchat * proba / 100 };
     })
     .sort((a, b) => groupByMois
       ? (moisKey(a.d.dateRealisation) || '9999').localeCompare(moisKey(b.d.dateRealisation) || '9999') || b.pondere - a.pondere
@@ -562,6 +562,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
   const totalMontant = rows.reduce((s, r) => s + r.montant, 0);
   const totalPondere = rows.reduce((s, r) => s + r.pondere, 0);
   const totalMargePondere = rows.reduce((s, r) => s + r.margePondere, 0);
+  const totalCoutPondere = rows.reduce((s, r) => s + r.coutPondere, 0);
 
   // Données du graphique : CA pondéré + marge pondérée par mois de réalisation
   const chartData = useMemo(() => {
@@ -569,8 +570,8 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
     for (const r of rows) {
       const k = moisKey(r.d.dateRealisation);
       if (!k) continue; // ignore les devis sans date de réalisation dans le graphe
-      const e = map.get(k) || { pondere: 0, margePondere: 0 };
-      e.pondere += r.pondere; e.margePondere += r.margePondere;
+      const e = map.get(k) || { pondere: 0, coutPondere: 0, margePondere: 0 };
+      e.pondere += r.pondere; e.coutPondere += r.coutPondere; e.margePondere += r.margePondere;
       map.set(k, e);
     }
     return [...map.entries()]
@@ -578,6 +579,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
       .map(([k, v]) => ({
         mois: new Date(k + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
         'CA pondéré': Math.round(v.pondere),
+        'Coût pondéré': Math.round(v.coutPondere),
         'Marge pondérée': Math.round(v.margePondere),
       }));
   }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -591,6 +593,8 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
       '% réussite': r.proba,
       'Montant HT': r.montant,
       'Montant pondéré': Math.round(r.pondere * 100) / 100,
+      'Coût fournisseur HT': Math.round(r.cout * 100) / 100,
+      'Coût pondéré': Math.round(r.coutPondere * 100) / 100,
       'Marge HT': Math.round(r.marge * 100) / 100,
       'Marge pondérée': Math.round(r.margePondere * 100) / 100,
     })), 'previsionnel_devis', 'Prévisionnel');
@@ -616,7 +620,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
     { v: 'accepté', label: 'Accepté' },
   ];
 
-  const renderRow = ({ d, client, montant, proba, pondere, margePondere }: typeof rows[number]) => (
+  const renderRow = ({ d, client, montant, proba, pondere, coutPondere, margePondere }: typeof rows[number]) => (
     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
       <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
       <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
@@ -627,6 +631,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
       </td>
       <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(montant)}</td>
       <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap text-primary">{formatMontant(pondere)}</td>
+      <td className="px-4 py-2.5 text-right whitespace-nowrap text-orange-500">{formatMontant(coutPondere)}</td>
       <td className="px-4 py-2.5 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{formatMontant(margePondere)}</td>
     </tr>
   );
@@ -655,14 +660,18 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="stat-card">
           <p className="text-xs text-muted-foreground">Montant total</p>
           <p className="text-2xl font-heading font-bold">{formatMontant(totalMontant)}</p>
         </div>
         <div className="stat-card">
-          <p className="text-xs text-muted-foreground">Montant pondéré (× % réussite)</p>
+          <p className="text-xs text-muted-foreground">CA pondéré (× % réussite)</p>
           <p className="text-2xl font-heading font-bold text-primary">{formatMontant(totalPondere)}</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-xs text-muted-foreground">Coût fournisseur pondéré</p>
+          <p className="text-2xl font-heading font-bold text-orange-500">{formatMontant(totalCoutPondere)}</p>
         </div>
         <div className="stat-card">
           <p className="text-xs text-muted-foreground">Marge pondérée prévisionnelle</p>
@@ -686,6 +695,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
               <Tooltip formatter={(v: number) => formatMontant(v)} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
               <Bar dataKey="CA pondéré" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Coût pondéré" fill="#f97316" radius={[4, 4, 0, 0]} />
               <Bar dataKey="Marge pondérée" fill="#10b981" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
@@ -704,18 +714,20 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
                 <th className="text-left px-4 py-2 font-medium">Réalisation</th>
                 <th className="text-right px-4 py-2 font-medium">% réussite</th>
                 <th className="text-right px-4 py-2 font-medium">Montant HT</th>
-                <th className="text-right px-4 py-2 font-medium">Montant pondéré</th>
+                <th className="text-right px-4 py-2 font-medium">CA pondéré</th>
+                <th className="text-right px-4 py-2 font-medium">Coût pondéré</th>
                 <th className="text-right px-4 py-2 font-medium">Marge pondérée</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Aucun devis</td></tr>
+                <tr><td colSpan={9} className="text-center py-8 text-muted-foreground">Aucun devis</td></tr>
               )}
               {groups
                 ? groups.map(([key, gr]) => {
                     const gMontant = gr.reduce((s, r) => s + r.montant, 0);
                     const gPondere = gr.reduce((s, r) => s + r.pondere, 0);
+                    const gCoutP = gr.reduce((s, r) => s + r.coutPondere, 0);
                     const gMargeP = gr.reduce((s, r) => s + r.margePondere, 0);
                     return (
                       <Fragment key={key || 'sans-date'}>
@@ -723,6 +735,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
                           <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{moisLabel(key)} · {gr.length} devis</td>
                           <td className="px-4 py-1.5 text-right text-xs font-semibold">{formatMontant(gMontant)}</td>
                           <td className="px-4 py-1.5 text-right text-xs font-semibold text-primary">{formatMontant(gPondere)}</td>
+                          <td className="px-4 py-1.5 text-right text-xs font-semibold text-orange-500">{formatMontant(gCoutP)}</td>
                           <td className="px-4 py-1.5 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatMontant(gMargeP)}</td>
                         </tr>
                         {gr.map(renderRow)}
@@ -737,6 +750,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
                   <td colSpan={5} className="px-4 py-2.5 text-right">Total</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(totalMontant)}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap text-primary">{formatMontant(totalPondere)}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap text-orange-500">{formatMontant(totalCoutPondere)}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{formatMontant(totalMargePondere)}</td>
                 </tr>
               </tfoot>
