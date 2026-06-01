@@ -1860,13 +1860,13 @@ export default function Devis() {
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
                   </Button>
-                  <Button variant="outline" size="sm" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
-                  <Button variant="outline" size="sm" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
-                  <Button variant="outline" size="sm" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
-                  <Button variant="outline" size="sm" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge MMA</Button>
-                  <Button variant="outline" size="sm" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> Surcharge hors MMA</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>MMA</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>hors MMA</Button>
                   <div ref={kitPickerRef} className="relative">
-                    <Button variant="outline" size="sm" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
+                    <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
                       <Layers className="w-3 h-3 mr-1" /> Kit
                     </Button>
                     {kitPickerOpen && (
@@ -1899,7 +1899,7 @@ export default function Devis() {
                       </div>
                     )}
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
+                  <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="h-7 px-2 text-xs text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
                   {/* Roue crantée : affichage + colonnes */}
                   <div ref={colChooserRef} className="relative">
                     <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Affichage & colonnes">
