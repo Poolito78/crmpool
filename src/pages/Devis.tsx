@@ -1736,7 +1736,7 @@ export default function Devis() {
             </div>
           </div>
           <div ref={scrollContainerRef} className={`space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1 ${dialogTab !== 'devis' ? 'hidden' : ''}`} onDragOver={e => { dragClientYRef.current = e.clientY; }}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div>
                 <div className="flex items-center justify-between">
                   <Label>Client *</Label>
@@ -1910,6 +1910,9 @@ export default function Devis() {
                   );
                 })()}
               </div>
+              {/* Colonne droite : dates + statut + réf + système + surface */}
+              <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label>Date de création</Label>
                 <Input type="date" value={dateCreation} onChange={e => setDateCreation(e.target.value)} />
@@ -1937,26 +1940,27 @@ export default function Devis() {
                   <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} />
                 </div>
               )}
-            </div>
-            <div>
-              <Label>Référence affaire</Label>
-              <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
-            </div>
-            <div>
-              <Label>Système</Label>
-              <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
-            </div>
-
-            {/* Surface globale — si renseignée + conso produit → calcul auto quantité */}
-            <div className="border border-border rounded-lg p-3 bg-muted/30">
-              <div className="flex items-center gap-4">
-                <div className="w-48">
-                  <Label className="text-xs">Surface globale (m²)</Label>
-                  <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" />
-                </div>
-                <p className="text-xs text-muted-foreground mt-4">Si surface + conso. renseignées → quantité calculée automatiquement</p>
+              </div>{/* fin grille dates/statut */}
+              <div>
+                <Label>Référence affaire</Label>
+                <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
               </div>
-            </div>
+              <div>
+                <Label>Système</Label>
+                <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
+              </div>
+              {/* Surface globale — si renseignée + conso produit → calcul auto quantité */}
+              <div className="border border-border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center gap-4">
+                  <div className="w-48">
+                    <Label className="text-xs">Surface globale (m²)</Label>
+                    <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-4">Si surface + conso. renseignées → quantité calculée automatiquement</p>
+                </div>
+              </div>
+              </div>{/* fin colonne droite */}
+            </div>{/* fin grille 2 colonnes */}
 
             {/* Lines */}
             <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
