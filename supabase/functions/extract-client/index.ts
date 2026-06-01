@@ -8,7 +8,9 @@ const SYSTEM_PROMPT = `Tu es un assistant spécialisé dans l'extraction d'infor
 Réponds UNIQUEMENT avec un objet JSON :
 {
   "societe": "nom de l'entreprise/société",
-  "nom": "prénom + nom du contact principal",
+  "nom": "NOM de famille du contact principal (en MAJUSCULES si possible)",
+  "prenom": "prénom du contact principal",
+  "fonction": "fonction / poste du contact si mentionné (ex: Gérant, Acheteur)",
   "email": "adresse email principale",
   "telephone": "téléphone fixe formaté",
   "telephoneMobile": "téléphone mobile formaté",

@@ -437,21 +437,40 @@ export default function Clients() {
             type: (a.type === 'facturation' ? 'facturation' : 'livraison') as 'facturation' | 'livraison',
           }))
         : [];
-      setForm(prev => ({
-        ...prev,
-        societe:          r.societe         || prev.societe,
-        nom:              r.nom             || prev.nom,
-        email:            r.email           || prev.email,
-        telephone:        r.telephone       || prev.telephone,
-        telephoneMobile:  r.telephoneMobile || prev.telephoneMobile,
-        adresse:          r.adresse         || prev.adresse,
-        ville:            r.ville           || prev.ville,
-        codePostal:       r.codePostal      || prev.codePostal,
-        notes:            r.notes           ? (prev.notes ? prev.notes + '\n' + r.notes : r.notes) : prev.notes,
-        adressesLivraison: newAdresses.length > 0
-          ? [...(prev.adressesLivraison || []), ...newAdresses]
-          : prev.adressesLivraison,
-      }));
+      setForm(prev => {
+        // Renseigne / met à jour le contact principal depuis les coordonnées extraites
+        const hasContactInfo = r.nom || r.email || r.telephone || r.telephoneMobile || r.fonction || r.prenom;
+        let contacts = prev.contacts || [];
+        if (hasContactInfo) {
+          const existing = contacts[0];
+          const merged = {
+            id: existing?.id || generateId(),
+            nom: r.nom || existing?.nom || '',
+            prenom: r.prenom || existing?.prenom || '',
+            email: r.email || existing?.email || '',
+            telephone: r.telephone || existing?.telephone || '',
+            telephoneMobile: r.telephoneMobile || existing?.telephoneMobile || '',
+            fonction: r.fonction || existing?.fonction || '',
+          };
+          contacts = [merged, ...contacts.slice(1)];
+        }
+        return {
+          ...prev,
+          societe:          r.societe         || prev.societe,
+          nom:              r.nom             || prev.nom,
+          email:            r.email           || prev.email,
+          telephone:        r.telephone       || prev.telephone,
+          telephoneMobile:  r.telephoneMobile || prev.telephoneMobile,
+          adresse:          r.adresse         || prev.adresse,
+          ville:            r.ville           || prev.ville,
+          codePostal:       r.codePostal      || prev.codePostal,
+          notes:            r.notes           ? (prev.notes ? prev.notes + '\n' + r.notes : r.notes) : prev.notes,
+          contacts,
+          adressesLivraison: newAdresses.length > 0
+            ? [...(prev.adressesLivraison || []), ...newAdresses]
+            : prev.adressesLivraison,
+        };
+      });
       setIaOpen(false);
       setIaText('');
       setIaImage(null);
