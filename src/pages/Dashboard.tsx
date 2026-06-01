@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
+import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, getPrixPourQuantite, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
+import { exportToExcel } from '@/lib/exportExcel';
 import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -191,7 +192,7 @@ export default function Dashboard() {
       </div>
 
       {dashTab === 'previsionnel' ? (
-        <PrevisionnelDevis devis={devis} clients={clients} />
+        <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
       ) : (
       <>
       {/* ── Alertes prioritaires ── */}
@@ -511,7 +512,7 @@ export default function Dashboard() {
 }
 
 // ── Onglet « Prévisionnel devis » : devis avec % réussite, montant et montant pondéré ──
-function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM>['devis']; clients: ReturnType<typeof useCRM>['clients'] }) {
+function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typeof useCRM>['devis']; clients: ReturnType<typeof useCRM>['clients']; produits: ReturnType<typeof useCRM>['produits'] }) {
   const [filterStatut, setFilterStatut] = useState<string>('encours');
   const [filterPeriode, setFilterPeriode] = useState<string>('tous');
   const [groupByMois, setGroupByMois] = useState(false);
@@ -539,16 +540,41 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
     .map(d => {
       const client = clients.find(c => c.id === d.clientId);
       const montant = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
+      // Total achat (marge) — même calcul que la colonne Marge de Devis
+      const totalAchat = d.lignes.reduce((acc, l) => {
+        if (l.type && l.type !== 'ligne') return acc;
+        if (!l.produitId) return acc + (l.prixAchatLigne ?? 0) * l.quantite;
+        const prod = produits.find(p => p.id === l.produitId);
+        if (!prod) return acc;
+        return acc + getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+      }, 0);
+      const totalHTLignes = calculerTotalDevis(d.lignes, 0, 0).totalHT;
+      const marge = totalHTLignes - totalAchat;
       const proba = d.probabiliteReussite ?? 0;
-      return { d, client, montant, proba, pondere: montant * proba / 100 };
+      return { d, client, montant, proba, pondere: montant * proba / 100, marge, margePondere: marge * proba / 100 };
     })
     .sort((a, b) => groupByMois
       ? (moisKey(a.d.dateRealisation) || '9999').localeCompare(moisKey(b.d.dateRealisation) || '9999') || b.pondere - a.pondere
       : b.pondere - a.pondere),
-    [devis, clients, filterStatut, filterPeriode, groupByMois]); // eslint-disable-line react-hooks/exhaustive-deps
+    [devis, clients, produits, filterStatut, filterPeriode, groupByMois]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalMontant = rows.reduce((s, r) => s + r.montant, 0);
   const totalPondere = rows.reduce((s, r) => s + r.pondere, 0);
+  const totalMargePondere = rows.reduce((s, r) => s + r.margePondere, 0);
+
+  function exportPrev() {
+    exportToExcel(rows.map(r => ({
+      'N°': r.d.numero,
+      Client: r.client?.societe || r.client?.nom || '',
+      Statut: r.d.statut,
+      'Réalisation': r.d.dateRealisation || '',
+      '% réussite': r.proba,
+      'Montant HT': r.montant,
+      'Montant pondéré': Math.round(r.pondere * 100) / 100,
+      'Marge HT': Math.round(r.marge * 100) / 100,
+      'Marge pondérée': Math.round(r.margePondere * 100) / 100,
+    })), 'previsionnel_devis', 'Prévisionnel');
+  }
 
   // Regroupement par mois de réalisation
   const groups = useMemo(() => {
@@ -570,7 +596,7 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
     { v: 'accepté', label: 'Accepté' },
   ];
 
-  const renderRow = ({ d, client, montant, proba, pondere }: typeof rows[number]) => (
+  const renderRow = ({ d, client, montant, proba, pondere, margePondere }: typeof rows[number]) => (
     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
       <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
       <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
@@ -581,6 +607,7 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
       </td>
       <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(montant)}</td>
       <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap text-primary">{formatMontant(pondere)}</td>
+      <td className="px-4 py-2.5 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{formatMontant(margePondere)}</td>
     </tr>
   );
 
@@ -602,10 +629,13 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
           <input type="checkbox" checked={groupByMois} onChange={e => setGroupByMois(e.target.checked)} className="rounded border-input accent-primary" />
           Grouper par mois de réalisation
         </label>
+        <Button variant="outline" size="sm" className="ml-auto" onClick={exportPrev} disabled={rows.length === 0}>
+          <Upload className="w-4 h-4 mr-1 rotate-180" /> Excel
+        </Button>
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="stat-card">
           <p className="text-xs text-muted-foreground">Montant total</p>
           <p className="text-2xl font-heading font-bold">{formatMontant(totalMontant)}</p>
@@ -613,6 +643,10 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
         <div className="stat-card">
           <p className="text-xs text-muted-foreground">Montant pondéré (× % réussite)</p>
           <p className="text-2xl font-heading font-bold text-primary">{formatMontant(totalPondere)}</p>
+        </div>
+        <div className="stat-card">
+          <p className="text-xs text-muted-foreground">Marge pondérée prévisionnelle</p>
+          <p className="text-2xl font-heading font-bold text-emerald-600 dark:text-emerald-400">{formatMontant(totalMargePondere)}</p>
         </div>
         <div className="stat-card">
           <p className="text-xs text-muted-foreground">Devis suivis</p>
@@ -633,22 +667,25 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
                 <th className="text-right px-4 py-2 font-medium">% réussite</th>
                 <th className="text-right px-4 py-2 font-medium">Montant HT</th>
                 <th className="text-right px-4 py-2 font-medium">Montant pondéré</th>
+                <th className="text-right px-4 py-2 font-medium">Marge pondérée</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Aucun devis</td></tr>
+                <tr><td colSpan={8} className="text-center py-8 text-muted-foreground">Aucun devis</td></tr>
               )}
               {groups
                 ? groups.map(([key, gr]) => {
                     const gMontant = gr.reduce((s, r) => s + r.montant, 0);
                     const gPondere = gr.reduce((s, r) => s + r.pondere, 0);
+                    const gMargeP = gr.reduce((s, r) => s + r.margePondere, 0);
                     return (
                       <Fragment key={key || 'sans-date'}>
                         <tr className="bg-muted/40 border-b border-border">
                           <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{moisLabel(key)} · {gr.length} devis</td>
                           <td className="px-4 py-1.5 text-right text-xs font-semibold">{formatMontant(gMontant)}</td>
                           <td className="px-4 py-1.5 text-right text-xs font-semibold text-primary">{formatMontant(gPondere)}</td>
+                          <td className="px-4 py-1.5 text-right text-xs font-semibold text-emerald-600 dark:text-emerald-400">{formatMontant(gMargeP)}</td>
                         </tr>
                         {gr.map(renderRow)}
                       </Fragment>
@@ -662,6 +699,7 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
                   <td colSpan={5} className="px-4 py-2.5 text-right">Total</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(totalMontant)}</td>
                   <td className="px-4 py-2.5 text-right whitespace-nowrap text-primary">{formatMontant(totalPondere)}</td>
+                  <td className="px-4 py-2.5 text-right whitespace-nowrap text-emerald-600 dark:text-emerald-400">{formatMontant(totalMargePondere)}</td>
                 </tr>
               </tfoot>
             )}
