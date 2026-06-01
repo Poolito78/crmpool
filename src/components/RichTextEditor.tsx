@@ -1,5 +1,7 @@
 import { useRef, useEffect } from 'react';
-import { Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Type, Eraser } from 'lucide-react';
+import { Bold, Italic, Underline, List, ListOrdered, Heading1, Heading2, Type, Eraser, Baseline } from 'lucide-react';
+
+const TEXT_COLORS = ['#000000', '#dc2626', '#ea580c', '#ca8a04', '#16a34a', '#2563eb', '#7c3aed', '#6b7280'];
 
 // Éditeur de texte riche minimal basé sur contentEditable + document.execCommand.
 // Valeur = HTML. Pas de dépendance externe.
@@ -64,6 +66,24 @@ export default function RichTextEditor({
           <option value="5">Grand</option>
           <option value="6">Très grand</option>
         </select>
+        <span className="w-px h-5 bg-border mx-1" />
+        {/* Couleur du texte */}
+        <span className="inline-flex items-center gap-0.5" title="Couleur du texte">
+          <Baseline className="w-4 h-4 text-muted-foreground shrink-0" />
+          {TEXT_COLORS.map(c => (
+            <button
+              key={c}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); exec('foreColor', c); }}
+              title={c}
+              className="w-4 h-4 rounded-sm border border-border/60 shrink-0 hover:scale-110 transition-transform"
+              style={{ backgroundColor: c }}
+            />
+          ))}
+          <label className="relative w-4 h-4 rounded-sm border border-border/60 shrink-0 overflow-hidden cursor-pointer" title="Couleur personnalisée" style={{ background: 'conic-gradient(red,orange,yellow,green,blue,violet,red)' }}>
+            <input type="color" onChange={e => exec('foreColor', e.target.value)} className="absolute inset-0 opacity-0 cursor-pointer" />
+          </label>
+        </span>
         <Btn onClick={() => exec('removeFormat')} title="Effacer la mise en forme"><Eraser className="w-4 h-4" /></Btn>
       </div>
       {/* Zone éditable */}
