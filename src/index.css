@@ -144,6 +144,13 @@ body[data-scroll-locked] {
   overflow-y: hidden !important;
 }
 
+/* Placeholder de l'éditeur de texte riche (contentEditable vide) */
+.rte-content:empty::before {
+  content: attr(data-placeholder);
+  color: hsl(var(--muted-foreground));
+  pointer-events: none;
+}
+
 @media print {
   @page { margin: 10mm; size: A4 portrait; }
   body { visibility: hidden; }

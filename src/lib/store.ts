@@ -382,6 +382,7 @@ export interface Devis {
   systeme?: string;
   notes?: string;
   conditions?: string;
+  moContent?: string; // Mise en œuvre — document HTML riche (récap groupes/notes/lignes)
   fraisPortHT?: number;
   fraisPortTVA?: number;
   fraisPortAuto?: boolean;

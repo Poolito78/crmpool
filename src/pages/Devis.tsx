@@ -37,6 +37,8 @@ import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
+import RichTextEditor from '@/components/RichTextEditor';
+import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
 const LIGNE_COLS = [
@@ -206,6 +208,9 @@ export default function Devis() {
   const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
+  const [moContent, setMoContent] = useState('');
+  const [moGenerating, setMoGenerating] = useState(false);
+  const moPrintRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -218,7 +223,7 @@ export default function Devis() {
   const ligneBodyScrollRef = useRef<HTMLDivElement>(null);
   const dragScrollRafRef = useRef<number | null>(null);
   const dragClientYRef = useRef<number>(0);
-  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'crm'>('devis');
+  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'mo' | 'crm'>('devis');
   const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
   // Comparatif — édition manuelle du PU Achat
   const [portAchatManuel, setPortAchatManuel] = useState<number | null>(null);
@@ -372,6 +377,7 @@ export default function Devis() {
     setSysteme(d.systeme || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
+    setMoContent(d.moContent || '');
     setLignes(d.lignes.map(l => {
       // Recalculer le prix des lignes dont la variante choisie a un prixDiff
       // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
@@ -423,6 +429,7 @@ export default function Devis() {
     setSysteme('');
     setNotes('');
     setConditions('Paiement à 45 jours fin de mois à compter de la date de facturation.');
+    setMoContent('');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
@@ -866,7 +873,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -877,7 +884,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -892,6 +899,57 @@ export default function Devis() {
     return savedId;
   }
 
+  // ── Mise en œuvre (MO) ──────────────────────────────────────────────────────
+  const escapeHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  // Construit le récap HTML depuis groupes, notes (texte) et lignes (description + note de ligne)
+  function buildMoRecap(): string {
+    const parts: string[] = [];
+    for (const l of lignes) {
+      if (l.type === 'groupe') {
+        parts.push(`<h2>${escapeHtml(l.description || 'Groupe')}</h2>`);
+      } else if (l.type === 'texte') {
+        if (l.description?.trim()) parts.push(`<p>${escapeHtml(l.description)}</p>`);
+      } else if (l.type === 'soustotal') {
+        // ignoré dans la MO
+      } else {
+        // ligne produit : description du produit puis note de ligne
+        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        const titre = prod?.description || l.description || prod?.reference || '';
+        if (titre.trim()) parts.push(`<p><strong>${escapeHtml(titre)}</strong></p>`);
+        if (l.note?.trim()) parts.push(`<p>${escapeHtml(l.note).replace(/\n/g, '<br>')}</p>`);
+      }
+    }
+    if (parts.length === 0) return '<p></p>';
+    return parts.join('\n');
+  }
+  function regenerateMo() {
+    if (moContent.trim() && !window.confirm('Régénérer le récapitulatif écrasera le contenu actuel de la Mise en œuvre. Continuer ?')) return;
+    setMoContent(buildMoRecap());
+    toast.success('Récapitulatif Mise en œuvre généré');
+  }
+  async function exportMoPdf() {
+    if (!moPrintRef.current) return;
+    setMoGenerating(true);
+    try {
+      const numero = (editingId ? devis.find(d => d.id === editingId)?.numero : '') || 'devis';
+      const fileName = `MO_${numero}${systeme ? '_' + systeme.replace(/[^\w-]+/g, '_') : ''}.pdf`;
+      const base64 = await generatePdfFromElement(moPrintRef.current, { docTitle: `Mise en œuvre — ${numero}` });
+      const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, '_blank');
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+      const res = await writeFileToFolder(fileName, bytes, false);
+      if (res.ok) toast.success(`PDF Mise en œuvre sauvegardé dans "${res.folderName}"`, { description: fileName, duration: 6000 });
+      else toast.success('PDF Mise en œuvre généré', { description: fileName, duration: 4000 });
+    } catch (err) {
+      console.error(err);
+      toast.error('Erreur lors de la génération du PDF Mise en œuvre');
+    } finally {
+      setMoGenerating(false);
+    }
+  }
+
   // Auto-save en temps réel pour les devis en édition
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => {
@@ -900,12 +958,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -1582,6 +1640,7 @@ export default function Devis() {
             <div className="flex gap-1">
               <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
               <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+              <button type="button" onClick={() => setDialogTab('mo')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'mo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>MO</button>
               {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
             </div>
             {/* Boutons d'action regroupés à droite */}
@@ -2881,6 +2940,32 @@ export default function Devis() {
               </div>
             );
           })()}
+          {/* ── Onglet MO (Mise en œuvre) ──────────────────────────────────────── */}
+          {dialogTab === 'mo' && (
+            <div className="flex flex-col flex-1 min-h-0 py-2 gap-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap shrink-0">
+                <div className="text-sm text-muted-foreground">
+                  Document de <span className="font-medium text-foreground">Mise en œuvre</span> joint au devis (PDF). Reprend les groupes, notes et descriptions/notes de lignes.
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <Button variant="outline" size="sm" onClick={regenerateMo}><RotateCcw className="w-4 h-4 mr-1.5" /> (Re)générer le récap</Button>
+                  <Button size="sm" onClick={exportMoPdf} disabled={moGenerating}><FileText className="w-4 h-4 mr-1.5" /> {moGenerating ? 'Génération…' : 'PDF Mise en œuvre'}</Button>
+                </div>
+              </div>
+              <RichTextEditor value={moContent} onChange={setMoContent} placeholder="Cliquez sur « (Re)générer le récap » ou saisissez le texte de mise en œuvre…" className="flex-1 min-h-0" />
+              {/* Zone hors-écran pour la génération PDF (titre + contenu) */}
+              <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden>
+                <div ref={moPrintRef} style={{ width: 794, padding: 32, background: '#fff', color: '#000', fontFamily: 'Arial, sans-serif' }}>
+                  <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Mise en œuvre</h1>
+                  <p style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>
+                    {(editingId ? devis.find(d => d.id === editingId)?.numero : '') || 'Devis'}
+                    {systeme ? ` — ${systeme}` : ''}
+                  </p>
+                  <div style={{ fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: moContent || '<p style="color:#888">(vide)</p>' }} />
+                </div>
+              </div>
+            </div>
+          )}
           {/* ── Onglet CRM ──────────────────────────────────────────────────────── */}
           {dialogTab === 'crm' && editingId && (() => {
             const devisActions = crmActions.filter(a => a.devisId === editingId);
