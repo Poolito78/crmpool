@@ -1781,8 +1781,13 @@ export default function Devis() {
                       adressesLivraison: [],
                       contacts: [],
                     };
+                    // Crée + persiste la société, la sélectionne, puis ouvre le formulaire complet
                     updateClients(prev => [...prev, newClient]);
-                    toast.success(`Société « ${societe} » créée`, { description: 'Complétez la fiche dans Clients si besoin.' });
+                    setClientId(newClient.id);
+                    setContactId('');
+                    const savedDevisId = save(true) || editingId;
+                    toast.success(`Société « ${societe} » créée`);
+                    navigate(`/clients?editClient=${newClient.id}${savedDevisId ? `&returnDevis=${savedDevisId}` : ''}`);
                     return newClient.id;
                   }}
                 />

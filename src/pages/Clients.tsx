@@ -156,7 +156,7 @@ export default function Clients() {
     });
     return map;
   }, [commandesClient]);
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const returnDevisId = searchParams.get('returnDevis');
   
@@ -394,6 +394,24 @@ export default function Clients() {
     setSiretQuery('');
     setDialogOpen(true);
   }
+
+  // Auto-ouverture du formulaire client via ?editClient=<id> (ex: création société depuis un devis)
+  const editClientHandledRef = useRef(false);
+  useEffect(() => {
+    if (editClientHandledRef.current) return;
+    const editClientId = searchParams.get('editClient');
+    if (!editClientId) return;
+    if (clients.length === 0) return; // attendre les données
+    const c = clients.find(cl => cl.id === editClientId);
+    if (c) {
+      openEdit(c);
+      editClientHandledRef.current = true;
+      // Conserve returnDevis pour le bouton retour, retire seulement editClient
+      const next = new URLSearchParams(searchParams);
+      next.delete('editClient');
+      setSearchParams(next, { replace: true });
+    }
+  }, [clients]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function extractClientFromIA() {
     if (!iaText.trim() && !iaImage) return;
