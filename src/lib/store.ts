@@ -1101,11 +1101,11 @@ export function useStore() {
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId)) as any).then();
+        if (added.length) supabase.from('clients').insert(added.map(c => clientToDb(c, userId)) as any).then(({ error }) => { if (error) console.error('[clients insert]', error.message, error.details); });
         if (updated.length) {
-          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId) as any).eq('id', c.id).then());
+          updated.forEach(c => supabase.from('clients').update(clientToDb(c, userId) as any).eq('id', c.id).then(({ error }) => { if (error) console.error('[clients update]', error.message, error.details); }));
         }
-        if (removed.length) supabase.from('clients').delete().in('id', removed.map(c => c.id)).then();
+        if (removed.length) supabase.from('clients').delete().in('id', removed.map(c => c.id)).then(({ error }) => { if (error) console.error('[clients delete]', error.message, error.details); });
       }
       return next;
     });
