@@ -437,13 +437,16 @@ export function VeilleContent() {
               </Button>
             )
           )}
+          <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'} className="order-first sm:order-none w-full sm:w-auto">
+            <Plus className="w-4 h-4 mr-1" /> Nouveau produit
+          </Button>
           <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
             <Download className="w-4 h-4 mr-1" /> Excel
           </Button>
           <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)}>
             <Mail className="w-4 h-4 mr-1" /> Par email
           </Button>
-          <Button size="sm" onClick={openNew}>
+          <Button size="sm" variant="outline" onClick={openNew}>
             <Plus className="w-4 h-4 mr-1" /> Nouveau concurrent
           </Button>
         </div>
