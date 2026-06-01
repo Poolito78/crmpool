@@ -1940,9 +1940,9 @@ export default function Devis() {
                 </div>
                 </div>
               </div>
-              <div className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
+              <div className={lignesView === 'tableau' ? 'overflow-auto max-h-[58vh]' : ''}>
               {lignesView === 'tableau' && (
-                <div className="flex items-center gap-1 px-1 pb-1 mb-1 min-w-max text-[11px] font-medium text-muted-foreground border-b border-border sticky top-0 bg-background z-[5]">
+                <div className="flex items-center gap-1 px-1 py-1.5 mb-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border sticky top-0 bg-background z-[5]">
                   <span className="w-3.5 shrink-0" />
                   <span className="w-6 shrink-0">#</span>
                   {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => { const c = TABLE_LIGNE_COLS.find(x => x.key === k)!; return !c.optional || visibleLigneCols.has(c.optional); }).map(c => {
