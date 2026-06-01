@@ -247,8 +247,8 @@ export default function CRM() {
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
-    // Hauteur = 100vh − header layout (4rem). Annule le padding du <main>.
-    <div className="flex flex-col -m-4 md:-m-6" style={{ height: 'calc(100vh - 4rem)' }}>
+    // Remplit la hauteur dispo de <main> (flex) et annule son padding.
+    <div className="flex flex-col flex-1 min-h-0 -mx-4 md:-mx-6 -mt-2 md:-mt-2 -mb-20 md:-mb-6">
 
       {/* Alerte retard — flex-none, toujours visible */}
       {actionsEnRetard.length > 0 && (
