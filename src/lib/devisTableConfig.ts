@@ -12,6 +12,7 @@ export const DEVIS_TABLE_COLS_DEF = [
   { key: 'totalHT',    label: 'Total HT',     align: 'right' },
   { key: 'marge',      label: 'Marge',        align: 'right' },
   { key: 'port',       label: 'Port HT',      align: 'right' },
+  { key: 'reussite',   label: '% réussite',   align: 'right' },
 ] as const;
 
 export type DevisTableColKey = typeof DEVIS_TABLE_COLS_DEF[number]['key'];

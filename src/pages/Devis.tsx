@@ -210,6 +210,7 @@ export default function Devis() {
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
   const [probabiliteReussite, setProbabiliteReussite] = useState<number>(0);
+  const [dateRealisation, setDateRealisation] = useState('');
   const [moGenerating, setMoGenerating] = useState(false);
   const moPrintRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
@@ -384,6 +385,7 @@ export default function Devis() {
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setMoContent(d.moContent || '');
     setProbabiliteReussite(d.probabiliteReussite ?? 0);
+    setDateRealisation(d.dateRealisation || '');
     setLignes(d.lignes.map(l => {
       // Recalculer le prix des lignes dont la variante choisie a un prixDiff
       // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
@@ -437,6 +439,7 @@ export default function Devis() {
     setConditions('Paiement à 45 jours fin de mois à compter de la date de facturation.');
     setMoContent('');
     setProbabiliteReussite(0);
+    setDateRealisation('');
     setLignes([{ id: generateId(), description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, tva: 20, remise: 0 }]);
     setFraisPortHT(0);
     setFraisPortTVA(20);
@@ -886,7 +889,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -897,7 +900,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -996,12 +999,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, probabiliteReussite, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -1392,6 +1395,7 @@ export default function Devis() {
                       case 'totalHT': return <td style={ws} className="px-3 py-2.5 text-right font-semibold whitespace-nowrap">{formatMontant(t.totalHT)}</td>;
                       case 'marge': return <td style={ws} className={`px-3 py-2.5 text-right text-sm font-medium whitespace-nowrap ${margeD < 0 ? 'text-destructive' : margeD < 20 ? 'text-warning' : 'text-success'}`}>{totalHTD > 0 ? `${margeD.toFixed(1)} %` : '—'}</td>;
                       case 'port': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>;
+                      case 'reussite': return <td style={ws} className="px-3 py-2.5 text-right text-sm whitespace-nowrap">{d.probabiliteReussite != null ? <span className={`font-medium ${d.probabiliteReussite >= 75 ? 'text-success' : d.probabiliteReussite >= 50 ? 'text-warning' : d.probabiliteReussite > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{d.probabiliteReussite}%</span> : <span className="text-muted-foreground">—</span>}</td>;
                       default: return <td style={ws} className="px-3 py-2.5" />;
                     }
                   };
@@ -1974,6 +1978,10 @@ export default function Devis() {
                     <select value={probabiliteReussite} onChange={e => setProbabiliteReussite(Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
                       {[0, 25, 50, 75, 100].map(p => <option key={p} value={p}>{p}%</option>)}
                     </select>
+                  </div>
+                  <div className="w-40">
+                    <Label className="text-xs">Date de réalisation</Label>
+                    <Input type="date" value={dateRealisation} onChange={e => setDateRealisation(e.target.value)} className="h-8 text-sm" />
                   </div>
                 </div>
               </div>
