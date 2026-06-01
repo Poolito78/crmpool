@@ -1941,7 +1941,8 @@ export default function Devis() {
                     )}
                   </div>
                 </div>
-                {/* En-tête de colonnes (figé avec les boutons), défilement H synchronisé avec les lignes */}
+                </div>
+                {/* En-tête de colonnes (figé avec les boutons, dessous), défilement H synchronisé avec les lignes */}
                 {lignesView === 'tableau' && (
                   <div ref={ligneHeaderScrollRef} className="overflow-x-hidden mt-1.5 -mb-2 pb-1">
                     <div className="flex items-center gap-1 px-1 py-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border">
@@ -1960,7 +1961,6 @@ export default function Devis() {
                     </div>
                   </div>
                 )}
-                </div>
               </div>
               <div ref={ligneBodyScrollRef} onScroll={e => { if (ligneHeaderScrollRef.current) ligneHeaderScrollRef.current.scrollLeft = e.currentTarget.scrollLeft; }} className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
               <div className={lignesView === 'tableau' ? 'flex flex-col gap-0.5 [&_label]:hidden [&>div]:border-b [&>div]:border-border/30 min-w-max' : 'flex flex-col gap-2'}>
