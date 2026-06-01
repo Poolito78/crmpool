@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { Check, ChevronsUpDown, Search } from 'lucide-react';
+import { Check, ChevronsUpDown, Search, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Client } from '@/lib/store';
 
@@ -7,9 +7,11 @@ interface ClientComboboxProps {
   clients: Client[];
   value: string;
   onSelect: (clientId: string) => void;
+  /** Création rapide d'une société à partir du texte saisi. Doit renvoyer l'id du nouveau client. */
+  onCreateNew?: (societe: string) => string | void;
 }
 
-export default function ClientCombobox({ clients, value, onSelect }: ClientComboboxProps) {
+export default function ClientCombobox({ clients, value, onSelect, onCreateNew }: ClientComboboxProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
@@ -70,6 +72,15 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
 
   function selectItem(clientId: string) {
     onSelect(clientId);
+    setOpen(false);
+    setQuery('');
+  }
+
+  function createNew() {
+    const name = query.trim();
+    if (!name || !onCreateNew) return;
+    const newId = onCreateNew(name);
+    if (typeof newId === 'string') onSelect(newId);
     setOpen(false);
     setQuery('');
   }
@@ -143,7 +154,18 @@ export default function ClientCombobox({ clients, value, onSelect }: ClientCombo
               );
             })}
             {filtered.length === 0 && (
-              <p className="py-3 text-center text-xs text-muted-foreground">Aucune société trouvée</p>
+              onCreateNew && query.trim() ? (
+                <button
+                  type="button"
+                  onClick={createNew}
+                  className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-sm cursor-pointer text-left text-primary hover:bg-accent/50"
+                >
+                  <Plus className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">Créer la société « <span className="font-semibold">{query.trim()}</span> »</span>
+                </button>
+              ) : (
+                <p className="py-3 text-center text-xs text-muted-foreground">Aucune société trouvée</p>
+              )
             )}
           </div>
         </div>

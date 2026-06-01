@@ -82,7 +82,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
+  const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -1770,6 +1770,20 @@ export default function Devis() {
                       const opt = DELAI_REGLEMENT_OPTIONS.find(o => o.value === c?.delaiReglement);
                       if (opt) setConditions(opt.conditions);
                     }
+                  }}
+                  onCreateNew={(societe) => {
+                    const newClient = {
+                      id: generateId(),
+                      nom: societe,
+                      email: '', telephone: '', adresse: '', ville: '', codePostal: '',
+                      societe,
+                      dateCreation: new Date().toISOString().split('T')[0],
+                      adressesLivraison: [],
+                      contacts: [],
+                    };
+                    updateClients(prev => [...prev, newClient]);
+                    toast.success(`Société « ${societe} » créée`, { description: 'Complétez la fiche dans Clients si besoin.' });
+                    return newClient.id;
                   }}
                 />
                 {(() => {
