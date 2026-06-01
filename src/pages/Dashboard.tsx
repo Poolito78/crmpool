@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
@@ -512,26 +512,102 @@ export default function Dashboard() {
 
 // ── Onglet « Prévisionnel devis » : devis avec % réussite, montant et montant pondéré ──
 function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM>['devis']; clients: ReturnType<typeof useCRM>['clients'] }) {
-  // Devis en cours (hors refusé/archivé/système) ayant une probabilité renseignée
-  const rows = devis
-    .filter(d => !['refusé', 'archivé', 'système'].includes(d.statut))
+  const [filterStatut, setFilterStatut] = useState<string>('encours');
+  const [filterPeriode, setFilterPeriode] = useState<string>('tous');
+  const [groupByMois, setGroupByMois] = useState(false);
+
+  const now = new Date();
+  const moisKey = (iso?: string) => iso ? iso.slice(0, 7) : ''; // YYYY-MM
+  const moisLabel = (key: string) => key ? new Date(key + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : 'Sans date de réalisation';
+
+  const rows = useMemo(() => devis
+    .filter(d => {
+      // Statut
+      if (filterStatut === 'encours') { if (['refusé', 'archivé', 'système'].includes(d.statut)) return false; }
+      else if (filterStatut !== 'tous') { if (d.statut !== filterStatut) return false; }
+      // Période de réalisation
+      if (filterPeriode !== 'tous') {
+        if (!d.dateRealisation) return false;
+        const dr = new Date(d.dateRealisation + 'T00:00:00');
+        if (filterPeriode === 'mois' && (dr.getMonth() !== now.getMonth() || dr.getFullYear() !== now.getFullYear())) return false;
+        if (filterPeriode === 'trimestre' && (Math.floor(dr.getMonth() / 3) !== Math.floor(now.getMonth() / 3) || dr.getFullYear() !== now.getFullYear())) return false;
+        if (filterPeriode === 'annee' && dr.getFullYear() !== now.getFullYear()) return false;
+        if (filterPeriode === 'avenir' && dr < new Date(now.getFullYear(), now.getMonth(), now.getDate())) return false;
+      }
+      return true;
+    })
     .map(d => {
       const client = clients.find(c => c.id === d.clientId);
       const montant = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
       const proba = d.probabiliteReussite ?? 0;
       return { d, client, montant, proba, pondere: montant * proba / 100 };
     })
-    .sort((a, b) => b.pondere - a.pondere);
+    .sort((a, b) => groupByMois
+      ? (moisKey(a.d.dateRealisation) || '9999').localeCompare(moisKey(b.d.dateRealisation) || '9999') || b.pondere - a.pondere
+      : b.pondere - a.pondere),
+    [devis, clients, filterStatut, filterPeriode, groupByMois]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const totalMontant = rows.reduce((s, r) => s + r.montant, 0);
   const totalPondere = rows.reduce((s, r) => s + r.pondere, 0);
 
+  // Regroupement par mois de réalisation
+  const groups = useMemo(() => {
+    if (!groupByMois) return null;
+    const map = new Map<string, typeof rows>();
+    for (const r of rows) {
+      const k = moisKey(r.d.dateRealisation);
+      if (!map.has(k)) map.set(k, []);
+      map.get(k)!.push(r);
+    }
+    return [...map.entries()].sort((a, b) => (a[0] || '9999').localeCompare(b[0] || '9999'));
+  }, [rows, groupByMois]);
+
+  const statutOptions = [
+    { v: 'encours', label: 'En cours (hors refusé/archivé)' },
+    { v: 'tous', label: 'Tous' },
+    { v: 'brouillon', label: 'Brouillon' },
+    { v: 'envoyé', label: 'Envoyé' },
+    { v: 'accepté', label: 'Accepté' },
+  ];
+
+  const renderRow = ({ d, client, montant, proba, pondere }: typeof rows[number]) => (
+    <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+      <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
+      <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
+      <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d.statut}</span></td>
+      <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>
+      <td className="px-4 py-2.5 text-right">
+        <span className={`font-medium ${proba >= 75 ? 'text-success' : proba >= 50 ? 'text-warning' : proba > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{proba}%</span>
+      </td>
+      <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(montant)}</td>
+      <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap text-primary">{formatMontant(pondere)}</td>
+    </tr>
+  );
+
   return (
     <div className="space-y-4">
+      {/* Filtres */}
+      <div className="flex flex-wrap items-center gap-2">
+        <select value={filterStatut} onChange={e => setFilterStatut(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+          {statutOptions.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
+        </select>
+        <select value={filterPeriode} onChange={e => setFilterPeriode(e.target.value)} className="text-sm rounded-md border border-input bg-background px-3 py-1.5">
+          <option value="tous">Toutes réalisations</option>
+          <option value="mois">Réalisation ce mois</option>
+          <option value="trimestre">Réalisation ce trimestre</option>
+          <option value="annee">Réalisation cette année</option>
+          <option value="avenir">Réalisation à venir</option>
+        </select>
+        <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" checked={groupByMois} onChange={e => setGroupByMois(e.target.checked)} className="rounded border-input accent-primary" />
+          Grouper par mois de réalisation
+        </label>
+      </div>
+
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="stat-card">
-          <p className="text-xs text-muted-foreground">Montant total (en cours)</p>
+          <p className="text-xs text-muted-foreground">Montant total</p>
           <p className="text-2xl font-heading font-bold">{formatMontant(totalMontant)}</p>
         </div>
         <div className="stat-card">
@@ -560,22 +636,25 @@ function PrevisionnelDevis({ devis, clients }: { devis: ReturnType<typeof useCRM
               </tr>
             </thead>
             <tbody>
-              {rows.map(({ d, client, montant, proba, pondere }) => (
-                <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-                  <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
-                  <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
-                  <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d.statut}</span></td>
-                  <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <span className={`font-medium ${proba >= 75 ? 'text-success' : proba >= 50 ? 'text-warning' : proba > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{proba}%</span>
-                  </td>
-                  <td className="px-4 py-2.5 text-right whitespace-nowrap">{formatMontant(montant)}</td>
-                  <td className="px-4 py-2.5 text-right font-semibold whitespace-nowrap text-primary">{formatMontant(pondere)}</td>
-                </tr>
-              ))}
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Aucun devis en cours</td></tr>
+                <tr><td colSpan={7} className="text-center py-8 text-muted-foreground">Aucun devis</td></tr>
               )}
+              {groups
+                ? groups.map(([key, gr]) => {
+                    const gMontant = gr.reduce((s, r) => s + r.montant, 0);
+                    const gPondere = gr.reduce((s, r) => s + r.pondere, 0);
+                    return (
+                      <Fragment key={key || 'sans-date'}>
+                        <tr className="bg-muted/40 border-b border-border">
+                          <td colSpan={5} className="px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{moisLabel(key)} · {gr.length} devis</td>
+                          <td className="px-4 py-1.5 text-right text-xs font-semibold">{formatMontant(gMontant)}</td>
+                          <td className="px-4 py-1.5 text-right text-xs font-semibold text-primary">{formatMontant(gPondere)}</td>
+                        </tr>
+                        {gr.map(renderRow)}
+                      </Fragment>
+                    );
+                  })
+                : rows.map(renderRow)}
             </tbody>
             {rows.length > 0 && (
               <tfoot>
