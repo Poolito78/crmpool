@@ -250,13 +250,18 @@ export default function CRM() {
     // Remplit la hauteur dispo de <main> (flex) et annule son padding.
     <div className="flex flex-col flex-1 min-h-0 -mx-4 md:-mx-6 -mt-2 md:-mt-2 -mb-20 md:-mb-6">
 
-      {/* Alerte retard — flex-none, toujours visible */}
+      {/* Alerte retard — flex-none, toujours visible, cliquable */}
       {actionsEnRetard.length > 0 && (
-        <div className="flex-none flex items-center gap-2 px-4 md:px-6 py-2 bg-orange-50 dark:bg-orange-900/20 border-b border-orange-200 dark:border-orange-800 text-sm text-orange-700 dark:text-orange-300">
+        <button
+          type="button"
+          onClick={() => { setTab('actions'); setActionFilterStatut('planifiee'); }}
+          title="Voir les actions en retard"
+          className="flex-none w-full flex items-center gap-2 px-4 md:px-6 py-2 bg-orange-50 dark:bg-orange-900/20 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors border-b border-orange-200 dark:border-orange-800 text-sm text-orange-700 dark:text-orange-300 text-left"
+        >
           <AlertCircle className="w-4 h-4 shrink-0" />
           <span><strong>{actionsEnRetard.length} action{actionsEnRetard.length > 1 ? 's' : ''}</strong> en retard</span>
-          <button onClick={() => { setTab('actions'); setActionFilterStatut('planifiee'); }} className="ml-auto text-xs underline">Voir</button>
-        </div>
+          <span className="ml-auto text-xs underline">Voir</span>
+        </button>
       )}
 
       {/* Barre d'onglets — flex-none, ne scroll JAMAIS */}
