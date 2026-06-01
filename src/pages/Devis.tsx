@@ -2099,7 +2099,7 @@ export default function Devis() {
                             {/* ── Ligne unifiée (surface + standard) ── */}
                             <div className={`flex items-end gap-1 ${lignesView === 'tableau' ? 'flex-nowrap' : 'flex-wrap'}`}>
                               <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
-                              <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0">#{ligneNums[l.id]}</span>
+                              <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0 w-6">#{ligneNums[l.id]}</span>
                               {/* Réf. */}
                               <div className="w-48 shrink-0">
                                 <Label className="text-xs">Réf.</Label>
