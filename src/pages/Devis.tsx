@@ -1934,6 +1934,7 @@ export default function Devis() {
                     {visibleLigneCols.has('netht') && <span className="w-24 shrink-0">Net HT</span>}
                     {visibleLigneCols.has('marge') && <span className="w-24 shrink-0 text-right">Marge / Coeff</span>}
                     <span className="shrink-0 w-24 text-right">Total HT</span>
+                    <span className="shrink-0 w-[76px]" />
                   </div>
                 )}
               </div>
@@ -2091,8 +2092,9 @@ export default function Devis() {
                         onDragOver={e => { e.preventDefault(); setDragOverId(l.id); }}
                         onDrop={() => dropLigne(l.id)}
                         onDragEnd={() => { setDraggedId(null); setDragOverId(null); stopDragScroll(); }}
-                        className={`rounded-lg px-2 py-1.5 border transition-all cursor-grab active:cursor-grabbing
-                          ${lineGroup[l.id] ? ' ml-4' : ''}
+                        className={`rounded-lg py-1.5 border transition-all cursor-grab active:cursor-grabbing
+                          ${lignesView === 'tableau' ? 'px-1' : 'px-2'}
+                          ${lineGroup[l.id] && lignesView !== 'tableau' ? ' ml-4' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
                         <>
@@ -2201,17 +2203,37 @@ export default function Devis() {
                                   </div>
                                 );
                               })()}
-                              {/* Total HT + actions */}
-                              <div className="shrink-0 flex flex-col items-end">
-                                <Label className="text-xs">Total HT</Label>
-                                <div className="flex items-center h-8 gap-0.5">
-                                  <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
-                                  <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
-                                  <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                              {lignesView === 'tableau' ? (
+                                <>
+                                  {/* Total HT (colonne alignée) */}
+                                  <div className="shrink-0 w-24 flex flex-col items-end">
+                                    <Label className="text-xs">Total HT</Label>
+                                    <span className="text-sm font-semibold h-8 flex items-center text-right">{formatMontant(t.totalHT)}</span>
+                                  </div>
+                                  {/* Actions (colonne dédiée) */}
+                                  <div className="shrink-0 w-[76px] flex flex-col items-end">
+                                    <Label className="text-xs">&nbsp;</Label>
+                                    <div className="flex items-center h-8 gap-0.5">
+                                      <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                                      <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                                      <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                                      <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                                    </div>
+                                  </div>
+                                </>
+                              ) : (
+                                /* Total HT + actions (mode cartes) */
+                                <div className="shrink-0 flex flex-col items-end">
+                                  <Label className="text-xs">Total HT</Label>
+                                  <div className="flex items-center h-8 gap-0.5">
+                                    <span className="text-sm font-semibold w-24 text-right">{formatMontant(t.totalHT)}</span>
+                                    <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => duplicateLigne(l.id)} title="Dupliquer" className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>
+                                    <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
+                                  </div>
                                 </div>
-                              </div>
+                              )}
                             </div>
                             {/* Variantes en sous-ligne (mode tableau) */}
                             {lignesView === 'tableau' && variantEls && (
