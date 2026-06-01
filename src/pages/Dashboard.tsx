@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, getPrixPourQuantite, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { exportToExcel } from '@/lib/exportExcel';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
 import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -562,6 +563,25 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
   const totalPondere = rows.reduce((s, r) => s + r.pondere, 0);
   const totalMargePondere = rows.reduce((s, r) => s + r.margePondere, 0);
 
+  // Données du graphique : CA pondéré + marge pondérée par mois de réalisation
+  const chartData = useMemo(() => {
+    const map = new Map<string, { pondere: number; margePondere: number }>();
+    for (const r of rows) {
+      const k = moisKey(r.d.dateRealisation);
+      if (!k) continue; // ignore les devis sans date de réalisation dans le graphe
+      const e = map.get(k) || { pondere: 0, margePondere: 0 };
+      e.pondere += r.pondere; e.margePondere += r.margePondere;
+      map.set(k, e);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([k, v]) => ({
+        mois: new Date(k + '-01T00:00:00').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }),
+        'CA pondéré': Math.round(v.pondere),
+        'Marge pondérée': Math.round(v.margePondere),
+      }));
+  }, [rows]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function exportPrev() {
     exportToExcel(rows.map(r => ({
       'N°': r.d.numero,
@@ -653,6 +673,24 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
           <p className="text-2xl font-heading font-bold">{rows.length}</p>
         </div>
       </div>
+
+      {/* Graphique mensuel : CA pondéré + marge pondérée */}
+      {chartData.length > 0 && (
+        <div className="bg-card rounded-xl border border-border p-4">
+          <p className="text-sm font-semibold mb-3">Prévisionnel pondéré par mois de réalisation</p>
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={chartData} margin={{ top: 4, right: 8, left: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis dataKey="mois" tick={{ fontSize: 12 }} stroke="hsl(var(--muted-foreground))" />
+              <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" tickFormatter={v => `${Math.round(v / 1000)}k`} width={40} />
+              <Tooltip formatter={(v: number) => formatMontant(v)} contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 8, fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="CA pondéré" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Marge pondérée" fill="#10b981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Tableau */}
       <div className="bg-card rounded-xl border border-border overflow-hidden">
