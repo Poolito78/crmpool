@@ -223,7 +223,7 @@ export default function Devis() {
   const ligneBodyScrollRef = useRef<HTMLDivElement>(null);
   const dragScrollRafRef = useRef<number | null>(null);
   const dragClientYRef = useRef<number>(0);
-  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'mo' | 'crm'>('devis');
+  const [dialogTab, setDialogTab] = useState<'devis' | 'comparatif' | 'mo' | 'crm' | 'notes'>('devis');
   const [selectedFournisseurPerLigne, setSelectedFournisseurPerLigne] = useState<Record<string, string>>({});
   // Comparatif — édition manuelle du PU Achat
   const [portAchatManuel, setPortAchatManuel] = useState<number | null>(null);
@@ -1667,6 +1667,7 @@ export default function Devis() {
               <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
               <button type="button" onClick={() => setDialogTab('mo')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'mo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>MO</button>
               {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+              {editingId && <button type="button" onClick={() => setDialogTab('notes')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'notes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Notes & Fichiers</button>}
             </div>
             {/* Boutons d'action regroupés à droite */}
             <div className="flex items-center gap-1.5 pb-1.5 pr-1">
@@ -3031,6 +3032,21 @@ export default function Devis() {
               </div>
             );
           })()}
+          {/* ── Onglet Notes & Fichiers ─────────────────────────────────────────── */}
+          {dialogTab === 'notes' && editingId && (
+            <div className="flex flex-col flex-1 min-h-0 py-2">
+              <DevisChatter
+                embedded
+                open
+                onOpenChange={() => {}}
+                devisId={editingId}
+                devisNumero={devis.find(d => d.id === editingId)?.numero || ''}
+                clients={clients}
+                produits={produits}
+                onRestore={(snap) => { populateForm(snap); toast.success('Version restaurée'); }}
+              />
+            </div>
+          )}
 
         </DialogContent>
       </Dialog>

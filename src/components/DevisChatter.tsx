@@ -40,6 +40,8 @@ interface Props {
   clients?: Client[];
   produits?: Produit[];
   onRestore?: (snapshot: DevisType) => void;
+  /** Rendu intégré (sans la fenêtre Dialog), pour un onglet. */
+  embedded?: boolean;
 }
 
 /* ── Helpers ── */
@@ -82,7 +84,7 @@ const actionLabel: Record<string, { label: string; icon: typeof Clock; color: st
 };
 
 /* ── Composant principal ── */
-export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode, clients = [], produits = [], onRestore }: Props) {
+export default function DevisChatter({ open, onOpenChange, devisId, devisNumero, initialMode, clients = [], produits = [], onRestore, embedded = false }: Props) {
   const [pjs, setPjs] = useState<PieceJointe[]>([]);
   const [hist, setHist] = useState<HistoriqueEntry[]>([]);
   const [loading, setLoading] = useState(false);
@@ -328,15 +330,15 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   }
 
 
-  return (
+  const inner = (
     <>
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[88vh] flex flex-col overflow-hidden">
-        <DialogHeader className="shrink-0">
-          <DialogTitle className="flex items-center gap-2">
-            <MessageSquare className="w-5 h-5 text-primary" />
-            Devis {devisNumero}
-          </DialogTitle>
+        <div className={embedded ? 'shrink-0' : ''}>
+          {!embedded && (
+            <div className="flex items-center gap-2 font-semibold text-lg">
+              <MessageSquare className="w-5 h-5 text-primary" />
+              Devis {devisNumero}
+            </div>
+          )}
           {/* Onglets */}
           <div className="flex gap-1 border-b border-border mt-2 -mb-1">
             <button
@@ -356,7 +358,7 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               {nbHist > 0 && <span className="ml-1 text-xs bg-muted rounded-full px-1.5">{nbHist}</span>}
             </button>
           </div>
-        </DialogHeader>
+        </div>
 
         {/* ── Zone drag & drop globale ── */}
         <div
@@ -599,8 +601,20 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
         )}
 
         </div>{/* fin zone drag & drop */}
-      </DialogContent>
-    </Dialog>
+    </>
+  );
+
+  return (
+    <>
+    {embedded ? (
+      <div className="flex flex-col flex-1 min-h-0">{inner}</div>
+    ) : (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[88vh] flex flex-col overflow-hidden">
+          {inner}
+        </DialogContent>
+      </Dialog>
+    )}
 
     {/* Dialog snapshot "avant modification" */}
     {snapshotDevis && (
