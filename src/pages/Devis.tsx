@@ -215,6 +215,10 @@ export default function Devis() {
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  const [selectedLignes, setSelectedLignes] = useState<Set<string>>(new Set());
+  function toggleLigneSelection(id: string) {
+    setSelectedLignes(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  }
   const lignesRef = useRef<LigneDevis[]>([]);
   lignesRef.current = lignes;
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -771,15 +775,21 @@ export default function Devis() {
   }
 
   function dropLigne(targetId: string) {
-    if (!draggedId || draggedId === targetId) { setDraggedId(null); setDragOverId(null); return; }
+    if (!draggedId) { setDragOverId(null); return; }
+    // Bloc à déplacer : la sélection si la ligne tirée en fait partie, sinon juste elle
+    const movingIds = selectedLignes.has(draggedId) && selectedLignes.size > 1
+      ? lignes.filter(l => selectedLignes.has(l.id)).map(l => l.id)
+      : [draggedId];
+    if (movingIds.includes(targetId)) { setDraggedId(null); setDragOverId(null); return; }
     saveSnapshot();
     setLignes(prev => {
-      const next = [...prev];
-      const from = next.findIndex(l => l.id === draggedId);
-      const to = next.findIndex(l => l.id === targetId);
-      if (from < 0 || to < 0) return prev;
-      const [item] = next.splice(from, 1);
-      next.splice(to, 0, item);
+      const movingSet = new Set(movingIds);
+      const block = prev.filter(l => movingSet.has(l.id)); // conserve l'ordre d'origine
+      const rest = prev.filter(l => !movingSet.has(l.id));
+      const to = rest.findIndex(l => l.id === targetId);
+      if (to < 0) return prev;
+      const next = [...rest];
+      next.splice(to, 0, ...block); // insère le bloc avant la ligne cible
       return next;
     });
     setDraggedId(null);
@@ -1966,7 +1976,15 @@ export default function Devis() {
             <div onKeyDown={e => { if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) { e.preventDefault(); undo(); } }}>
               <div className="sticky -top-2 z-20 bg-background border-b border-border py-2 -mx-1 px-1 mb-2">
                 <div className="flex items-center justify-between">
-                <Label className="text-base font-semibold">Lignes du devis</Label>
+                <div className="flex items-center gap-2">
+                  <Label className="text-base font-semibold">Lignes du devis</Label>
+                  {selectedLignes.size > 0 && (
+                    <span className="text-xs text-primary bg-primary/10 rounded-full px-2 py-0.5 flex items-center gap-1">
+                      {selectedLignes.size} sélectionnée{selectedLignes.size > 1 ? 's' : ''} — glissez pour déplacer
+                      <button onClick={() => setSelectedLignes(new Set())} title="Désélectionner" className="hover:text-foreground"><XIcon className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
@@ -2228,6 +2246,7 @@ export default function Devis() {
                         className={`rounded-lg py-1.5 border transition-all cursor-grab active:cursor-grabbing
                           ${lignesView === 'tableau' ? 'px-1' : 'px-2'}
                           ${lineGroup[l.id] && lignesView !== 'tableau' ? ' ml-4' : ''}
+                          ${selectedLignes.has(l.id) ? 'ring-2 ring-primary/50' : ''}
                           ${draggedId === l.id ? 'opacity-40 border-border/60 bg-muted/40' : ''}
                           ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-zinc-200 dark:bg-zinc-700 border-border'}`}>
                         <>
@@ -2296,6 +2315,7 @@ export default function Devis() {
                               if (lignesView === 'tableau') {
                                 return (
                                   <div className="flex items-center gap-1 flex-nowrap">
+                                    <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
                                     <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
                                     <span className="text-xs font-medium text-muted-foreground shrink-0 w-6">#{ligneNums[l.id]}</span>
                                     {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => colVisible(TABLE_LIGNE_COLS.find(c => c.key === k)!)).map(c => (
@@ -2311,6 +2331,7 @@ export default function Devis() {
                               // ── Mode CARTES : libellés par cellule, retour à la ligne ──
                               return (
                                 <div className="flex items-end gap-1 flex-wrap">
+                                  <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="mb-2 shrink-0 rounded border-input accent-primary cursor-pointer" />
                                   <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 mb-2 shrink-0" />
                                   <span className="text-xs font-medium text-muted-foreground mb-2 shrink-0 w-6">#{ligneNums[l.id]}</span>
                                   <div className="w-48 shrink-0"><Label className="text-xs">Réf.</Label>{cell.ref}</div>
