@@ -1940,7 +1940,7 @@ export default function Devis() {
                 </div>
                 </div>
               </div>
-              <div className={lignesView === 'tableau' ? 'overflow-auto max-h-[58vh]' : ''}>
+              <div className={lignesView === 'tableau' ? 'overflow-x-auto' : ''}>
               {lignesView === 'tableau' && (
                 <div className="flex items-center gap-1 px-1 py-1.5 mb-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border sticky top-0 bg-background z-[5]">
                   <span className="w-3.5 shrink-0" />
