@@ -1570,7 +1570,15 @@ export default function Clients() {
           </div>{/* end infos tab wrapper */}
           <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite') && <Button onClick={save}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>}
+            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite') && (
+              returnDevisId ? (
+                <Button onClick={() => { if (save(true)) { setDialogOpen(false); navigate(`/devis?editDevis=${returnDevisId}`); } }}>
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis
+                </Button>
+              ) : (
+                <Button onClick={() => save()}>{editingClient ? 'Modifier' : 'Ajouter'}</Button>
+              )
+            )}
           </div>
         </DialogContent>
       </Dialog>
