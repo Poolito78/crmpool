@@ -45,6 +45,7 @@ const LIGNE_COLS = [
   { key: 'surface', label: 'Surface (m²)' },
   { key: 'conso',   label: 'Conso. (kg/m²)' },
   { key: 'poids',   label: 'Poids (kg)' },
+  { key: 'prixht',  label: 'Prix HT' },
   { key: 'remise',  label: 'Rem. %' },
   { key: 'netht',   label: 'Net HT' },
   { key: 'marge',   label: 'Marge / Coeff' },
@@ -63,13 +64,13 @@ const TABLE_LIGNE_COLS: { key: TLCKey; label: string; width: number; optional?: 
   { key: 'poids',       label: 'Poids kg',      width: 64,  optional: 'poids' },
   { key: 'qte',         label: 'Qté',           width: 64 },
   { key: 'unite',       label: 'Unité',         width: 56 },
-  { key: 'prixht',      label: 'Prix HT',       width: 96 },
+  { key: 'prixht',      label: 'Prix HT',       width: 96,  optional: 'prixht' },
   { key: 'remise',      label: 'Rem. %',        width: 64,  optional: 'remise' },
   { key: 'netht',       label: 'Net HT',        width: 96,  optional: 'netht' },
   { key: 'marge',       label: 'Marge / Coeff', width: 96,  optional: 'marge', align: 'right' },
   { key: 'total',       label: 'Total HT',      width: 96,  align: 'right' },
 ];
-const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso', 'remise', 'netht'];
+const DEFAULT_LIGNE_COLS: LigneColKey[] = ['surface', 'conso', 'prixht', 'remise', 'netht'];
 
 const statutColors: Record<string, string> = {
   brouillon: 'bg-muted text-muted-foreground',
@@ -169,7 +170,7 @@ export default function Devis() {
 
   const [visibleLigneCols, setVisibleLigneCols] = useState<Set<LigneColKey>>(() => {
     try {
-      const s = localStorage.getItem('devis_ligne_cols_v2');
+      const s = localStorage.getItem('devis_ligne_cols_v3');
       if (s) {
         const parsed = JSON.parse(s) as LigneColKey[];
         if (Array.isArray(parsed) && parsed.length > 0) return new Set(parsed);
@@ -682,7 +683,7 @@ export default function Devis() {
   }, [colChooserOpen]);
 
   useEffect(() => {
-    localStorage.setItem('devis_ligne_cols_v2', JSON.stringify([...visibleLigneCols]));
+    localStorage.setItem('devis_ligne_cols_v3', JSON.stringify([...visibleLigneCols]));
   }, [visibleLigneCols]);
 
   function insertKit(kitProd: Produit) {
