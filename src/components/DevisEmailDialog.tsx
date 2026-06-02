@@ -352,7 +352,10 @@ Restant à ta disposition pour tout complément d'information.`
         }))
         .catch(() => null);
       const refDate = devis.dateEnvoi || devis.dateCreation;
-      pdfBase64Ref.current = await generatePdfFromElement(pdfContainerRef.current, {
+      // Capturer le document A4 lui-même (#devis-print), pas le wrapper externe
+      // (qui ajoute le padding p-4/p-8 de l'aperçu → contenu décalé/rogné).
+      const printEl = (pdfContainerRef.current.querySelector('#devis-print') as HTMLElement) ?? pdfContainerRef.current;
+      pdfBase64Ref.current = await generatePdfFromElement(printEl, {
         devisNumero: devis.numero,
         devisDate: refDate ? formatDate(refDate) : undefined,
         logoDataUrl: logoDataUrl ?? undefined,
