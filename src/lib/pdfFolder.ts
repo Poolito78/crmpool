@@ -299,7 +299,10 @@ export async function generatePdfFromElement(
       const remaining = imgH - consumed;
       if (remaining <= pageContentH) { slices.push(remaining); break; }
       const naturalBreak = consumed + pageContentH;
-      const minBreak = consumed + pageContentH * 0.3;
+      // On ne recule que faiblement (max ~18%) pour aligner sur une fin de ligne :
+      // un seuil trop bas (ex. 0.3) renvoyait le saut jusqu'à la dernière ligne du
+      // tableau, laissant un grand vide en bas de page.
+      const minBreak = consumed + pageContentH * 0.82;
       let bestBreak = naturalBreak;
       for (let i = rowBottoms.length - 1; i >= 0; i--) {
         if (rowBottoms[i] <= naturalBreak && rowBottoms[i] >= minBreak) {
