@@ -506,7 +506,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       {/* Devis document — effet page A4 */}
       <div className="bg-white dark:bg-card shadow-lg rounded-sm mx-auto print:shadow-none print:rounded-none"
            style={{ width: '100%', maxWidth: '794px' }}>
-      <div className="px-10 pb-7 text-sm" style={{ paddingTop: '1rem', position: 'relative' }} id="devis-print" ref={printAreaRef}>
+      <div className="px-6 pb-7 text-sm" style={{ paddingTop: '1rem', position: 'relative' }} id="devis-print" ref={printAreaRef}>
         {/* Espace libre en haut pour impression (entête papier à en-tête) */}
         <div style={{ height: '0.3cm' }} />
         {/* Header */}
@@ -746,9 +746,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '30px' }} />{/* kg cond */}
                 <col style={{ width: '28px' }} />{/* Unité cond */}
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
-                <col style={{ width: '72px' }} />{/* Unité prix */}
-                <col style={{ width: '58px' }} />{/* (Kg) */}
-                <col style={{ width: '72px' }} />{/* Total HT */}
+                <col style={{ width: '64px' }} />{/* Unité prix */}
+                <col style={{ width: '50px' }} />{/* (Kg) */}
+                <col style={{ width: '76px' }} />{/* Total HT */}
               </colgroup>
               <thead>
                 {/* Centrage vertical : texte directement dans <th>, align-middle Tailwind.
