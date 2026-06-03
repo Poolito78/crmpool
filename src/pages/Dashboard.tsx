@@ -21,7 +21,10 @@ export default function Dashboard() {
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
-  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel'>('overview');
+  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel'>(() => {
+    try { return (localStorage.getItem('dashboard_tab') as 'overview' | 'previsionnel') || 'overview'; } catch { return 'overview'; }
+  });
+  const setDashTabPersist = (t: 'overview' | 'previsionnel') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -188,8 +191,8 @@ export default function Dashboard() {
 
       {/* ── Onglets tableau de bord ── */}
       <div className="flex gap-1 border-b border-border">
-        <button onClick={() => setDashTab('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
-        <button onClick={() => setDashTab('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>
+        <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
+        <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>
       </div>
 
       {dashTab === 'previsionnel' ? (
@@ -622,7 +625,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
 
   const renderRow = ({ d, client, montant, proba, pondere, coutPondere, margePondere }: typeof rows[number]) => (
     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
-      <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
+      <td className="px-4 py-2.5"><Link to={`/devis?editDevis=${d.id}&returnTo=dashboard`} className="font-medium text-primary hover:underline">{d.numero}</Link></td>
       <td className="px-4 py-2.5 truncate max-w-[200px]">{client?.societe || client?.nom || '—'}</td>
       <td className="px-4 py-2.5"><span className="text-xs px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{d.statut}</span></td>
       <td className="px-4 py-2.5 text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>

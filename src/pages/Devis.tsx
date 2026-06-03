@@ -186,6 +186,8 @@ export default function Devis() {
 
   // Auto-open devis editor via ?editDevis=<id> URL param
   const editDevisHandledRef = useRef(false);
+  // Page de retour à la fermeture du devis (ex: ouvert depuis le tableau de bord)
+  const returnToRef = useRef<string | null>(null);
   useEffect(() => {
     if (editDevisHandledRef.current) return;
     const editDevisId = searchParams.get('editDevis');
@@ -193,6 +195,7 @@ export default function Devis() {
     if (devis.length === 0) return; // wait for data
     const d = devis.find(dv => dv.id === editDevisId);
     if (d) {
+      returnToRef.current = searchParams.get('returnTo');
       openEdit(d);
       editDevisHandledRef.current = true;
       setSearchParams({}, { replace: true });
@@ -912,6 +915,7 @@ export default function Devis() {
     if (!silent) {
       setDialogOpen(false);
       setEditingId(null);
+      if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
     }
     return savedId;
   }
@@ -1679,7 +1683,11 @@ export default function Devis() {
           if (savedId) toast.info('Brouillon sauvegardé automatiquement', { duration: 3000 });
         }
         setDialogOpen(open);
-        if (!open) setEditingId(null);
+        if (!open) {
+          setEditingId(null);
+          // Retour à la page d'origine si ouvert depuis ailleurs (ex: tableau de bord)
+          if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
+        }
       }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
@@ -1750,7 +1758,7 @@ export default function Devis() {
                 }}><Send className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Odoo</span></Button>
               )}
               <span className="w-px h-6 bg-border mx-0.5" />
-              <Button variant="outline" size="sm" onClick={() => setDialogOpen(false)}>Annuler</Button>
+              <Button variant="outline" size="sm" onClick={() => { setDialogOpen(false); setEditingId(null); if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); } }}>Annuler</Button>
               <Button size="sm" onClick={() => save()}>
                 <FileText className="w-4 h-4 sm:mr-1.5" />
                 <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
