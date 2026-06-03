@@ -195,8 +195,9 @@ export default function Devis() {
     if (devis.length === 0) return; // wait for data
     const d = devis.find(dv => dv.id === editDevisId);
     if (d) {
-      returnToRef.current = searchParams.get('returnTo');
+      const rt = searchParams.get('returnTo');
       openEdit(d);
+      returnToRef.current = rt; // après openEdit (qui réinitialise returnToRef)
       editDevisHandledRef.current = true;
       setSearchParams({}, { replace: true });
     }
@@ -430,6 +431,7 @@ export default function Devis() {
   }
 
   function openNew() {
+    returnToRef.current = null;
     setEditingId(null);
     setClientId('');
     setContactId('');
@@ -466,6 +468,7 @@ export default function Devis() {
   }
 
   function openEdit(d: DevisType) {
+    returnToRef.current = null; // ouverture directe (liste) → pas de retour spécial
     setEditingId(d.id);
     populateForm(d);
     setDialogOpen(true);
