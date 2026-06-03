@@ -938,7 +938,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? fmt(conso) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? fmt(totalKgConso, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? ''}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? (l.quantite || '')}</td>
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
@@ -957,7 +957,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{conso > 0 ? fmt(conso) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{kg != null ? fmt(kg, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? ''}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? (l.quantite || '')}</td>
                             <td className="py-1.5 px-1 text-right">{condKg ?? ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
