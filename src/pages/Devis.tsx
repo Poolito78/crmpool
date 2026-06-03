@@ -186,39 +186,46 @@ export default function Devis() {
 
   // Auto-open devis editor via ?editDevis=<id> URL param
   const editDevisHandledRef = useRef(false);
-  // Page de retour à la fermeture du devis (ex: ouvert depuis le tableau de bord)
-  const returnToRef = useRef<string | null>(null);
-  // Gestion du bouton « retour » navigateur : une entrée d'historique est poussée
-  // à l'ouverture du devis pour que « back » ferme le devis (au lieu de quitter la page).
+  // ── Gestion du retour / fermeture du devis ──────────────────────────────────
+  // openedViaUrl=true : ouvert depuis une navigation (ex. tableau de bord) → il
+  //   existe déjà une vraie entrée d'historique → fermer = revenir en arrière.
+  // openedViaUrl=false : ouvert directement depuis la liste (modale sans nav) →
+  //   on pousse une entrée factice pour que le bouton « retour » ferme la modale
+  //   et reste sur la liste.
+  const openedViaUrlRef = useRef(false);
   const dialogOpenRef = useRef(false);
-  const historyPushedRef = useRef(false);
-  // Ferme proprement le devis (autosave brouillon + retour éventuel). fromPop=true
-  // quand déclenché par le bouton retour (l'entrée d'historique est déjà consommée).
+  const pushedStateRef = useRef(false);
   const closeDevisDialog = (fromPop = false) => {
-    if (!dialogOpenRef.current) return; // déjà fermé (évite la ré-entrance popstate)
+    if (!dialogOpenRef.current) return; // déjà fermé (évite la ré-entrance)
     dialogOpenRef.current = false;
     if (!editingId) { const savedId = save(true); if (savedId) toast.info('Brouillon sauvegardé automatiquement', { duration: 3000 }); }
     setDialogOpen(false);
     setEditingId(null);
-    if (!fromPop && historyPushedRef.current) { historyPushedRef.current = false; window.history.back(); }
-    if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
+    if (openedViaUrlRef.current) {
+      // Ouvert via navigation → revenir à la page précédente effective
+      openedViaUrlRef.current = false;
+      if (!fromPop) navigate(-1);
+    } else if (pushedStateRef.current && !fromPop) {
+      // Ouvert depuis la liste → retirer l'entrée factice (reste sur la liste)
+      pushedStateRef.current = false;
+      window.history.back();
+    }
   };
   useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
-  // Réf toujours à jour vers la fonction de fermeture (évite les closures périmées dans popstate)
   const closeRef = useRef(closeDevisDialog);
   closeRef.current = closeDevisDialog;
-  // Pousse une entrée d'historique à l'ouverture
+  // Entrée d'historique factice à l'ouverture — uniquement pour les ouvertures liste
   useEffect(() => {
-    if (dialogOpen && !historyPushedRef.current) {
-      historyPushedRef.current = true;
+    if (dialogOpen && !openedViaUrlRef.current && !pushedStateRef.current) {
+      pushedStateRef.current = true;
       window.history.pushState({ devisDialog: true }, '');
     }
   }, [dialogOpen]);
-  // Intercepte le retour navigateur : ferme le devis au lieu de naviguer
+  // Bouton « retour » navigateur → ferme le devis si ouvert depuis la liste
   useEffect(() => {
     const onPop = () => {
-      if (dialogOpenRef.current) {
-        historyPushedRef.current = false;
+      if (dialogOpenRef.current && !openedViaUrlRef.current) {
+        pushedStateRef.current = false;
         closeRef.current(true);
       }
     };
@@ -232,10 +239,10 @@ export default function Devis() {
     if (devis.length === 0) return; // wait for data
     const d = devis.find(dv => dv.id === editDevisId);
     if (d) {
-      const rt = searchParams.get('returnTo');
       openEdit(d);
-      returnToRef.current = rt; // après openEdit (qui réinitialise returnToRef)
+      openedViaUrlRef.current = true; // après openEdit (qui réinitialise les refs)
       editDevisHandledRef.current = true;
+      // Nettoie le paramètre d'URL sans ajouter d'entrée d'historique (navigate(-1) reste valide)
       setSearchParams({}, { replace: true });
     }
   }, [devis]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -468,7 +475,7 @@ export default function Devis() {
   }
 
   function openNew() {
-    returnToRef.current = null;
+    openedViaUrlRef.current = false;
     setEditingId(null);
     setClientId('');
     setContactId('');
@@ -505,7 +512,7 @@ export default function Devis() {
   }
 
   function openEdit(d: DevisType) {
-    returnToRef.current = null; // ouverture directe (liste) → pas de retour spécial
+    openedViaUrlRef.current = false; // ouverture directe (liste)
     setEditingId(d.id);
     populateForm(d);
     setDialogOpen(true);
@@ -953,12 +960,11 @@ export default function Devis() {
       }
     }
     if (!silent) {
-      dialogOpenRef.current = false; // évite la ré-entrance via popstate du history.back()
+      dialogOpenRef.current = false; // évite la ré-entrance via popstate
       setDialogOpen(false);
       setEditingId(null);
-      // Consomme l'entrée d'historique poussée à l'ouverture (sans re-naviguer)
-      if (historyPushedRef.current) { historyPushedRef.current = false; window.history.back(); }
-      if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
+      if (openedViaUrlRef.current) { openedViaUrlRef.current = false; navigate(-1); }
+      else if (pushedStateRef.current) { pushedStateRef.current = false; window.history.back(); }
     }
     return savedId;
   }
