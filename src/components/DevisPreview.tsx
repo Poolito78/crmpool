@@ -939,7 +939,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? fmt(totalKgConso, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? (l.quantite || '')}</td>
-                            <td className="py-1.5 px-1 text-right">{condKgComp ?? ''}</td>
+                            <td className="py-1.5 px-1 text-right">{condKgComp ?? (poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : '')}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
@@ -958,7 +958,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{kg != null ? fmt(kg, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? (l.quantite || '')}</td>
-                            <td className="py-1.5 px-1 text-right">{condKg ?? ''}</td>
+                            <td className="py-1.5 px-1 text-right">{condKg ?? (poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : '')}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
