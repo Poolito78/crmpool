@@ -188,6 +188,43 @@ export default function Devis() {
   const editDevisHandledRef = useRef(false);
   // Page de retour à la fermeture du devis (ex: ouvert depuis le tableau de bord)
   const returnToRef = useRef<string | null>(null);
+  // Gestion du bouton « retour » navigateur : une entrée d'historique est poussée
+  // à l'ouverture du devis pour que « back » ferme le devis (au lieu de quitter la page).
+  const dialogOpenRef = useRef(false);
+  const historyPushedRef = useRef(false);
+  // Ferme proprement le devis (autosave brouillon + retour éventuel). fromPop=true
+  // quand déclenché par le bouton retour (l'entrée d'historique est déjà consommée).
+  const closeDevisDialog = (fromPop = false) => {
+    if (!dialogOpenRef.current) return; // déjà fermé (évite la ré-entrance popstate)
+    dialogOpenRef.current = false;
+    if (!editingId) { const savedId = save(true); if (savedId) toast.info('Brouillon sauvegardé automatiquement', { duration: 3000 }); }
+    setDialogOpen(false);
+    setEditingId(null);
+    if (!fromPop && historyPushedRef.current) { historyPushedRef.current = false; window.history.back(); }
+    if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
+  };
+  useEffect(() => { dialogOpenRef.current = dialogOpen; }, [dialogOpen]);
+  // Réf toujours à jour vers la fonction de fermeture (évite les closures périmées dans popstate)
+  const closeRef = useRef(closeDevisDialog);
+  closeRef.current = closeDevisDialog;
+  // Pousse une entrée d'historique à l'ouverture
+  useEffect(() => {
+    if (dialogOpen && !historyPushedRef.current) {
+      historyPushedRef.current = true;
+      window.history.pushState({ devisDialog: true }, '');
+    }
+  }, [dialogOpen]);
+  // Intercepte le retour navigateur : ferme le devis au lieu de naviguer
+  useEffect(() => {
+    const onPop = () => {
+      if (dialogOpenRef.current) {
+        historyPushedRef.current = false;
+        closeRef.current(true);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
   useEffect(() => {
     if (editDevisHandledRef.current) return;
     const editDevisId = searchParams.get('editDevis');
@@ -916,8 +953,11 @@ export default function Devis() {
       }
     }
     if (!silent) {
+      dialogOpenRef.current = false; // évite la ré-entrance via popstate du history.back()
       setDialogOpen(false);
       setEditingId(null);
+      // Consomme l'entrée d'historique poussée à l'ouverture (sans re-naviguer)
+      if (historyPushedRef.current) { historyPushedRef.current = false; window.history.back(); }
       if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
     }
     return savedId;
@@ -1680,17 +1720,8 @@ export default function Devis() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
-        if (!open && !editingId) {
-          // Fermeture via X / Échap / fond — auto-save si contenu suffisant
-          const savedId = save(true);
-          if (savedId) toast.info('Brouillon sauvegardé automatiquement', { duration: 3000 });
-        }
+        if (!open) { closeDevisDialog(); return; }
         setDialogOpen(open);
-        if (!open) {
-          setEditingId(null);
-          // Retour à la page d'origine si ouvert depuis ailleurs (ex: tableau de bord)
-          if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); }
-        }
       }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
@@ -1761,7 +1792,7 @@ export default function Devis() {
                 }}><Send className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Odoo</span></Button>
               )}
               <span className="w-px h-6 bg-border mx-0.5" />
-              <Button variant="outline" size="sm" onClick={() => { setDialogOpen(false); setEditingId(null); if (returnToRef.current === 'dashboard') { returnToRef.current = null; navigate('/'); } }}>Annuler</Button>
+              <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>
               <Button size="sm" onClick={() => save()}>
                 <FileText className="w-4 h-4 sm:mr-1.5" />
                 <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
