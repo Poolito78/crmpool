@@ -1101,7 +1101,11 @@ export default function Devis() {
       openArchiveDialog({ ...d, statut: newStatut });
       return;
     }
-    updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut } : dv));
+    // Passage à 'accepté' → probabilité 100% + date de réalisation = aujourd'hui (si absente)
+    const acceptPatch = (newStatut === 'accepté')
+      ? { probabiliteReussite: 100, dateRealisation: d?.dateRealisation || new Date().toISOString().split('T')[0] }
+      : {};
+    updateDevis(prev => prev.map(dv => dv.id === id ? { ...dv, statut: newStatut, ...acceptPatch } : dv));
     toast.success('Statut mis à jour');
     logHistorique({ entiteType: 'devis', entiteId: id, entiteNumero: d?.numero ?? id, action: 'statut', details: { ancienStatut: d?.statut, nouveauStatut: newStatut } });
     if (newStatut === 'accepté' && d) {
@@ -1383,7 +1387,7 @@ export default function Devis() {
                       case 'numero': return <td style={ws} className={`px-3 py-2.5${trunc}`}><p className="font-semibold text-sm truncate">{d.numero}</p></td>;
                       case 'statut': return (
                         <td style={ws} className="px-3 py-2.5">
-                          <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}>
+                          <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; const patch = ns === 'accepté' ? { probabiliteReussite: 100, dateRealisation: d.dateRealisation || new Date().toISOString().split('T')[0] } : {}; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns, ...patch } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}>
                             <option value="brouillon">brouillon</option><option value="envoyé">envoyé</option><option value="accepté">accepté</option><option value="refusé">refusé</option><option value="expiré">expiré</option><option value="archivé">archivé</option>
                           </select>
                         </td>
@@ -1943,7 +1947,13 @@ export default function Devis() {
               <div>
                 <Label>Statut</Label>
                 <select className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm" value={statut} onChange={e => {
-                  setStatut(e.target.value as DevisType['statut']);
+                  const ns = e.target.value as DevisType['statut'];
+                  setStatut(ns);
+                  // Passage à 'accepté' → probabilité 100% + date de réalisation auto (si absente)
+                  if (ns === 'accepté') {
+                    setProbabiliteReussite(100);
+                    if (!dateRealisation) setDateRealisation(new Date().toISOString().split('T')[0]);
+                  }
                 }}>
                   <option value="brouillon">Brouillon</option>
                   <option value="envoyé">Envoyé</option>
