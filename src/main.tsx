@@ -1,6 +1,11 @@
 import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
+import { registerSW } from "virtual:pwa-register";
+
+// Enregistre le service worker (mise à jour auto en arrière-plan).
+// Une nouvelle version s'applique au prochain chargement.
+registerSW({ immediate: true });
 
 window.addEventListener('error', (e) => {
   const root = document.getElementById('root');

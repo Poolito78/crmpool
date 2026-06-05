@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+import { VitePWA } from "vite-plugin-pwa";
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -19,7 +20,46 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(),
+    mode === "development" && componentTagger(),
+    VitePWA({
+      registerType: "autoUpdate",
+      // Le SW ne s'active qu'en build (pas en dev) pour ne pas gêner le HMR.
+      devOptions: { enabled: false },
+      includeAssets: ["favicon.ico", "logo-isofloor.png"],
+      manifest: {
+        name: "MonCRM - ISOFLOOR",
+        short_name: "MonCRM",
+        description: "CRM : clients, devis, produits, stock, fournisseurs.",
+        theme_color: "#cc0000",
+        background_color: "#ffffff",
+        display: "standalone",
+        orientation: "portrait",
+        start_url: "/",
+        scope: "/",
+        icons: [
+          { src: "/logo-isofloor.png", sizes: "192x192", type: "image/png", purpose: "any" },
+          { src: "/logo-isofloor.png", sizes: "512x512", type: "image/png", purpose: "any" },
+          { src: "/logo-isofloor.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+        ],
+      },
+      workbox: {
+        // Précache les chunks JS/CSS/HTML (les gros chunks PDF/Excel inclus → 2e ouverture instantanée)
+        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // pdf.worker ~2,1 Mo
+        navigateFallback: "/index.html",
+        // Ne jamais mettre en cache les appels Supabase (données toujours fraîches)
+        navigateFallbackDenylist: [/^\/anthropic/, /supabase\.co/],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.origin.includes("supabase.co"),
+            handler: "NetworkOnly",
+          },
+        ],
+      },
+    }),
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
