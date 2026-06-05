@@ -60,7 +60,7 @@ When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, 
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`. Only `'ligne'` rows count in totals. `prixAchatLigne` = free-line purchase cost (e.g. energy surcharges). |
 | `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is price per kg from supplier catalog — **different** from `Produit.prixAchat`. |
 | `Client` | `delaiReglement?: string` — preset payment terms (`'Comptant' \| '30J' \| '30J FDM' \| '45J' \| '45J FDM'`). Drives auto-fill of the `conditions` textarea in the devis form when client changes. `DELAI_REGLEMENT_OPTIONS` (label + full text) exported from `Clients.tsx`. |
-| `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation`. `statut` includes `'archivé'` in addition to the standard statuses. Archived devis carry: `archiveDate?`, `archiveRaison?`, `archiveCommentaire?`, `archiveConcurrents?`. |
+| `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation`. `statut` includes `'archivé'`. Archived devis carry: `archiveDate?`, `archiveRaison?`, `archiveCommentaire?`, `archiveConcurrents?`. Prévisionnel fields: `probabiliteReussite?` (0/25/50/75/100), `dateRealisation?` (YYYY-MM-DD), `moContent?` (HTML riche de l'onglet Mise en œuvre). Passer à `'accepté'` met auto `probabiliteReussite=100` + `dateRealisation=today` (sur les 3 sélecteurs de statut). |
 | `CrmAction` | Has `concurrents?: CrmActionConcurrent[]` for recording competitor prices observed during visits/calls. Only include in DB payload when defined (column may not exist yet). |
 | `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constant `RAISON_ARCHIVE` holds label/color/messageDefaut per key. |
 
@@ -93,7 +93,7 @@ Current structure:
 
 | Page | Role |
 |---|---|
-| `Devis.tsx` | Largest file. Full devis lifecycle: list, create/edit dialog (tabs: Devis / Comparatif / CRM), archive dialog, PDF, email. Supports `?editDevis=<id>` URL param to auto-open the edit dialog after data loads (uses a `useRef` guard to fire only once). |
+| `Devis.tsx` | Largest file. Full devis lifecycle: list (vue liste cartes / vue tableau colonnes), create/edit dialog (tabs: **Devis / Comparatif / MO / CRM / Notes & Fichiers**), archive dialog, PDF, email. Lignes éditables en mode cartes OU tableau (`lignesView`, persisté) — la vue tableau utilise `TABLE_LIGNE_COLS` + `useTableColumns('devis_lignes_table')` (colonnes resize/drag), en-tête figé dans la barre sticky, scroll H synchronisé. Sélection multi-lignes (cases à cocher) pour déplacer un bloc (groupe + lignes + sous-total) ensemble. **Fermeture / retour** : pattern historique navigateur — ouverture liste = `pushState` factice (back ferme la modale, reste sur la liste) ; ouverture via `?editDevis=` (navigation) = `navigate(-1)` (revient à la vraie page précédente). Voir `openedViaUrlRef` / `closeDevisDialog`. |
 | `CRM.tsx` | 5-tab page: Pipeline / Actions / Calendrier / Analyse / Veille. Uses its own scroll container (see below). |
 | `VeilleConcurrence.tsx` | Competitor watch: 4 sub-tabs (Fiches / Produits / Notes / Tableau pivot). Embeds `useConcurrents()`. Also embedded as a tab inside CRM.tsx. |
 | `Produits.tsx` | Product catalog with tiered pricing, variants, kit composition, supplier links, qteVendue column. |
@@ -105,20 +105,20 @@ Current structure:
 | `GED.tsx` | Document management (pieces jointes per devis line via `devis_pieces_jointes` table). |
 | `CalculateurUPS.tsx` | Shipping cost calculator. 5 tabs: Standard, Transporteurs, Barèmes transporteurs, Saisie manuelle, **Achat**. The Achat tab stores real transport purchase history (drag-and-drop reorder, sortable, AI PDF extraction). localStorage key `crm_transport_achats`. `AchatTransport` interface has `fournisseur` (sender/client, e.g. QRM) distinct from `transporteur` (carrier, e.g. UPS). |
 | `StatsVariantes.tsx` | Sales statistics by product variant. |
-| `Dashboard.tsx` | KPI summary. |
+| `Dashboard.tsx` | 2 onglets (persistés localStorage `dashboard_tab`) : **Vue d'ensemble** (KPIs, alertes, derniers devis…) et **Prévisionnel devis** — pipeline pondéré par `probabiliteReussite` : CA pondéré, coût fournisseur pondéré, marge pondérée ; filtres statut + période de réalisation ; groupement par mois ; graphe `recharts` (BarChart) + export Excel. Liens devis avec `&returnTo=dashboard`. |
 
 ### CRM page scroll architecture
 
-`CRM.tsx` uses a self-contained scroll container to keep the tab bar always visible regardless of content length:
+`CRM.tsx` remplit la hauteur de `<main>` en flex-fill et annule son padding via marges négatives (alignées sur le padding réel de `main` : `-mx-4 md:-mx-6 -mt-2 -mb-20 md:-mb-6`) :
 
 ```
-<div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
-  <div className="flex-none">   ← alert bar (when actions overdue)
-  <div className="flex-none">   ← tab bar (Pipeline / Actions / Calendrier / Analyse / Veille) — NEVER scrolls
-  <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">  ← all tab content scrolls here
+<div className="flex flex-col flex-1 min-h-0 -mx-4 md:-mx-6 -mt-2 -mb-20 md:-mb-6">
+  <button className="flex-none">   ← bandeau « N actions en retard » (cliquable, ouvre l'onglet Actions)
+  <div className="flex-none">      ← barre d'onglets (Pipeline / Actions / Calendrier / Analyse / Veille) — NE scrolle JAMAIS
+  <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">  ← le contenu d'onglet scrolle ici
 ```
 
-Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern avoids the CSS bug where `overflow-x: hidden` on a parent breaks `position: sticky`.
+Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern avoids the CSS bug where `overflow-x: hidden` on a parent breaks `position: sticky`. ⚠️ Ne pas utiliser `-m-4` + `height: calc(100vh-4rem)` (ancien hack) : depuis le passage de `<main>` en flex (`pt-2`), ça décalait le bandeau sous le header.
 
 ### Key components (`src/components/`)
 
@@ -132,8 +132,11 @@ Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern 
 - `AnalyseDocumentDialog.tsx` — AI-powered document classifier: reads PDF/EML/MSG, classifies type, and extracts structured fields.
 - `DevisAssistantDialog.tsx`, `AiCalculatorDialog.tsx`, `EmailAnalyzerDialog.tsx`, `EmailToContactDialog.tsx` — AI-assisted workflows.
 - `DevisChatter.tsx` — Threaded comments/history on a devis.
-- `ClientCombobox.tsx`, `ProduitCombobox.tsx`, `VarianteSelect.tsx` — Reusable entity pickers.
+- `ClientCombobox.tsx`, `ProduitCombobox.tsx`, `VarianteSelect.tsx` — Reusable entity pickers. `ClientCombobox` accepte `onCreateNew(societe)` : si aucune société trouvée, propose « Créer la société … » (Devis crée le client persisté puis ouvre le formulaire complet via `/clients?editClient=<id>&returnDevis=<id>`).
 - `TruncTooltip.tsx` — Text truncation with hover tooltip.
+- `RichTextEditor.tsx` — Éditeur HTML riche (contentEditable + `execCommand`, sans dépendance) : gras/italique/souligné, titres, listes, taille, **couleur** (palette + sélecteur libre). Utilisé par l'onglet MO du devis. CSS placeholder `.rte-content:empty::before` dans `index.css`.
+- `RowActionsMenu.tsx` — Roue crantée d'actions par ligne (menu en **portail** position fixe, jamais rogné). Actions = `{ icon, label, onClick, danger?, hidden? }`. Utilisé sur toutes les vues tableau (Devis, Produits, Clients, Commandes, Factures).
+- `TableGearMenu.tsx` / `PageHeaderSlot.tsx` — voir section « Tableaux de données » ci-dessous.
 
 ### Library modules (`src/lib/`)
 
@@ -165,11 +168,21 @@ Replicate this pattern consistently in: the comparatif IIFE, devis card list (`t
 
 **`populateForm` price recalculation:** when loading an existing devis into the edit dialog, `prixUnitaireHT` is recalculated for any `'ligne'`-type row where `getVarianteDiff > 0`. This corrects values saved before the variant-prixDiff logic was added without overriding manually set prices on non-variant lines.
 
+**Onglet MO (Mise en œuvre)** : éditeur `RichTextEditor` sur `moContent`. Bouton « (Re)générer » construit le récap depuis groupes (titres), notes (texte), et lignes produit (description produit + note de ligne). « PDF Mise en œuvre » → `generatePdfFromElement` (titré « Mise en œuvre — N° — système »), enregistré dans le dossier devis **et** joint aux Notes & Fichiers (bucket `devis-pj` + table `devis_pieces_jointes`). `DevisChatter` accepte `embedded` pour s'afficher dans l'onglet « Notes & Fichiers ».
+
+**Aperçu/PDF (`DevisPreview`)** : la colonne « Unité » (Condit.) et « KG » retombent sur `l.quantite` (× poids) quand le calcul auto surface×conso n'aboutit pas. Le PDF de l'email capture `#devis-print` (pas le wrapper) pour un rendu identique au bouton PDF direct. Pagination : `minBreak` à 0.82 (recul de saut limité) pour éviter un grand vide en bas de page.
+
 ### Supabase migrations (`supabase/migrations/`)
 
 SQL migrations are numbered by timestamp. Apply via Supabase dashboard SQL editor or CLI (`supabase db push`). `src/integrations/supabase/types.ts` is auto-generated — regenerate with `supabase gen types typescript`.
 
 To apply programmatically from the browser, use the Supabase Management API with `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/qkjxcfosutclnahvxflf/database/query`.
+
+**Diagnostic « ne persiste pas » :** les `updateXxx` font les écritures Supabase en fire-and-forget. Si un upsert envoie une colonne inexistante, PostgREST renvoie 400 et **toute la ligne est rejetée silencieusement** (perte de données). Les écritures clients loggent désormais `console.error('[clients update] …')` ; une erreur `Could not find the 'X' column` = colonne manquante → `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Colonnes récemment ajoutées sur `devis` : `mo_content text`, `probabilite_reussite numeric`, `date_realisation text` ; sur `clients` : champs compta/légal (`siret`, `tva_intra`, `capital_social`…). Les écritures `clients` utilisent `upsert` (pas insert/update séparés) pour éviter les courses création-puis-modif.
+
+**Edge Functions** (`supabase/functions/*`) : déployer avec `.\deploy-function.ps1 <nom>` (ou `-All`). Le script demande l'access token Supabase (ou réutilise `SUPABASE_ACCESS_TOKEN`). Fonctions : `extract-client`, `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`, `send-devis-email`.
+
+⚠️ **Ne jamais éditer un fichier source via PowerShell `Set-Content`/`Out-File`** : l'encodage casse les accents UTF-8 (mojibake `envoyÃ©`). Utiliser l'outil Edit.
 
 ### localStorage column visibility (table pages)
 
