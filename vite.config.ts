@@ -25,6 +25,22 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // Sépare les grosses libs dans leurs propres chunks → chargées seulement
+    // quand une page qui les utilise est ouverte (allège le bundle initial mobile).
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-supabase': ['@supabase/supabase-js'],
+          'vendor-xlsx': ['xlsx'],
+          'vendor-pdf': ['jspdf', 'html2canvas'],
+          'vendor-charts': ['recharts'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1200,
+  },
   // xlsx (SheetJS) référence process/Buffer de Node.js — les rendre disponibles dans le navigateur
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),

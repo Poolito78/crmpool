@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from "react";
+import { Component, lazy, Suspense, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,25 +26,27 @@ import { StoreProvider } from "@/lib/StoreContext";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import CRMLayout from "@/components/CRMLayout";
-import Dashboard from "@/pages/Dashboard";
-import Clients from "@/pages/Clients";
-import Produits from "@/pages/Produits";
-import Fournisseurs from "@/pages/Fournisseurs";
-import Stock from "@/pages/Stock";
-import Commandes from "@/pages/Commandes";
-import CommandesClient from "@/pages/CommandesClient";
-import Devis from "@/pages/Devis";
-import CalculateurUPS from "@/pages/CalculateurUPS";
-import GED from "@/pages/GED";
-import FacturesClient from "@/pages/FacturesClient";
-import FacturesFournisseur from "@/pages/FacturesFournisseur";
-import CRM from "@/pages/CRM";
-import StatsVariantes from "@/pages/StatsVariantes";
-import VeilleConcurrence from "@/pages/VeilleConcurrence";
-import Parametres from "@/pages/Parametres";
+// Auth/Reset chargés en statique (écrans d'entrée, requis immédiatement)
 import Auth from "@/pages/Auth";
 import ResetPassword from "@/pages/ResetPassword";
-import NotFound from "./pages/NotFound";
+// Pages applicatives chargées à la demande (code-splitting → bundle initial allégé)
+const Dashboard = lazy(() => import("@/pages/Dashboard"));
+const Clients = lazy(() => import("@/pages/Clients"));
+const Produits = lazy(() => import("@/pages/Produits"));
+const Fournisseurs = lazy(() => import("@/pages/Fournisseurs"));
+const Stock = lazy(() => import("@/pages/Stock"));
+const Commandes = lazy(() => import("@/pages/Commandes"));
+const CommandesClient = lazy(() => import("@/pages/CommandesClient"));
+const Devis = lazy(() => import("@/pages/Devis"));
+const CalculateurUPS = lazy(() => import("@/pages/CalculateurUPS"));
+const GED = lazy(() => import("@/pages/GED"));
+const FacturesClient = lazy(() => import("@/pages/FacturesClient"));
+const FacturesFournisseur = lazy(() => import("@/pages/FacturesFournisseur"));
+const CRM = lazy(() => import("@/pages/CRM"));
+const StatsVariantes = lazy(() => import("@/pages/StatsVariantes"));
+const VeilleConcurrence = lazy(() => import("@/pages/VeilleConcurrence"));
+const Parametres = lazy(() => import("@/pages/Parametres"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -107,28 +109,34 @@ function AppRoutes() {
 
   return (
     <StoreProvider>
-      <Routes>
-        <Route element={<CRMLayout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/clients" element={<Clients />} />
-          <Route path="/produits" element={<Produits />} />
-          <Route path="/fournisseurs" element={<Fournisseurs />} />
-          <Route path="/stock" element={<Stock />} />
-          <Route path="/devis" element={<Devis />} />
-          <Route path="/commandes" element={<Commandes />} />
-          <Route path="/commandes-client" element={<CommandesClient />} />
-          <Route path="/calculateur-ups" element={<CalculateurUPS />} />
-          <Route path="/ged" element={<GED />} />
-          <Route path="/factures-client" element={<FacturesClient />} />
-          <Route path="/factures-fournisseur" element={<FacturesFournisseur />} />
-          <Route path="/crm" element={<CRM />} />
-          <Route path="/stats-variantes" element={<StatsVariantes />} />
-          <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
-          <Route path="/parametres" element={<Parametres />} />
-        </Route>
-        <Route path="/auth" element={<Navigate to="/" replace />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-background">
+          <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
+        </div>
+      }>
+        <Routes>
+          <Route element={<CRMLayout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/clients" element={<Clients />} />
+            <Route path="/produits" element={<Produits />} />
+            <Route path="/fournisseurs" element={<Fournisseurs />} />
+            <Route path="/stock" element={<Stock />} />
+            <Route path="/devis" element={<Devis />} />
+            <Route path="/commandes" element={<Commandes />} />
+            <Route path="/commandes-client" element={<CommandesClient />} />
+            <Route path="/calculateur-ups" element={<CalculateurUPS />} />
+            <Route path="/ged" element={<GED />} />
+            <Route path="/factures-client" element={<FacturesClient />} />
+            <Route path="/factures-fournisseur" element={<FacturesFournisseur />} />
+            <Route path="/crm" element={<CRM />} />
+            <Route path="/stats-variantes" element={<StatsVariantes />} />
+            <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
+            <Route path="/parametres" element={<Parametres />} />
+          </Route>
+          <Route path="/auth" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
     </StoreProvider>
   );
 }
