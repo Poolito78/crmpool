@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -15,6 +15,7 @@ type NavEntry = NavLink | NavGroup;
 
 const NAV: NavEntry[] = [
   { type: 'link',  label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
+  { type: 'link',  label: 'Veille Concurrence', icon: Eye,          path: '/veille-concurrence' },
   { type: 'link',  label: 'CRM',              icon: Target,          path: '/crm' },
   {
     type: 'group', label: 'Vente', icon: TrendingUp,
@@ -39,8 +40,11 @@ const NAV: NavEntry[] = [
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
-      { type: 'link', label: 'Tableau de bord', icon: LayoutDashboard, path: '/parametres' },
-      { type: 'link', label: 'Historique GED',  icon: History,         path: '/ged' },
+      { type: 'link', label: 'Tableau de bord',    icon: LayoutDashboard, path: '/parametres?tab=dashboard' },
+      { type: 'link', label: 'Entrepôts',          icon: Warehouse,       path: '/parametres?tab=entrepots' },
+      { type: 'link', label: 'Devis',              icon: FileText,        path: '/parametres?tab=devis' },
+      { type: 'link', label: 'Veille Concurrence', icon: Eye,             path: '/parametres?tab=veille' },
+      { type: 'link', label: 'Historique GED',     icon: History,         path: '/ged' },
     ],
   },
 ];
@@ -59,16 +63,28 @@ export default function CRMLayout() {
   const location = useLocation();
   const { clients, produits, fournisseurs, devis } = useCRM();
 
+  // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.
+  const isLinkActive = (path: string) => {
+    const [base, query] = path.split('?');
+    if (location.pathname !== base) return false;
+    if (!query) return true;
+    const want = new URLSearchParams(query).get('tab');
+    const cur = new URLSearchParams(location.search).get('tab') || 'dashboard';
+    return want === cur;
+  };
+  // Section active (pour ouvrir le groupe) : par pathname seul (ignore ?tab=).
+  const isSectionActive = (path: string) => location.pathname === path.split('?')[0];
+
   // Auto-open groups containing the active route
   const initialOpen = NAV
-    .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => i.path === location.pathname))
+    .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => isSectionActive(i.path)))
     .map(e => e.label);
   const [openGroups, setOpenGroups] = useState<string[]>(initialOpen);
 
   // Keep groups open when navigating into them
   useEffect(() => {
     const active = NAV
-      .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => i.path === location.pathname))
+      .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => isSectionActive(i.path)))
       .map(e => e.label);
     setOpenGroups(prev => Array.from(new Set([...prev, ...active])));
   }, [location.pathname]);
@@ -82,7 +98,7 @@ export default function CRMLayout() {
     if (iconsOnly) {
       const flat: NavLink[] = entries.flatMap(e => e.type === 'group' ? e.items : [e]);
       return flat.map(item => {
-        const active = location.pathname === item.path;
+        const active = isLinkActive(item.path);
         return (
           <Link
             key={item.path}
@@ -103,7 +119,7 @@ export default function CRMLayout() {
     }
     return entries.map(entry => {
       if (entry.type === 'link') {
-        const active = location.pathname === entry.path;
+        const active = isLinkActive(entry.path);
         return (
           <Link
             key={entry.path}
@@ -124,7 +140,7 @@ export default function CRMLayout() {
 
       // NavGroup
       const isOpen = openGroups.includes(entry.label);
-      const hasActive = entry.items.some(i => i.path === location.pathname);
+      const hasActive = entry.items.some(i => isSectionActive(i.path));
       return (
         <div key={entry.label}>
           <button
@@ -145,7 +161,7 @@ export default function CRMLayout() {
           {isOpen && (
             <div className="ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border/50 pl-3">
               {entry.items.map(item => {
-                const active = location.pathname === item.path;
+                const active = isLinkActive(item.path);
                 return (
                   <Link
                     key={item.path}
@@ -180,7 +196,8 @@ export default function CRMLayout() {
     exportMultiSheet(sheets, `MonCRM_Export_${new Date().toISOString().split('T')[0]}`);
   }
 
-  const currentLabel = NAV_FLAT.find(i => i.path === location.pathname)?.label
+  const currentLabel = NAV_FLAT.find(i => isLinkActive(i.path))?.label
+    ?? NAV_FLAT.find(i => i.path.split('?')[0] === location.pathname)?.label
     ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
 
   return (

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3 } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
@@ -22,6 +23,9 @@ import {
 } from '@/lib/dashboardSettings';
 
 export default function Parametres() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'dashboard';
+  const setActiveTab = (t: string) => setSearchParams(t === 'dashboard' ? {} : { tab: t }, { replace: true });
   const hidden = useHiddenTiles();
   const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
 
@@ -113,7 +117,7 @@ export default function Parametres() {
 
   return (
     <div className="max-w-3xl mx-auto">
-      <Tabs defaultValue="dashboard" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto justify-start">
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
