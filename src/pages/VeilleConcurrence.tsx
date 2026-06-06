@@ -499,51 +499,49 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
             </TabsTrigger>
           </TabsList>
+          <div className="flex gap-2 flex-wrap items-center ml-auto">
+            {myEmail && (
+              nameEditOpen ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={nameInput}
+                    onChange={e => setNameInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveDisplayName(); if (e.key === 'Escape') setNameEditOpen(false); }}
+                    placeholder="Votre nom affiché..."
+                    className="h-8 text-sm w-36"
+                    autoFocus
+                  />
+                  <Button size="sm" className="h-8" onClick={saveDisplayName}>OK</Button>
+                  <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setNameEditOpen(false)}>✕</Button>
+                </div>
+              ) : (
+                <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5 h-8"
+                  title="Modifier mon nom d'affichage"
+                  onClick={() => { setNameInput(formatCreateur(myEmail)); setNameEditOpen(true); }}>
+                  <Settings className="w-3.5 h-3.5" />
+                  <span className="text-xs">{formatCreateur(myEmail)}</span>
+                </Button>
+              )
+            )}
+            <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
+              <Download className="w-4 h-4 mr-1" /> Excel
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)}>
+              <Mail className="w-4 h-4 mr-1" /> Par email
+            </Button>
+            <Button size="sm" variant="outline" onClick={openNew}>
+              <Plus className="w-4 h-4 mr-1" /> Nouveau concurrent
+            </Button>
+            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'}>
+              <Plus className="w-4 h-4 mr-1" /> Nouveau produit
+            </Button>
+          </div>
         </div>
 
-      {/* Barre d'actions */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <p className="text-sm text-muted-foreground">
+        {/* Compteurs */}
+        <p className="text-sm text-muted-foreground -mt-1">
           {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
         </p>
-        <div className="flex gap-2 flex-wrap items-center">
-          {myEmail && (
-            nameEditOpen ? (
-              <div className="flex items-center gap-1.5">
-                <Input
-                  value={nameInput}
-                  onChange={e => setNameInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') saveDisplayName(); if (e.key === 'Escape') setNameEditOpen(false); }}
-                  placeholder="Votre nom affiché..."
-                  className="h-8 text-sm w-36"
-                  autoFocus
-                />
-                <Button size="sm" className="h-8" onClick={saveDisplayName}>OK</Button>
-                <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setNameEditOpen(false)}>✕</Button>
-              </div>
-            ) : (
-              <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5 h-8"
-                title="Modifier mon nom d'affichage"
-                onClick={() => { setNameInput(formatCreateur(myEmail)); setNameEditOpen(true); }}>
-                <Settings className="w-3.5 h-3.5" />
-                <span className="text-xs">{formatCreateur(myEmail)}</span>
-              </Button>
-            )
-          )}
-          <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'} className="order-first sm:order-none w-full sm:w-auto">
-            <Plus className="w-4 h-4 mr-1" /> Nouveau produit
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
-            <Download className="w-4 h-4 mr-1" /> Excel
-          </Button>
-          <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)}>
-            <Mail className="w-4 h-4 mr-1" /> Par email
-          </Button>
-          <Button size="sm" variant="outline" onClick={openNew}>
-            <Plus className="w-4 h-4 mr-1" /> Nouveau concurrent
-          </Button>
-        </div>
-      </div>
 
         {/* ── Fiches Concurrents ── */}
         <TabsContent value="fiches" className="space-y-3 pt-3">
