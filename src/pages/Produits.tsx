@@ -73,7 +73,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, clients } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -126,7 +126,7 @@ export default function Produits() {
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
-  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes'>('infos');
+  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF'>('infos');
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -397,6 +397,10 @@ export default function Produits() {
     const c = clients.find(cl => cl.id === clientId);
     return c ? (c.societe || c.nom || '—') : '—';
   };
+  const fournLabel = (fournisseurId?: string) => {
+    const f = fournisseurs.find(fo => fo.id === fournisseurId);
+    return f ? (f.societe || f.nom || '—') : '—';
+  };
   // Devis contenant le produit en cours d'édition (qté cumulée + montant HT)
   const produitDevisRows = useMemo(() => {
     if (!editing) return [];
@@ -427,6 +431,21 @@ export default function Produits() {
       .filter((x): x is NonNullable<typeof x> => !!x)
       .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
   }, [editing, commandesClient]);
+  // Commandes fournisseur contenant le produit (côté achat)
+  const produitCommandesFournRows = useMemo(() => {
+    if (!editing) return [];
+    const pid = editing.id;
+    return commandesFournisseur
+      .map(c => {
+        const lignes = c.lignes.filter(l => l.produitId === pid);
+        if (lignes.length === 0) return null;
+        const qte = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
+        const montantHT = lignes.reduce((s, l) => s + (l.total || 0), 0);
+        return { id: c.id, numero: c.numero, date: c.dateCreation, statut: c.statut, fournisseurId: c.fournisseurId, qte, montantHT };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [editing, commandesFournisseur]);
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -1225,7 +1244,8 @@ export default function Produits() {
               { id: 'stock',       label: 'Stock & entrepôts', icon: Warehouse },
               { id: 'fournisseurs', label: 'Fournisseurs', icon: Truck },
               { id: 'devis',       label: 'Devis', icon: FileText },
-              { id: 'commandes',   label: 'Commandes', icon: ShoppingCart },
+              { id: 'commandes',   label: 'Cmd client', icon: ShoppingCart },
+              { id: 'commandesF',  label: 'Cmd fourn.', icon: Truck },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -2486,6 +2506,50 @@ export default function Produits() {
                             <td className="px-3 py-2 truncate max-w-[140px]">{clientLabel(r.clientId)}</td>
                             <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatDate(r.date)}</td>
                             <td className="px-3 py-2"><span className="text-xs capitalize">{r.statut}</span></td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.qte}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-medium">{formatMontant(r.montantHT)} €</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ══ Onglet Commandes fournisseur ═══════════════════════════════ */}
+          {produitTab === 'commandesF' && (
+            <div className="py-2">
+              {!editing ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Enregistrez le produit d'abord pour voir les commandes fournisseur associées.</p>
+              ) : produitCommandesFournRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Ce produit n'apparaît dans aucune commande fournisseur.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-2 px-1">
+                    <span>{produitCommandesFournRows.length} commande(s) · {produitCommandesFournRows.reduce((s, r) => s + r.qte, 0)} u. au total</span>
+                    <span className="font-semibold text-foreground">{formatMontant(produitCommandesFournRows.reduce((s, r) => s + r.montantHT, 0))} € HT (achat)</span>
+                  </div>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted text-xs text-muted-foreground">
+                          <th className="text-left px-3 py-2 font-medium">N°</th>
+                          <th className="text-left px-3 py-2 font-medium">Fournisseur</th>
+                          <th className="text-left px-3 py-2 font-medium">Date</th>
+                          <th className="text-left px-3 py-2 font-medium">Statut</th>
+                          <th className="text-right px-3 py-2 font-medium">Qté</th>
+                          <th className="text-right px-3 py-2 font-medium">Montant HT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {produitCommandesFournRows.map(r => (
+                          <tr key={r.id} className="border-t border-border hover:bg-muted/40 cursor-pointer" onClick={() => { setDialogOpen(false); navigate(`/commandes?search=${encodeURIComponent(r.numero)}`); }}>
+                            <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.numero}</td>
+                            <td className="px-3 py-2 truncate max-w-[140px]">{fournLabel(r.fournisseurId)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatDate(r.date)}</td>
+                            <td className="px-3 py-2"><span className="text-xs capitalize">{r.statut.replace('_', ' ')}</span></td>
                             <td className="px-3 py-2 text-right tabular-nums">{r.qte}</td>
                             <td className="px-3 py-2 text-right tabular-nums font-medium">{formatMontant(r.montantHT)} €</td>
                           </tr>
