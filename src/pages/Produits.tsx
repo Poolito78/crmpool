@@ -37,7 +37,7 @@ const COLUMNS = [
   { key: 'stock',           label: 'Stock',            align: 'right'  as const },
   { key: 'qteVendue',      label: 'Qté vendue',       align: 'right'  as const },
   { key: 'qteCommandeeF',  label: 'Qté cmd fourn.',   align: 'right'  as const },
-  { key: 'valeurStock',    label: 'Valeur stock',     align: 'right'  as const },
+  { key: 'valeurStock',    label: 'Valeur stock (PMP)', align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
@@ -432,14 +432,27 @@ export default function Produits() {
     return map;
   }, [commandesFournisseur, produits]);
 
-  // Valeur de stock = Σ (prix d'achat à date × quantité achetée à date)
-  const valeurStockParProduit = useMemo(() => {
-    const map: Record<string, number> = {};
+  // Agrégat des achats par produit : valeur cumulée + quantité totale achetée (base du PMP)
+  const achatsAggParProduit = useMemo(() => {
+    const map = new Map<string, { valeur: number; qte: number }>();
     for (const [pid, arr] of achatsParProduit) {
-      map[pid] = arr.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 0), 0);
+      let valeur = 0, qte = 0;
+      for (const a of arr) { valeur += (a.prix || 0) * (a.quantite || 0); qte += (a.quantite || 0); }
+      map.set(pid, { valeur, qte });
     }
     return map;
   }, [achatsParProduit]);
+  // PMP (prix moyen pondéré) = Σ(prix×qté) / Σ(qté)
+  const pmpParProduit = useCallback((pid: string) => {
+    const agg = achatsAggParProduit.get(pid);
+    return agg && agg.qte > 0 ? agg.valeur / agg.qte : 0;
+  }, [achatsAggParProduit]);
+  // Valeur de stock = PMP × stock courant (valorisation de l'inventaire restant)
+  const valeurStockParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of produits) map[p.id] = pmpParProduit(p.id) * (p.stock || 0);
+    return map;
+  }, [produits, pmpParProduit]);
 
   // Nom client (société de préférence) pour les onglets Devis / Commandes de la fiche produit
   const clientLabel = (clientId?: string) => {
@@ -2335,8 +2348,8 @@ export default function Produits() {
                 {editing && (
                   <button type="button" onClick={() => setProduitTab('valorisation')} className="w-full flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 hover:bg-muted/40 transition-colors text-left">
                     <div>
-                      <p className="text-sm font-medium">Valeur de stock</p>
-                      <p className="text-xs text-muted-foreground">Σ achats datés (commandes + saisie) — voir onglet Valorisation</p>
+                      <p className="text-sm font-medium">Valeur de stock (PMP × stock)</p>
+                      <p className="text-xs text-muted-foreground">Prix moyen pondéré des achats datés — voir onglet Valorisation</p>
                     </div>
                     <span className="text-lg font-bold text-primary">{formatMontant(valeurStockParProduit[editing.id] || 0)} €</span>
                   </button>
@@ -2632,16 +2645,32 @@ export default function Produits() {
           {produitTab === 'valorisation' && (() => {
             const autoAchats = editing ? (achatsParProduit.get(editing.id) || []).filter(a => a.source === 'commande') : [];
             const totalAuto = autoAchats.reduce((s, a) => s + a.prix * a.quantite, 0);
+            const qteAuto = autoAchats.reduce((s, a) => s + a.quantite, 0);
             const totalManuel = achatsManuel.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 0), 0);
+            const qteManuel = achatsManuel.reduce((s, a) => s + (a.quantite || 0), 0);
             const totalGeneral = totalAuto + totalManuel;
+            const qteTotale = qteAuto + qteManuel;
+            const pmp = qteTotale > 0 ? totalGeneral / qteTotale : 0;
+            const valeurStockActuel = pmp * (form.stock || 0);
             return (
               <div className="py-2 space-y-4">
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between">
-                  <div className="text-sm">
-                    <p className="font-semibold text-foreground">Valeur de stock (cumul des achats)</p>
-                    <p className="text-xs text-muted-foreground">Σ (prix d'achat à date × quantité achetée à date)</p>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="bg-card border border-border rounded-xl p-3 text-center">
+                    <p className="text-lg font-heading font-bold">{formatMontant(pmp)} €</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">PMP (prix moyen pondéré)</p>
                   </div>
-                  <span className="text-xl font-bold text-primary">{formatMontant(totalGeneral)} €</span>
+                  <div className="bg-card border border-border rounded-xl p-3 text-center">
+                    <p className="text-lg font-heading font-bold">{form.stock || 0}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Stock courant</p>
+                  </div>
+                  <div className="bg-primary/5 border border-primary/30 rounded-xl p-3 text-center">
+                    <p className="text-lg font-heading font-bold text-primary">{formatMontant(valeurStockActuel)} €</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Valeur stock (PMP × stock)</p>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/20 px-3 py-2 flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Cumul des achats — Σ (prix × qté) sur {qteTotale} u.</span>
+                  <span className="font-semibold">{formatMontant(totalGeneral)} €</span>
                 </div>
 
                 {/* Achats issus des commandes fournisseur (auto, lecture seule) */}
