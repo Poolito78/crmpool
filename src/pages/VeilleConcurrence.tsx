@@ -490,11 +490,14 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)} title="Envoyer par email">
               <Mail className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Par email</span>
             </Button>
-            <Button size="sm" variant="outline" onClick={openNew}>
-              <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Nouveau&nbsp;</span>concurrent
+            <Button variant="outline" size="sm" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }} title="Importer un tarif concurrent">
+              <Upload className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Importer tarif</span>
             </Button>
-            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'}>
-              <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Nouveau&nbsp;</span>produit
+            <Button size="sm" variant="outline" onClick={openNew} title="Nouveau concurrent">
+              <Plus className="w-4 h-4 mr-1" /> Concurrent
+            </Button>
+            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Nouveau produit concurrent'}>
+              <Plus className="w-4 h-4 mr-1" /> Produit
             </Button>
           </div>
         </div>
@@ -608,14 +611,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               {Object.values(prodColFilters).some(Boolean) && (
                 <button onClick={() => setProdColFilters({})} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
               )}
-            </div>
-            <div className="flex gap-2 justify-end items-center">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
-                <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Importer tarif</span><span className="sm:hidden">Importer</span>
-              </Button>
-              <Button size="sm" className="gap-1.5" onClick={openAddProd}>
-                <Plus className="w-4 h-4" /> Ajouter
-              </Button>
             </div>
           </div>
           {filteredProduits.length === 0 ? (
