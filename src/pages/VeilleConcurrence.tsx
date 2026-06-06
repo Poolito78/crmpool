@@ -258,7 +258,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     return () => document.removeEventListener('mousedown', h);
   }, [prodGearOpen]);
   // Panneau admin de renommage global (catégories / informateurs)
-  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
@@ -649,27 +648,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               )}
             </div>
             <div className="flex gap-2 justify-end items-center">
-              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAdminPanelOpen(true)} title="Corriger globalement catégories / informateurs">
-                <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Corriger</span>
-              </Button>
-              {/* Roue crantée : colonnes visibles */}
-              <div className="relative">
-                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setProdGearOpen(o => !o)} title="Colonnes visibles">
-                  <Settings className="w-4 h-4" /><span className="hidden sm:inline">Colonnes</span>
-                </Button>
-                {prodGearOpen && (
-                  <div ref={prodGearRef} className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-44 text-left">
-                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes affichées</p>
-                    {PROD_COLS.map(c => (
-                      <label key={c.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
-                        <input type="checkbox" checked={prodVisCols.has(c.key)} onChange={() => toggleProdCol(c.key)} className="rounded accent-primary w-3.5 h-3.5" />
-                        {c.label}
-                      </label>
-                    ))}
-                    <button onClick={() => prodCols.reset()} className="mt-2 pt-2 border-t border-border w-full text-left text-xs text-muted-foreground hover:text-foreground">↺ Réinitialiser ordre & largeurs</button>
-                  </div>
-                )}
-              </div>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
                 <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Importer tarif</span><span className="sm:hidden">Importer</span>
               </Button>
@@ -720,7 +698,25 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                         </TableHead>
                       );
                     })}
-                    <TableHead className="w-12" />
+                    <TableHead className="w-12 relative">
+                      <div className="relative" ref={prodGearRef}>
+                        <button onClick={() => setProdGearOpen(o => !o)} title="Colonnes affichées" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
+                          <Settings className="w-4 h-4" />
+                        </button>
+                        {prodGearOpen && (
+                          <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-44 text-left font-normal">
+                            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes affichées</p>
+                            {PROD_COLS.map(c => (
+                              <label key={c.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
+                                <input type="checkbox" checked={prodVisCols.has(c.key)} onChange={() => toggleProdCol(c.key)} className="rounded accent-primary w-3.5 h-3.5" />
+                                {c.label}
+                              </label>
+                            ))}
+                            <button onClick={() => prodCols.reset()} className="mt-2 pt-2 border-t border-border w-full text-left text-xs text-muted-foreground hover:text-foreground">↺ Réinitialiser ordre & largeurs</button>
+                          </div>
+                        )}
+                      </div>
+                    </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1200,34 +1196,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       </Dialog>
 
       {/* ── Panneau admin : renommage global catégories / informateurs ── */}
-      <Dialog open={adminPanelOpen} onOpenChange={setAdminPanelOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Corriger catégories & informateurs</DialogTitle></DialogHeader>
-          <p className="text-xs text-muted-foreground -mt-2">Renomme une valeur sur <strong>tous</strong> les produits concernés (corrige fautes/variantes).</p>
-          <RenameGroup
-            title="Catégories"
-            values={[...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort()}
-            count={(v) => produits.filter(p => p.categorie === v).length}
-            onRename={async (oldV, newV) => {
-              const targets = produits.filter(p => p.categorie === oldV);
-              for (const p of targets) await updateProduit({ ...p, categorie: newV || undefined });
-              toast.success(`${targets.length} produit(s) — catégorie « ${oldV} » → « ${newV} »`);
-            }}
-          />
-          <RenameGroup
-            title="Informateurs (saisi par)"
-            values={[...new Set(produits.map(p => p.informateur).filter(Boolean) as string[])].sort()}
-            count={(v) => produits.filter(p => p.informateur === v).length}
-            onRename={async (oldV, newV) => {
-              const targets = produits.filter(p => p.informateur === oldV);
-              for (const p of targets) await updateProduit({ ...p, informateur: newV || undefined });
-              toast.success(`${targets.length} produit(s) — informateur « ${oldV} » → « ${newV} »`);
-            }}
-          />
-          <DialogFooter><Button variant="outline" onClick={() => setAdminPanelOpen(false)}>Fermer</Button></DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <ConcurrentDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -1245,48 +1213,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         onUpdateNote={updateNote}
         onDeleteNote={deleteNote}
       />
-    </div>
-  );
-}
-
-// ── Sous-composant : renommage global d'une valeur (catégorie / informateur) ──
-function RenameGroup({ title, values, count, onRename }: {
-  title: string;
-  values: string[];
-  count: (v: string) => number;
-  onRename: (oldV: string, newV: string) => Promise<void>;
-}) {
-  const [editing, setEditing] = useState<string | null>(null);
-  const [val, setVal] = useState('');
-  const [busy, setBusy] = useState(false);
-  return (
-    <div className="border-t border-border pt-3">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{title}</p>
-      {values.length === 0 ? (
-        <p className="text-xs text-muted-foreground">Aucune valeur.</p>
-      ) : (
-        <div className="space-y-1 max-h-48 overflow-y-auto">
-          {values.map(v => (
-            <div key={v} className="flex items-center gap-2 text-sm">
-              {editing === v ? (
-                <>
-                  <Input value={val} onChange={e => setVal(e.target.value)} className="h-7 text-sm flex-1" autoFocus onKeyDown={e => { if (e.key === 'Escape') setEditing(null); }} />
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" disabled={busy || !val.trim() || val.trim() === v} onClick={async () => { setBusy(true); await onRename(v, val.trim()); setBusy(false); setEditing(null); }} title="Appliquer">
-                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditing(null)} title="Annuler"><X className="w-3.5 h-3.5" /></Button>
-                </>
-              ) : (
-                <>
-                  <span className="flex-1 truncate">{v}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">{count(v)}</span>
-                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => { setEditing(v); setVal(v); }} title="Renommer"><Pencil className="w-3.5 h-3.5" /></Button>
-                </>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

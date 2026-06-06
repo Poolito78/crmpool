@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2 } from 'lucide-react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3 } from 'lucide-react';
+import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -242,6 +243,19 @@ export default function Parametres() {
             })}
           </div>
         </div>
+      </div>
+
+      {/* ══ Section Veille Concurrence ═══════════════════════════════════════ */}
+      <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+        <div>
+          <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
+          </h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Corrigez globalement les catégories et les noms d'informateurs : renommer une valeur l'applique sur <strong>tous</strong> les produits concernés (corrige fautes et variantes).
+          </p>
+        </div>
+        <VeilleCorrectionPanel />
       </div>
 
       {/* ══ Section Tableau de bord ══════════════════════════════════════════ */}
