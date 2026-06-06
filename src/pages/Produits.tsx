@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment, cloneElement, type ReactElement } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
+import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings, FileText, ShoppingCart } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings, FileText, ShoppingCart, Euro } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -37,10 +37,11 @@ const COLUMNS = [
   { key: 'stock',           label: 'Stock',            align: 'right'  as const },
   { key: 'qteVendue',      label: 'Qté vendue',       align: 'right'  as const },
   { key: 'qteCommandeeF',  label: 'Qté cmd fourn.',   align: 'right'  as const },
+  { key: 'valeurStock',    label: 'Valeur stock',     align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue', 'qteCommandeeF'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue', 'qteCommandeeF', 'valeurStock'];
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -87,7 +88,7 @@ export default function Produits() {
         // Filtre uniquement les clés valides (supprime les anciennes clés obsolètes)
         const validKeys = new Set(COLUMNS.map(c => c.key));
         const saved = new Set((JSON.parse(s) as ColKey[]).filter(k => validKeys.has(k)));
-        if (saved.size > 0) { saved.add('qteCommandeeF'); return saved; } // nouvelle colonne : visible chez les utilisateurs existants
+        if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
       }
     } catch {}
     return new Set(DEFAULT_VISIBLE_COLS);
@@ -126,8 +127,9 @@ export default function Produits() {
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
+  const [achatsManuel, setAchatsManuel] = useState<AchatDate[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
-  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF'>('infos');
+  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation'>('infos');
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -359,6 +361,7 @@ export default function Produits() {
         case 'stock':        if (isNonVide ? p.stock === 0 : !String(p.stock).includes(v)) return false; break;
         case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
         case 'qteCommandeeF': if (isNonVide ? !(qteCommandeeFournParProduit[p.id] > 0) : !String(qteCommandeeFournParProduit[p.id] || 0).includes(v)) return false; break;
+        case 'valeurStock':  if (isNonVide ? !(valeurStockParProduit[p.id] > 0) : !String(Math.round(valeurStockParProduit[p.id] || 0)).includes(v)) return false; break;
         case 'disponibleVente': if (isNonVide ? !(p.disponibleVente !== false) : !String(p.disponibleVente !== false ? 'oui' : 'non').includes(v)) return false; break;
       }
     }
@@ -384,12 +387,13 @@ export default function Produits() {
         case 'stock':           av = a.stock; bv = b.stock; break;
         case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
         case 'qteCommandeeF':   av = qteCommandeeFournParProduit[a.id] || 0; bv = qteCommandeeFournParProduit[b.id] || 0; break;
+        case 'valeurStock':     av = valeurStockParProduit[a.id] || 0; bv = valeurStockParProduit[b.id] || 0; break;
         case 'disponibleVente': av = (a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
-  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit]);
+  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
 
   // Stock par dépôt (entrepôt) par produit — pour l'affichage détaillé quand plusieurs dépôts
   const depotStocksParProduit = useMemo(() => {
@@ -405,6 +409,37 @@ export default function Produits() {
     for (const arr of m.values()) arr.sort((a, b) => b.stock - a.stock);
     return m;
   }, [stockEntrepots, entrepots]);
+
+  // Achats datés par produit : auto (lignes de commandes fournisseur) + manuel (produit.achatsHistorique)
+  const achatsParProduit = useMemo(() => {
+    const map = new Map<string, AchatDate[]>();
+    for (const cf of commandesFournisseur) {
+      for (const l of cf.lignes) {
+        if (!l.produitId) continue;
+        const arr = map.get(l.produitId) || [];
+        arr.push({ date: cf.dateCreation, prix: l.prixAchat || 0, quantite: l.quantite || 0, source: 'commande', ref: cf.numero });
+        map.set(l.produitId, arr);
+      }
+    }
+    for (const p of produits) {
+      if (p.achatsHistorique?.length) {
+        const arr = map.get(p.id) || [];
+        for (const a of p.achatsHistorique) arr.push({ ...a, source: a.source || 'manuel' });
+        map.set(p.id, arr);
+      }
+    }
+    for (const arr of map.values()) arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return map;
+  }, [commandesFournisseur, produits]);
+
+  // Valeur de stock = Σ (prix d'achat à date × quantité achetée à date)
+  const valeurStockParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const [pid, arr] of achatsParProduit) {
+      map[pid] = arr.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 0), 0);
+    }
+    return map;
+  }, [achatsParProduit]);
 
   // Nom client (société de préférence) pour les onglets Devis / Commandes de la fiche produit
   const clientLabel = (clientId?: string) => {
@@ -491,7 +526,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setAchatsManuel([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -532,6 +567,7 @@ export default function Produits() {
     setIsTypeKit(p.typeKit ?? false);
     setLignesKit(p.lignesKit || []);
     setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
+    setAchatsManuel(p.achatsHistorique ? [...p.achatsHistorique] : []);
     setVariantes(p.variantes ? [...p.variantes] : []);
     setProduitTab('infos');
     setEntrepotStockEdit(null);
@@ -603,12 +639,14 @@ export default function Produits() {
     const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
     const paliersPrixToSave = paliersPrix.length > 0 ? paliersPrix : null;
     const variantesToSave = variantes.length > 0 ? variantes : null;
+    const achatsToSave = achatsManuel.filter(a => a.date && a.prix > 0 && a.quantite > 0).map(a => ({ ...a, source: 'manuel' as const }));
+    const achatsToSaveOrNull = achatsToSave.length > 0 ? achatsToSave : null;
     if (editing) {
-      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined };
+      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
       updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any }).eq('id', editing.id).then(({ error }) => {
-        if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes:', error);
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull as any }).eq('id', editing.id).then(({ error }) => {
+        if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
       });
       updateDevis(prev => prev.map(d => ({
         ...d,
@@ -623,12 +661,12 @@ export default function Produits() {
       toast.success('Produit modifié');
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
-      if (composantsToSave || lignesKitToSave || paliersPrixToSave || variantesToSave) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any }).eq('id', newId).then(({ error }) => {
-          if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes nouveau produit:', error);
+      if (composantsToSave || lignesKitToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull as any }).eq('id', newId).then(({ error }) => {
+          if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats nouveau produit:', error);
         });
       }
       toast.success('Produit ajouté');
@@ -1120,6 +1158,7 @@ export default function Produits() {
                     }
                     case 'qteVendue':    return <td className="px-2 py-2.5 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'qteCommandeeF': return <td className="px-2 py-2.5 text-right font-medium">{qteCommandeeFournParProduit[p.id] ? <span className="text-foreground">{qteCommandeeFournParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
+                    case 'valeurStock':  return <td className="px-2 py-2.5 text-right font-medium">{valeurStockParProduit[p.id] ? <span>{formatMontant(valeurStockParProduit[p.id])} €</span> : <span className="text-muted-foreground">—</span>}</td>;
                     case 'disponibleVente': return (
                       <td className="px-2 py-2.5 text-center">
                         {p.disponibleVente !== false
@@ -1261,6 +1300,7 @@ export default function Produits() {
               { id: 'devis',       label: 'Devis', icon: FileText },
               { id: 'commandes',   label: 'Cmd client', icon: ShoppingCart },
               { id: 'commandesF',  label: 'Cmd fourn.', icon: Truck },
+              { id: 'valorisation', label: 'Valorisation', icon: Euro },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -2291,6 +2331,17 @@ export default function Produits() {
                   </div>
                 </div>
 
+                {/* Valeur de stock (cumul des achats datés) */}
+                {editing && (
+                  <button type="button" onClick={() => setProduitTab('valorisation')} className="w-full flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 hover:bg-muted/40 transition-colors text-left">
+                    <div>
+                      <p className="text-sm font-medium">Valeur de stock</p>
+                      <p className="text-xs text-muted-foreground">Σ achats datés (commandes + saisie) — voir onglet Valorisation</p>
+                    </div>
+                    <span className="text-lg font-bold text-primary">{formatMontant(valeurStockParProduit[editing.id] || 0)} €</span>
+                  </button>
+                )}
+
                 {/* Champs stock */}
                 <div className="grid grid-cols-2 gap-3">
                   <div><Label>Stock total</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
@@ -2576,6 +2627,104 @@ export default function Produits() {
               )}
             </div>
           )}
+
+          {/* ══ Onglet Valorisation ════════════════════════════════════════ */}
+          {produitTab === 'valorisation' && (() => {
+            const autoAchats = editing ? (achatsParProduit.get(editing.id) || []).filter(a => a.source === 'commande') : [];
+            const totalAuto = autoAchats.reduce((s, a) => s + a.prix * a.quantite, 0);
+            const totalManuel = achatsManuel.reduce((s, a) => s + (a.prix || 0) * (a.quantite || 0), 0);
+            const totalGeneral = totalAuto + totalManuel;
+            return (
+              <div className="py-2 space-y-4">
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 flex items-center justify-between">
+                  <div className="text-sm">
+                    <p className="font-semibold text-foreground">Valeur de stock (cumul des achats)</p>
+                    <p className="text-xs text-muted-foreground">Σ (prix d'achat à date × quantité achetée à date)</p>
+                  </div>
+                  <span className="text-xl font-bold text-primary">{formatMontant(totalGeneral)} €</span>
+                </div>
+
+                {/* Achats issus des commandes fournisseur (auto, lecture seule) */}
+                <div>
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">Achats — commandes fournisseur (auto)</p>
+                  {!editing ? (
+                    <p className="text-xs text-muted-foreground">Enregistrez le produit d'abord.</p>
+                  ) : autoAchats.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Aucune commande fournisseur pour ce produit.</p>
+                  ) : (
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-muted text-xs text-muted-foreground">
+                          <th className="text-left px-3 py-1.5 font-medium">Date</th>
+                          <th className="text-left px-3 py-1.5 font-medium">Réf.</th>
+                          <th className="text-right px-3 py-1.5 font-medium">Prix achat</th>
+                          <th className="text-right px-3 py-1.5 font-medium">Qté</th>
+                          <th className="text-right px-3 py-1.5 font-medium">Valeur</th>
+                        </tr></thead>
+                        <tbody>
+                          {autoAchats.map((a, i) => (
+                            <tr key={i} className="border-t border-border">
+                              <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(a.date)}</td>
+                              <td className="px-3 py-1.5 font-mono text-xs text-muted-foreground">{a.ref || '—'}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{formatMontant(a.prix)} €</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums">{a.quantite}</td>
+                              <td className="px-3 py-1.5 text-right tabular-nums font-medium">{formatMontant(a.prix * a.quantite)} €</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-border bg-muted/30 text-xs font-semibold">
+                            <td className="px-3 py-1.5" colSpan={4}>Sous-total commandes</td>
+                            <td className="px-3 py-1.5 text-right tabular-nums">{formatMontant(totalAuto)} €</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Achats manuels (éditables) */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Achats — saisie manuelle</p>
+                    <Button size="sm" variant="outline" className="h-7 text-xs gap-1" onClick={() => setAchatsManuel(prev => [...prev, { date: new Date().toISOString().split('T')[0], prix: 0, quantite: 0, source: 'manuel' }])}>
+                      <Plus className="w-3.5 h-3.5" /> Ligne
+                    </Button>
+                  </div>
+                  {achatsManuel.length === 0 ? (
+                    <p className="text-xs text-muted-foreground">Aucune saisie manuelle. Ajoutez une ligne pour enregistrer un achat daté.</p>
+                  ) : (
+                    <div className="border border-border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead><tr className="bg-muted text-xs text-muted-foreground">
+                          <th className="text-left px-2 py-1.5 font-medium">Date</th>
+                          <th className="text-right px-2 py-1.5 font-medium">Prix achat (€)</th>
+                          <th className="text-right px-2 py-1.5 font-medium">Qté</th>
+                          <th className="text-right px-2 py-1.5 font-medium">Valeur</th>
+                          <th className="w-8"></th>
+                        </tr></thead>
+                        <tbody>
+                          {achatsManuel.map((a, idx) => (
+                            <tr key={idx} className="border-t border-border">
+                              <td className="px-2 py-1"><Input type="date" value={a.date} onChange={e => setAchatsManuel(prev => prev.map((x, i) => i === idx ? { ...x, date: e.target.value } : x))} className="h-7 text-xs" /></td>
+                              <td className="px-2 py-1"><Input type="number" step="0.01" value={a.prix || ''} onChange={e => setAchatsManuel(prev => prev.map((x, i) => i === idx ? { ...x, prix: parseFloat(e.target.value) || 0 } : x))} className="h-7 text-xs text-right w-24 ml-auto" /></td>
+                              <td className="px-2 py-1"><Input type="number" step="any" value={a.quantite || ''} onChange={e => setAchatsManuel(prev => prev.map((x, i) => i === idx ? { ...x, quantite: parseFloat(e.target.value) || 0 } : x))} className="h-7 text-xs text-right w-20 ml-auto" /></td>
+                              <td className="px-2 py-1 text-right tabular-nums font-medium whitespace-nowrap">{formatMontant((a.prix || 0) * (a.quantite || 0))} €</td>
+                              <td className="px-2 py-1 text-center"><button type="button" onClick={() => setAchatsManuel(prev => prev.filter((_, i) => i !== idx))} className="text-destructive hover:opacity-70"><Trash2 className="w-3.5 h-3.5" /></button></td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-border bg-muted/30 text-xs font-semibold">
+                            <td className="px-2 py-1.5" colSpan={3}>Sous-total manuel</td>
+                            <td className="px-2 py-1.5 text-right tabular-nums">{formatMontant(totalManuel)} €</td>
+                            <td></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <p className="text-[11px] text-muted-foreground mt-1">La saisie manuelle est enregistrée avec le produit (bouton Modifier).</p>
+                </div>
+              </div>
+            );
+          })()}
 
           </div> {/* fin wrapper onglets */}
 

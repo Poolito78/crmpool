@@ -119,6 +119,15 @@ export interface PrixPalier {
   prixHT: number;        // prix public HT à ce palier
 }
 
+// Achat daté : prix d'achat unitaire à une date + quantité achetée (valorisation stock)
+export interface AchatDate {
+  date: string;      // YYYY-MM-DD
+  prix: number;      // prix d'achat unitaire HT à cette date
+  quantite: number;  // quantité achetée à cette date
+  source?: 'manuel' | 'commande'; // origine (saisie ou commande fournisseur)
+  ref?: string;      // n° de commande fournisseur si source = commande
+}
+
 export interface VarianteOption {
   id: string;
   label: string;       // ex: "RAL 9010 Blanc pur", "0.5-1 mm"
@@ -163,6 +172,7 @@ export interface Produit {
   proprietaire?: 'isosign' | 'fournisseur'; // propriétaire de la marchandise
   proprietaireFournisseurId?: string;        // si proprietaire = 'fournisseur'
   disponibleVente?: boolean;                 // produit proposé à la vente
+  achatsHistorique?: AchatDate[];            // historique manuel des achats datés (valorisation)
 }
 
 export interface PalierPort {
@@ -587,6 +597,7 @@ function dbToProduit(r: any): Produit {
     proprietaire: (r.proprietaire as 'isosign' | 'fournisseur') || 'isosign',
     proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
     disponibleVente: r.disponible_vente ?? true,
+    achatsHistorique: r.achats_historique ? (Array.isArray(r.achats_historique) ? r.achats_historique : JSON.parse(r.achats_historique)) : undefined,
   };
 }
 
@@ -622,6 +633,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.proprietaire !== undefined ? { proprietaire: p.proprietaire } : {}),
     ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
     ...(p.disponibleVente !== undefined ? { disponible_vente: p.disponibleVente } : {}),
+    ...(p.achatsHistorique !== undefined ? { achats_historique: p.achatsHistorique && p.achatsHistorique.length > 0 ? p.achatsHistorique : null } : {}),
   };
 }
 
