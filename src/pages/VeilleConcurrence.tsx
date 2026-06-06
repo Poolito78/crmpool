@@ -284,13 +284,14 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
 
   const addNomSuggestions = useMemo(() => {
     const q = addProdForm.nom.trim().toLowerCase();
-    if (!q) return [];
-    // Produits concurrents déjà saisis + catalogue produits ISOFLOOR
+    // Produits concurrents déjà saisis (en premier) + catalogue produits ISOFLOOR
     const unique = Array.from(new Set([
       ...produits.map(p => p.nom),
       ...produitsCatalogue.map(p => p.description).filter(Boolean) as string[],
-    ]));
-    return unique.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
+    ].filter(Boolean) as string[]));
+    // Champ vide → on propose la liste complète (dès le focus) ; sinon on filtre.
+    const list = q ? unique.filter(n => n.toLowerCase().includes(q)) : unique;
+    return list.slice(0, 10);
   }, [addProdForm.nom, produits, produitsCatalogue]);
 
   function selectAddNomSuggestion(nom: string) {
