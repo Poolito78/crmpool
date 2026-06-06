@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3 } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
+import VeilleDisplayName from '@/components/VeilleDisplayName';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -255,7 +256,10 @@ export default function Parametres() {
             Corrigez globalement les catégories et les noms d'informateurs : renommer une valeur l'applique sur <strong>tous</strong> les produits concernés (corrige fautes et variantes).
           </p>
         </div>
-        <VeilleCorrectionPanel />
+        <VeilleDisplayName />
+        <div className="border-t border-border pt-4">
+          <VeilleCorrectionPanel />
+        </div>
       </div>
 
       {/* ══ Section Tableau de bord ══════════════════════════════════════════ */}

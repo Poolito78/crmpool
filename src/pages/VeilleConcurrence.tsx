@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { useConcurrents, formatCreateur, setCreatorName } from '@/lib/concurrents';
+import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant } from '@/lib/store';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
@@ -199,27 +199,12 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
 
   // Nom d'affichage
   const [myEmail, setMyEmail] = useState<string>('');
-  const [nameEditOpen, setNameEditOpen] = useState(false);
-  const [nameInput, setNameInput] = useState('');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user?.email) setMyEmail(session.user.email);
     });
   }, []);
-
-  async function saveDisplayName() {
-    if (!myEmail || !nameInput.trim()) return;
-    const name = nameInput.trim();
-    setCreatorName(myEmail, name);
-    // Persiste dans veille_roles.display_name pour que l'app Veille puisse le lire.
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user.id) {
-      await supabase.from('veille_roles').update({ display_name: name }).eq('user_id', session.user.id);
-    }
-    setNameEditOpen(false);
-    toast.success(`Nom d'affichage mis à jour : ${name}`);
-  }
 
   const [searchConc, setSearchConc] = useState('');
   const [filterCreateur, setFilterCreateur] = useState('');
@@ -499,29 +484,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
-            {myEmail && (
-              nameEditOpen ? (
-                <div className="flex items-center gap-1.5">
-                  <Input
-                    value={nameInput}
-                    onChange={e => setNameInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') saveDisplayName(); if (e.key === 'Escape') setNameEditOpen(false); }}
-                    placeholder="Votre nom affiché..."
-                    className="h-8 text-sm w-36"
-                    autoFocus
-                  />
-                  <Button size="sm" className="h-8" onClick={saveDisplayName}>OK</Button>
-                  <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setNameEditOpen(false)}>✕</Button>
-                </div>
-              ) : (
-                <Button variant="ghost" size="sm" className="text-muted-foreground gap-1.5 h-8"
-                  title="Modifier mon nom d'affichage"
-                  onClick={() => { setNameInput(formatCreateur(myEmail)); setNameEditOpen(true); }}>
-                  <Settings className="w-3.5 h-3.5" />
-                  <span className="text-xs">{formatCreateur(myEmail)}</span>
-                </Button>
-              )
-            )}
             <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)} title="Exporter en Excel">
               <Download className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Excel</span>
             </Button>
