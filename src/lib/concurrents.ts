@@ -42,6 +42,7 @@ export interface ConcurrentProduit {
   nom: string;
   reference?: string;
   categorie?: string;
+  quantite?: number;
   prixHT?: number;
   description?: string;
   clientId?: string;
@@ -102,6 +103,7 @@ function dbToConcurrentProduit(r: any): ConcurrentProduit {
     nom: r.nom,
     reference: r.reference || undefined,
     categorie: r.categorie || undefined,
+    quantite: r.quantite != null ? Number(r.quantite) : undefined,
     prixHT: r.prix_ht != null ? Number(r.prix_ht) : undefined,
     description: r.description || undefined,
     clientId: r.client_id || undefined,
@@ -131,6 +133,7 @@ function concurrentProduitToDb(p: ConcurrentProduit) {
     ...(p.clientNom !== undefined ? { client_nom: p.clientNom || null } : {}),
     ...(p.informateur !== undefined ? { informateur: p.informateur || null } : {}),
     ...(p.dateRenseignement !== undefined ? { date_renseignement: p.dateRenseignement || null } : {}),
+    ...(p.quantite !== undefined ? { quantite: p.quantite ?? null } : {}),
   };
 }
 
