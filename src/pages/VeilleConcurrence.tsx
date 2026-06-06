@@ -260,6 +260,15 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const [addProdOpen, setAddProdOpen] = useState(false);
   const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
+  // Si un concurrent est créé depuis le dialog produit, l'auto-sélectionner.
+  const prevConcIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (addProdOpen && !addProdForm.concurrentId) {
+      const added = concurrents.find(c => !prevConcIdsRef.current.has(c.id));
+      if (added) setAddProdForm(f => ({ ...f, concurrentId: added.id }));
+    }
+    prevConcIdsRef.current = new Set(concurrents.map(c => c.id));
+  }, [concurrents, addProdOpen, addProdForm.concurrentId]);
   const [showAddNomSuggestions, setShowAddNomSuggestions] = useState(false);
 
   // Import tarif
@@ -507,11 +516,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <Button variant="outline" size="sm" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }} title="Importer un tarif concurrent">
               <Upload className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Importer tarif</span>
             </Button>
-            <Button size="sm" variant="outline" onClick={openNew} title="Nouveau concurrent">
-              <Plus className="w-4 h-4 mr-1" /> Concurrent
-            </Button>
-            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Nouveau produit concurrent'}>
-              <Plus className="w-4 h-4 mr-1" /> Produit
+            <Button size="sm" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
+              <Plus className="w-4 h-4 mr-1" /> Ajout
             </Button>
           </div>
         </div>
@@ -1076,9 +1082,14 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
-              <Label>Concurrent *</Label>
+              <div className="flex items-center justify-between">
+                <Label>Concurrent *</Label>
+                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary hover:text-primary" onClick={openNew} title="Créer un nouveau concurrent">
+                  <Plus className="w-3.5 h-3.5" /> Concurrent
+                </Button>
+              </div>
               <Select value={addProdForm.concurrentId} onValueChange={v => setAddProdForm(f => ({ ...f, concurrentId: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectTrigger><SelectValue placeholder={concurrents.length === 0 ? 'Aucun concurrent — cliquez sur + Concurrent' : 'Choisir un concurrent…'} /></SelectTrigger>
                 <SelectContent>{concurrents.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}</SelectContent>
               </Select>
             </div>
