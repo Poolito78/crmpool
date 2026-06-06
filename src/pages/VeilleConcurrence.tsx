@@ -24,6 +24,8 @@ import { formatMontant } from '@/lib/store';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
 import type { Concurrent } from '@/lib/concurrents';
 import { supabase } from '@/integrations/supabase/client';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -241,6 +243,8 @@ export function VeilleContent() {
     { key: 'date', label: 'Date' },
   ];
   const DEFAULT_PROD_VIS: PCol[] = ['concurrent', 'produit', 'reference', 'categorie', 'prixHT', 'description', 'clientSource', 'informateur', 'date'];
+  // Largeur (resize) + ordre (drag) des colonnes, persistés (veille_prod_table_*)
+  const prodCols = useTableColumns<PCol>('veille_prod_table', DEFAULT_PROD_VIS);
   const [prodVisCols, setProdVisCols] = useState<Set<PCol>>(() => {
     try { const s = localStorage.getItem('veille_prod_cols'); if (s) return new Set(JSON.parse(s) as PCol[]); } catch { /* ignore */ }
     return new Set(DEFAULT_PROD_VIS);
@@ -658,6 +662,7 @@ export function VeilleContent() {
                         {c.label}
                       </label>
                     ))}
+                    <button onClick={() => prodCols.reset()} className="mt-2 pt-2 border-t border-border w-full text-left text-xs text-muted-foreground hover:text-foreground">↺ Réinitialiser ordre & largeurs</button>
                   </div>
                 )}
               </div>
@@ -682,29 +687,32 @@ export function VeilleContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => {
+                    {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => {
                       const sorted = prodSort?.col === c.key;
                       const hasFilter = !!prodColFilters[c.key];
                       const isOpen = prodOpenFilter === c.key;
                       const SortIcon = sorted ? (prodSort!.dir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
                       const suggestions = c.key === 'categorie' ? categories : c.key === 'clientSource' ? clientNomsSuggestions : c.key === 'informateur' ? createurs.map(formatCreateur) : [];
+                      const isDragOver = prodCols.dragOverKey === c.key && prodCols.dragKey !== c.key;
                       return (
-                        <TableHead key={c.key} className={c.key === 'prixHT' ? 'text-right' : ''}>
-                          <div className={`flex items-center gap-0.5 ${c.key === 'prixHT' ? 'justify-end' : ''}`}>
-                            <button onClick={() => setProdSort(s => s?.col === c.key ? (s.dir === 'asc' ? { col: c.key, dir: 'desc' } : null) : { col: c.key, dir: 'asc' })} className="flex items-center gap-1 hover:text-foreground">
-                              <span>{c.label}</span>
-                              <SortIcon className={`w-3 h-3 ${sorted ? 'text-primary' : 'opacity-40'}`} />
+                        <TableHead key={c.key} {...prodCols.thProps(c.key)} style={prodCols.widthStyle(c.key)} className={`relative select-none cursor-grab active:cursor-grabbing ${c.key === 'prixHT' ? 'text-right' : ''} ${prodCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                          {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                          <div className={`flex items-center gap-0.5 ${c.key === 'prixHT' ? 'justify-end' : ''} ${prodCols.widthStyle(c.key) ? 'overflow-hidden' : ''}`}>
+                            <button onClick={() => setProdSort(s => s?.col === c.key ? (s.dir === 'asc' ? { col: c.key, dir: 'desc' } : null) : { col: c.key, dir: 'asc' })} className="flex items-center gap-1 hover:text-foreground min-w-0">
+                              <span className="truncate">{c.label}</span>
+                              <SortIcon className={`w-3 h-3 shrink-0 ${sorted ? 'text-primary' : 'opacity-40'}`} />
                             </button>
                             {isOpen ? (
-                              <span className="inline-flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                              <span className="inline-flex items-center gap-0.5" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
                                 <Input list={suggestions.length ? `vprod-sugg-${c.key}` : undefined} autoFocus value={prodColFilters[c.key] || ''} onChange={e => setProdColFilters(f => ({ ...f, [c.key]: e.target.value }))} placeholder="Filtrer…" className="h-6 text-xs w-28" onKeyDown={e => { if (e.key === 'Escape') { setProdColFilters(f => { const n = { ...f }; delete n[c.key]; return n; }); setProdOpenFilter(null); } }} />
                                 {suggestions.length > 0 && <datalist id={`vprod-sugg-${c.key}`}>{suggestions.map(s => <option key={s} value={s} />)}</datalist>}
-                                <button onClick={() => { if (!prodColFilters[c.key]) setProdOpenFilter(null); else setProdOpenFilter(null); }} className="p-0.5 text-muted-foreground/60 hover:text-foreground"><X className="w-3 h-3" /></button>
+                                <button onClick={() => setProdOpenFilter(null)} className="p-0.5 text-muted-foreground/60 hover:text-foreground shrink-0"><X className="w-3 h-3" /></button>
                               </span>
                             ) : (
-                              <button onClick={() => setProdOpenFilter(c.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 ${hasFilter ? 'text-primary' : 'text-muted-foreground/30 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
+                              <button onClick={() => setProdOpenFilter(c.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/30 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
                             )}
                           </div>
+                          <ColResizeHandle {...prodCols.resizeHandleProps(c.key)} />
                         </TableHead>
                       );
                     })}
@@ -733,21 +741,21 @@ export function VeilleContent() {
                     const editCellFor = (col: PCol) => {
                       const esc = (e: React.KeyboardEvent) => { if (e.key === 'Escape') setEditingProduitId(null); };
                       switch (col) {
-                        case 'concurrent': return <TableCell key={col}><select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" onKeyDown={esc}>{concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}</select></TableCell>;
-                        case 'produit': return <TableCell key={col}><Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-32" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); esc(e); }} /></TableCell>;
-                        case 'reference': return <TableCell key={col}><Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={esc} /></TableCell>;
-                        case 'categorie': return <TableCell key={col}><Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={esc} /></TableCell>;
-                        case 'prixHT': return <TableCell key={col} className="text-right"><Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={esc} /></TableCell>;
-                        case 'description': return <TableCell key={col}><Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={esc} /></TableCell>;
-                        case 'clientSource': return <TableCell key={col}><Input list="veille-clients-add" value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={esc} /></TableCell>;
-                        case 'informateur': return <TableCell key={col}><Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={esc} /></TableCell>;
-                        case 'date': return <TableCell key={col}><Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={esc} /></TableCell>;
+                        case 'concurrent': return <TableCell key={col} style={prodCols.widthStyle(col)}><select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" onKeyDown={esc}>{concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}</select></TableCell>;
+                        case 'produit': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-32" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); esc(e); }} /></TableCell>;
+                        case 'reference': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={esc} /></TableCell>;
+                        case 'categorie': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={esc} /></TableCell>;
+                        case 'prixHT': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right"><Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={esc} /></TableCell>;
+                        case 'description': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={esc} /></TableCell>;
+                        case 'clientSource': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input list="veille-clients-add" value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={esc} /></TableCell>;
+                        case 'informateur': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={esc} /></TableCell>;
+                        case 'date': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={esc} /></TableCell>;
                       }
                     };
                     if (isEditing) {
                       return (
                         <TableRow key={p.id} className="bg-muted/20">
-                          {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => editCellFor(c.key))}
+                          {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => editCellFor(c.key))}
                           <TableCell>
                             <div className="flex gap-1">
                               <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
@@ -763,20 +771,20 @@ export function VeilleContent() {
                     }
                     const cellFor = (col: PCol) => {
                       switch (col) {
-                        case 'concurrent': return <TableCell key={col} className="font-medium">{conc?.nom || '—'}</TableCell>;
-                        case 'produit': return <TableCell key={col}><div className="font-medium">{p.nom}</div></TableCell>;
-                        case 'reference': return <TableCell key={col} className="font-mono text-xs">{p.reference || '—'}</TableCell>;
-                        case 'categorie': return <TableCell key={col}>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>;
-                        case 'prixHT': return <TableCell key={col} className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>;
-                        case 'description': return <TableCell key={col} className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>;
-                        case 'clientSource': return <TableCell key={col} className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>;
-                        case 'informateur': return <TableCell key={col} className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>;
-                        case 'date': return <TableCell key={col} className="text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>;
+                        case 'concurrent': return <TableCell key={col} style={prodCols.widthStyle(col)} className="font-medium">{conc?.nom || '—'}</TableCell>;
+                        case 'produit': return <TableCell key={col} style={prodCols.widthStyle(col)}><div className="font-medium">{p.nom}</div></TableCell>;
+                        case 'reference': return <TableCell key={col} style={prodCols.widthStyle(col)} className="font-mono text-xs">{p.reference || '—'}</TableCell>;
+                        case 'categorie': return <TableCell key={col} style={prodCols.widthStyle(col)}>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>;
+                        case 'prixHT': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>;
+                        case 'description': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>;
+                        case 'clientSource': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>;
+                        case 'informateur': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>;
+                        case 'date': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>;
                       }
                     };
                     return (
                       <TableRow key={p.id} className="group cursor-pointer hover:bg-muted/30" onClick={startEdit}>
-                        {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => cellFor(c.key))}
+                        {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => cellFor(c.key))}
                         <TableCell onClick={e => e.stopPropagation()}>
                           <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-6 sm:w-6 text-destructive opacity-100 sm:opacity-0 group-hover:opacity-100"
                             onClick={async () => {
