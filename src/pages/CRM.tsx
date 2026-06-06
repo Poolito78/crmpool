@@ -1227,7 +1227,7 @@ export default function CRM() {
       {/* ══════════════════════════ VEILLE CONCURRENCE ══════════════════════════ */}
       {tab === 'veille' && (
         <div className="p-0">
-          <VeilleContent />
+          <VeilleContent embedded />
         </div>
       )}
 

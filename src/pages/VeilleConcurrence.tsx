@@ -184,7 +184,7 @@ async function extractTarifText(file: File): Promise<string> {
 // ── Composant principal (sans wrapper de scroll) ──────────────────────────────
 // Utilisé tel quel dans CRM.tsx ; wrappé dans un scroll container pour la page dédiée.
 
-export function VeilleContent() {
+export function VeilleContent({ embedded = false }: { embedded?: boolean } = {}) {
   const {
     concurrents, produits, notes, loading,
     addConcurrent, updateConcurrent, deleteConcurrent,
@@ -477,6 +477,30 @@ export function VeilleContent() {
 
   return (
     <div className="space-y-4">
+      <Tabs defaultValue="fiches" className="space-y-4">
+        {/* Titre + sous-onglets sur la même ligne */}
+        <div className="flex items-center gap-3 flex-wrap">
+          {!embedded && (
+            <h1 className="text-xl font-bold flex items-center gap-2 mr-1">
+              <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
+            </h1>
+          )}
+          <TabsList className="h-9">
+            <TabsTrigger value="fiches" className="flex items-center gap-1">
+              <Building2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Fiches</span>
+            </TabsTrigger>
+            <TabsTrigger value="produits" className="flex items-center gap-1">
+              <Package className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Produits</span>
+            </TabsTrigger>
+            <TabsTrigger value="notes" className="flex items-center gap-1">
+              <FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Notes</span>
+            </TabsTrigger>
+            <TabsTrigger value="analyse" className="flex items-center gap-1">
+              <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
+            </TabsTrigger>
+          </TabsList>
+        </div>
+
       {/* Barre d'actions */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-muted-foreground">
@@ -520,23 +544,6 @@ export function VeilleContent() {
           </Button>
         </div>
       </div>
-
-      {/* Sous-onglets */}
-      <Tabs defaultValue="fiches">
-        <TabsList className="grid grid-cols-4 w-full max-w-lg">
-          <TabsTrigger value="fiches" className="flex items-center gap-1">
-            <Building2 className="w-3.5 h-3.5" /> Fiches
-          </TabsTrigger>
-          <TabsTrigger value="produits" className="flex items-center gap-1">
-            <Package className="w-3.5 h-3.5" /> Produits
-          </TabsTrigger>
-          <TabsTrigger value="notes" className="flex items-center gap-1">
-            <FileText className="w-3.5 h-3.5" /> Notes
-          </TabsTrigger>
-          <TabsTrigger value="analyse" className="flex items-center gap-1">
-            <BarChart3 className="w-3.5 h-3.5" /> Analyse
-          </TabsTrigger>
-        </TabsList>
 
         {/* ── Fiches Concurrents ── */}
         <TabsContent value="fiches" className="space-y-3 pt-3">
@@ -1291,13 +1298,6 @@ function RenameGroup({ title, values, count, onRename }: {
 export default function VeilleConcurrence() {
   return (
     <div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
-      <div className="flex-none px-4 md:px-6 py-4 border-b bg-background flex items-center gap-3">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
-          </h1>
-        </div>
-      </div>
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
         <VeilleContent />
       </div>
