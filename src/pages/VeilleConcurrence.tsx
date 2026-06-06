@@ -11,10 +11,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download, Upload, Check,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, MoreHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -508,15 +509,24 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
-            <Button variant="outline" size="sm" onClick={() => exportVeilleExcel(concurrents, produits, notes)} title="Exporter en Excel">
-              <Download className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Excel</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)} title="Envoyer par email">
-              <Mail className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Par email</span>
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }} title="Importer un tarif concurrent">
-              <Upload className="w-4 h-4 lg:mr-1" /> <span className="hidden lg:inline">Importer tarif</span>
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-1.5">
+                  <MoreHorizontal className="w-4 h-4" /> Action
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
+                  <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Export Excel
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => exportByEmail(concurrents, produits, notes)}>
+                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoi par email
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
+                  <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer tarif
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button size="sm" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
               <Plus className="w-4 h-4 mr-1" /> Ajout
             </Button>
