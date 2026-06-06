@@ -377,6 +377,21 @@ export default function Produits() {
     });
   }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit]);
 
+  // Stock par dépôt (entrepôt) par produit — pour l'affichage détaillé quand plusieurs dépôts
+  const depotStocksParProduit = useMemo(() => {
+    const m = new Map<string, { nom: string; stock: number }[]>();
+    for (const s of stockEntrepots) {
+      if (!s.stock) continue;
+      const nom = entrepots.find(e => e.id === s.entrepotId)?.nom || '?';
+      const arr = m.get(s.produitId) || [];
+      arr.push({ nom, stock: s.stock });
+      m.set(s.produitId, arr);
+    }
+    // Tri par stock décroissant pour chaque produit
+    for (const arr of m.values()) arr.sort((a, b) => b.stock - a.stock);
+    return m;
+  }, [stockEntrepots, entrepots]);
+
   // Nom client (société de préférence) pour les onglets Devis / Commandes de la fiche produit
   const clientLabel = (clientId?: string) => {
     const c = clients.find(cl => cl.id === clientId);
@@ -1057,7 +1072,19 @@ export default function Produits() {
                     case 'poids':        return <td className="px-2 py-2.5 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
                     case 'consommation': return <td className="px-2 py-2.5 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
                     case 'tva':          return <td className="px-2 py-2.5 text-right">{p.tva}%</td>;
-                    case 'stock':        return <td className={`px-2 py-2.5 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>{p.stock}{pfs.length > 0 && <span className="block text-xs text-muted-foreground">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>}</td>;
+                    case 'stock': {
+                      const depots = depotStocksParProduit.get(p.id) || [];
+                      return <td className={`px-2 py-2.5 text-right font-medium ${p.stock < p.stockMin ? 'text-warning' : ''}`}>
+                        {p.stock}
+                        {depots.length > 1 ? (
+                          <span className="block text-[11px] text-muted-foreground leading-tight font-normal">
+                            {depots.map(d => `${d.nom} ${d.stock}`).join(' · ')}
+                          </span>
+                        ) : pfs.length > 0 ? (
+                          <span className="block text-xs text-muted-foreground font-normal">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>
+                        ) : null}
+                      </td>;
+                    }
                     case 'qteVendue':    return <td className="px-2 py-2.5 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'disponibleVente': return (
                       <td className="px-2 py-2.5 text-center">
