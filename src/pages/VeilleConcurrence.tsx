@@ -498,7 +498,22 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
             </TabsTrigger>
           </TabsList>
-          <div className="flex gap-2 flex-wrap items-center ml-auto">
+          <div className="flex gap-2 items-center ml-auto">
+            <Button size="sm" variant="outline" onClick={openNew}>
+              <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Nouveau&nbsp;</span>concurrent
+            </Button>
+            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'}>
+              <Plus className="w-4 h-4 mr-1" /> <span className="hidden sm:inline">Nouveau&nbsp;</span>produit
+            </Button>
+          </div>
+        </div>
+
+        {/* Compteurs + actions secondaires */}
+        <div className="flex items-center justify-between gap-3 flex-wrap -mt-1">
+          <p className="text-sm text-muted-foreground">
+            {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
+          </p>
+          <div className="flex gap-2 flex-wrap items-center">
             {myEmail && (
               nameEditOpen ? (
                 <div className="flex items-center gap-1.5">
@@ -528,19 +543,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <Button variant="outline" size="sm" onClick={() => exportByEmail(concurrents, produits, notes)}>
               <Mail className="w-4 h-4 mr-1" /> Par email
             </Button>
-            <Button size="sm" variant="outline" onClick={openNew}>
-              <Plus className="w-4 h-4 mr-1" /> Nouveau concurrent
-            </Button>
-            <Button size="sm" onClick={openAddProd} disabled={concurrents.length === 0} title={concurrents.length === 0 ? 'Créez d\'abord un concurrent' : 'Ajouter un produit concurrent'}>
-              <Plus className="w-4 h-4 mr-1" /> Nouveau produit
-            </Button>
           </div>
         </div>
-
-        {/* Compteurs */}
-        <p className="text-sm text-muted-foreground -mt-1">
-          {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
-        </p>
 
         {/* ── Fiches Concurrents ── */}
         <TabsContent value="fiches" className="space-y-3 pt-3">
