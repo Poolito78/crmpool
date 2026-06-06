@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback, Fragment, cloneElement, type ReactElement } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, formatMontant, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
+import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings, FileText, ShoppingCart } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -73,7 +73,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient } = useCRM();
+  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, clients } = useCRM();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -126,7 +126,7 @@ export default function Produits() {
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
-  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs'>('infos');
+  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes'>('infos');
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -376,6 +376,42 @@ export default function Produits() {
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
   }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit]);
+
+  // Nom client (société de préférence) pour les onglets Devis / Commandes de la fiche produit
+  const clientLabel = (clientId?: string) => {
+    const c = clients.find(cl => cl.id === clientId);
+    return c ? (c.societe || c.nom || '—') : '—';
+  };
+  // Devis contenant le produit en cours d'édition (qté cumulée + montant HT)
+  const produitDevisRows = useMemo(() => {
+    if (!editing) return [];
+    const pid = editing.id;
+    return devis
+      .map(d => {
+        const lignes = d.lignes.filter(l => l.produitId === pid);
+        if (lignes.length === 0) return null;
+        const qte = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
+        const montantHT = lignes.reduce((s, l) => s + calculerTotalLigne(l).totalHT, 0);
+        return { id: d.id, numero: d.numero, date: d.dateCreation, statut: d.statut, clientId: d.clientId, qte, montantHT };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [editing, devis]);
+  // Commandes client contenant le produit
+  const produitCommandesRows = useMemo(() => {
+    if (!editing) return [];
+    const pid = editing.id;
+    return commandesClient
+      .map(c => {
+        const lignes = c.lignes.filter(l => l.produitId === pid);
+        if (lignes.length === 0) return null;
+        const qte = lignes.reduce((s, l) => s + (l.quantite || 0), 0);
+        const montantHT = lignes.reduce((s, l) => s + calculerTotalLigne(l).totalHT, 0);
+        return { id: c.id, numero: c.numero, date: c.dateCreation, statut: c.statut, clientId: c.clientId, qte, montantHT };
+      })
+      .filter((x): x is NonNullable<typeof x> => !!x)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  }, [editing, commandesClient]);
 
   const toggleSelect = (id: string) => setSelected(prev => {
     const next = new Set(prev);
@@ -1161,6 +1197,8 @@ export default function Produits() {
               { id: 'infos',       label: 'Informations', icon: Package },
               { id: 'stock',       label: 'Stock & entrepôts', icon: Warehouse },
               { id: 'fournisseurs', label: 'Fournisseurs', icon: Truck },
+              { id: 'devis',       label: 'Devis', icon: FileText },
+              { id: 'commandes',   label: 'Commandes', icon: ShoppingCart },
             ] as const).map(t => (
               <button
                 key={t.id}
@@ -2341,6 +2379,94 @@ export default function Produits() {
                 )
               ) : (
                 <p className="text-sm text-muted-foreground py-4 text-center">Enregistrez le produit d'abord pour gérer les fournisseurs.</p>
+              )}
+            </div>
+          )}
+
+          {/* ══ Onglet Devis ═══════════════════════════════════════════════ */}
+          {produitTab === 'devis' && (
+            <div className="py-2">
+              {!editing ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Enregistrez le produit d'abord pour voir les devis associés.</p>
+              ) : produitDevisRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Ce produit n'apparaît dans aucun devis.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-2 px-1">
+                    <span>{produitDevisRows.length} devis · {produitDevisRows.reduce((s, r) => s + r.qte, 0)} u. au total</span>
+                    <span className="font-semibold text-foreground">{formatMontant(produitDevisRows.reduce((s, r) => s + r.montantHT, 0))} € HT</span>
+                  </div>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted text-xs text-muted-foreground">
+                          <th className="text-left px-3 py-2 font-medium">N°</th>
+                          <th className="text-left px-3 py-2 font-medium">Client</th>
+                          <th className="text-left px-3 py-2 font-medium">Date</th>
+                          <th className="text-left px-3 py-2 font-medium">Statut</th>
+                          <th className="text-right px-3 py-2 font-medium">Qté</th>
+                          <th className="text-right px-3 py-2 font-medium">Montant HT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {produitDevisRows.map(r => (
+                          <tr key={r.id} className="border-t border-border hover:bg-muted/40 cursor-pointer" onClick={() => { setDialogOpen(false); navigate(`/devis?editDevis=${r.id}`); }}>
+                            <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.numero}</td>
+                            <td className="px-3 py-2 truncate max-w-[140px]">{clientLabel(r.clientId)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatDate(r.date)}</td>
+                            <td className="px-3 py-2"><span className="text-xs capitalize">{r.statut}</span></td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.qte}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-medium">{formatMontant(r.montantHT)} €</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ══ Onglet Commandes (client) ══════════════════════════════════ */}
+          {produitTab === 'commandes' && (
+            <div className="py-2">
+              {!editing ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">Enregistrez le produit d'abord pour voir les commandes associées.</p>
+              ) : produitCommandesRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-8 text-center">Ce produit n'apparaît dans aucune commande client.</p>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-2 px-1">
+                    <span>{produitCommandesRows.length} commande(s) · {produitCommandesRows.reduce((s, r) => s + r.qte, 0)} u. au total</span>
+                    <span className="font-semibold text-foreground">{formatMontant(produitCommandesRows.reduce((s, r) => s + r.montantHT, 0))} € HT</span>
+                  </div>
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-muted text-xs text-muted-foreground">
+                          <th className="text-left px-3 py-2 font-medium">N°</th>
+                          <th className="text-left px-3 py-2 font-medium">Client</th>
+                          <th className="text-left px-3 py-2 font-medium">Date</th>
+                          <th className="text-left px-3 py-2 font-medium">Statut</th>
+                          <th className="text-right px-3 py-2 font-medium">Qté</th>
+                          <th className="text-right px-3 py-2 font-medium">Montant HT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {produitCommandesRows.map(r => (
+                          <tr key={r.id} className="border-t border-border hover:bg-muted/40 cursor-pointer" onClick={() => { setDialogOpen(false); navigate(`/commandes-client?search=${encodeURIComponent(r.numero)}`); }}>
+                            <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.numero}</td>
+                            <td className="px-3 py-2 truncate max-w-[140px]">{clientLabel(r.clientId)}</td>
+                            <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{formatDate(r.date)}</td>
+                            <td className="px-3 py-2"><span className="text-xs capitalize">{r.statut}</span></td>
+                            <td className="px-3 py-2 text-right tabular-nums">{r.qte}</td>
+                            <td className="px-3 py-2 text-right tabular-nums font-medium">{formatMontant(r.montantHT)} €</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           )}
