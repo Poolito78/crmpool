@@ -1088,7 +1088,10 @@ export function VeilleContent() {
               </div>
               <div className="space-y-1.5">
                 <Label>Catégorie</Label>
-                <Input value={addProdForm.categorie} onChange={e => setAddProdForm(f => ({ ...f, categorie: e.target.value }))} />
+                <Input list="veille-categories-add" value={addProdForm.categorie} onChange={e => setAddProdForm(f => ({ ...f, categorie: e.target.value }))} placeholder="Choisir ou saisir…" />
+                <datalist id="veille-categories-add">
+                  {categories.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
             </div>
             <div className="space-y-1.5">
