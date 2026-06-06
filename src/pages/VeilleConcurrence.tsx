@@ -249,17 +249,22 @@ export function VeilleContent() {
   const addNomSuggestions = useMemo(() => {
     const q = addProdForm.nom.trim().toLowerCase();
     if (!q) return [];
-    const unique = Array.from(new Set(produits.map(p => p.nom)));
+    // Produits concurrents déjà saisis + catalogue produits ISOFLOOR
+    const unique = Array.from(new Set([
+      ...produits.map(p => p.nom),
+      ...produitsCatalogue.map(p => p.description).filter(Boolean) as string[],
+    ]));
     return unique.filter(n => n.toLowerCase().includes(q)).slice(0, 8);
-  }, [addProdForm.nom, produits]);
+  }, [addProdForm.nom, produits, produitsCatalogue]);
 
   function selectAddNomSuggestion(nom: string) {
     const match = produits.find(p => p.nom === nom);
+    const cat = produitsCatalogue.find(p => p.description === nom); // catalogue ISOFLOOR
     setAddProdForm(f => ({
       ...f,
       nom,
-      reference: f.reference || match?.reference || '',
-      categorie: f.categorie || match?.categorie || '',
+      reference: f.reference || match?.reference || cat?.reference || '',
+      categorie: f.categorie || match?.categorie || cat?.categorie || '',
     }));
     setShowAddNomSuggestions(false);
   }
@@ -272,6 +277,12 @@ export function VeilleContent() {
   const categories = useMemo(() =>
     [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort()
   , [produits]);
+  // Suggestions « Client source » : clients du CRM + valeurs déjà saisies sur les produits concurrents
+  const clientNomsSuggestions = useMemo(() => {
+    const fromCrm = clients.map(c => c.societe || c.nom).filter(Boolean) as string[];
+    const fromProduits = produits.map(p => p.clientNom).filter(Boolean) as string[];
+    return [...new Set([...fromCrm, ...fromProduits])].sort();
+  }, [clients, produits]);
 
   const filteredConcurrents = useMemo(() => {
     let list = concurrents;
@@ -1111,7 +1122,10 @@ export function VeilleContent() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Client source</Label>
-                  <Input value={addProdForm.clientNom} onChange={e => setAddProdForm(f => ({ ...f, clientNom: e.target.value }))} placeholder="Nom du client" />
+                  <Input list="veille-clients-add" value={addProdForm.clientNom} onChange={e => setAddProdForm(f => ({ ...f, clientNom: e.target.value }))} placeholder="Nom du client" />
+                  <datalist id="veille-clients-add">
+                    {clientNomsSuggestions.map(n => <option key={n} value={n} />)}
+                  </datalist>
                 </div>
                 <div className="space-y-1.5">
                   <Label>Informateur</Label>
