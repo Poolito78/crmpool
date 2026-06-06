@@ -460,10 +460,10 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   }
 
   return (
-    <div className="space-y-4">
-      <Tabs defaultValue="fiches" className="space-y-4">
+    <div className={embedded ? 'space-y-3' : 'flex flex-col flex-1 min-h-0'}>
+      <Tabs defaultValue="fiches" className={embedded ? 'space-y-4' : 'flex flex-col flex-1 min-h-0 gap-3'}>
         {/* Titre + sous-onglets sur la même ligne */}
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap flex-none">
           {!embedded && (
             <h1 className="text-xl font-bold flex items-center gap-2 mr-1">
               <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
@@ -502,13 +502,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           </div>
         </div>
 
-        {/* Compteurs */}
-        <p className="text-sm text-muted-foreground -mt-1">
-          {concurrents.length} concurrent{concurrents.length > 1 ? 's' : ''} · {produits.length} produit{produits.length > 1 ? 's' : ''} · {notes.length} note{notes.length > 1 ? 's' : ''}
-        </p>
-
         {/* ── Fiches Concurrents ── */}
-        <TabsContent value="fiches" className="space-y-3 pt-3">
+        <TabsContent value="fiches" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 overflow-y-auto space-y-3 pt-1 mt-0'}>
           <div className="flex gap-2 flex-wrap">
             <div className="relative flex-1 min-w-48">
               <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground" />
@@ -598,10 +593,10 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         </TabsContent>
 
         {/* ── Produits Concurrents ── */}
-        <TabsContent value="produits" className="space-y-3 pt-3">
-          <div className="flex items-center justify-between gap-2 flex-wrap">
+        <TabsContent value="produits" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 flex flex-col gap-2 pt-1 mt-0'}>
+          <div className="flex items-center justify-between gap-2 flex-wrap flex-none empty:hidden">
             {/* Barre filtres actifs (les filtres/tri sont dans les en-têtes de colonnes) */}
-            <div className="flex items-center gap-1.5 flex-wrap min-h-[2rem]">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {Object.entries(prodColFilters).filter(([, v]) => v).map(([col, v]) => (
                 <span key={col} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
                   {PROD_COLS.find(c => c.key === col)?.label} : {v}
@@ -619,11 +614,11 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               <p>Aucun produit concurrent trouvé</p>
             </div>
           ) : (
-            <div className="rounded-lg border overflow-hidden">
+            <div className={embedded ? 'rounded-lg border overflow-hidden' : 'flex-1 min-h-0 rounded-lg border overflow-hidden flex flex-col'}>
               <datalist id="veille-categories-list">
                 {categories.map(c => <option key={c} value={c} />)}
               </datalist>
-              <Table>
+              <Table containerClassName={embedded ? undefined : 'flex-1 min-h-0'}>
                 <TableHeader>
                   <TableRow>
                     {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => {
@@ -634,7 +629,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                       const suggestions = c.key === 'categorie' ? categories : c.key === 'clientSource' ? clientNomsSuggestions : c.key === 'informateur' ? createurs.map(formatCreateur) : [];
                       const isDragOver = prodCols.dragOverKey === c.key && prodCols.dragKey !== c.key;
                       return (
-                        <TableHead key={c.key} {...prodCols.thProps(c.key)} style={prodCols.widthStyle(c.key)} className={`relative select-none cursor-grab active:cursor-grabbing ${c.key === 'prixHT' ? 'text-right' : ''} ${prodCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : ''}`}>
+                        <TableHead key={c.key} {...prodCols.thProps(c.key)} style={prodCols.widthStyle(c.key)} className={`relative select-none cursor-grab active:cursor-grabbing sticky top-0 z-10 ${c.key === 'prixHT' ? 'text-right' : ''} ${prodCols.dragKey === c.key ? 'opacity-40' : ''} ${isDragOver ? 'bg-primary/10' : 'bg-muted'}`}>
                           {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
                           <div className={`flex items-center gap-0.5 ${c.key === 'prixHT' ? 'justify-end' : ''} ${prodCols.widthStyle(c.key) ? 'overflow-hidden' : ''}`}>
                             <button onClick={() => setProdSort(s => s?.col === c.key ? (s.dir === 'asc' ? { col: c.key, dir: 'desc' } : null) : { col: c.key, dir: 'asc' })} className="flex items-center gap-1 hover:text-foreground min-w-0">
@@ -655,7 +650,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                         </TableHead>
                       );
                     })}
-                    <TableHead className="w-12 relative">
+                    <TableHead className="w-12 relative sticky top-0 z-10 bg-muted">
                       <div className="relative" ref={prodGearRef}>
                         <button onClick={() => setProdGearOpen(o => !o)} title="Colonnes affichées" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
                           <Settings className="w-4 h-4" />
@@ -762,7 +757,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         </TabsContent>
 
         {/* ── Notes ── */}
-        <TabsContent value="notes" className="space-y-3 pt-3">
+        <TabsContent value="notes" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 overflow-y-auto space-y-3 pt-1 mt-0'}>
           <div className="flex gap-2 flex-wrap">
             <Select value={filterConcNote || '_all'} onValueChange={v => setFilterConcNote(v === '_all' ? '' : v)}>
               <SelectTrigger className="w-48">
@@ -818,7 +813,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         </TabsContent>
 
         {/* ── Analyse Pivot ── */}
-        <TabsContent value="analyse" className="space-y-4 pt-3">
+        <TabsContent value="analyse" className={embedded ? 'space-y-4 pt-3' : 'flex-1 min-h-0 overflow-y-auto space-y-4 pt-1 mt-0'}>
           <div className="flex gap-2">
             <Button size="sm" variant={pivotMode === 'categorie' ? 'default' : 'outline'} onClick={() => setPivotMode('categorie')}>
               Catégories × Concurrents
@@ -1179,7 +1174,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
 export default function VeilleConcurrence() {
   return (
     <div style={{ height: 'calc(100vh - 4rem)' }} className="flex flex-col -m-4 md:-m-6">
-      <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">
+      <div className="flex-1 min-h-0 flex flex-col px-4 md:px-6 py-4">
         <VeilleContent />
       </div>
     </div>
