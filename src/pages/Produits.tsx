@@ -36,10 +36,11 @@ const COLUMNS = [
   { key: 'tva',          label: 'TVA %',            align: 'right' as const },
   { key: 'stock',           label: 'Stock',            align: 'right'  as const },
   { key: 'qteVendue',      label: 'Qté vendue',       align: 'right'  as const },
+  { key: 'qteCommandeeF',  label: 'Qté cmd fourn.',   align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue', 'qteCommandeeF'];
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -86,7 +87,7 @@ export default function Produits() {
         // Filtre uniquement les clés valides (supprime les anciennes clés obsolètes)
         const validKeys = new Set(COLUMNS.map(c => c.key));
         const saved = new Set((JSON.parse(s) as ColKey[]).filter(k => validKeys.has(k)));
-        if (saved.size > 0) return saved;
+        if (saved.size > 0) { saved.add('qteCommandeeF'); return saved; } // nouvelle colonne : visible chez les utilisateurs existants
       }
     } catch {}
     return new Set(DEFAULT_VISIBLE_COLS);
@@ -306,6 +307,17 @@ export default function Produits() {
     return map;
   }, [commandesClient]);
 
+  // Quantité totale commandée aux fournisseurs par produit (somme des lignes de toutes les commandes fournisseur)
+  const qteCommandeeFournParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cf of commandesFournisseur) {
+      for (const l of cf.lignes) {
+        if (l.produitId) map[l.produitId] = (map[l.produitId] || 0) + (l.quantite || 0);
+      }
+    }
+    return map;
+  }, [commandesFournisseur]);
+
   // Stock réservé : quantité dans commandes actives non encore livrées
   const stockReserveParProduit = useMemo(() => {
     const map: Record<string, number> = {};
@@ -346,6 +358,7 @@ export default function Produits() {
         case 'tva':          if (isNonVide ? p.tva === 0 : !String(p.tva).includes(v)) return false; break;
         case 'stock':        if (isNonVide ? p.stock === 0 : !String(p.stock).includes(v)) return false; break;
         case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
+        case 'qteCommandeeF': if (isNonVide ? !(qteCommandeeFournParProduit[p.id] > 0) : !String(qteCommandeeFournParProduit[p.id] || 0).includes(v)) return false; break;
         case 'disponibleVente': if (isNonVide ? !(p.disponibleVente !== false) : !String(p.disponibleVente !== false ? 'oui' : 'non').includes(v)) return false; break;
       }
     }
@@ -370,12 +383,13 @@ export default function Produits() {
         case 'tva':          av = a.tva; bv = b.tva; break;
         case 'stock':           av = a.stock; bv = b.stock; break;
         case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
+        case 'qteCommandeeF':   av = qteCommandeeFournParProduit[a.id] || 0; bv = qteCommandeeFournParProduit[b.id] || 0; break;
         case 'disponibleVente': av = (a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
-  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit]);
+  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit]);
 
   // Stock par dépôt (entrepôt) par produit — pour l'affichage détaillé quand plusieurs dépôts
   const depotStocksParProduit = useMemo(() => {
@@ -1105,6 +1119,7 @@ export default function Produits() {
                       </td>;
                     }
                     case 'qteVendue':    return <td className="px-2 py-2.5 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
+                    case 'qteCommandeeF': return <td className="px-2 py-2.5 text-right font-medium">{qteCommandeeFournParProduit[p.id] ? <span className="text-foreground">{qteCommandeeFournParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'disponibleVente': return (
                       <td className="px-2 py-2.5 text-center">
                         {p.disponibleVente !== false
