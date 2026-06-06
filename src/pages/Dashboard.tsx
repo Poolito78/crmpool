@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
+import { VeilleContent } from '@/pages/VeilleConcurrence';
 import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
@@ -21,10 +22,10 @@ export default function Dashboard() {
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
-  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel'>(() => {
-    try { return (localStorage.getItem('dashboard_tab') as 'overview' | 'previsionnel') || 'overview'; } catch { return 'overview'; }
+  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel' | 'veille'>(() => {
+    try { return (localStorage.getItem('dashboard_tab') as 'overview' | 'previsionnel' | 'veille') || 'overview'; } catch { return 'overview'; }
   });
-  const setDashTabPersist = (t: 'overview' | 'previsionnel') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
+  const setDashTabPersist = (t: 'overview' | 'previsionnel' | 'veille') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
@@ -193,10 +194,13 @@ export default function Dashboard() {
       <div className="flex gap-1 border-b border-border">
         <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
         <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>
+        <button onClick={() => setDashTabPersist('veille')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'veille' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Veille Concurrence</button>
       </div>
 
       {dashTab === 'previsionnel' ? (
         <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
+      ) : dashTab === 'veille' ? (
+        <VeilleContent embedded />
       ) : (
       <>
       {/* ── Alertes prioritaires ── */}

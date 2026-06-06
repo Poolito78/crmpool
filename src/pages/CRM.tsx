@@ -14,7 +14,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
 import CRMActionDialog from '@/components/CRMActionDialog';
-import { VeilleContent } from '@/pages/VeilleConcurrence';
 import DevisPreview from '@/components/DevisPreview';
 import { useNavigate } from 'react-router-dom';
 import {
@@ -56,7 +55,7 @@ export default function CRM() {
   const { actions, loading: actionsLoading, addAction, updateAction, deleteAction } = useCrmActions();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier' | 'analyse' | 'veille'>('pipeline');
+  const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier' | 'analyse'>('pipeline');
 
   // ── Analyse — sections ouvertes/fermées ───────────────────────────────
   const [analyseSections, setAnalyseSections] = useState<Record<string, boolean>>({
@@ -271,7 +270,6 @@ export default function CRM() {
           { key: 'actions',     label: 'Actions',             icon: CheckSquare },
           { key: 'calendrier',  label: 'Calendrier',          icon: Calendar },
           { key: 'analyse',     label: 'Analyse',             icon: PieChart },
-          { key: 'veille',      label: 'Veille Concurrence',  icon: Users },
         ] as const).map(t => (
           <button
             key={t.key}
@@ -1223,13 +1221,6 @@ export default function CRM() {
           </div>
         );
       })()}
-
-      {/* ══════════════════════════ VEILLE CONCURRENCE ══════════════════════════ */}
-      {tab === 'veille' && (
-        <div className="p-0">
-          <VeilleContent embedded />
-        </div>
-      )}
 
       </div>{/* fin zone scrollable */}
 
