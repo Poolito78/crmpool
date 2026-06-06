@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download, Upload, Check,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronDown, ChevronRight, Settings, Loader2,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -221,11 +221,40 @@ export function VeilleContent() {
 
   const [searchConc, setSearchConc] = useState('');
   const [filterCreateur, setFilterCreateur] = useState('');
-  const [filterConcProduit, setFilterConcProduit] = useState('');
-  const [filterCategorie, setFilterCategorie] = useState('');
   const [filterConcNote, setFilterConcNote] = useState('');
   const [filterCreateurNote, setFilterCreateurNote] = useState('');
-  const [sortProduit, setSortProduit] = useState<'nom' | 'categorie' | 'prix'>('categorie');
+  // ── Vue tableau Produits : tri + filtres inline par colonne + colonnes visibles ──
+  type PCol = 'concurrent' | 'produit' | 'reference' | 'categorie' | 'prixHT' | 'description' | 'clientSource' | 'informateur' | 'date';
+  const [prodSort, setProdSort] = useState<{ col: PCol; dir: 'asc' | 'desc' } | null>(null);
+  const [prodColFilters, setProdColFilters] = useState<Partial<Record<PCol, string>>>({});
+  const [prodOpenFilter, setProdOpenFilter] = useState<PCol | null>(null);
+  const PROD_COLS: { key: PCol; label: string }[] = [
+    { key: 'concurrent', label: 'Concurrent' },
+    { key: 'produit', label: 'Produit' },
+    { key: 'reference', label: 'Référence' },
+    { key: 'categorie', label: 'Catégorie' },
+    { key: 'prixHT', label: 'Prix HT' },
+    { key: 'description', label: 'Description' },
+    { key: 'clientSource', label: 'Client source' },
+    { key: 'informateur', label: 'Saisi par' },
+    { key: 'date', label: 'Date' },
+  ];
+  const DEFAULT_PROD_VIS: PCol[] = ['concurrent', 'produit', 'reference', 'categorie', 'prixHT', 'description', 'clientSource', 'informateur', 'date'];
+  const [prodVisCols, setProdVisCols] = useState<Set<PCol>>(() => {
+    try { const s = localStorage.getItem('veille_prod_cols'); if (s) return new Set(JSON.parse(s) as PCol[]); } catch { /* ignore */ }
+    return new Set(DEFAULT_PROD_VIS);
+  });
+  const toggleProdCol = (k: PCol) => setProdVisCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('veille_prod_cols', JSON.stringify([...n])); } catch { /* ignore */ } return n; });
+  const [prodGearOpen, setProdGearOpen] = useState(false);
+  const prodGearRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!prodGearOpen) return;
+    const h = (e: MouseEvent) => { if (prodGearRef.current && !prodGearRef.current.contains(e.target as Node)) setProdGearOpen(false); };
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [prodGearOpen]);
+  // Panneau admin de renommage global (catégories / informateurs)
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
@@ -291,16 +320,41 @@ export function VeilleContent() {
     return list;
   }, [concurrents, searchConc, filterCreateur]);
 
+  // Valeur affichée d'une colonne pour un produit (filtre/tri textuels)
+  const prodColValue = (p: typeof produits[number], col: PCol): string => {
+    switch (col) {
+      case 'concurrent': return concurrents.find(c => c.id === p.concurrentId)?.nom || '';
+      case 'produit': return p.nom || '';
+      case 'reference': return p.reference || '';
+      case 'categorie': return p.categorie || '';
+      case 'prixHT': return p.prixHT != null ? String(p.prixHT) : '';
+      case 'description': return p.description || '';
+      case 'clientSource': return p.clientNom || (clients.find(c => c.id === p.clientId)?.societe || clients.find(c => c.id === p.clientId)?.nom || '');
+      case 'informateur': return p.informateur || formatCreateur(p.createdByEmail);
+      case 'date': return p.dateRenseignement || p.createdAt || '';
+    }
+  };
   const filteredProduits = useMemo(() => {
-    let list = produits;
-    if (filterConcProduit) list = list.filter(p => p.concurrentId === filterConcProduit);
-    if (filterCategorie) list = list.filter(p => p.categorie === filterCategorie);
-    return [...list].sort((a, b) => {
-      if (sortProduit === 'prix') return (a.prixHT ?? Infinity) - (b.prixHT ?? Infinity);
-      if (sortProduit === 'categorie') return (a.categorie || '').localeCompare(b.categorie || '');
-      return a.nom.localeCompare(b.nom);
+    let list = produits.filter(p => {
+      for (const [col, v] of Object.entries(prodColFilters)) {
+        if (!v) continue;
+        if (!prodColValue(p, col as PCol).toLowerCase().includes(v.toLowerCase())) return false;
+      }
+      return true;
     });
-  }, [produits, filterConcProduit, filterCategorie, sortProduit]);
+    if (prodSort) {
+      const { col, dir } = prodSort;
+      list = [...list].sort((a, b) => {
+        let r: number;
+        if (col === 'prixHT') r = (a.prixHT ?? Infinity) - (b.prixHT ?? Infinity);
+        else r = prodColValue(a, col).localeCompare(prodColValue(b, col), 'fr', { numeric: true });
+        return dir === 'asc' ? r : -r;
+      });
+    } else {
+      list = [...list].sort((a, b) => (a.categorie || '').localeCompare(b.categorie || '') || a.nom.localeCompare(b.nom));
+    }
+    return list;
+  }, [produits, prodColFilters, prodSort, concurrents, clients]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const filteredNotes = useMemo(() => {
     let list = notes;
@@ -572,41 +626,40 @@ export function VeilleContent() {
 
         {/* ── Produits Concurrents ── */}
         <TabsContent value="produits" className="space-y-3 pt-3">
-          <div className="flex flex-col sm:flex-row gap-2">
-            <div className="flex gap-2 flex-wrap flex-1 items-center">
-            <Select value={filterConcProduit || '_all'} onValueChange={v => setFilterConcProduit(v === '_all' ? '' : v)}>
-              <SelectTrigger className="min-w-fit w-auto">
-                <Building2 className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="Tous les concurrents" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">Tous les concurrents</SelectItem>
-                {concurrents.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={filterCategorie || '_all'} onValueChange={v => setFilterCategorie(v === '_all' ? '' : v)}>
-              <SelectTrigger className="min-w-fit w-auto">
-                <Filter className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
-                <SelectValue placeholder="Toutes les catégories" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="_all">Toutes les catégories</SelectItem>
-                {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
-            <Select value={sortProduit} onValueChange={v => setSortProduit(v as any)}>
-              <SelectTrigger className="min-w-fit w-auto">
-                <ArrowUpDown className="w-4 h-4 mr-1 text-muted-foreground shrink-0" />
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="categorie">Trier par catégorie</SelectItem>
-                <SelectItem value="nom">Trier par nom</SelectItem>
-                <SelectItem value="prix">Trier par prix</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            {/* Barre filtres actifs (les filtres/tri sont dans les en-têtes de colonnes) */}
+            <div className="flex items-center gap-1.5 flex-wrap min-h-[2rem]">
+              {Object.entries(prodColFilters).filter(([, v]) => v).map(([col, v]) => (
+                <span key={col} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {PROD_COLS.find(c => c.key === col)?.label} : {v}
+                  <button onClick={() => setProdColFilters(f => { const n = { ...f }; delete n[col as PCol]; return n; })}><X className="w-3 h-3" /></button>
+                </span>
+              ))}
+              {Object.values(prodColFilters).some(Boolean) && (
+                <button onClick={() => setProdColFilters({})} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+              )}
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex gap-2 justify-end items-center">
+              <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setAdminPanelOpen(true)} title="Corriger globalement catégories / informateurs">
+                <Settings className="w-4 h-4" /> <span className="hidden sm:inline">Corriger</span>
+              </Button>
+              {/* Roue crantée : colonnes visibles */}
+              <div className="relative">
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setProdGearOpen(o => !o)} title="Colonnes visibles">
+                  <Settings className="w-4 h-4" /><span className="hidden sm:inline">Colonnes</span>
+                </Button>
+                {prodGearOpen && (
+                  <div ref={prodGearRef} className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-44 text-left">
+                    <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes affichées</p>
+                    {PROD_COLS.map(c => (
+                      <label key={c.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
+                        <input type="checkbox" checked={prodVisCols.has(c.key)} onChange={() => toggleProdCol(c.key)} className="rounded accent-primary w-3.5 h-3.5" />
+                        {c.label}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Button size="sm" variant="outline" className="gap-1.5" onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
                 <Upload className="w-4 h-4" /> <span className="hidden sm:inline">Importer tarif</span><span className="sm:hidden">Importer</span>
               </Button>
@@ -628,15 +681,32 @@ export function VeilleContent() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="hidden sm:table-cell">Concurrent</TableHead>
-                    <TableHead>Produit</TableHead>
-                    <TableHead className="hidden md:table-cell">Référence</TableHead>
-                    <TableHead className="hidden md:table-cell">Catégorie</TableHead>
-                    <TableHead className="text-right">Prix HT</TableHead>
-                    <TableHead className="hidden lg:table-cell">Description</TableHead>
-                    <TableHead className="hidden lg:table-cell">Client source</TableHead>
-                    <TableHead className="hidden lg:table-cell">Saisi par</TableHead>
-                    <TableHead className="hidden md:table-cell">Date</TableHead>
+                    {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => {
+                      const sorted = prodSort?.col === c.key;
+                      const hasFilter = !!prodColFilters[c.key];
+                      const isOpen = prodOpenFilter === c.key;
+                      const SortIcon = sorted ? (prodSort!.dir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                      const suggestions = c.key === 'categorie' ? categories : c.key === 'clientSource' ? clientNomsSuggestions : c.key === 'informateur' ? createurs.map(formatCreateur) : [];
+                      return (
+                        <TableHead key={c.key} className={c.key === 'prixHT' ? 'text-right' : ''}>
+                          <div className={`flex items-center gap-0.5 ${c.key === 'prixHT' ? 'justify-end' : ''}`}>
+                            <button onClick={() => setProdSort(s => s?.col === c.key ? (s.dir === 'asc' ? { col: c.key, dir: 'desc' } : null) : { col: c.key, dir: 'asc' })} className="flex items-center gap-1 hover:text-foreground">
+                              <span>{c.label}</span>
+                              <SortIcon className={`w-3 h-3 ${sorted ? 'text-primary' : 'opacity-40'}`} />
+                            </button>
+                            {isOpen ? (
+                              <span className="inline-flex items-center gap-0.5" onClick={e => e.stopPropagation()}>
+                                <Input list={suggestions.length ? `vprod-sugg-${c.key}` : undefined} autoFocus value={prodColFilters[c.key] || ''} onChange={e => setProdColFilters(f => ({ ...f, [c.key]: e.target.value }))} placeholder="Filtrer…" className="h-6 text-xs w-28" onKeyDown={e => { if (e.key === 'Escape') { setProdColFilters(f => { const n = { ...f }; delete n[c.key]; return n; }); setProdOpenFilter(null); } }} />
+                                {suggestions.length > 0 && <datalist id={`vprod-sugg-${c.key}`}>{suggestions.map(s => <option key={s} value={s} />)}</datalist>}
+                                <button onClick={() => { if (!prodColFilters[c.key]) setProdOpenFilter(null); else setProdOpenFilter(null); }} className="p-0.5 text-muted-foreground/60 hover:text-foreground"><X className="w-3 h-3" /></button>
+                              </span>
+                            ) : (
+                              <button onClick={() => setProdOpenFilter(c.key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 ${hasFilter ? 'text-primary' : 'text-muted-foreground/30 hover:text-muted-foreground/60'}`}><Filter className="w-3 h-3" /></button>
+                            )}
+                          </div>
+                        </TableHead>
+                      );
+                    })}
                     <TableHead className="w-12" />
                   </TableRow>
                 </TableHeader>
@@ -659,38 +729,24 @@ export function VeilleContent() {
                       toast.success('Produit mis à jour');
                     }
 
+                    const editCellFor = (col: PCol) => {
+                      const esc = (e: React.KeyboardEvent) => { if (e.key === 'Escape') setEditingProduitId(null); };
+                      switch (col) {
+                        case 'concurrent': return <TableCell key={col}><select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" onKeyDown={esc}>{concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}</select></TableCell>;
+                        case 'produit': return <TableCell key={col}><Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-32" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); esc(e); }} /></TableCell>;
+                        case 'reference': return <TableCell key={col}><Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={esc} /></TableCell>;
+                        case 'categorie': return <TableCell key={col}><Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={esc} /></TableCell>;
+                        case 'prixHT': return <TableCell key={col} className="text-right"><Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={esc} /></TableCell>;
+                        case 'description': return <TableCell key={col}><Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={esc} /></TableCell>;
+                        case 'clientSource': return <TableCell key={col}><Input list="veille-clients-add" value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={esc} /></TableCell>;
+                        case 'informateur': return <TableCell key={col}><Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={esc} /></TableCell>;
+                        case 'date': return <TableCell key={col}><Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={esc} /></TableCell>;
+                      }
+                    };
                     if (isEditing) {
                       return (
                         <TableRow key={p.id} className="bg-muted/20">
-                          <TableCell className="hidden sm:table-cell">
-                            <select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" title="Concurrent" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }}>
-                              {concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}
-                            </select>
-                          </TableCell>
-                          <TableCell>
-                            <Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-28" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell>
-                            <Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <Input value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden lg:table-cell">
-                            <Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
-                          <TableCell className="hidden md:table-cell">
-                            <Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={e => { if (e.key === 'Escape') setEditingProduitId(null); }} />
-                          </TableCell>
+                          {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => editCellFor(c.key))}
                           <TableCell>
                             <div className="flex gap-1">
                               <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
@@ -704,36 +760,22 @@ export function VeilleContent() {
                         </TableRow>
                       );
                     }
+                    const cellFor = (col: PCol) => {
+                      switch (col) {
+                        case 'concurrent': return <TableCell key={col} className="font-medium">{conc?.nom || '—'}</TableCell>;
+                        case 'produit': return <TableCell key={col}><div className="font-medium">{p.nom}</div></TableCell>;
+                        case 'reference': return <TableCell key={col} className="font-mono text-xs">{p.reference || '—'}</TableCell>;
+                        case 'categorie': return <TableCell key={col}>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>;
+                        case 'prixHT': return <TableCell key={col} className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>;
+                        case 'description': return <TableCell key={col} className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>;
+                        case 'clientSource': return <TableCell key={col} className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>;
+                        case 'informateur': return <TableCell key={col} className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>;
+                        case 'date': return <TableCell key={col} className="text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>;
+                      }
+                    };
                     return (
                       <TableRow key={p.id} className="group cursor-pointer hover:bg-muted/30" onClick={startEdit}>
-                        <TableCell className="hidden sm:table-cell font-medium">{conc?.nom || '—'}</TableCell>
-                        <TableCell>
-                          <div className="font-medium">{p.nom}</div>
-                          {conc?.nom && <p className="sm:hidden text-xs text-muted-foreground mt-0.5">{conc.nom}</p>}
-                          <div className="md:hidden flex items-center gap-1.5 mt-0.5 flex-wrap">
-                            {p.reference && <span className="font-mono text-xs text-muted-foreground">{p.reference}</span>}
-                            {p.categorie && <Badge variant="outline" className="text-[10px] py-0 h-4">{p.categorie}</Badge>}
-                          </div>
-                          {p.description && <p className="lg:hidden text-xs text-muted-foreground mt-0.5 truncate max-w-48">{p.description}</p>}
-                          {(p.clientNom || sourceClient || p.informateur || p.createdByEmail) && (
-                            <div className="lg:hidden text-xs text-muted-foreground mt-0.5 flex gap-2 flex-wrap">
-                              {(p.clientNom || sourceClient) && <span>{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '')}</span>}
-                              {(p.informateur || p.createdByEmail) && <span>{p.informateur || formatCreateur(p.createdByEmail)}</span>}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="hidden md:table-cell font-mono text-xs">{p.reference || '—'}</TableCell>
-                        <TableCell className="hidden md:table-cell">{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>
-                        <TableCell className="text-right font-semibold">
-                          {p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}
-                          <p className="md:hidden text-xs text-muted-foreground font-normal mt-0.5">
-                            {p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}
-                          </p>
-                        </TableCell>
-                        <TableCell className="hidden lg:table-cell text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>
-                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>
-                        <TableCell className="hidden md:table-cell text-xs text-muted-foreground">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</TableCell>
+                        {PROD_COLS.filter(c => prodVisCols.has(c.key)).map(c => cellFor(c.key))}
                         <TableCell onClick={e => e.stopPropagation()}>
                           <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-6 sm:w-6 text-destructive opacity-100 sm:opacity-0 group-hover:opacity-100"
                             onClick={async () => {
@@ -1144,6 +1186,35 @@ export function VeilleContent() {
         </DialogContent>
       </Dialog>
 
+      {/* ── Panneau admin : renommage global catégories / informateurs ── */}
+      <Dialog open={adminPanelOpen} onOpenChange={setAdminPanelOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Corriger catégories & informateurs</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground -mt-2">Renomme une valeur sur <strong>tous</strong> les produits concernés (corrige fautes/variantes).</p>
+          <RenameGroup
+            title="Catégories"
+            values={[...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort()}
+            count={(v) => produits.filter(p => p.categorie === v).length}
+            onRename={async (oldV, newV) => {
+              const targets = produits.filter(p => p.categorie === oldV);
+              for (const p of targets) await updateProduit({ ...p, categorie: newV || undefined });
+              toast.success(`${targets.length} produit(s) — catégorie « ${oldV} » → « ${newV} »`);
+            }}
+          />
+          <RenameGroup
+            title="Informateurs (saisi par)"
+            values={[...new Set(produits.map(p => p.informateur).filter(Boolean) as string[])].sort()}
+            count={(v) => produits.filter(p => p.informateur === v).length}
+            onRename={async (oldV, newV) => {
+              const targets = produits.filter(p => p.informateur === oldV);
+              for (const p of targets) await updateProduit({ ...p, informateur: newV || undefined });
+              toast.success(`${targets.length} produit(s) — informateur « ${oldV} » → « ${newV} »`);
+            }}
+          />
+          <DialogFooter><Button variant="outline" onClick={() => setAdminPanelOpen(false)}>Fermer</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConcurrentDialog
         open={dialogOpen}
         onClose={() => setDialogOpen(false)}
@@ -1161,6 +1232,48 @@ export function VeilleContent() {
         onUpdateNote={updateNote}
         onDeleteNote={deleteNote}
       />
+    </div>
+  );
+}
+
+// ── Sous-composant : renommage global d'une valeur (catégorie / informateur) ──
+function RenameGroup({ title, values, count, onRename }: {
+  title: string;
+  values: string[];
+  count: (v: string) => number;
+  onRename: (oldV: string, newV: string) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<string | null>(null);
+  const [val, setVal] = useState('');
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="border-t border-border pt-3">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">{title}</p>
+      {values.length === 0 ? (
+        <p className="text-xs text-muted-foreground">Aucune valeur.</p>
+      ) : (
+        <div className="space-y-1 max-h-48 overflow-y-auto">
+          {values.map(v => (
+            <div key={v} className="flex items-center gap-2 text-sm">
+              {editing === v ? (
+                <>
+                  <Input value={val} onChange={e => setVal(e.target.value)} className="h-7 text-sm flex-1" autoFocus onKeyDown={e => { if (e.key === 'Escape') setEditing(null); }} />
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-primary" disabled={busy || !val.trim() || val.trim() === v} onClick={async () => { setBusy(true); await onRename(v, val.trim()); setBusy(false); setEditing(null); }} title="Appliquer">
+                    {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => setEditing(null)} title="Annuler"><X className="w-3.5 h-3.5" /></Button>
+                </>
+              ) : (
+                <>
+                  <span className="flex-1 truncate">{v}</span>
+                  <span className="text-xs text-muted-foreground shrink-0">{count(v)}</span>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => { setEditing(v); setVal(v); }} title="Renommer"><Pencil className="w-3.5 h-3.5" /></Button>
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
