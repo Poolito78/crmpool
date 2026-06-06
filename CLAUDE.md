@@ -84,18 +84,21 @@ When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, 
 The nav uses a `NavEntry = NavLink | NavGroup` type union. Groups (`Vente`, `Achat`) are collapsible, auto-expand when a child route is active, and persist open state in `openGroups: string[]`. The flat list `NAV_FLAT` is used for the mobile bottom bar and the top-bar title.
 
 Current structure:
-- Tableau de bord, CRM (top-level)
+- Tableau de bord, **Veille Concurrence** (`/veille-concurrence`), CRM (top-level)
 - **Vente** group: Clients, Produits, Devis, Commandes Client, Factures Client
 - **Achat** group: Fournisseurs, Cmd Fournisseur, Factures Fourn.
-- Stock, Calcul Transport, Historique GED (top-level)
+- Stock, Calcul Transport (top-level)
+- **Paramètres** group: Tableau de bord, Entrepôts, Devis, Veille Concurrence, Historique GED. Les 4 premiers sont des **liens profonds** vers les onglets de `/parametres` via `?tab=dashboard|entrepots|devis|veille` ; `Parametres.tsx` lit l'onglet actif depuis `useSearchParams`.
+
+**Liens avec `?tab=` dans la nav** : un `NavLink.path` peut contenir une query (`/parametres?tab=devis`). `CRMLayout` expose `isLinkActive(path)` (compare `pathname` + `?tab=`, défaut `dashboard`) pour le surlignage, et `isSectionActive(path)` (pathname seul, ignore la query) pour l'auto-ouverture du groupe. `currentLabel` (titre du bandeau) utilise `isLinkActive` puis un repli par pathname.
 
 ### Pages (`src/pages/`)
 
 | Page | Role |
 |---|---|
 | `Devis.tsx` | Largest file. Full devis lifecycle: list (vue liste cartes / vue tableau colonnes), create/edit dialog (tabs: **Devis / Comparatif / MO / CRM / Notes & Fichiers**), archive dialog, PDF, email. Lignes éditables en mode cartes OU tableau (`lignesView`, persisté) — la vue tableau utilise `TABLE_LIGNE_COLS` + `useTableColumns('devis_lignes_table')` (colonnes resize/drag), en-tête figé dans la barre sticky, scroll H synchronisé. Sélection multi-lignes (cases à cocher) pour déplacer un bloc (groupe + lignes + sous-total) ensemble. **Fermeture / retour** : pattern historique navigateur — ouverture liste = `pushState` factice (back ferme la modale, reste sur la liste) ; ouverture via `?editDevis=` (navigation) = `navigate(-1)` (revient à la vraie page précédente). Voir `openedViaUrlRef` / `closeDevisDialog`. |
-| `CRM.tsx` | 5-tab page: Pipeline / Actions / Calendrier / Analyse / Veille. Uses its own scroll container (see below). |
-| `VeilleConcurrence.tsx` | Competitor watch: 4 sub-tabs (Fiches / Produits / Notes / Tableau pivot). Embeds `useConcurrents()`. Also embedded as a tab inside CRM.tsx. |
+| `CRM.tsx` | 4-tab page: Pipeline / Actions / Calendrier / Analyse. Uses its own scroll container (see below). (La Veille n'est plus un onglet de CRM — c'est une page dédiée `/veille-concurrence`.) |
+| `VeilleConcurrence.tsx` | Competitor watch. Export par défaut `VeilleConcurrence` (page dédiée, wrapper flex pleine hauteur) + export nommé **`VeilleContent({ embedded? })`** (le contenu réutilisable). 4 sous-onglets (Fiches / Produits / Notes / Analyse) rendus **sur la ligne du titre** (TabsList à côté du `<h1>`), boutons d'action à droite : menu **Action** (dropdown : Export Excel / Envoi par email / Importer tarif) + bouton unique **+ Ajout** (ouvre le dialog produit, qui contient lui-même « Importer tarif » et « + Concurrent » — concurrent créé auto-sélectionné). `embedded` masque le titre et désactive le flex-fill (flux normal). **Onglet Produits** : tableau data-driven (`PROD_COLS`/`PCol`) via `useTableColumns('veille_prod_table')` (drag + resize), filtres/tri **inline dans les en-têtes**, gear « colonnes » dans la dernière cellule d'en-tête, **en-tête sticky** (`<th sticky top-0>`) avec scroll unique flex-fill (`<Table containerClassName="flex-1 min-h-0">`). Colonne **Quantité** (prix par quantité). En mode page dédiée, `VeilleContent` passe en `flex flex-col flex-1 min-h-0` ; chaque `TabsContent` scrolle dans sa propre zone. |
 | `Produits.tsx` | Product catalog with tiered pricing, variants, kit composition, supplier links, qteVendue column. |
 | `Clients.tsx` | CRM contacts. Edit dialog has tabs: Infos / CRM (actions + devis history + win/loss). |
 | `Stock.tsx` | Stock level tracking. |
@@ -105,6 +108,7 @@ Current structure:
 | `GED.tsx` | Document management (pieces jointes per devis line via `devis_pieces_jointes` table). |
 | `CalculateurUPS.tsx` | Shipping cost calculator. 5 tabs: Standard, Transporteurs, Barèmes transporteurs, Saisie manuelle, **Achat**. The Achat tab stores real transport purchase history (drag-and-drop reorder, sortable, AI PDF extraction). localStorage key `crm_transport_achats`. `AchatTransport` interface has `fournisseur` (sender/client, e.g. QRM) distinct from `transporteur` (carrier, e.g. UPS). |
 | `StatsVariantes.tsx` | Sales statistics by product variant. |
+| `Parametres.tsx` | Réglages, organisés en **onglets** (`Tabs` contrôlé par `?tab=` via `useSearchParams`) : **Tableau de bord** (visibilité des tuiles), **Entrepôts** (CRUD `useEntrepots`), **Devis** (vue par défaut + colonnes), **Veille Concurrence** (`<VeilleDisplayName>` + `<VeilleCorrectionPanel>`). Atteignables en lien direct depuis la nav (`/parametres?tab=…`). |
 | `Dashboard.tsx` | 2 onglets (persistés localStorage `dashboard_tab`) : **Vue d'ensemble** (KPIs, alertes, derniers devis…) et **Prévisionnel devis** — pipeline pondéré par `probabiliteReussite` : CA pondéré, coût fournisseur pondéré, marge pondérée ; filtres statut + période de réalisation ; groupement par mois ; graphe `recharts` (BarChart) + export Excel. Liens devis avec `&returnTo=dashboard`. |
 
 ### CRM page scroll architecture
@@ -137,10 +141,13 @@ Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern 
 - `RichTextEditor.tsx` — Éditeur HTML riche (contentEditable + `execCommand`, sans dépendance) : gras/italique/souligné, titres, listes, taille, **couleur** (palette + sélecteur libre). Utilisé par l'onglet MO du devis. CSS placeholder `.rte-content:empty::before` dans `index.css`.
 - `RowActionsMenu.tsx` — Roue crantée d'actions par ligne (menu en **portail** position fixe, jamais rogné). Actions = `{ icon, label, onClick, danger?, hidden? }`. Utilisé sur toutes les vues tableau (Devis, Produits, Clients, Commandes, Factures).
 - `TableGearMenu.tsx` / `PageHeaderSlot.tsx` — voir section « Tableaux de données » ci-dessous.
+- `VeilleDisplayName.tsx` — éditeur autonome du nom d'affichage Veille de l'utilisateur courant (localStorage `crm_creator_names` + `veille_roles.display_name`). Affiché dans Paramètres → Veille.
+- `VeilleCorrectionPanel.tsx` — correction globale catégories/informateurs des produits concurrents (sous-composant `RenameGroup` : renomme une valeur sur tous les produits via `updateProduit`). Lit les données via `useConcurrents()`. Affiché dans Paramètres → Veille.
+- `ui/table.tsx` — le `<Table>` shadcn accepte un **`containerClassName`** optionnel (mergé sur le wrapper `relative w-full overflow-auto`). Indispensable pour borner le conteneur de scroll en flex-fill et obtenir un **en-tête `<th>` sticky** (sinon le wrapper overflow-auto non borné empêche le sticky vertical).
 
 ### Library modules (`src/lib/`)
 
-- **`concurrents.ts`** — `useConcurrents()` hook + `formatCreateur(emailOrName)` utility. `formatCreateur` resolves an email to a display name stored in localStorage key `crm_creator_names` (`{ "email": "displayName" }`). Used wherever creator identity is shown in competitor watch. La table `concurrent_produits` a 3 colonnes additionnelles gérées depuis Veille : `client_nom`, `informateur`, `date_renseignement`.
+- **`concurrents.ts`** — `useConcurrents()` hook + `formatCreateur(emailOrName)` utility. `formatCreateur` resolves an email to a display name stored in localStorage key `crm_creator_names` (`{ "email": "displayName" }`). Used wherever creator identity is shown in competitor watch. La table `concurrent_produits` a des colonnes additionnelles ajoutées par migration et incluses **conditionnellement** dans `concurrentProduitToDb` (spread `...(p.x !== undefined ? {...} : {})`) : `client_nom`, `informateur`, `date_renseignement`, **`quantite`** (numeric, prix par quantité). `ConcurrentProduit.quantite?: number`.
 - **`historique.ts`** — Fire-and-forget audit log via `logHistorique(entry)`. Never awaited — never blocks UI. `fetchHistorique(opts?)` retrieves entries. Table: `historique`.
 - **`pdfFolder.ts`** — `generatePdfFromElement` / `savePdfFromElement` via `html2canvas` + `jsPDF`. Smart page-break detection on `<tr>` boundaries. `writeFileToSubfolder` persists to a user-chosen directory via File System Access API (stored in IndexedDB).
 - **`exportExcel.ts`** — `exportMultiSheet` generates multi-sheet `.xlsx` files (used for global data export from the nav bar).
@@ -174,7 +181,14 @@ Replicate this pattern consistently in: the comparatif IIFE, devis card list (`t
 
 ### Supabase migrations (`supabase/migrations/`)
 
-SQL migrations are numbered by timestamp. Apply via Supabase dashboard SQL editor or CLI (`supabase db push`). `src/integrations/supabase/types.ts` is auto-generated — regenerate with `supabase gen types typescript`.
+SQL migrations are numbered by timestamp. Apply via Supabase dashboard SQL editor or CLI (`supabase db push`). `src/integrations/supabase/types.ts` is auto-generated and **resynced** avec la base — `npx tsc --noEmit` passe à 0 erreur (le maintenir ainsi).
+
+**Régénérer `types.ts`** : utiliser le script racine **`gen-types.ps1`** (lit `SUPABASE_ACCESS_TOKEN` depuis l'env — jamais en clair, gère le bon `--project-id` et l'encodage) :
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "sbp_xxx"   # token sur https://supabase.com/dashboard/account/tokens
+.\gen-types.ps1
+```
+⚠️ Régénérer **après** avoir appliqué les `ALTER TABLE` (sinon la colonne absente n'apparaît pas dans les types). Le token est interactif (`supabase login`) ou via la variable d'env — **ne pas manipuler le token de l'utilisateur** (il lance la commande lui-même). Les commandes `npx supabase …` s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 
 To apply programmatically from the browser, use the Supabase Management API with `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/qkjxcfosutclnahvxflf/database/query`.
 
@@ -220,7 +234,7 @@ const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_CO
   - Page multi-sections (Commandes Client, Factures Client/Fournisseur) → racine en **`flex flex-col flex-1 min-h-0 gap-4`** ; contenu au-dessus (cartes résumé, filtres statut) auto ; conteneur de tableau en **`flex-1 min-h-0 overflow-auto`** → le tableau remplit la hauteur restante.
   - Chaque `<th>` reste `sticky top-0 z-10 bg-muted`.
   - ⚠️ Ne PAS utiliser `max-h-[calc(...)]` sur le conteneur de scroll (cause un double scrollbar). Exception connue : `Stock.tsx` (3 onglets) conserve encore `max-h` (structure tabulée multi-sections, refonte à faire).
-- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Filtres inline en-tête + barre « Filtres actifs » + bandeau fixe + sticky faits sur **toutes** les vues tableau : Devis, Produits, Clients, Stock (×3), Commandes Client, Factures Client, Factures Fournisseur. Pour les colonnes date/montant, utiliser `FilterDateInput`/`FilterAmountInput` (helpers `matchDateFilter`/`matchAmountFilter` côté logique de filtrage).
+- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Filtres inline en-tête + barre « Filtres actifs » + bandeau fixe + sticky faits sur **toutes** les vues tableau : Devis, Produits, Clients, Stock (×3), Commandes Client, Factures Client, Factures Fournisseur, **Veille Concurrence (onglet Produits)**. Pour les colonnes date/montant, utiliser `FilterDateInput`/`FilterAmountInput` (helpers `matchDateFilter`/`matchAmountFilter` côté logique de filtrage).
 
 ### TypeScript conventions
 
