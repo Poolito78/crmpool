@@ -213,10 +213,9 @@ export function VeilleContent() {
     const name = nameInput.trim();
     setCreatorName(myEmail, name);
     // Persiste dans veille_roles.display_name pour que l'app Veille puisse le lire.
-    // (table absente des types générés → cast ; la colonne existe bien en base.)
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user.id) {
-      await (supabase as any).from('veille_roles').update({ display_name: name }).eq('user_id', session.user.id);
+      await supabase.from('veille_roles').update({ display_name: name }).eq('user_id', session.user.id);
     }
     setNameEditOpen(false);
     toast.success(`Nom d'affichage mis à jour : ${name}`);
