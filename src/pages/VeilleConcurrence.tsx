@@ -1095,9 +1095,14 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label>Concurrent *</Label>
-                <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary hover:text-primary" onClick={openNew} title="Créer un nouveau concurrent">
-                  <Plus className="w-3.5 h-3.5" /> Concurrent
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary hover:text-primary" onClick={() => { setImportConcId(addProdForm.concurrentId || concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }} title="Importer un tarif (PDF/Excel)">
+                    <Upload className="w-3.5 h-3.5" /> Importer tarif
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-7 text-xs gap-1 text-primary hover:text-primary" onClick={openNew} title="Créer un nouveau concurrent">
+                    <Plus className="w-3.5 h-3.5" /> Concurrent
+                  </Button>
+                </div>
               </div>
               <Select value={addProdForm.concurrentId} onValueChange={v => setAddProdForm(f => ({ ...f, concurrentId: v }))}>
                 <SelectTrigger><SelectValue placeholder={concurrents.length === 0 ? 'Aucun concurrent — cliquez sur + Concurrent' : 'Choisir un concurrent…'} /></SelectTrigger>
