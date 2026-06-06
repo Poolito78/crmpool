@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useEntrepots, type Entrepot } from '@/lib/store';
@@ -111,8 +112,16 @@ export default function Parametres() {
   const visibleCount = DASHBOARD_TILES.length - hidden.size;
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
+    <div className="max-w-3xl mx-auto">
+      <Tabs defaultValue="dashboard" className="space-y-4">
+        <TabsList className="flex flex-wrap h-auto justify-start">
+          <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
+          <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
+          <TabsTrigger value="devis">Devis</TabsTrigger>
+          <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
+        </TabsList>
 
+        <TabsContent value="entrepots" className="space-y-6 mt-4">
       {/* ══ Section Entrepôts ════════════════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">
@@ -195,7 +204,9 @@ export default function Parametres() {
           </div>
         )}
       </div>
+        </TabsContent>
 
+        <TabsContent value="devis" className="space-y-6 mt-4">
       {/* ══ Section Devis ════════════════════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <div>
@@ -245,7 +256,9 @@ export default function Parametres() {
           </div>
         </div>
       </div>
+        </TabsContent>
 
+        <TabsContent value="veille" className="space-y-6 mt-4">
       {/* ══ Section Veille Concurrence ═══════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <div>
@@ -261,7 +274,9 @@ export default function Parametres() {
           <VeilleCorrectionPanel />
         </div>
       </div>
+        </TabsContent>
 
+        <TabsContent value="dashboard" className="space-y-6 mt-4">
       {/* ══ Section Tableau de bord ══════════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5">
         <div className="flex items-center justify-between gap-3 mb-1">
@@ -314,6 +329,8 @@ export default function Parametres() {
           </div>
         </div>
       ))}
+        </TabsContent>
+      </Tabs>
 
       {/* ══ Dialog créer / modifier entrepôt ════════════════════════════════ */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
