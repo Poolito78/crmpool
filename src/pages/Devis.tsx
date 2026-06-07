@@ -1488,8 +1488,8 @@ export default function Devis() {
       {devisView === 'liste' && <div className="flex flex-col flex-1 min-h-0 gap-2 -mt-2">
         {/* Bandeau d'en-têtes fixe au-dessus des cartes */}
         <div className="shrink-0 space-y-2 bg-background -mx-4 md:-mx-6 px-4 md:px-6 pb-1">
-        {/* Barre tri + filtres (reprend l'en-tête du tableau) */}
-        <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2">
+        {/* Barre tri + filtres (reprend l'en-tête du tableau) — une seule ligne défilante */}
+        <div className="flex flex-nowrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 overflow-x-auto [&>*]:shrink-0">
           <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
           {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
             const sortKey = col.key === 'totalHT' ? 'total' : col.key;
