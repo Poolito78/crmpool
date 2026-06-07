@@ -541,18 +541,18 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   // Onglets + boutons d'action (placés dans le bandeau du haut en mode page)
   const headerControls = (
     <>
-      <TabsList className="h-9">
+      <TabsList className="h-9 hidden sm:inline-flex">
         <TabsTrigger value="fiches" className="flex items-center gap-1">
-          <Building2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Fiches</span>
+          <Building2 className="w-3.5 h-3.5" /> Fiches
         </TabsTrigger>
         <TabsTrigger value="produits" className="flex items-center gap-1">
-          <Package className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Produits</span>
+          <Package className="w-3.5 h-3.5" /> Produits
         </TabsTrigger>
         <TabsTrigger value="notes" className="flex items-center gap-1">
-          <FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Notes</span>
+          <FileText className="w-3.5 h-3.5" /> Notes
         </TabsTrigger>
         <TabsTrigger value="analyse" className="flex items-center gap-1">
-          <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
+          <BarChart3 className="w-3.5 h-3.5" /> Analyse
         </TabsTrigger>
       </TabsList>
       <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
@@ -604,6 +604,14 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <div className="flex-1 flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">{headerControls}</div>
           </PageHeaderSlot>
         )}
+
+        {/* Onglets pleine largeur sur mobile (le bandeau du haut est trop étroit) */}
+        <TabsList className="sm:hidden grid grid-cols-4 w-full h-9 flex-none">
+          <TabsTrigger value="fiches" className="flex items-center justify-center gap-1 text-xs"><Building2 className="w-3.5 h-3.5" /> Fiches</TabsTrigger>
+          <TabsTrigger value="produits" className="flex items-center justify-center gap-1 text-xs"><Package className="w-3.5 h-3.5" /> Produits</TabsTrigger>
+          <TabsTrigger value="notes" className="flex items-center justify-center gap-1 text-xs"><FileText className="w-3.5 h-3.5" /> Notes</TabsTrigger>
+          <TabsTrigger value="analyse" className="flex items-center justify-center gap-1 text-xs"><BarChart3 className="w-3.5 h-3.5" /> Analyse</TabsTrigger>
+        </TabsList>
 
         {/* ── Fiches Concurrents ── */}
         <TabsContent value="fiches" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 overflow-y-auto space-y-3 pt-1 mt-0'}>
