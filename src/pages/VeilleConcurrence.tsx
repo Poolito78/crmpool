@@ -597,13 +597,17 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           /* Mode intégré : onglets + boutons inline (pas de bandeau de page) */
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-none">{headerControls}</div>
         ) : (
-          /* Mode page : onglets + boutons portés dans le bandeau du haut (à côté du titre) */
-          <PageHeaderSlot>
-            <div className="flex-1 flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">{headerControls}</div>
-          </PageHeaderSlot>
+          <>
+            {/* Desktop : onglets + boutons dans le bandeau du haut (à côté du titre) */}
+            <PageHeaderSlot>
+              <div className="hidden sm:flex flex-1 items-center gap-3 flex-wrap min-w-0">{headerControls}</div>
+            </PageHeaderSlot>
+            {/* Mobile : boutons d'action dans le corps de page (le bandeau est trop étroit) */}
+            <div className="sm:hidden flex items-center gap-2 flex-none">{headerControls}</div>
+          </>
         )}
 
-        {/* Onglets pleine largeur sur mobile (le bandeau du haut est trop étroit) */}
+        {/* Onglets pleine largeur sur mobile */}
         <TabsList className="sm:hidden grid grid-cols-4 w-full h-9 flex-none">
           <TabsTrigger value="fiches" className="flex items-center justify-center gap-1 text-xs"><Building2 className="w-3.5 h-3.5" /> Fiches</TabsTrigger>
           <TabsTrigger value="produits" className="flex items-center justify-center gap-1 text-xs"><Package className="w-3.5 h-3.5" /> Produits</TabsTrigger>
