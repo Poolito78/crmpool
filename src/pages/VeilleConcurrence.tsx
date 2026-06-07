@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, X, Search, Download, Upload, Check,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, MoreHorizontal,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, MoreHorizontal, LayoutList, Table2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -27,6 +27,7 @@ import type { Concurrent } from '@/lib/concurrents';
 import { supabase } from '@/integrations/supabase/client';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import RowActionsMenu from '@/components/RowActionsMenu';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -216,6 +217,15 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   // ── Vue tableau Produits : tri + filtres inline par colonne + colonnes visibles ──
   type PCol = 'concurrent' | 'produit' | 'reference' | 'categorie' | 'quantite' | 'prixHT' | 'description' | 'clientSource' | 'informateur' | 'date';
   const [prodSort, setProdSort] = useState<{ col: PCol; dir: 'asc' | 'desc' } | null>(null);
+  // Mode d'affichage produits (tableau / liste) — défaut liste sur mobile
+  const [prodView, setProdViewState] = useState<'tableau' | 'liste'>(() => {
+    try { const v = localStorage.getItem('veille_prod_view'); if (v === 'liste' || v === 'tableau') return v; } catch { /* ignore */ }
+    return typeof window !== 'undefined' && window.innerWidth < 768 ? 'liste' : 'tableau';
+  });
+  function setProdView(v: 'tableau' | 'liste') {
+    setProdViewState(v);
+    try { localStorage.setItem('veille_prod_view', v); } catch { /* ignore */ }
+  }
   const [prodColFilters, setProdColFilters] = useState<Partial<Record<PCol, string>>>({});
   const [prodOpenFilter, setProdOpenFilter] = useState<PCol | null>(null);
   const PROD_COLS: { key: PCol; label: string }[] = [
@@ -666,7 +676,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
 
         {/* ── Produits Concurrents ── */}
         <TabsContent value="produits" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 flex flex-col gap-2 pt-1 mt-0'}>
-          <div className="flex items-center justify-between gap-2 flex-wrap flex-none empty:hidden">
+          <div className="flex items-center justify-between gap-2 flex-wrap flex-none">
             {/* Barre filtres actifs (les filtres/tri sont dans les en-têtes de colonnes) */}
             <div className="flex items-center gap-1.5 flex-wrap">
               {Object.entries(prodColFilters).filter(([, v]) => v).map(([col, v]) => (
@@ -679,11 +689,66 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                 <button onClick={() => setProdColFilters({})} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
               )}
             </div>
+            {/* Bascule liste / tableau */}
+            <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
+              <button onClick={() => setProdView('liste')} title="Vue liste" className={`flex items-center justify-center px-2.5 h-8 transition-colors ${prodView === 'liste' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                <LayoutList className="w-4 h-4" />
+              </button>
+              <button onClick={() => setProdView('tableau')} title="Vue tableau" className={`flex items-center justify-center px-2.5 h-8 transition-colors border-l border-border ${prodView === 'tableau' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                <Table2 className="w-4 h-4" />
+              </button>
+            </div>
           </div>
           {filteredProduits.length === 0 ? (
             <div className="text-center py-12 text-muted-foreground">
               <Package className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <p>Aucun produit concurrent trouvé</p>
+            </div>
+          ) : prodView === 'liste' ? (
+            /* ── Vue liste (cartes) ── */
+            <div className={embedded ? '' : 'flex-1 min-h-0 overflow-y-auto'}>
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredProduits.map(p => {
+                  const conc = concurrents.find(c => c.id === p.concurrentId);
+                  const sourceClient = clients.find(c => c.id === p.clientId);
+                  return (
+                    <div
+                      key={p.id}
+                      className="relative rounded-xl border border-border bg-card p-3.5 cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                      onClick={() => openEditProd(p)}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-semibold leading-tight truncate">{p.nom}</p>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">{conc?.nom || '—'}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="font-semibold text-primary whitespace-nowrap">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</span>
+                          <div onClick={e => e.stopPropagation()}>
+                            <RowActionsMenu actions={[
+                              { icon: <Pencil className="w-3.5 h-3.5" />, label: 'Modifier', onClick: () => openEditProd(p) },
+                              { icon: <Trash2 className="w-3.5 h-3.5" />, label: 'Supprimer', danger: true, onClick: async () => { if (!confirm(`Supprimer "${p.nom}" ?`)) return; await deleteProduit(p.id); toast.success('Produit supprimé'); } },
+                            ]} />
+                          </div>
+                        </div>
+                      </div>
+                      {(p.categorie || p.quantite != null || p.reference) && (
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {p.categorie && <Badge variant="outline" className="text-[10px]">{p.categorie}</Badge>}
+                          {p.quantite != null && <Badge variant="secondary" className="text-[10px]">Qté : {p.quantite}</Badge>}
+                          {p.reference && <span className="text-[10px] font-mono text-muted-foreground">{p.reference}</span>}
+                        </div>
+                      )}
+                      {p.description && <p className="text-xs text-muted-foreground mt-2 line-clamp-2">{p.description}</p>}
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-2 text-[11px] text-muted-foreground">
+                        {(p.clientNom || sourceClient) && <span>📍 {p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '')}</span>}
+                        <span>👤 {p.informateur || formatCreateur(p.createdByEmail)}</span>
+                        <span className="ml-auto">{p.dateRenseignement ? new Date(p.dateRenseignement + 'T00:00:00').toLocaleDateString('fr-FR') : p.createdAt}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           ) : (
             <div className={embedded ? 'rounded-lg border overflow-hidden' : 'flex-1 min-h-0 rounded-lg border overflow-hidden flex flex-col'}>
