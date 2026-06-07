@@ -29,7 +29,7 @@ window.addEventListener('vite:preloadError', (e) => { e.preventDefault(); reload
 
 window.addEventListener('error', (e) => {
   // Signatures d'un mélange d'anciens et nouveaux chunks après déploiement
-  if (/before initialization|Failed to fetch dynamically imported module|error loading dynamically imported module|Unexpected token '<'/.test(e.message || '')) {
+  if (/before initialization|reading 'default'|Failed to fetch dynamically imported module|error loading dynamically imported module|Unexpected token '<'/.test(e.message || '')) {
     reloadOnceForStaleChunks(e.message);
     return;
   }

@@ -230,15 +230,33 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   /* ── Ajouter un lien (dossier PC / OneDrive / Google Drive / WhatsApp…) ── */
   async function handleAddLink() {
     const uid = userId.current;
-    if (!uid || !linkForm.url.trim()) return;
+    if (!uid) return;
+
+    let url = linkForm.url.trim();
+    let label = linkForm.label.trim();
+
+    // Aucun lien saisi → ouvrir l'explorateur Windows pour choisir un dossier
+    if (!url) {
+      const picker = (window as unknown as { showDirectoryPicker?: () => Promise<{ name: string }> }).showDirectoryPicker;
+      if (!picker) { toast.error('Sélecteur de dossier non disponible dans ce navigateur — collez le lien manuellement.'); return; }
+      try {
+        const handle = await picker();
+        // Le navigateur n'expose pas le chemin absolu (sécurité) : on enregistre le nom du dossier.
+        url = handle.name;
+        if (!label) label = handle.name;
+      } catch {
+        return; // annulé par l'utilisateur
+      }
+    }
+
     setUploading(true);
     try {
       const { error } = await supabase.from('devis_pieces_jointes').insert({
         user_id: uid,
         devis_id: devisId,
         type: 'fichier',
-        fichier_nom: linkForm.label.trim() || linkForm.url.trim(),
-        fichier_url: linkForm.url.trim(),
+        fichier_nom: label || url,
+        fichier_url: url,
         fichier_mime: LINK_MIME,
         confidentiel: linkForm.confidentiel,
       });
@@ -491,9 +509,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                 </label>
                 <div className="flex gap-2">
                   <Button size="sm" variant="ghost" onClick={() => { setMode(null); setLinkForm({ label: '', url: '', confidentiel: false }); }}>Annuler</Button>
-                  <Button size="sm" onClick={handleAddLink} disabled={!linkForm.url.trim() || uploading} className="gap-1.5">
+                  <Button size="sm" onClick={handleAddLink} disabled={uploading} className="gap-1.5">
                     {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    Ajouter le lien
+                    {linkForm.url.trim() ? 'Ajouter le lien' : 'Parcourir un dossier…'}
                   </Button>
                 </div>
               </div>

@@ -4,12 +4,36 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+// Signatures d'un mélange d'anciens/nouveaux chunks après déploiement (cache PWA).
+function isStaleChunkError(msg: string) {
+  return /before initialization|reading 'default'|Failed to fetch dynamically imported module|error loading dynamically imported module|Unexpected token '<'/.test(msg);
+}
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
+  componentDidCatch(error: Error) {
+    // Chunk périmé → recharge UNE fois pour récupérer les fichiers à jour.
+    if (isStaleChunkError(error?.message || '')) {
+      try {
+        if (sessionStorage.getItem('chunk-reload') !== '1') {
+          sessionStorage.setItem('chunk-reload', '1');
+          window.location.reload();
+        }
+      } catch { /* ignore */ }
+    }
+  }
   render() {
     if (this.state.error) {
       const err = this.state.error as Error;
+      // En cas de chunk périmé, on affiche un message neutre le temps du rechargement.
+      if (isStaleChunkError(err.message || '')) {
+        return (
+          <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif', textAlign: 'center', color: '#555' }}>
+            Mise à jour de l'application en cours…
+          </div>
+        );
+      }
       return (
         <div style={{ padding: 32, fontFamily: 'monospace', background: '#fee', border: '2px solid red', margin: 16, borderRadius: 8 }}>
           <h2 style={{ color: 'red' }}>Erreur React</h2>
