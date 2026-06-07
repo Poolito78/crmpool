@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import {
-  Building2, Package, FileText, Plus, Trash2, Pencil, Save, X, Search, Download, Upload, Check,
+  Building2, Package, FileText, Plus, Trash2, Pencil, X, Search, Download, Upload, Check,
   Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, MoreHorizontal,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -256,10 +256,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   // Panneau admin de renommage global (catégories / informateurs)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
-  const [editingProduitId, setEditingProduitId] = useState<string | null>(null);
-  const [editingProduitForm, setEditingProduitForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdOpen, setAddProdOpen] = useState(false);
-  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [editingProdId, setEditingProdId] = useState<string | null>(null);
+  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
   // Si un concurrent est créé depuis le dialog produit, l'auto-sélectionner.
   const prevConcIdsRef = useRef<Set<string>>(new Set());
@@ -410,10 +409,29 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   }
 
   function openAddProd() {
+    setEditingProdId(null);
     setAddProdForm({
       concurrentId: concurrents[0]?.id || '',
       nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '',
-      clientNom: '', informateur: formatCreateur(myEmail), dateRenseignement: new Date().toISOString().split('T')[0],
+      clientId: '', clientNom: '', informateur: formatCreateur(myEmail), dateRenseignement: new Date().toISOString().split('T')[0],
+    });
+    setAddProdOpen(true);
+  }
+
+  function openEditProd(p: ConcurrentProduit) {
+    setEditingProdId(p.id);
+    setAddProdForm({
+      concurrentId: p.concurrentId,
+      nom: p.nom,
+      reference: p.reference || '',
+      categorie: p.categorie || '',
+      quantite: p.quantite != null ? String(p.quantite) : '',
+      prixHT: p.prixHT != null ? String(p.prixHT) : '',
+      description: p.description || '',
+      clientId: p.clientId || '',
+      clientNom: p.clientNom || '',
+      informateur: p.informateur || '',
+      dateRenseignement: p.dateRenseignement || '',
     });
     setAddProdOpen(true);
   }
@@ -423,6 +441,29 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     setAddProdSaving(true);
     const prixHT = addProdForm.prixHT ? parseFloat(addProdForm.prixHT.replace(',', '.')) : undefined;
     const quantite = addProdForm.quantite ? parseFloat(addProdForm.quantite.replace(',', '.')) : undefined;
+    if (editingProdId) {
+      const existing = produits.find(p => p.id === editingProdId);
+      if (existing) {
+        await updateProduit({
+          ...existing,
+          concurrentId: addProdForm.concurrentId,
+          nom: addProdForm.nom.trim(),
+          reference: addProdForm.reference || undefined,
+          categorie: addProdForm.categorie || undefined,
+          quantite,
+          prixHT,
+          description: addProdForm.description || undefined,
+          clientId: addProdForm.clientId || undefined,
+          clientNom: addProdForm.clientNom || undefined,
+          informateur: addProdForm.informateur || undefined,
+          dateRenseignement: addProdForm.dateRenseignement || undefined,
+        });
+      }
+      setAddProdSaving(false);
+      setAddProdOpen(false);
+      toast.success('Produit mis à jour');
+      return;
+    }
     await addProduit({
       concurrentId: addProdForm.concurrentId,
       nom: addProdForm.nom.trim(),
@@ -706,54 +747,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                   {filteredProduits.map(p => {
                     const conc = concurrents.find(c => c.id === p.concurrentId);
                     const sourceClient = clients.find(c => c.id === p.clientId);
-                    const isEditing = editingProduitId === p.id;
-
-                    function startEdit() {
-                      setEditingProduitId(p.id);
-                      setEditingProduitForm({ concurrentId: p.concurrentId, nom: p.nom, reference: p.reference || '', categorie: p.categorie || '', quantite: p.quantite != null ? String(p.quantite) : '', prixHT: p.prixHT != null ? String(p.prixHT) : '', description: p.description || '', clientId: p.clientId || '', clientNom: p.clientNom || '', informateur: p.informateur || '', dateRenseignement: p.dateRenseignement || '' });
-                    }
-
-                    async function saveEdit() {
-                      if (!editingProduitForm.nom.trim()) return;
-                      const prixHT = editingProduitForm.prixHT ? parseFloat(editingProduitForm.prixHT.replace(',', '.')) : undefined;
-                      const quantite = editingProduitForm.quantite ? parseFloat(editingProduitForm.quantite.replace(',', '.')) : undefined;
-                      await updateProduit({ ...p, concurrentId: editingProduitForm.concurrentId || p.concurrentId, nom: editingProduitForm.nom, reference: editingProduitForm.reference || undefined, categorie: editingProduitForm.categorie || undefined, quantite, prixHT, description: editingProduitForm.description || undefined, clientId: editingProduitForm.clientId || undefined, clientNom: editingProduitForm.clientNom || undefined, informateur: editingProduitForm.informateur || undefined, dateRenseignement: editingProduitForm.dateRenseignement || undefined });
-                      setEditingProduitId(null);
-                      toast.success('Produit mis à jour');
-                    }
-
-                    const editCellFor = (col: PCol) => {
-                      const esc = (e: React.KeyboardEvent) => { if (e.key === 'Escape') setEditingProduitId(null); };
-                      switch (col) {
-                        case 'concurrent': return <TableCell key={col} style={prodCols.widthStyle(col)}><select value={editingProduitForm.concurrentId} onChange={e => setEditingProduitForm(f => ({ ...f, concurrentId: e.target.value }))} className="h-7 text-sm rounded border border-input bg-background px-1 max-w-[120px]" onKeyDown={esc}>{concurrents.map(c => <option key={c.id} value={c.id}>{c.nom}</option>)}</select></TableCell>;
-                        case 'produit': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.nom} onChange={e => setEditingProduitForm(f => ({ ...f, nom: e.target.value }))} className="h-7 text-sm w-32" autoFocus onKeyDown={e => { if (e.key === 'Enter') saveEdit(); esc(e); }} /></TableCell>;
-                        case 'reference': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.reference} onChange={e => setEditingProduitForm(f => ({ ...f, reference: e.target.value }))} className="h-7 text-sm w-20 font-mono" placeholder="REF" onKeyDown={esc} /></TableCell>;
-                        case 'categorie': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input list="veille-categories-list" value={editingProduitForm.categorie} onChange={e => setEditingProduitForm(f => ({ ...f, categorie: e.target.value }))} className="h-7 text-sm w-36" placeholder="Catégorie" onKeyDown={esc} /></TableCell>;
-                        case 'quantite': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right"><Input type="number" value={editingProduitForm.quantite} onChange={e => setEditingProduitForm(f => ({ ...f, quantite: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="Qté" step="any" onKeyDown={esc} /></TableCell>;
-                        case 'prixHT': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right"><Input type="number" value={editingProduitForm.prixHT} onChange={e => setEditingProduitForm(f => ({ ...f, prixHT: e.target.value }))} className="h-7 text-sm w-20 text-right" placeholder="0.00" step="0.01" onKeyDown={esc} /></TableCell>;
-                        case 'description': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.description} onChange={e => setEditingProduitForm(f => ({ ...f, description: e.target.value }))} className="h-7 text-sm w-40" placeholder="Description..." onKeyDown={esc} /></TableCell>;
-                        case 'clientSource': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input list="veille-clients-add" value={editingProduitForm.clientNom} onChange={e => setEditingProduitForm(f => ({ ...f, clientNom: e.target.value }))} className="h-7 text-sm w-28" placeholder="Client source" onKeyDown={esc} /></TableCell>;
-                        case 'informateur': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input value={editingProduitForm.informateur} onChange={e => setEditingProduitForm(f => ({ ...f, informateur: e.target.value }))} className="h-7 text-sm w-24" placeholder="Informateur" onKeyDown={esc} /></TableCell>;
-                        case 'date': return <TableCell key={col} style={prodCols.widthStyle(col)}><Input type="date" value={editingProduitForm.dateRenseignement} onChange={e => setEditingProduitForm(f => ({ ...f, dateRenseignement: e.target.value }))} className="h-7 text-sm w-32" onKeyDown={esc} /></TableCell>;
-                      }
-                    };
-                    if (isEditing) {
-                      return (
-                        <TableRow key={p.id} className="bg-muted/20">
-                          {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => editCellFor(c.key))}
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-primary" title="Enregistrer" onClick={saveEdit}>
-                                <Save className="w-4 h-4 sm:w-3 sm:h-3" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-8 w-8 sm:h-6 sm:w-6 text-muted-foreground" title="Annuler" onClick={() => setEditingProduitId(null)}>
-                                <X className="w-4 h-4 sm:w-3 sm:h-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    }
                     const cellFor = (col: PCol) => {
                       switch (col) {
                         case 'concurrent': return <TableCell key={col} style={prodCols.widthStyle(col)} className="font-medium">{conc?.nom || '—'}</TableCell>;
@@ -769,7 +762,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                       }
                     };
                     return (
-                      <TableRow key={p.id} className="group cursor-pointer hover:bg-muted/30" onClick={startEdit}>
+                      <TableRow key={p.id} className="group cursor-pointer hover:bg-muted/30" onClick={() => openEditProd(p)}>
                         {prodCols.ordered(PROD_COLS, k => prodVisCols.has(k)).map(c => cellFor(c.key))}
                         <TableCell onClick={e => e.stopPropagation()}>
                           <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-6 sm:w-6 text-destructive opacity-100 sm:opacity-0 group-hover:opacity-100"
@@ -1085,11 +1078,11 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         </DialogContent>
       </Dialog>
 
-      {/* Dialog — Ajouter produit */}
-      <Dialog open={addProdOpen} onOpenChange={setAddProdOpen}>
+      {/* Dialog — Ajouter / Modifier produit */}
+      <Dialog open={addProdOpen} onOpenChange={o => { setAddProdOpen(o); if (!o) setEditingProdId(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Ajouter un produit concurrent</DialogTitle>
+            <DialogTitle>{editingProdId ? 'Modifier le produit' : 'Ajouter un produit concurrent'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div className="space-y-1.5">
@@ -1188,10 +1181,10 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAddProdOpen(false)}>Annuler</Button>
+            <Button variant="outline" onClick={() => { setAddProdOpen(false); setEditingProdId(null); }}>Annuler</Button>
             <Button onClick={handleAddProd} disabled={addProdSaving || !addProdForm.nom.trim() || !addProdForm.concurrentId}>
               {addProdSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-              Ajouter
+              {editingProdId ? 'Enregistrer' : 'Ajouter'}
             </Button>
           </DialogFooter>
         </DialogContent>
