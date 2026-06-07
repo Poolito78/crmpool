@@ -28,6 +28,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import RowActionsMenu from '@/components/RowActionsMenu';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -537,65 +538,72 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     return <div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
   }
 
+  // Onglets + boutons d'action (placés dans le bandeau du haut en mode page)
+  const headerControls = (
+    <>
+      <TabsList className="h-9">
+        <TabsTrigger value="fiches" className="flex items-center gap-1">
+          <Building2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Fiches</span>
+        </TabsTrigger>
+        <TabsTrigger value="produits" className="flex items-center gap-1">
+          <Package className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Produits</span>
+        </TabsTrigger>
+        <TabsTrigger value="notes" className="flex items-center gap-1">
+          <FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Notes</span>
+        </TabsTrigger>
+        <TabsTrigger value="analyse" className="flex items-center gap-1">
+          <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
+        </TabsTrigger>
+      </TabsList>
+      <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
+        {/* Bascule liste / tableau — uniquement sur l'onglet Produits */}
+        {veilleTab === 'produits' && (
+          <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+            <button onClick={() => setProdView('liste')} title="Vue liste" className={`flex items-center justify-center px-2.5 h-8 transition-colors ${prodView === 'liste' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+              <LayoutList className="w-4 h-4" />
+            </button>
+            <button onClick={() => setProdView('tableau')} title="Vue tableau" className={`flex items-center justify-center px-2.5 h-8 transition-colors border-l border-border ${prodView === 'tableau' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+              <Table2 className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="outline" size="sm" className="gap-1.5">
+              <MoreHorizontal className="w-4 h-4" /> Action
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
+              <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Export Excel
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => exportByEmail(concurrents, produits, notes)}>
+              <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoi par email
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
+              <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer tarif
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Button size="sm" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
+          <Plus className="w-4 h-4 mr-1" /> Ajout
+        </Button>
+      </div>
+    </>
+  );
+
   return (
     <div className={embedded ? 'space-y-3' : 'flex flex-col flex-1 min-h-0'}>
       <Tabs value={veilleTab} onValueChange={setVeilleTab} className={embedded ? 'space-y-4' : 'flex flex-col flex-1 min-h-0 gap-3'}>
-        {/* Titre + sous-onglets sur la même ligne */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-none">
-          {!embedded && (
-            <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 mr-1 shrink-0">
-              <BarChart3 className="w-5 h-5 text-primary" /> Veille<span className="hidden sm:inline"> Concurrence</span>
-            </h1>
-          )}
-          <TabsList className="h-9">
-            <TabsTrigger value="fiches" className="flex items-center gap-1">
-              <Building2 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Fiches</span>
-            </TabsTrigger>
-            <TabsTrigger value="produits" className="flex items-center gap-1">
-              <Package className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Produits</span>
-            </TabsTrigger>
-            <TabsTrigger value="notes" className="flex items-center gap-1">
-              <FileText className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Notes</span>
-            </TabsTrigger>
-            <TabsTrigger value="analyse" className="flex items-center gap-1">
-              <BarChart3 className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Analyse</span>
-            </TabsTrigger>
-          </TabsList>
-          <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
-            {/* Bascule liste / tableau — uniquement sur l'onglet Produits */}
-            {veilleTab === 'produits' && (
-              <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
-                <button onClick={() => setProdView('liste')} title="Vue liste" className={`flex items-center justify-center px-2.5 h-8 transition-colors ${prodView === 'liste' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                  <LayoutList className="w-4 h-4" />
-                </button>
-                <button onClick={() => setProdView('tableau')} title="Vue tableau" className={`flex items-center justify-center px-2.5 h-8 transition-colors border-l border-border ${prodView === 'tableau' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                  <Table2 className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <MoreHorizontal className="w-4 h-4" /> Action
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
-                  <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Export Excel
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => exportByEmail(concurrents, produits, notes)}>
-                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoi par email
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => { setImportConcId(concurrents[0]?.id || ''); setExtracted([]); setImportError(''); setImportOpen(true); }}>
-                  <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer tarif
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button size="sm" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
-              <Plus className="w-4 h-4 mr-1" /> Ajout
-            </Button>
-          </div>
-        </div>
+        {embedded ? (
+          /* Mode intégré : onglets + boutons inline (pas de bandeau de page) */
+          <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-none">{headerControls}</div>
+        ) : (
+          /* Mode page : onglets + boutons portés dans le bandeau du haut (à côté du titre) */
+          <PageHeaderSlot>
+            <div className="flex-1 flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">{headerControls}</div>
+          </PageHeaderSlot>
+        )}
 
         {/* ── Fiches Concurrents ── */}
         <TabsContent value="fiches" className={embedded ? 'space-y-3 pt-3' : 'flex-1 min-h-0 overflow-y-auto space-y-3 pt-1 mt-0'}>
