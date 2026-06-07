@@ -8,6 +8,7 @@ import {
   MessageSquare, Paperclip, Send, Trash2, Download, FileText,
   FileImage, FileSpreadsheet, File, Clock, Pencil, Mail,
   Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen, History,
+  Link2, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import DevisPreview from '@/components/DevisPreview';
@@ -44,6 +45,11 @@ interface Props {
   embedded?: boolean;
 }
 
+/* ── Liens externes (dossier PC, OneDrive, Google Drive, WhatsApp…) ──
+   Stockés comme type 'fichier' avec ce mime marqueur pour éviter une migration DB. */
+const LINK_MIME = 'application/x-link';
+function isLink(pj: PieceJointe) { return pj.fichierMime === LINK_MIME; }
+
 /* ── Helpers ── */
 function formatRelative(iso: string) {
   const diff = Date.now() - new Date(iso).getTime();
@@ -66,6 +72,7 @@ function formatTaille(bytes?: number) {
 
 function IconFichier({ mime }: { mime?: string }) {
   if (!mime) return <File className="w-5 h-5 text-muted-foreground" />;
+  if (mime === LINK_MIME) return <Link2 className="w-5 h-5 text-violet-500" />;
   if (mime.startsWith('image/')) return <FileImage className="w-5 h-5 text-blue-500" />;
   if (mime.includes('pdf')) return <FileText className="w-5 h-5 text-red-500" />;
   if (mime.includes('sheet') || mime.includes('excel') || mime.includes('csv'))
@@ -91,7 +98,8 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [uploading, setUploading] = useState(false);
   const [note, setNote] = useState('');
   const [pastedImages, setPastedImages] = useState<{ file: File; preview: string }[]>([]);
-  const [mode, setMode] = useState<'note' | 'fichier' | null>(null);
+  const [mode, setMode] = useState<'note' | 'fichier' | 'lien' | null>(null);
+  const [linkForm, setLinkForm] = useState({ label: '', url: '', confidentiel: false });
   const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
   const [snapshotDevis, setSnapshotDevis] = useState<DevisType | null>(null);
@@ -219,6 +227,31 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     }
   }
 
+  /* ── Ajouter un lien (dossier PC / OneDrive / Google Drive / WhatsApp…) ── */
+  async function handleAddLink() {
+    const uid = userId.current;
+    if (!uid || !linkForm.url.trim()) return;
+    setUploading(true);
+    try {
+      const { error } = await supabase.from('devis_pieces_jointes').insert({
+        user_id: uid,
+        devis_id: devisId,
+        type: 'fichier',
+        fichier_nom: linkForm.label.trim() || linkForm.url.trim(),
+        fichier_url: linkForm.url.trim(),
+        fichier_mime: LINK_MIME,
+        confidentiel: linkForm.confidentiel,
+      });
+      if (error) { toast.error('Erreur ajout lien'); return; }
+      toast.success('Lien ajouté');
+      setLinkForm({ label: '', url: '', confidentiel: false });
+      setMode(null);
+      load();
+    } finally {
+      setUploading(false);
+    }
+  }
+
   /* ── Toggle confidentiel ── */
   async function handleToggleConfidentiel(pj: PieceJointe) {
     await supabase.from('devis_pieces_jointes')
@@ -297,8 +330,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     return pj.fichierUrl;
   }
 
-  /* ── Afficher dans le navigateur (PDF / image) ── */
+  /* ── Afficher dans le navigateur (PDF / image / lien) ── */
   async function handleView(pj: PieceJointe) {
+    if (isLink(pj)) { if (pj.fichierUrl) window.open(pj.fichierUrl, '_blank', 'noopener'); return; }
     const url = await getSignedUrl(pj, false);
     if (url) window.open(url, '_blank');
   }
@@ -405,6 +439,15 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             </Button>
             <Button
               size="sm"
+              variant={mode === 'lien' ? 'default' : 'outline'}
+              onClick={() => setMode(mode === 'lien' ? null : 'lien')}
+              className="gap-1.5"
+            >
+              <Link2 className="w-3.5 h-3.5" />
+              Lien
+            </Button>
+            <Button
+              size="sm"
               variant="outline"
               onClick={() => fileConfRef.current?.click()}
               className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50 dark:border-amber-700 dark:text-amber-400 dark:hover:bg-amber-950/30"
@@ -418,6 +461,45 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             <input ref={fileConfRef} type="file" className="hidden"
               onChange={e => { const f = e.target.files?.[0]; e.target.value = ''; if (f) handleUpload(f, true); }} />
           </div>
+
+          {/* Saisie lien */}
+          {mode === 'lien' && (
+            <div className="space-y-2">
+              <div className="grid sm:grid-cols-2 gap-2">
+                <input
+                  type="text"
+                  placeholder="Libellé (ex : Dossier chantier, WhatsApp client…)"
+                  value={linkForm.label}
+                  onChange={e => setLinkForm(f => ({ ...f, label: e.target.value }))}
+                  className="h-9 text-sm rounded-md border border-input bg-background px-3"
+                  autoFocus
+                />
+                <input
+                  type="text"
+                  placeholder="Lien : https://… (OneDrive, Drive, wa.me) ou chemin PC"
+                  value={linkForm.url}
+                  onChange={e => setLinkForm(f => ({ ...f, url: e.target.value }))}
+                  className="h-9 text-sm rounded-md border border-input bg-background px-3"
+                  onKeyDown={e => { if (e.key === 'Enter') handleAddLink(); }}
+                />
+              </div>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={linkForm.confidentiel} onChange={e => setLinkForm(f => ({ ...f, confidentiel: e.target.checked }))} className="rounded accent-amber-500" />
+                  <Lock className="w-3.5 h-3.5 text-amber-500" />
+                  Confidentiel <span className="text-muted-foreground">(non transmis à l'envoi)</span>
+                </label>
+                <div className="flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => { setMode(null); setLinkForm({ label: '', url: '', confidentiel: false }); }}>Annuler</Button>
+                  <Button size="sm" onClick={handleAddLink} disabled={!linkForm.url.trim() || uploading} className="gap-1.5">
+                    {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    Ajouter le lien
+                  </Button>
+                </div>
+              </div>
+              <p className="text-[10px] text-muted-foreground">📁 dossier PC · ☁️ OneDrive / Google Drive · 💬 WhatsApp (wa.me) — le lien s'ouvre dans un nouvel onglet.</p>
+            </div>
+          )}
 
           {/* Saisie note */}
           {mode === 'note' && (
@@ -484,6 +566,18 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                     <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-800/30 rounded-lg px-3 py-2">
                       <p className="text-sm whitespace-pre-wrap break-words">{pj.contenu}</p>
                     </div>
+                  ) : isLink(pj) ? (
+                    <div className="border border-violet-200 dark:border-violet-800/50 rounded-lg px-3 py-2 flex items-center gap-2 min-w-0 bg-violet-50/40 dark:bg-violet-950/10">
+                      <Link2 className="w-5 h-5 text-violet-500 shrink-0" />
+                      <button onClick={() => handleView(pj)} className="flex-1 min-w-0 text-left">
+                        <p className="text-sm font-medium truncate text-violet-700 dark:text-violet-300 hover:underline">{pj.fichierNom}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">{pj.fichierUrl}</p>
+                      </button>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-muted" title="Ouvrir le lien"><ExternalLink className="w-3.5 h-3.5 text-violet-500" /></button>
+                        <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-muted" title="Rendre confidentiel"><Lock className="w-3.5 h-3.5 text-amber-500 opacity-50 hover:opacity-100" /></button>
+                      </div>
+                    </div>
                   ) : pj.fichierMime?.startsWith('image/') ? (
                     <div className="border border-border rounded-lg overflow-hidden">
                       <img
@@ -534,17 +628,40 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
               Documents confidentiels — non transmis à l'envoi
             </div>
             {confidentiels.map(pj => (
-              <div key={pj.id} className="flex items-center gap-2 group bg-white dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-lg px-2.5 py-1.5">
-                <IconFichier mime={pj.fichierMime} />
-                <span className="text-sm flex-1 truncate">{pj.fichierNom}</span>
-                {pj.fichierTaille != null && <span className="text-[10px] text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>}
-                <div className="flex items-center gap-1 shrink-0">
-                  {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
-                    <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Afficher"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+              <div key={pj.id} className="group bg-white dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-800/40 rounded-lg overflow-hidden">
+                {/* Aperçu image confidentielle */}
+                {pj.fichierMime?.startsWith('image/') && (
+                  <img
+                    src={pj.fichierUrl} alt={pj.fichierNom}
+                    className="max-w-full max-h-48 object-contain cursor-pointer w-full bg-muted/20"
+                    onClick={() => handleView(pj)}
+                  />
+                )}
+                <div className="flex items-center gap-2 px-2.5 py-1.5">
+                  <IconFichier mime={pj.fichierMime} />
+                  {isLink(pj) ? (
+                    <button onClick={() => handleView(pj)} className="flex-1 min-w-0 text-left">
+                      <span className="text-sm truncate block text-violet-700 dark:text-violet-300 hover:underline">{pj.fichierNom}</span>
+                      <span className="text-[10px] text-muted-foreground truncate block">{pj.fichierUrl}</span>
+                    </button>
+                  ) : (
+                    <span className="text-sm flex-1 truncate">{pj.fichierNom}</span>
                   )}
-                  <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-amber-100" title="Télécharger"><Download className="w-3.5 h-3.5 text-muted-foreground" /></button>
-                  <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-amber-100" title="Rendre public"><LockOpen className="w-3.5 h-3.5 text-amber-600" /></button>
-                  <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  {pj.fichierTaille != null && <span className="text-[10px] text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {isLink(pj) ? (
+                      <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Ouvrir le lien"><ExternalLink className="w-3.5 h-3.5 text-violet-500" /></button>
+                    ) : (
+                      <>
+                        {(pj.fichierMime?.includes('pdf') || pj.fichierMime?.startsWith('image/')) && (
+                          <button onClick={() => handleView(pj)} className="p-1 rounded hover:bg-amber-100" title="Afficher"><Eye className="w-3.5 h-3.5 text-primary" /></button>
+                        )}
+                        <button onClick={() => handleDownload(pj)} className="p-1 rounded hover:bg-amber-100" title="Télécharger"><Download className="w-3.5 h-3.5 text-muted-foreground" /></button>
+                      </>
+                    )}
+                    <button onClick={() => handleToggleConfidentiel(pj)} className="p-1 rounded hover:bg-amber-100" title="Rendre public"><LockOpen className="w-3.5 h-3.5 text-amber-600" /></button>
+                    <button onClick={() => handleDelete(pj)} className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 text-destructive" title="Supprimer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
                 </div>
               </div>
             ))}

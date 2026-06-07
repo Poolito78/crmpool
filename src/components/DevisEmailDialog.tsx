@@ -258,6 +258,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [savedFolder, setSavedFolder] = useState<string | null>(null);
   const [pjFichiers, setPjFichiers] = useState<PjFichier[]>([]);
   const [selectedPjIds, setSelectedPjIds] = useState<Set<string>>(new Set());
+  // Liens (dossier PC / OneDrive / Drive / WhatsApp) partageables à l'envoi
+  const [pjLinks, setPjLinks] = useState<Array<{ id: string; label: string; url: string }>>([]);
+  const [selectedLinkIds, setSelectedLinkIds] = useState<Set<string>>(new Set());
   const pdfBase64Ref = useRef<string | null>(null);
   const regenTimer = useRef<ReturnType<typeof setTimeout>>();
 
@@ -274,9 +277,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     getStoredDirHandle().then(h => setSavedFolder(h?.name ?? null));
   }, []);
 
-  // Charger les pièces jointes du chatter pour ce devis
+  // Charger les pièces jointes du chatter pour ce devis (fichiers + liens, non confidentiels)
   useEffect(() => {
-    if (!devis || !open) { setPjFichiers([]); setSelectedPjIds(new Set()); return; }
+    if (!devis || !open) { setPjFichiers([]); setSelectedPjIds(new Set()); setPjLinks([]); setSelectedLinkIds(new Set()); return; }
     supabase
       .from('devis_pieces_jointes')
       .select('id, fichier_nom, fichier_url, fichier_mime, fichier_taille')
@@ -285,16 +288,24 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       .eq('confidentiel', false)
       .order('date', { ascending: true })
       .then(({ data }) => {
-        const fichiers: PjFichier[] = (data ?? []).map(r => ({
-          id: r.id,
-          fichierNom: r.fichier_nom ?? 'Fichier',
-          fichierUrl: r.fichier_url ?? '',
-          fichierMime: r.fichier_mime ?? undefined,
-          fichierTaille: r.fichier_taille ?? undefined,
-        }));
+        const rows = data ?? [];
+        // Les liens (mime marqueur) sont partagés comme liens cliquables, pas comme PJ
+        const fichiers: PjFichier[] = rows
+          .filter(r => r.fichier_mime !== 'application/x-link')
+          .map(r => ({
+            id: r.id,
+            fichierNom: r.fichier_nom ?? 'Fichier',
+            fichierUrl: r.fichier_url ?? '',
+            fichierMime: r.fichier_mime ?? undefined,
+            fichierTaille: r.fichier_taille ?? undefined,
+          }));
+        const liens = rows
+          .filter(r => r.fichier_mime === 'application/x-link')
+          .map(r => ({ id: r.id, label: r.fichier_nom ?? r.fichier_url ?? 'Lien', url: r.fichier_url ?? '' }));
         setPjFichiers(fichiers);
-        // Tout sélectionner par défaut
         setSelectedPjIds(new Set(fichiers.map(f => f.id)));
+        setPjLinks(liens);
+        setSelectedLinkIds(new Set(liens.map(l => l.id)));
       });
   }, [devis, open]);
 
@@ -428,6 +439,8 @@ Restant à ta disposition pour tout complément d'information.`
     }
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
+    // Liens partageables sélectionnés ajoutés comme liens cliquables (avec les fiches produit)
+    const allLinks = [...ficheLinks, ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url }))];
     try {
       const emlContent = generateEml({
         from: 'f.mouhot@isosign.fr',
@@ -437,7 +450,7 @@ Restant à ta disposition pour tout complément d'information.`
         pdfBase64: pdfBase64Ref.current!,
         pdfFileName,
         extraAttachments,
-        ficheLinks,
+        ficheLinks: allLinks,
       });
       const result = await openEmlInOutlook({
         emlContent,
@@ -446,7 +459,7 @@ Restant à ta disposition pour tout complément d'information.`
         pdfFileName,
         to, subject, body,
         extraAttachments,
-        ficheLinks,
+        ficheLinks: allLinks,
       });
       const totalFichiers = 1 + extraAttachments.length;
       const desc = result === 'mailto'
@@ -549,6 +562,38 @@ Restant à ta disposition pour tout complément d'information.`
                     {pj.fichierTaille != null && (
                       <span className="text-xs text-muted-foreground shrink-0">{formatTaille(pj.fichierTaille)}</span>
                     )}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* ── Liens à partager (dossier PC / OneDrive / Drive / WhatsApp) ── */}
+          {pjLinks.length > 0 && (
+            <div className="rounded-md border px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <ExternalLink className="w-4 h-4 text-violet-500" />
+                Liens à partager
+                <span className="text-xs font-normal text-muted-foreground">({selectedLinkIds.size}/{pjLinks.length} — liens cliquables dans le mail)</span>
+              </div>
+              <div className="space-y-1">
+                {pjLinks.map(l => (
+                  <label key={l.id} className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={selectedLinkIds.has(l.id)}
+                      onChange={e => {
+                        setSelectedLinkIds(prev => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(l.id); else next.delete(l.id);
+                          return next;
+                        });
+                      }}
+                    />
+                    <ExternalLink className="w-4 h-4 text-violet-500 shrink-0" />
+                    <span className="text-sm flex-1 truncate">{l.label}</span>
+                    <span className="text-[10px] text-muted-foreground truncate max-w-[40%]">{l.url}</span>
                   </label>
                 ))}
               </div>
