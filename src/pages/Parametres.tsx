@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink, Settings, Download } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
+import ClientsImportExport from '@/components/ClientsImportExport';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -138,6 +139,7 @@ export default function Parametres() {
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
           <TabsTrigger value="devis">Devis</TabsTrigger>
+          <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
           <TabsTrigger value="administration">Admin App Veille ext</TabsTrigger>
         </TabsList>
@@ -300,6 +302,21 @@ export default function Parametres() {
           </div>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="clients" className="space-y-6 mt-4">
+          {/* ══ Section Clients ═══════════════════════════════════════════════ */}
+          <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+            <div>
+              <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+                <Users className="w-5 h-5 text-primary" /> Clients
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                Importez des clients depuis un fichier Excel/CSV (avec correspondance des colonnes, ajout ou mise à jour) ou exportez la liste complète.
+              </p>
+            </div>
+            <ClientsImportExport />
+          </div>
         </TabsContent>
 
         <TabsContent value="veille" className="space-y-6 mt-4">
