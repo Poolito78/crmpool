@@ -275,8 +275,8 @@ export default function CRMLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="font-heading font-semibold text-lg truncate shrink-0">
-            <span className="sm:hidden">{currentShort}</span>
-            <span className="hidden sm:inline">{currentLabel}</span>
+            <span className="lg:hidden">{currentShort}</span>
+            <span className="hidden lg:inline">{currentLabel}</span>
           </h1>
           <PageHeaderSlotTarget />
           {location.pathname === '/' && (

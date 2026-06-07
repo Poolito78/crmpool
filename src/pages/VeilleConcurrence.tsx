@@ -541,7 +541,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   // Onglets + boutons d'action (placés dans le bandeau du haut en mode page)
   const headerControls = (
     <>
-      <TabsList className="h-9 hidden sm:inline-flex">
+      <TabsList className="h-9 hidden lg:inline-flex">
         <TabsTrigger value="fiches" className="flex items-center gap-1">
           <Building2 className="w-3.5 h-3.5" /> Fiches
         </TabsTrigger>
@@ -611,8 +611,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           </PageHeaderSlot>
         )}
 
-        {/* Onglets pleine largeur sur mobile */}
-        <TabsList className="sm:hidden grid grid-cols-4 w-full h-9 flex-none">
+        {/* Onglets pleine largeur quand l'écran est trop étroit (< lg) */}
+        <TabsList className="lg:hidden grid grid-cols-4 w-full h-9 flex-none">
           <TabsTrigger value="fiches" className="flex items-center justify-center gap-1 text-xs"><Building2 className="w-3.5 h-3.5" /> Fiches</TabsTrigger>
           <TabsTrigger value="produits" className="flex items-center justify-center gap-1 text-xs"><Package className="w-3.5 h-3.5" /> Produits</TabsTrigger>
           <TabsTrigger value="notes" className="flex items-center justify-center gap-1 text-xs"><FileText className="w-3.5 h-3.5" /> Notes</TabsTrigger>
