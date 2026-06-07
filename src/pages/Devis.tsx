@@ -1333,24 +1333,23 @@ export default function Devis() {
             </DropdownMenu>
           </div>
           <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
-            {/* Vue liste / tableau — un seul bouton menu */}
+            {/* Vue + Analyser un mail regroupés dans un bouton Action */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="px-2.5 gap-1 shrink-0" title="Changer de vue">
-                  {devisView === 'liste' ? <LayoutList className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
-                  <ChevronDown className="w-3 h-3 opacity-60" />
-                </Button>
+                <Button variant="outline" className="px-3 gap-1 shrink-0">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => setDevisView('liste')}>
                   <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste (cartes) {devisView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => setDevisView('tableau')}>
                   <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {devisView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEmailAnalyzerOpen(true)} className="border-t border-border mt-1">
+                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Analyser un mail
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" onClick={() => setEmailAnalyzerOpen(true)} className="hidden sm:flex shrink-0"><Mail className="w-4 h-4 mr-2" /> Analyser un mail</Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
