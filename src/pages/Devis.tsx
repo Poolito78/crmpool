@@ -2,11 +2,12 @@ import { useState, useEffect, useRef, useCallback, Fragment, type ReactNode } fr
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -1317,11 +1318,23 @@ export default function Devis() {
             )}
           </div>
           <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
-            {/* Vue liste / tableau */}
-            <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
-              <button onClick={() => setDevisView('liste')} title="Vue liste (cartes)" className={`px-2.5 py-1.5 transition-colors ${devisView === 'liste' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-4 h-4" /></button>
-              <button onClick={() => setDevisView('tableau')} title="Vue tableau (colonnes)" className={`px-2.5 py-1.5 border-l border-border transition-colors ${devisView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-4 h-4" /></button>
-            </div>
+            {/* Vue liste / tableau — un seul bouton menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="px-2.5 gap-1 shrink-0" title="Changer de vue">
+                  {devisView === 'liste' ? <LayoutList className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-44">
+                <DropdownMenuItem onClick={() => setDevisView('liste')}>
+                  <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste (cartes) {devisView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setDevisView('tableau')}>
+                  <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {devisView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Button variant="outline" onClick={() => setEmailAnalyzerOpen(true)} className="hidden sm:flex shrink-0"><Mail className="w-4 h-4 mr-2" /> Analyser un mail</Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
