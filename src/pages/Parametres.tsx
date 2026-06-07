@@ -123,7 +123,7 @@ export default function Parametres() {
           <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
-          <TabsTrigger value="administration">Administration</TabsTrigger>
+          <TabsTrigger value="administration">Admin App Veille ext</TabsTrigger>
         </TabsList>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">
@@ -340,7 +340,7 @@ export default function Parametres() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" /> Administration Veille
+                  <ShieldCheck className="w-5 h-5 text-primary" /> Admin App Veille ext
                 </h2>
                 <p className="text-sm text-muted-foreground mt-0.5">
                   Gérez les utilisateurs et les accès CRM depuis le panel d'administration de l'application Veille.

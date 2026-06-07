@@ -44,7 +44,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Entrepôts',          icon: Warehouse,       path: '/parametres?tab=entrepots' },
       { type: 'link', label: 'Devis',              icon: FileText,        path: '/parametres?tab=devis' },
       { type: 'link', label: 'Veille Concurrence', icon: Eye,             path: '/parametres?tab=veille' },
-      { type: 'link', label: 'Administration',     icon: ShieldCheck,     path: '/parametres?tab=administration' },
+      { type: 'link', label: 'Admin App Veille ext', icon: ShieldCheck,   path: '/parametres?tab=administration' },
       { type: 'link', label: 'Historique GED',     icon: History,         path: '/ged' },
     ],
   },
@@ -176,7 +176,7 @@ export default function CRMLayout() {
                     )}
                   >
                     <item.icon className="w-4 h-4 shrink-0" />
-                    {item.label}
+                    <span className={cn('min-w-0 truncate', item.label.length > 16 && 'text-[13px]')}>{item.label}</span>
                   </Link>
                 );
               })}
