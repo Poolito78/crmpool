@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink, Settings, Download } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
 import { Switch } from '@/components/ui/switch';
@@ -11,7 +11,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useEntrepots, type Entrepot } from '@/lib/store';
+import { useCRM } from '@/lib/StoreContext';
+import { useEntrepots, calculerTotalDevis, type Entrepot } from '@/lib/store';
+import { exportMultiSheet } from '@/lib/exportExcel';
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
 import {
   DASHBOARD_TILES,
@@ -28,6 +30,19 @@ export default function Parametres() {
   const setActiveTab = (t: string) => setSearchParams(t === 'dashboard' ? {} : { tab: t }, { replace: true });
   const hidden = useHiddenTiles();
   const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
+  const { clients, produits, fournisseurs, devis } = useCRM();
+
+  // ── Export global (toutes les données dans un classeur Excel multi-feuilles) ──
+  function exportGlobal() {
+    const sheets = [
+      { name: 'Clients', data: clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code Postal': c.codePostal, Revendeur: c.estRevendeur ? 'Oui' : 'Non', Notes: c.notes || '' })) },
+      { name: 'Produits', data: produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, Poids: p.poids || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })) },
+      { name: 'Fournisseurs', data: fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code Postal': f.codePostal, 'Franco Port': f.francoPort, 'Coût Transport': f.coutTransport, Notes: f.notes || '' })) },
+      { name: 'Devis', data: devis.map(d => { const client = clients.find(c => c.id === d.clientId); const t = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': t.totalHT, 'Total TVA': t.totalTVA, 'Total TTC': t.totalTTC, Notes: d.notes || '' }; }) },
+    ];
+    exportMultiSheet(sheets, `MonCRM_Export_${new Date().toISOString().split('T')[0]}`);
+    toast.success('Export global généré');
+  }
 
   // ── Paramètres Devis ─────────────────────────────────────────────────────────
   const [devisView, setDevisViewState] = useState<'liste' | 'tableau'>(() => {
@@ -119,12 +134,36 @@ export default function Parametres() {
     <div className="max-w-3xl mx-auto">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto justify-start">
+          <TabsTrigger value="general">Général</TabsTrigger>
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
           <TabsTrigger value="administration">Admin App Veille ext</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="general" className="space-y-6 mt-4">
+          {/* ══ Section Général ═══════════════════════════════════════════════ */}
+          <div className="bg-card rounded-xl border border-border p-5 space-y-4">
+            <div>
+              <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+                <Settings className="w-5 h-5 text-primary" /> Général
+              </h2>
+              <p className="text-sm text-muted-foreground mt-0.5">Outils et exports généraux de l'application.</p>
+            </div>
+            <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-muted/20 px-4 py-3">
+              <div>
+                <p className="font-medium text-sm">Export global</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Télécharge un classeur Excel multi-feuilles : Clients, Produits, Fournisseurs et Devis.
+                </p>
+              </div>
+              <Button size="sm" onClick={exportGlobal} className="gap-1.5 shrink-0">
+                <Download className="w-4 h-4" /> Exporter
+              </Button>
+            </div>
+          </div>
+        </TabsContent>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">
       {/* ══ Section Entrepôts ════════════════════════════════════════════════ */}

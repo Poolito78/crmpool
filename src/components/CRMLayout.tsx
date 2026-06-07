@@ -1,10 +1,7 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { useCRM } from '@/lib/StoreContext';
-import { calculerTotalDevis } from '@/lib/store';
-import { exportMultiSheet } from '@/lib/exportExcel';
 import { supabase } from '@/integrations/supabase/client';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
@@ -40,6 +37,7 @@ const NAV: NavEntry[] = [
   {
     type: 'group', label: 'Paramètres', icon: Settings,
     items: [
+      { type: 'link', label: 'Général',             icon: Settings,        path: '/parametres?tab=general' },
       { type: 'link', label: 'Tableau de bord',    icon: LayoutDashboard, path: '/parametres?tab=dashboard' },
       { type: 'link', label: 'Entrepôts',          icon: Warehouse,       path: '/parametres?tab=entrepots' },
       { type: 'link', label: 'Devis',              icon: FileText,        path: '/parametres?tab=devis' },
@@ -62,7 +60,6 @@ export default function CRMLayout() {
   });
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
-  const { clients, produits, fournisseurs, devis } = useCRM();
 
   // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.
   const isLinkActive = (path: string) => {
@@ -187,16 +184,6 @@ export default function CRMLayout() {
     });
   }
 
-  function exportGlobal() {
-    const sheets = [
-      { name: 'Clients', data: clients.map(c => ({ Nom: c.nom, Société: c.societe || '', Email: c.email, Téléphone: c.telephone, Adresse: c.adresse, Ville: c.ville, 'Code Postal': c.codePostal, Revendeur: c.estRevendeur ? 'Oui' : 'Non', Notes: c.notes || '' })) },
-      { name: 'Produits', data: produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, Poids: p.poids || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })) },
-      { name: 'Fournisseurs', data: fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code Postal': f.codePostal, 'Franco Port': f.francoPort, 'Coût Transport': f.coutTransport, Notes: f.notes || '' })) },
-      { name: 'Devis', data: devis.map(d => { const client = clients.find(c => c.id === d.clientId); const t = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': t.totalHT, 'Total TVA': t.totalTVA, 'Total TTC': t.totalTTC, Notes: d.notes || '' }; }) },
-    ];
-    exportMultiSheet(sheets, `MonCRM_Export_${new Date().toISOString().split('T')[0]}`);
-  }
-
   const currentLabel = NAV_FLAT.find(i => isLinkActive(i.path))?.label
     ?? NAV_FLAT.find(i => i.path.split('?')[0] === location.pathname)?.label
     ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
@@ -236,17 +223,6 @@ export default function CRMLayout() {
           </button>
         </nav>
         <div className={cn('pb-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
-          <button
-            onClick={exportGlobal}
-            title="Export global"
-            className={cn(
-              'rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-colors',
-              collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
-            )}
-          >
-            <Download className="w-5 h-5 shrink-0" />
-            {!collapsed && 'Export global'}
-          </button>
           <button
             onClick={() => supabase.auth.signOut()}
             title="Déconnexion"

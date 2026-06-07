@@ -214,6 +214,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const [filterCreateur, setFilterCreateur] = useState('');
   const [filterConcNote, setFilterConcNote] = useState('');
   const [filterCreateurNote, setFilterCreateurNote] = useState('');
+  // Onglet actif (contrôlé) — sert à afficher la bascule de vue uniquement sur Produits
+  const [veilleTab, setVeilleTab] = useState('fiches');
   // ── Vue tableau Produits : tri + filtres inline par colonne + colonnes visibles ──
   type PCol = 'concurrent' | 'produit' | 'reference' | 'categorie' | 'quantite' | 'prixHT' | 'description' | 'clientSource' | 'informateur' | 'date';
   const [prodSort, setProdSort] = useState<{ col: PCol; dir: 'asc' | 'desc' } | null>(null);
@@ -537,12 +539,12 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
 
   return (
     <div className={embedded ? 'space-y-3' : 'flex flex-col flex-1 min-h-0'}>
-      <Tabs defaultValue="fiches" className={embedded ? 'space-y-4' : 'flex flex-col flex-1 min-h-0 gap-3'}>
+      <Tabs value={veilleTab} onValueChange={setVeilleTab} className={embedded ? 'space-y-4' : 'flex flex-col flex-1 min-h-0 gap-3'}>
         {/* Titre + sous-onglets sur la même ligne */}
-        <div className="flex items-center gap-3 flex-wrap flex-none">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-none">
           {!embedded && (
-            <h1 className="text-xl font-bold flex items-center gap-2 mr-1">
-              <BarChart3 className="w-5 h-5 text-primary" /> Veille Concurrence
+            <h1 className="text-lg sm:text-xl font-bold flex items-center gap-2 mr-1 shrink-0">
+              <BarChart3 className="w-5 h-5 text-primary" /> Veille<span className="hidden sm:inline"> Concurrence</span>
             </h1>
           )}
           <TabsList className="h-9">
@@ -560,6 +562,17 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </TabsTrigger>
           </TabsList>
           <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
+            {/* Bascule liste / tableau — uniquement sur l'onglet Produits */}
+            {veilleTab === 'produits' && (
+              <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
+                <button onClick={() => setProdView('liste')} title="Vue liste" className={`flex items-center justify-center px-2.5 h-8 transition-colors ${prodView === 'liste' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                  <LayoutList className="w-4 h-4" />
+                </button>
+                <button onClick={() => setProdView('tableau')} title="Vue tableau" className={`flex items-center justify-center px-2.5 h-8 transition-colors border-l border-border ${prodView === 'tableau' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                  <Table2 className="w-4 h-4" />
+                </button>
+              </div>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="gap-1.5">
@@ -688,15 +701,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               {Object.values(prodColFilters).some(Boolean) && (
                 <button onClick={() => setProdColFilters({})} className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
               )}
-            </div>
-            {/* Bascule liste / tableau */}
-            <div className="flex rounded-lg border border-border overflow-hidden ml-auto shrink-0">
-              <button onClick={() => setProdView('liste')} title="Vue liste" className={`flex items-center justify-center px-2.5 h-8 transition-colors ${prodView === 'liste' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                <LayoutList className="w-4 h-4" />
-              </button>
-              <button onClick={() => setProdView('tableau')} title="Vue tableau" className={`flex items-center justify-center px-2.5 h-8 transition-colors border-l border-border ${prodView === 'tableau' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
-                <Table2 className="w-4 h-4" />
-              </button>
             </div>
           </div>
           {filteredProduits.length === 0 ? (
