@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { cn } from '@/lib/utils';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import DevisPreview from '@/components/DevisPreview';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
 import { useNavigate } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Clock, BarChart3,
@@ -263,29 +264,31 @@ export default function CRM() {
         </button>
       )}
 
-      {/* Barre d'onglets — flex-none, ne scroll JAMAIS */}
-      <div className="flex-none flex gap-1 border-b border-border bg-background px-4 md:px-6">
-        {([
-          { key: 'pipeline',    label: 'Pipeline commercial', icon: BarChart3 },
-          { key: 'actions',     label: 'Actions',             icon: CheckSquare },
-          { key: 'calendrier',  label: 'Calendrier',          icon: Calendar },
-          { key: 'analyse',     label: 'Analyse',             icon: PieChart },
-        ] as const).map(t => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px',
-              tab === t.key
-                ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            <t.icon className="w-4 h-4" />
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {/* Barre d'onglets — portée à droite du titre « CRM » (compacte, scrollable) */}
+      <PageHeaderSlot>
+        <div className="flex-1 flex items-center gap-0.5 overflow-x-auto">
+          {([
+            { key: 'pipeline',    label: 'Pipeline',   icon: BarChart3 },
+            { key: 'actions',     label: 'Actions',    icon: CheckSquare },
+            { key: 'calendrier',  label: 'Calendrier', icon: Calendar },
+            { key: 'analyse',     label: 'Analyse',    icon: PieChart },
+          ] as const).map(t => (
+            <button
+              key={t.key}
+              onClick={() => setTab(t.key)}
+              className={cn(
+                'flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium rounded-lg transition-colors shrink-0',
+                tab === t.key
+                  ? 'bg-primary/10 text-primary'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+              )}
+            >
+              <t.icon className="w-3.5 h-3.5 shrink-0" />
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </PageHeaderSlot>
 
       {/* Zone scrollable — tout le contenu des onglets */}
       <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-4">
