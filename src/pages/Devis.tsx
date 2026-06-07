@@ -1757,81 +1757,110 @@ export default function Devis() {
         setDialogOpen(open);
       }}>
         <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
-          <DialogHeader className="shrink-0"><DialogTitle>{editingId ? `Modifier le devis — ${devis.find(d => d.id === editingId)?.numero ?? ''}` : 'Nouveau devis'}</DialogTitle></DialogHeader>
-          {/* Onglets + actions (barre fixe) */}
-          <div className="flex items-end justify-between gap-2 border-b border-border shrink-0 flex-wrap">
-            <div className="flex gap-1">
-              <button type="button" onClick={() => setDialogTab('devis')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
-              <button type="button" onClick={() => setDialogTab('comparatif')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
-              <button type="button" onClick={() => setDialogTab('mo')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'mo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>MO</button>
-              {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
-              {editingId && <button type="button" onClick={() => setDialogTab('notes')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'notes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Notes & Fichiers</button>}
+          <DialogHeader className="shrink-0">
+            <div className="flex items-center justify-between gap-2 pr-8">
+              <DialogTitle className="truncate text-base sm:text-lg">
+                {editingId ? (<>
+                  <span className="hidden md:inline">Modifier le devis — </span>
+                  <span>{devis.find(d => d.id === editingId)?.numero ?? ''}</span>
+                </>) : 'Nouveau devis'}
+              </DialogTitle>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => {
+                      const existing = editingId ? devis.find(d => d.id === editingId) : null;
+                      const preview: DevisType = {
+                        id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
+                        clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
+                        dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
+                        fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
+                      };
+                      setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
+                      setPreviewDevis(preview);
+                    }}>
+                      <Eye className="w-4 h-4 mr-2 text-muted-foreground" /> Aperçu
+                    </DropdownMenuItem>
+                    {editingId && (
+                      <DropdownMenuItem onClick={() => {
+                        save(true);
+                        const existing = devis.find(d => d.id === editingId);
+                        const current: DevisType = {
+                          id: editingId, numero: existing?.numero || editingId,
+                          clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
+                          systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                          surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                        };
+                        setEmailDevis(current);
+                      }}>
+                        <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer par mail
+                      </DropdownMenuItem>
+                    )}
+                    {editingId && (
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          save(true);
+                          const selectedClient = clients.find(c => c.id === clientId);
+                          if (!selectedClient) { toast.error('Client introuvable'); return; }
+                          const defaultName = selectedClient.societe || selectedClient.nom;
+                          const odooNom = promptOdooPartnerName(clientId, defaultName);
+                          if (odooNom === null) return;
+                          const allContacts = selectedClient.contacts || [];
+                          const contact = allContacts.find(ct => ct.id === contactId);
+                          const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+                          const current: DevisType = {
+                            id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
+                            clientId, contactId: contactId || undefined,
+                            dateCreation, dateValidite, statut, lignes, referenceAffaire,
+                            systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                            surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                          };
+                          const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
+                          await navigator.clipboard.writeText(script);
+                          toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
+                        } catch (err) {
+                          toast.error('Erreur lors de la génération du script Odoo');
+                          console.error(err);
+                        }
+                      }}>
+                        <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer vers Odoo
+                      </DropdownMenuItem>
+                    )}
+                    {dialogTab === 'devis' && (
+                      <>
+                        <DropdownMenuItem onClick={() => setLignesView('cartes')} className="border-t border-border mt-1 pt-1.5">
+                          <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue cartes {lignesView === 'cartes' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLignesView('tableau')}>
+                          <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {lignesView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
+                          <Bot className="w-4 h-4 mr-2" /> Assistant Claude
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>
+                <Button size="sm" onClick={() => save()}>
+                  <FileText className="w-4 h-4 sm:mr-1.5" />
+                  <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
+                  <span className="sm:hidden">{editingId ? 'Enreg.' : 'Créer'}</span>
+                </Button>
+              </div>
             </div>
-            {/* Boutons d'action regroupés à droite */}
-            <div className="flex items-center gap-1.5 pb-1.5 pr-1">
-              <Button variant="outline" size="sm" onClick={() => {
-                const existing = editingId ? devis.find(d => d.id === editingId) : null;
-                const preview: DevisType = {
-                  id: editingId || 'preview',
-                  numero: existing?.numero || 'APERÇU',
-                  clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
-                  dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
-                  fraisPortHT, fraisPortTVA, modeCalcul,
-                  surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
-                };
-                setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
-                setPreviewDevis(preview);
-              }} title="Aperçu"><Eye className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Aperçu</span></Button>
-              {editingId && (
-                <Button variant="outline" size="sm" title="Envoyer par mail" onClick={() => {
-                  save(true);
-                  const existing = devis.find(d => d.id === editingId);
-                  const current: DevisType = {
-                    id: editingId, numero: existing?.numero || editingId,
-                    clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
-                    dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
-                    systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                    surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                  };
-                  setEmailDevis(current);
-                }}><Mail className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Mail</span></Button>
-              )}
-              {editingId && (
-                <Button variant="outline" size="sm" title="Envoyer vers Odoo" onClick={async () => {
-                  try {
-                    save(true);
-                    const selectedClient = clients.find(c => c.id === clientId);
-                    if (!selectedClient) { toast.error('Client introuvable'); return; }
-                    const defaultName = selectedClient.societe || selectedClient.nom;
-                    const odooNom = promptOdooPartnerName(clientId, defaultName);
-                    if (odooNom === null) return;
-                    const allContacts = selectedClient.contacts || [];
-                    const contact = allContacts.find(ct => ct.id === contactId);
-                    const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
-                    const current: DevisType = {
-                      id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
-                      clientId, contactId: contactId || undefined,
-                      dateCreation, dateValidite, statut, lignes, referenceAffaire,
-                      systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                      surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                    };
-                    const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
-                    await navigator.clipboard.writeText(script);
-                    toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
-                  } catch (err) {
-                    toast.error('Erreur lors de la génération du script Odoo');
-                    console.error(err);
-                  }
-                }}><Send className="w-4 h-4 sm:mr-1.5" /><span className="hidden lg:inline">Odoo</span></Button>
-              )}
-              <span className="w-px h-6 bg-border mx-0.5" />
-              <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>
-              <Button size="sm" onClick={() => save()}>
-                <FileText className="w-4 h-4 sm:mr-1.5" />
-                <span className="hidden sm:inline">{editingId ? 'Enregistrer' : 'Créer le devis'}</span>
-                <span className="sm:hidden">{editingId ? 'Enreg.' : 'Créer'}</span>
-              </Button>
-            </div>
+          </DialogHeader>
+          {/* Onglets (barre fixe) */}
+          <div className="flex items-end gap-1 border-b border-border shrink-0 overflow-x-auto">
+            <button type="button" onClick={() => setDialogTab('devis')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
+            <button type="button" onClick={() => setDialogTab('comparatif')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+            <button type="button" onClick={() => setDialogTab('mo')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'mo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>MO</button>
+            {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
+            {editingId && <button type="button" onClick={() => setDialogTab('notes')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'notes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Notes & Fichiers</button>}
           </div>
           <div ref={scrollContainerRef} className={`space-y-4 py-2 flex-1 overflow-y-auto overflow-x-hidden pr-1 ${dialogTab !== 'devis' ? 'hidden' : ''}`} onDragOver={e => { dragClientYRef.current = e.clientY; }}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
@@ -2131,19 +2160,13 @@ export default function Devis() {
                       </div>
                     )}
                   </div>
-                  <Button variant="outline" size="sm" onClick={() => setAssistantOpen(true)} title="Assistant IA" className="h-7 px-2 text-xs text-primary border-primary/40 hover:bg-primary/10"><Bot className="w-3 h-3 mr-1" /> Claude</Button>
-                  {/* Roue crantée : affichage + colonnes */}
+                  {/* Roue crantée : colonnes visibles */}
                   <div ref={colChooserRef} className="relative">
-                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Affichage & colonnes">
+                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Colonnes visibles">
                       <Settings className="w-3.5 h-3.5" />
                     </Button>
                     {colChooserOpen && (
                       <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Affichage</p>
-                        <div className="flex rounded-md border border-border overflow-hidden mb-3">
-                          <button type="button" onClick={() => setLignesView('cartes')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs transition-colors ${lignesView === 'cartes' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><LayoutList className="w-3.5 h-3.5" /> Cartes</button>
-                          <button type="button" onClick={() => setLignesView('tableau')} className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 text-xs border-l border-border transition-colors ${lignesView === 'tableau' ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:text-foreground'}`}><Table2 className="w-3.5 h-3.5" /> Tableau</button>
-                        </div>
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Colonnes visibles</p>
                         {LIGNE_COLS.map(col => (
                           <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
