@@ -2109,7 +2109,7 @@ export default function Devis() {
               <div className="sticky -top-2 z-20 bg-background border-b border-border py-2 -mx-1 px-1 mb-2">
                 <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Label className="text-base font-semibold">Lignes du devis</Label>
+                  <Label className="text-base font-semibold">Lignes</Label>
                   {selectedLignes.size > 0 && (
                     <span className="text-xs text-primary bg-primary/10 rounded-full px-2 py-0.5 flex items-center gap-1">
                       {selectedLignes.size} sélectionnée{selectedLignes.size > 1 ? 's' : ''} — glissez pour déplacer
@@ -2117,7 +2117,8 @@ export default function Devis() {
                     </span>
                   )}
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 min-w-0">
+                  <div className="flex items-center gap-1 overflow-x-auto min-w-0 [&>*]:shrink-0">
                   <Button variant="ghost" size="sm" onClick={undo} disabled={undoStack.length === 0} title="Annuler la dernière action (Ctrl+Z)" className="h-7 px-2 text-muted-foreground">
                     <Undo2 className="w-3.5 h-3.5 mr-1" /><span className="text-xs">Annuler</span>
                   </Button>
@@ -2126,7 +2127,8 @@ export default function Devis() {
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>MMA</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>hors MMA</Button>
-                  <div ref={kitPickerRef} className="relative">
+                  </div>
+                  <div ref={kitPickerRef} className="relative shrink-0">
                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
                       <Layers className="w-3 h-3 mr-1" /> Kit
                     </Button>
@@ -2161,7 +2163,7 @@ export default function Devis() {
                     )}
                   </div>
                   {/* Roue crantée : colonnes visibles */}
-                  <div ref={colChooserRef} className="relative">
+                  <div ref={colChooserRef} className="relative shrink-0">
                     <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Colonnes visibles">
                       <Settings className="w-3.5 h-3.5" />
                     </Button>
