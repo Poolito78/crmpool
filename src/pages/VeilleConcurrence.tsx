@@ -15,7 +15,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, X, Search, Download, Upload, Check,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, MoreHorizontal, LayoutList, Table2,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, LayoutList, Table2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
@@ -555,7 +555,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           <BarChart3 className="w-3.5 h-3.5" /> Analyse
         </TabsTrigger>
       </TabsList>
-      <div className="flex gap-2 items-center ml-auto flex-wrap justify-end">
+      <div className="flex gap-1.5 items-center ml-auto flex-nowrap justify-end shrink-0">
         {/* Bascule liste / tableau — uniquement sur l'onglet Produits */}
         {veilleTab === 'produits' && (
           <div className="flex rounded-lg border border-border overflow-hidden shrink-0">
@@ -569,9 +569,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="sm" className="gap-1.5">
-              <MoreHorizontal className="w-4 h-4" /> Action
-            </Button>
+            <Button variant="outline" size="sm" className="px-3">Action</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
@@ -585,7 +583,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Button size="sm" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
+        <Button size="sm" className="px-3" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
           <Plus className="w-4 h-4 mr-1" /> Ajout
         </Button>
       </div>
