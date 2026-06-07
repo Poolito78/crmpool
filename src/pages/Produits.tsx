@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, Settings, FileText, ShoppingCart, Euro } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -15,6 +15,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -95,8 +96,6 @@ export default function Produits() {
   });
   const [colChooserOpen, setColChooserOpen] = useState(false);
   const colChooserRef = useRef<HTMLDivElement>(null);
-  const [gearMenuOpen, setGearMenuOpen] = useState(false);
-  const gearMenuRef = useRef<HTMLDivElement>(null);
   // Colonnes : largeur (resize) + ordre (drag) via le hook partagé (persistés sous produits_col_*)
   const prodCols = useTableColumns<ColKey>('produits_col', COLUMNS.map(c => c.key));
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
@@ -155,16 +154,6 @@ export default function Produits() {
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [colChooserOpen]);
-
-  // Close gear menu on outside click
-  useEffect(() => {
-    if (!gearMenuOpen) return;
-    const handler = (e: MouseEvent) => {
-      if (gearMenuRef.current && !gearMenuRef.current.contains(e.target as Node)) setGearMenuOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [gearMenuOpen]);
 
   function handleSort(key: ColKey) {
     if (sortCol === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -957,27 +946,32 @@ export default function Produits() {
         </div>
         <div className="ml-auto flex flex-wrap gap-2 items-center">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
-          {selected.size > 0 && (
-            <>
-              <Button variant="outline" size="sm" onClick={() => {
-                const sel = produits.filter(p => selected.has(p.id));
-                exportToExcel(sel.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits_selection', 'Produits');
-              }}>
-                <Download className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Exporter {selected.size} sélectionné(s)</span>
-                <span className="sm:hidden">{selected.size}</span>
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Importer</span>
-              </Button>
-            </>
-          )}
           {Object.values(columnFilters).some(v => v) && (
             <Button variant="ghost" size="sm" onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }}>
               <X className="w-4 h-4 mr-1" /> Effacer
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="px-3">Action</Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer (Excel/CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}>
+                <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter tout (Excel)
+              </DropdownMenuItem>
+              {selected.size > 0 && (
+                <DropdownMenuItem onClick={() => {
+                  const sel = produits.filter(p => selected.has(p.id));
+                  exportToExcel(sel.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits_selection', 'Produits');
+                }}>
+                  <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter la sélection ({selected.size})
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={openNew}>
             <Plus className="w-4 h-4 sm:mr-2" />
             <span className="hidden sm:inline">Nouveau produit</span>
@@ -1067,7 +1061,7 @@ export default function Produits() {
                     {/* Sélecteur de colonnes */}
                     <div className="relative" ref={colChooserRef}>
                       <button
-                        onClick={() => { setColChooserOpen(v => !v); setGearMenuOpen(false); }}
+                        onClick={() => setColChooserOpen(v => !v)}
                         title="Choisir les colonnes"
                         className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                       >
@@ -1102,32 +1096,6 @@ export default function Produits() {
                             onClick={() => prodCols.reset()}
                           >
                             Réinitialiser l'ordre et les largeurs
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                    {/* Roue crantée : Importer / Exporter */}
-                    <div className="relative" ref={gearMenuRef}>
-                      <button
-                        onClick={() => { setGearMenuOpen(v => !v); setColChooserOpen(false); }}
-                        title="Importer / Exporter"
-                        className="p-1.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                      >
-                        <Settings className="w-4 h-4" />
-                      </button>
-                      {gearMenuOpen && (
-                        <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl py-1 min-w-[170px] text-left font-normal">
-                          <button
-                            onClick={() => { setGearMenuOpen(false); fileInputRef.current?.click(); }}
-                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
-                          >
-                            <Upload className="w-4 h-4 text-muted-foreground" /> Importer
-                          </button>
-                          <button
-                            onClick={() => { setGearMenuOpen(false); exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits'); }}
-                            className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground"
-                          >
-                            <Download className="w-4 h-4 text-muted-foreground" /> Exporter
                           </button>
                         </div>
                       )}
