@@ -2200,6 +2200,7 @@ export default function Devis() {
                 {lignesView === 'tableau' && (
                   <div ref={ligneHeaderScrollRef} className="overflow-x-hidden mt-1.5 -mb-2 pb-1">
                     <div className="flex items-center gap-1 px-1 py-1 min-w-max text-xs font-bold text-foreground border-b-2 border-border">
+                      <span className="w-4 shrink-0" />
                       <span className="w-3.5 shrink-0" />
                       <span className="w-6 shrink-0">#</span>
                       {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => { const c = TABLE_LIGNE_COLS.find(x => x.key === k)!; return !c.optional || visibleLigneCols.has(c.optional); }).map(c => {
@@ -2449,7 +2450,7 @@ export default function Devis() {
                               if (lignesView === 'tableau') {
                                 return (
                                   <div className="flex items-center gap-1 flex-nowrap">
-                                    <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
+                                    <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="w-4 shrink-0 rounded border-input accent-primary cursor-pointer" />
                                     <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 shrink-0" />
                                     <span className="text-xs font-medium text-muted-foreground shrink-0 w-6">#{ligneNums[l.id]}</span>
                                     {ligneTableCols.ordered(TABLE_LIGNE_COLS, k => colVisible(TABLE_LIGNE_COLS.find(c => c.key === k)!)).map(c => (
