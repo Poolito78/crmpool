@@ -605,14 +605,10 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           /* Mode intégré : onglets + boutons inline (pas de bandeau de page) */
           <div className="flex items-center gap-2 sm:gap-3 flex-wrap flex-none">{headerControls}</div>
         ) : (
-          <>
-            {/* Desktop : onglets + boutons dans le bandeau du haut (à côté du titre) */}
-            <PageHeaderSlot>
-              <div className="hidden sm:flex flex-1 items-center gap-3 flex-wrap min-w-0">{headerControls}</div>
-            </PageHeaderSlot>
-            {/* Mobile : boutons d'action dans le corps de page (le bandeau est trop étroit) */}
-            <div className="sm:hidden flex items-center gap-2 flex-none">{headerControls}</div>
-          </>
+          /* Mode page : boutons (Vue / Action / Ajout) dans le bandeau du titre, toutes tailles */
+          <PageHeaderSlot>
+            <div className="flex-1 flex items-center gap-2 sm:gap-3 flex-wrap justify-end min-w-0">{headerControls}</div>
+          </PageHeaderSlot>
         )}
 
         {/* Onglets pleine largeur sur mobile */}
