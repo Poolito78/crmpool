@@ -331,6 +331,50 @@ export default function Produits() {
     return map;
   }, [commandesClient]);
 
+  // Achats datés par produit : auto (lignes de commandes fournisseur) + manuel (produit.achatsHistorique)
+  const achatsParProduit = useMemo(() => {
+    const map = new Map<string, AchatDate[]>();
+    for (const cf of commandesFournisseur) {
+      for (const l of cf.lignes) {
+        if (!l.produitId) continue;
+        const arr = map.get(l.produitId) || [];
+        arr.push({ date: cf.dateCreation, prix: l.prixAchat || 0, quantite: l.quantite || 0, source: 'commande', ref: cf.numero });
+        map.set(l.produitId, arr);
+      }
+    }
+    for (const p of produits) {
+      if (p.achatsHistorique?.length) {
+        const arr = map.get(p.id) || [];
+        for (const a of p.achatsHistorique) arr.push({ ...a, source: a.source || 'manuel' });
+        map.set(p.id, arr);
+      }
+    }
+    for (const arr of map.values()) arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    return map;
+  }, [commandesFournisseur, produits]);
+
+  // Agrégat des achats par produit : valeur cumulée + quantité totale achetée (base du PMP)
+  const achatsAggParProduit = useMemo(() => {
+    const map = new Map<string, { valeur: number; qte: number }>();
+    for (const [pid, arr] of achatsParProduit) {
+      let valeur = 0, qte = 0;
+      for (const a of arr) { valeur += (a.prix || 0) * (a.quantite || 0); qte += (a.quantite || 0); }
+      map.set(pid, { valeur, qte });
+    }
+    return map;
+  }, [achatsParProduit]);
+  // PMP (prix moyen pondéré) = Σ(prix×qté) / Σ(qté)
+  const pmpParProduit = useCallback((pid: string) => {
+    const agg = achatsAggParProduit.get(pid);
+    return agg && agg.qte > 0 ? agg.valeur / agg.qte : 0;
+  }, [achatsAggParProduit]);
+  // Valeur de stock = PMP × stock courant (valorisation de l'inventaire restant)
+  const valeurStockParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const p of produits) map[p.id] = pmpParProduit(p.id) * (p.stock || 0);
+    return map;
+  }, [produits, pmpParProduit]);
+
   const filtered = safeProduits.filter(p => {
     // Global search
     if (search) {
@@ -409,50 +453,6 @@ export default function Produits() {
     for (const arr of m.values()) arr.sort((a, b) => b.stock - a.stock);
     return m;
   }, [stockEntrepots, entrepots]);
-
-  // Achats datés par produit : auto (lignes de commandes fournisseur) + manuel (produit.achatsHistorique)
-  const achatsParProduit = useMemo(() => {
-    const map = new Map<string, AchatDate[]>();
-    for (const cf of commandesFournisseur) {
-      for (const l of cf.lignes) {
-        if (!l.produitId) continue;
-        const arr = map.get(l.produitId) || [];
-        arr.push({ date: cf.dateCreation, prix: l.prixAchat || 0, quantite: l.quantite || 0, source: 'commande', ref: cf.numero });
-        map.set(l.produitId, arr);
-      }
-    }
-    for (const p of produits) {
-      if (p.achatsHistorique?.length) {
-        const arr = map.get(p.id) || [];
-        for (const a of p.achatsHistorique) arr.push({ ...a, source: a.source || 'manuel' });
-        map.set(p.id, arr);
-      }
-    }
-    for (const arr of map.values()) arr.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    return map;
-  }, [commandesFournisseur, produits]);
-
-  // Agrégat des achats par produit : valeur cumulée + quantité totale achetée (base du PMP)
-  const achatsAggParProduit = useMemo(() => {
-    const map = new Map<string, { valeur: number; qte: number }>();
-    for (const [pid, arr] of achatsParProduit) {
-      let valeur = 0, qte = 0;
-      for (const a of arr) { valeur += (a.prix || 0) * (a.quantite || 0); qte += (a.quantite || 0); }
-      map.set(pid, { valeur, qte });
-    }
-    return map;
-  }, [achatsParProduit]);
-  // PMP (prix moyen pondéré) = Σ(prix×qté) / Σ(qté)
-  const pmpParProduit = useCallback((pid: string) => {
-    const agg = achatsAggParProduit.get(pid);
-    return agg && agg.qte > 0 ? agg.valeur / agg.qte : 0;
-  }, [achatsAggParProduit]);
-  // Valeur de stock = PMP × stock courant (valorisation de l'inventaire restant)
-  const valeurStockParProduit = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const p of produits) map[p.id] = pmpParProduit(p.id) * (p.stock || 0);
-    return map;
-  }, [produits, pmpParProduit]);
 
   // Nom client (société de préférence) pour les onglets Devis / Commandes de la fiche produit
   const clientLabel = (clientId?: string) => {
