@@ -92,6 +92,7 @@ export default function Devis() {
   const [filterStatut, setFilterStatut] = useState<string>(_savedFilters.filterStatut ?? 'tous');
   const [filterClient, setFilterClient] = useState<string>(_savedFilters.filterClient ?? 'tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
+  const [searchMode, setSearchMode] = useState<'global' | 'produit'>('global');
   const [filterPeriode, setFilterPeriode] = useState<string>(_savedFilters.filterPeriode ?? 'tous');
   const [sortBy, setSortBy] = useState<string>(_savedFilters.sortBy ?? 'date_desc');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -1300,22 +1301,36 @@ export default function Devis() {
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-2">
       <PageHeaderSlot>
-          <div className="relative w-32 sm:w-48 md:w-72">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
-          </div>
-          <div className="relative hidden md:block shrink-0">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-            <input
-              type="text"
-              value={filterProduit}
-              onChange={e => setFilterProduit(e.target.value)}
-              placeholder="Filtrer par produit..."
-              className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-1.5 h-9 w-44 lg:w-52 focus:outline-none focus:ring-1 focus:ring-ring"
+          <div className="relative w-40 sm:w-56 md:w-80">
+            {searchMode === 'produit'
+              ? <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+              : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />}
+            <Input
+              placeholder={searchMode === 'produit' ? 'Filtrer par produit…' : 'Rechercher…'}
+              value={searchMode === 'produit' ? filterProduit : search}
+              onChange={e => (searchMode === 'produit' ? setFilterProduit(e.target.value) : setSearch(e.target.value))}
+              className="pl-9 pr-9 h-9"
             />
-            {filterProduit && (
-              <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">×</button>
-            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted" title="Mode de recherche">
+                  <Settings className="w-4 h-4" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem onClick={() => setSearchMode('global')}>
+                  <Search className="w-4 h-4 mr-2 text-muted-foreground" /> Recherche générale {searchMode === 'global' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setSearchMode('produit')}>
+                  <Package className="w-4 h-4 mr-2 text-muted-foreground" /> Filtrer par produit {searchMode === 'produit' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                {(search || filterProduit) && (
+                  <DropdownMenuItem onClick={() => { setSearch(''); setFilterProduit(''); }}>
+                    <XIcon className="w-4 h-4 mr-2 text-muted-foreground" /> Tout effacer
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
           <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
             {/* Vue liste / tableau — un seul bouton menu */}
