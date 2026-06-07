@@ -12,7 +12,8 @@ import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
-import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X } from 'lucide-react';
+import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X, Settings, Package, Check } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -46,6 +47,7 @@ export default function CommandesClient() {
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
+  const [searchMode, setSearchMode] = useState<'global' | 'produit'>('global');
   const [colFilters, setColFilters] = useState<Partial<Record<CCColKey, string>>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<CCColKey>>(new Set());
   const [visCols, setVisCols] = useState<Set<CCColKey>>(() => {
@@ -373,28 +375,41 @@ export default function CommandesClient() {
   return (
     <div className="flex flex-col flex-1 min-h-0 gap-4">
       <PageHeaderSlot>
-        <div className="relative w-32 sm:w-48 md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher client, numéro..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+        <div className="relative w-40 sm:w-56 md:w-80">
+          {searchMode === 'produit'
+            ? <Package className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+            : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />}
+          <Input
+            placeholder={searchMode === 'produit' ? 'Filtrer par produit…' : 'Rechercher client, numéro…'}
+            value={searchMode === 'produit' ? filterProduit : search}
+            onChange={e => (searchMode === 'produit' ? setFilterProduit(e.target.value) : setSearch(e.target.value))}
+            className="pl-9 pr-9 h-9"
+          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted" title="Mode de recherche">
+                <Settings className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => setSearchMode('global')}>
+                <Search className="w-4 h-4 mr-2 text-muted-foreground" /> Recherche générale {searchMode === 'global' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSearchMode('produit')}>
+                <Package className="w-4 h-4 mr-2 text-muted-foreground" /> Filtrer par produit {searchMode === 'produit' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              {(search || filterProduit) && (
+                <DropdownMenuItem onClick={() => { setSearch(''); setFilterProduit(''); }}>
+                  <X className="w-4 h-4 mr-2 text-muted-foreground" /> Tout effacer
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="ml-auto flex gap-2 items-center shrink-0">
           <Button onClick={openNew} size="sm"><Plus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Nouvelle commande</span></Button>
         </div>
       </PageHeaderSlot>
-
-      <div className="relative w-full sm:w-72">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-        <input
-          type="text"
-          value={filterProduit}
-          onChange={e => setFilterProduit(e.target.value)}
-          placeholder="Filtrer par produit..."
-          className="text-sm rounded-md border border-input bg-background pl-8 pr-7 py-2 w-full focus:outline-none focus:ring-1 focus:ring-ring"
-        />
-        {filterProduit && (
-          <button onClick={() => setFilterProduit('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-base leading-none">×</button>
-        )}
-      </div>
 
       {/* Filter by status */}
       <div className="flex flex-wrap gap-1.5">
