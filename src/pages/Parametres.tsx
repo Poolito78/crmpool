@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink, Settings, Download } from 'lucide-react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink, Settings, Download, Users } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
 import ClientsImportExport from '@/components/ClientsImportExport';

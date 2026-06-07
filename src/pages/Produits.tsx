@@ -658,7 +658,7 @@ export default function Produits() {
       const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
       updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull as any }).eq('id', editing.id).then(({ error }) => {
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
       });
       updateDevis(prev => prev.map(d => ({
@@ -678,7 +678,7 @@ export default function Produits() {
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
       if (composantsToSave || lignesKitToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull as any }).eq('id', newId).then(({ error }) => {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', newId).then(({ error }) => {
           if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats nouveau produit:', error);
         });
       }

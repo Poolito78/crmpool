@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { useConcurrents, formatCreateur } from '@/lib/concurrents';
+import { useConcurrents, formatCreateur, type ConcurrentProduit } from '@/lib/concurrents';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant } from '@/lib/store';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
