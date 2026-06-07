@@ -49,6 +49,13 @@ export default defineConfig(({ mode }) => ({
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // pdf.worker ~2,1 Mo
         navigateFallback: "/index.html",
+        // CRUCIAL après un déploiement : le nouveau SW prend le contrôle immédiatement
+        // et purge les anciens caches. Sans ça, le navigateur peut mélanger d'anciens
+        // et de nouveaux chunks (bindings déplacés entre chunks → « Cannot access 'X'
+        // before initialization »).
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
         // Ne jamais mettre en cache les appels Supabase (données toujours fraîches)
         navigateFallbackDenylist: [/^\/anthropic/, /supabase\.co/],
         runtimeCaching: [
