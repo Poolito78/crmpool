@@ -949,7 +949,7 @@ export default function Produits() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="ml-auto flex flex-wrap gap-2 items-center">
+        <div className="ml-auto flex flex-nowrap gap-1.5 items-center shrink-0">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />
           {Object.values(columnFilters).some(v => v) && (
             <Button variant="ghost" size="sm" onClick={() => { setColumnFilters({}); setOpenFilterCols(new Set()); }}>
@@ -983,10 +983,9 @@ export default function Produits() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button size="sm" onClick={openNew}>
-            <Plus className="w-4 h-4 sm:mr-2" />
-            <span className="hidden sm:inline">Nouveau produit</span>
-            <span className="sm:hidden">Nouveau</span>
+          <Button size="sm" onClick={openNew} className="shrink-0" title="Nouveau produit">
+            <Plus className="w-4 h-4 lg:mr-2" />
+            <span className="hidden lg:inline">Nouveau produit</span>
           </Button>
         </div>
       </PageHeaderSlot>
