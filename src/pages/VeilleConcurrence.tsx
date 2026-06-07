@@ -556,30 +556,22 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         </TabsTrigger>
       </TabsList>
       <div className="flex gap-1.5 items-center ml-auto flex-nowrap justify-end shrink-0">
-        {/* Vue (liste / tableau) — un seul bouton menu, uniquement sur l'onglet Produits */}
-        {veilleTab === 'produits' && (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="px-2.5 gap-1 shrink-0" title="Changer de vue">
-                {prodView === 'liste' ? <LayoutList className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
-                <ChevronDown className="w-3 h-3 opacity-60" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem onClick={() => setProdView('liste')}>
-                <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste {prodView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setProdView('tableau')}>
-                <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {prodView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="sm" className="px-3">Action</Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
+            {/* Vue (liste / tableau) — uniquement sur l'onglet Produits */}
+            {veilleTab === 'produits' && (
+              <>
+                <DropdownMenuItem onClick={() => setProdView('liste')}>
+                  <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste {prodView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setProdView('tableau')} className="border-b border-border pb-1.5 mb-1">
+                  <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {prodView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                </DropdownMenuItem>
+              </>
+            )}
             <DropdownMenuItem onClick={() => exportVeilleExcel(concurrents, produits, notes)}>
               <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Export Excel
             </DropdownMenuItem>
