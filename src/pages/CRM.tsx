@@ -329,7 +329,7 @@ export default function CRM() {
           </div>
 
           {/* Filtres */}
-          <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm -mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border flex flex-wrap gap-2 items-center">
+          <div className="-mx-4 md:-mx-6 px-4 md:px-6 py-2 border-b border-border flex flex-wrap gap-2 items-center">
             <Input
               placeholder="Rechercher…"
               value={searchDevis}
@@ -358,11 +358,10 @@ export default function CRM() {
             </select>
           </div>
 
-          {/* Table devis */}
-          <div className="rounded-lg border border-border overflow-hidden">
-            <div className="overflow-x-auto">
+          {/* Table devis — en-tête figé au scroll */}
+          <div className="rounded-lg border border-border">
               <table className="w-full text-sm">
-                <thead className="sticky top-[44px] z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
+                <thead className="sticky top-0 z-10 bg-muted/95 backdrop-blur-sm border-b border-border">
                   <tr>
                     {[
                       { col: 'numero',  label: 'Devis',      align: 'left',   cls: '' },
@@ -465,7 +464,6 @@ export default function CRM() {
                   })}
                 </tbody>
               </table>
-            </div>
           </div>
         </div>
       )}
