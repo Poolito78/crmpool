@@ -6,13 +6,13 @@ import { supabase } from '@/integrations/supabase/client';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 
-type NavLink = { type: 'link'; label: string; icon: any; path: string };
+type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string };
 type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
 type NavEntry = NavLink | NavGroup;
 
 const NAV: NavEntry[] = [
   { type: 'link',  label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
-  { type: 'link',  label: 'Veille Concurrence', icon: Eye,          path: '/veille-concurrence' },
+  { type: 'link',  label: 'Veille Concurrence', icon: Eye,          path: '/veille-concurrence', shortLabel: 'Veille' },
   { type: 'link',  label: 'CRM',              icon: Target,          path: '/crm' },
   {
     type: 'group', label: 'Vente', icon: TrendingUp,
@@ -184,9 +184,10 @@ export default function CRMLayout() {
     });
   }
 
-  const currentLabel = NAV_FLAT.find(i => isLinkActive(i.path))?.label
-    ?? NAV_FLAT.find(i => i.path.split('?')[0] === location.pathname)?.label
-    ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
+  const currentNav = NAV_FLAT.find(i => isLinkActive(i.path))
+    ?? NAV_FLAT.find(i => i.path.split('?')[0] === location.pathname);
+  const currentLabel = currentNav?.label ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
+  const currentShort = currentNav?.shortLabel ?? currentLabel;
 
   return (
     <div className="h-screen overflow-hidden flex bg-background">
@@ -273,7 +274,8 @@ export default function CRMLayout() {
             <Menu className="w-5 h-5" />
           </button>
           <h1 className="font-heading font-semibold text-lg truncate shrink-0">
-            {currentLabel}
+            <span className="sm:hidden">{currentShort}</span>
+            <span className="hidden sm:inline">{currentLabel}</span>
           </h1>
           <PageHeaderSlotTarget />
           {location.pathname === '/' && (
