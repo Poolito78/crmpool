@@ -10,13 +10,22 @@ registerSW({ immediate: true });
 // Filet de sécurité après un déploiement : si un chunk dynamique ne se charge pas
 // (hash changé / cache périmé), on recharge la page UNE fois pour récupérer les
 // fichiers à jour. Le garde-fou sessionStorage évite toute boucle de rechargement.
-function reloadOnceForStaleChunks(reason: string) {
+async function reloadOnceForStaleChunks(reason: string) {
   try {
     if (sessionStorage.getItem('chunk-reload') === '1') return;
     sessionStorage.setItem('chunk-reload', '1');
-    console.warn('[reload] chunks périmés détectés (' + reason + ') — rechargement…');
-    window.location.reload();
+    console.warn('[reload] chunks périmés détectés (' + reason + ') — purge SW + caches puis rechargement…');
+    // Désinscrire l'ancien SW + vider les caches (sinon il continue de servir d'anciens chunks)
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
   } catch { /* ignore */ }
+  window.location.reload();
 }
 // Après 30 s de fonctionnement sain, on lève le garde-fou (un futur déploiement
 // pourra de nouveau déclencher un rechargement). Si l'erreur réapparaît avant ça,

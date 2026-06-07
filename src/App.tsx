@@ -9,16 +9,35 @@ function isStaleChunkError(msg: string) {
   return /before initialization|reading 'default'|Failed to fetch dynamically imported module|error loading dynamically imported module|Unexpected token '<'/.test(msg);
 }
 
+// Purge le service worker + tous les caches puis recharge depuis le réseau.
+// Indispensable : un ancien SW (sans skipWaiting) garde le contrôle tant que des
+// onglets sont ouverts et continue de servir d'anciens chunks → un simple reload()
+// ne suffit pas, il faut le désinscrire.
+async function purgeAndReload() {
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch { /* ignore */ }
+  window.location.reload();
+}
+
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
   state = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
   componentDidCatch(error: Error) {
-    // Chunk périmé → recharge UNE fois pour récupérer les fichiers à jour.
+    // 1re occurrence d'une erreur de chunk périmé → purge SW + caches puis recharge.
+    // Si ça se reproduit après (garde-fou déjà posé), c'est un vrai bug → on affiche l'erreur.
     if (isStaleChunkError(error?.message || '')) {
       try {
         if (sessionStorage.getItem('chunk-reload') !== '1') {
           sessionStorage.setItem('chunk-reload', '1');
-          window.location.reload();
+          purgeAndReload();
         }
       } catch { /* ignore */ }
     }
@@ -26,11 +45,20 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   render() {
     if (this.state.error) {
       const err = this.state.error as Error;
-      // En cas de chunk périmé, on affiche un message neutre le temps du rechargement.
-      if (isStaleChunkError(err.message || '')) {
+      // Chunk périmé, 1re fois → message neutre le temps de la purge + rechargement.
+      const alreadyTried = (() => { try { return sessionStorage.getItem('chunk-reload') === '1'; } catch { return false; } })();
+      if (isStaleChunkError(err.message || '') && !alreadyTried) {
         return (
           <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif', textAlign: 'center', color: '#555' }}>
             Mise à jour de l'application en cours…
+            <div style={{ marginTop: 16 }}>
+              <button
+                onClick={() => { try { sessionStorage.removeItem('chunk-reload'); } catch { /* ignore */ } purgeAndReload(); }}
+                style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
+              >
+                Recharger maintenant
+              </button>
+            </div>
           </div>
         );
       }
