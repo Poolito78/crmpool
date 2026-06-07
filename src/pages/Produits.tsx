@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -96,6 +96,11 @@ export default function Produits() {
   });
   const [colChooserOpen, setColChooserOpen] = useState(false);
   const colChooserRef = useRef<HTMLDivElement>(null);
+  // Vue liste (cartes) / tableau (colonnes), persistée
+  const [produitsView, setProduitsView] = useState<'liste' | 'tableau'>(() => {
+    try { return (localStorage.getItem('produits_view') as 'liste' | 'tableau') || 'tableau'; } catch { return 'tableau'; }
+  });
+  const setProduitsViewPersist = (v: 'liste' | 'tableau') => { setProduitsView(v); try { localStorage.setItem('produits_view', v); } catch { /* ignore */ } };
   // Colonnes : largeur (resize) + ordre (drag) via le hook partagé (persistés sous produits_col_*)
   const prodCols = useTableColumns<ColKey>('produits_col', COLUMNS.map(c => c.key));
   const [sortCol, setSortCol] = useState<ColKey | null>(null);
@@ -956,6 +961,12 @@ export default function Produits() {
               <Button variant="outline" size="sm" className="px-3">Action</Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem onClick={() => setProduitsViewPersist('liste')} className="md:flex hidden">
+                <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste {produitsView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setProduitsViewPersist('tableau')} className="md:flex hidden border-b border-border pb-1.5 mb-1">
+                <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {produitsView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                 <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer (Excel/CSV)
               </DropdownMenuItem>
@@ -980,7 +991,7 @@ export default function Produits() {
         </div>
       </PageHeaderSlot>
 
-      <div className="hidden md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden">
+      <div className={`${produitsView === 'liste' ? 'hidden' : 'hidden md:flex md:flex-col'} flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden`}>
         {Object.values(columnFilters).some(v => v) && (
           <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">Filtres actifs :</span>
@@ -1181,8 +1192,8 @@ export default function Produits() {
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun produit</p>}
       </div>
 
-      {/* Mobile cards */}
-      <div className="md:hidden space-y-2">
+      {/* Vue cartes — mobile (toujours) + desktop si vue liste */}
+      <div className={produitsView === 'liste' ? 'flex-1 min-h-0 overflow-y-auto space-y-2' : 'md:hidden space-y-2'}>
         {sortedFiltered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucun produit</p>}
         {sortedFiltered.map(p => {
           const isCompose = !!(p.composants && p.composants.length > 0);

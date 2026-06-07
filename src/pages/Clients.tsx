@@ -2,7 +2,8 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2 } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check } from 'lucide-react';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -140,6 +141,11 @@ export default function Clients() {
     return Array.from(cats).sort();
   }, [produits]);
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  // Vue liste (cartes) / tableau (colonnes), persistée
+  const [clientsView, setClientsView] = useState<'liste' | 'tableau'>(() => {
+    try { return (localStorage.getItem('clients_view') as 'liste' | 'tableau') || 'tableau'; } catch { return 'tableau'; }
+  });
+  const setClientsViewPersist = (v: 'liste' | 'tableau') => { setClientsView(v); try { localStorage.setItem('clients_view', v); } catch { /* ignore */ } };
   const [filterVille, setFilterVille] = useState('');
   const [filterDepartement, setFilterDepartement] = useState('');
   const [filterSociete, setFilterSociete] = useState('');
@@ -571,13 +577,30 @@ export default function Clients() {
               <X className="w-4 h-4 mr-1" /> Effacer
             </Button>
           )}
+          {/* Sélecteur de vue (desktop) */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="px-2.5 gap-1 shrink-0 hidden md:flex" title="Changer de vue">
+                {clientsView === 'liste' ? <LayoutList className="w-4 h-4" /> : <Table2 className="w-4 h-4" />}
+                <ChevronDown className="w-3 h-3 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40">
+              <DropdownMenuItem onClick={() => setClientsViewPersist('liste')}>
+                <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue liste {clientsView === 'liste' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setClientsViewPersist('tableau')}>
+                <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {clientsView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" onClick={openNew}><Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Nouveau client</span><span className="sm:hidden">Nouveau</span></Button>
         </div>
       </PageHeaderSlot>
 
 
-      {/* Desktop table */}
-      <div className="hidden md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden">
+      {/* Desktop table (vue tableau) */}
+      <div className={`${clientsView === 'liste' ? 'hidden' : 'hidden md:flex md:flex-col'} flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden`}>
         {activeFilterCount > 0 && (
           <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
             <span className="text-xs text-muted-foreground">Filtres actifs :</span>
@@ -736,7 +759,7 @@ export default function Clients() {
       </div>
 
       {/* Mobile cards */}
-      <div className="md:hidden space-y-3">
+      <div className={clientsView === 'liste' ? 'flex-1 min-h-0 overflow-y-auto space-y-3' : 'md:hidden space-y-3'}>
         {filtered.map(c => (
           <div key={c.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={() => openEdit(c)}>
             <div className="flex justify-between items-start">
