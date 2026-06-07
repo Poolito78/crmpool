@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check, Settings } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -146,6 +146,7 @@ export default function Clients() {
     try { return (localStorage.getItem('clients_view') as 'liste' | 'tableau') || 'tableau'; } catch { return 'tableau'; }
   });
   const setClientsViewPersist = (v: 'liste' | 'tableau') => { setClientsView(v); try { localStorage.setItem('clients_view', v); } catch { /* ignore */ } };
+  const [searchMode, setSearchMode] = useState<'global' | 'contact'>('global');
   const [filterVille, setFilterVille] = useState('');
   const [filterDepartement, setFilterDepartement] = useState('');
   const [filterSociete, setFilterSociete] = useState('');
@@ -239,8 +240,9 @@ export default function Clients() {
       if (search) {
         const s = search.toLowerCase();
         const inBase = [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(s));
-        const inContacts = (c.contacts || []).some(ct => [ct.nom, ct.prenom, ct.email, ct.telephone, ct.fonction].some(v => v?.toLowerCase().includes(s)));
-        if (!inBase && !inContacts) return false;
+        const inContacts = (c.contacts || []).some(ct => [ct.nom, ct.prenom, ct.email, ct.telephone, ct.telephoneMobile, ct.fonction].some(v => v?.toLowerCase().includes(s)));
+        // Mode « contact » : on ne matche que sur les contacts ; sinon base + contacts
+        if (searchMode === 'contact' ? !inContacts : (!inBase && !inContacts)) return false;
       }
       if (filterVille && !c.ville?.toLowerCase().includes(filterVille.toLowerCase())) return false;
       if (filterDepartement && !c.codePostal?.startsWith(filterDepartement)) return false;
@@ -259,7 +261,7 @@ export default function Clients() {
       if (filterHasAdresse === 'non' && c.adressesLivraison && c.adressesLivraison.length > 0) return false;
       return true;
     });
-  }, [clients, search, filterVille, filterDepartement, filterSociete, filterContact, filterRevendeur, filterHasAdresse]);
+  }, [clients, search, searchMode, filterVille, filterDepartement, filterSociete, filterContact, filterRevendeur, filterHasAdresse]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortCol) return filtered;
@@ -567,9 +569,26 @@ export default function Clients() {
         </div>
       )}
       <PageHeaderSlot>
-        <div className="relative w-32 sm:w-48 md:w-72">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+        <div className="relative w-40 sm:w-56 md:w-72">
+          {searchMode === 'contact'
+            ? <UserPlus className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+            : <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />}
+          <Input placeholder={searchMode === 'contact' ? 'Rechercher un contact…' : 'Rechercher...'} value={search} onChange={e => setSearch(e.target.value)} className="pl-9 pr-9 h-9" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted" title="Mode de recherche">
+                <Settings className="w-4 h-4" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onClick={() => setSearchMode('global')}>
+                <Search className="w-4 h-4 mr-2 text-muted-foreground" /> Recherche générale {searchMode === 'global' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setSearchMode('contact')}>
+                <UserPlus className="w-4 h-4 mr-2 text-muted-foreground" /> Rechercher par contact {searchMode === 'contact' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
         <div className="ml-auto flex flex-wrap gap-2 items-center">
           {activeFilterCount > 0 && (
