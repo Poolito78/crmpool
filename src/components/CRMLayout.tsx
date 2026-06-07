@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, Download, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { useCRM } from '@/lib/StoreContext';
@@ -44,6 +44,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Entrepôts',          icon: Warehouse,       path: '/parametres?tab=entrepots' },
       { type: 'link', label: 'Devis',              icon: FileText,        path: '/parametres?tab=devis' },
       { type: 'link', label: 'Veille Concurrence', icon: Eye,             path: '/parametres?tab=veille' },
+      { type: 'link', label: 'Administration',     icon: ShieldCheck,     path: '/parametres?tab=administration' },
       { type: 'link', label: 'Historique GED',     icon: History,         path: '/ged' },
     ],
   },

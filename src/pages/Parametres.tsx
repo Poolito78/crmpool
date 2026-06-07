@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
 import { Switch } from '@/components/ui/switch';
@@ -123,6 +123,7 @@ export default function Parametres() {
           <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
+          <TabsTrigger value="administration">Administration</TabsTrigger>
         </TabsList>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">
@@ -333,6 +334,35 @@ export default function Parametres() {
           </div>
         </div>
       ))}
+        </TabsContent>
+        <TabsContent value="administration" className="space-y-4 mt-4">
+          <div className="bg-card rounded-xl border border-border p-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
+                  <ShieldCheck className="w-5 h-5 text-primary" /> Administration Veille
+                </h2>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Gérez les utilisateurs et les accès CRM depuis le panel d'administration de l'application Veille.
+                </p>
+              </div>
+              <a
+                href="https://veille-alpha.vercel.app"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
+              >
+                <ExternalLink className="w-3.5 h-3.5" /> Ouvrir dans un nouvel onglet
+              </a>
+            </div>
+          </div>
+          <div className="rounded-xl border border-border overflow-hidden" style={{ height: 'calc(100vh - 260px)' }}>
+            <iframe
+              src="https://veille-alpha.vercel.app"
+              className="w-full h-full"
+              title="Administration Veille"
+            />
+          </div>
         </TabsContent>
       </Tabs>
 
