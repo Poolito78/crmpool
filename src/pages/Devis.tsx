@@ -1775,7 +1775,7 @@ export default function Devis() {
                       const existing = editingId ? devis.find(d => d.id === editingId) : null;
                       const preview: DevisType = {
                         id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
-                        clientId, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
+                        clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
                         dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
                         fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
                       };
