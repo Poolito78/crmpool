@@ -1873,15 +1873,11 @@ export default function Devis() {
                       onClick={() => {
                         const savedId = save(true);
                         const devisId = savedId || editingId;
-                        if (devisId) {
-                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}&returnDevis=${devisId}`);
-                        } else {
-                          navigate(`/clients?search=${encodeURIComponent(clients.find(c => c.id === clientId)?.nom || '')}`);
-                        }
+                        navigate(`/clients?editClient=${clientId}${devisId ? `&returnDevis=${devisId}` : ''}`);
                       }}
                       className="text-xs text-primary hover:underline inline-flex items-center gap-1"
                     >
-                      <ExternalLink className="w-3 h-3" /> Voir fiche
+                      <ExternalLink className="w-3 h-3" /> Modifier la fiche
                     </button>
                   )}
                 </div>
