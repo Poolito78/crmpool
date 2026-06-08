@@ -21,7 +21,6 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
-import { NUANCIER_PAILLETTES } from '@/lib/nuancierPaillettes';
 import { getRalInfo } from '@/lib/ralColors';
 
 const COLUMNS = [
@@ -1577,36 +1576,17 @@ export default function Produits() {
 
             {/* ─── Variantes produit ─── */}
             <div className="border border-border rounded-md p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground">Variantes (ex : RAL, granulométrie)</p>
-                <div className="flex items-center gap-1.5">
-                  {/* Import du nuancier paillettes ISOFLOOR (visible pour les produits « paillette ») */}
-                  {(`${form.reference} ${form.description}`.toLowerCase().includes('paillette')) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs text-primary border-primary/40 hover:bg-primary/10"
-                      title="Charge les 46 teintes du nuancier paillettes ISOFLOOR (puis cliquez sur Modifier pour enregistrer)"
-                      onClick={() => {
-                        if (variantes.length > 0 && !confirm('Remplacer les variantes actuelles par le nuancier paillettes (46 teintes) ?')) return;
-                        setVariantes(NUANCIER_PAILLETTES.map(d => ({ ...d, options: d.options.map(o => ({ ...o })) })));
-                        toast.success('Nuancier paillettes chargé — cliquez sur Modifier pour enregistrer');
-                      }}
-                    >
-                      <Layers className="h-3 w-3 mr-1" /> Importer le nuancier
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 text-xs"
-                    onClick={() => setVariantes(prev => [...prev, { id: generateId(), nom: '', options: [] }])}
-                  >
-                    <Plus className="h-3 w-3 mr-1" /> Ajouter une dimension
-                  </Button>
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setVariantes(prev => [...prev, { id: generateId(), nom: '', options: [] }])}
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Ajouter une dimension
+                </Button>
               </div>
               {variantes.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-1">Aucune variante — produit sans déclinaison.</p>

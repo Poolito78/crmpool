@@ -80,7 +80,7 @@ export default function VarianteSelect({ dimension, value, onChange, className }
   const selectedRal = !selectedOpt?.couleur ? getRalInfo(selectedOpt?.label || '') : undefined;
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) { setHovered(null); return; } // menu fermé → masque l'aperçu survol
     function handler(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
@@ -125,7 +125,7 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                 <button
                   key={opt.id}
                   type="button"
-                  onClick={() => { onChange(opt.label); setOpen(false); }}
+                  onClick={() => { onChange(opt.label); setOpen(false); setHovered(null); }}
                   onMouseEnter={e => {
                     const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
                     setHoverPos({ x: r.right + 8, y: r.top });
