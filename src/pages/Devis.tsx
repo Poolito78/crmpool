@@ -195,8 +195,16 @@ export default function Devis() {
   //   on pousse une entrée factice pour que le bouton « retour » ferme la modale
   //   et reste sur la liste.
   const openedViaUrlRef = useRef(false);
+  const returnToRef = useRef<string | null>(null); // destination après fermeture (ex. /dashboard) ; null = liste devis
   const dialogOpenRef = useRef(false);
   const pushedStateRef = useRef(false);
+  // Revient à la destination d'origine après ouverture via URL.
+  // navigate(-1) n'est PAS fiable après un détour (ex. devis → fiche client → retour devis) :
+  // il retomberait sur la page intermédiaire. On cible explicitement returnTo ou la liste /devis.
+  const navigateBackFromDevis = () => {
+    navigate(returnToRef.current || '/devis');
+    returnToRef.current = null;
+  };
   const closeDevisDialog = (fromPop = false) => {
     if (!dialogOpenRef.current) return; // déjà fermé (évite la ré-entrance)
     dialogOpenRef.current = false;
@@ -204,9 +212,9 @@ export default function Devis() {
     setDialogOpen(false);
     setEditingId(null);
     if (openedViaUrlRef.current) {
-      // Ouvert via navigation → revenir à la page précédente effective
+      // Ouvert via navigation → revenir à la destination d'origine (returnTo ou liste devis)
       openedViaUrlRef.current = false;
-      if (!fromPop) navigate(-1);
+      if (!fromPop) navigateBackFromDevis();
     } else if (pushedStateRef.current && !fromPop) {
       // Ouvert depuis la liste → retirer l'entrée factice (reste sur la liste)
       pushedStateRef.current = false;
@@ -241,8 +249,10 @@ export default function Devis() {
     if (devis.length === 0) return; // wait for data
     const d = devis.find(dv => dv.id === editDevisId);
     if (d) {
+      const returnTo = searchParams.get('returnTo');
       openEdit(d);
       openedViaUrlRef.current = true; // après openEdit (qui réinitialise les refs)
+      returnToRef.current = returnTo ? `/${returnTo}` : null; // ex. returnTo=dashboard → /dashboard ; sinon liste devis
       editDevisHandledRef.current = true;
       // Nettoie le paramètre d'URL sans ajouter d'entrée d'historique (navigate(-1) reste valide)
       setSearchParams({}, { replace: true });
@@ -478,6 +488,7 @@ export default function Devis() {
 
   function openNew() {
     openedViaUrlRef.current = false;
+    returnToRef.current = null;
     setEditingId(null);
     setClientId('');
     setContactId('');
@@ -515,6 +526,7 @@ export default function Devis() {
 
   function openEdit(d: DevisType) {
     openedViaUrlRef.current = false; // ouverture directe (liste)
+    returnToRef.current = null;
     setEditingId(d.id);
     populateForm(d);
     setDialogOpen(true);
@@ -965,7 +977,7 @@ export default function Devis() {
       dialogOpenRef.current = false; // évite la ré-entrance via popstate
       setDialogOpen(false);
       setEditingId(null);
-      if (openedViaUrlRef.current) { openedViaUrlRef.current = false; navigate(-1); }
+      if (openedViaUrlRef.current) { openedViaUrlRef.current = false; navigateBackFromDevis(); }
       else if (pushedStateRef.current) { pushedStateRef.current = false; window.history.back(); }
     }
     return savedId;
