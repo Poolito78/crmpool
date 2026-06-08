@@ -1968,7 +1968,7 @@ export default function Devis() {
                           {displayTel && <p>{displayTel}</p>}
                         </div>
                       )}
-                      {selectedClient.adressesLivraison?.length > 0 && (
+                      {selectedClient.adressesLivraison?.some(a => a.type !== 'facturation') && (
                         <div className="border-t border-border pt-2 mt-2">
                           <label className="text-xs font-medium text-muted-foreground block mb-1">Adresse de livraison</label>
                           <select
@@ -1977,9 +1977,9 @@ export default function Devis() {
                             className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
                           >
                             <option value="">Identique à l'adresse de facturation</option>
-                            {selectedClient.adressesLivraison.map(a => (
+                            {selectedClient.adressesLivraison.filter(a => a.type !== 'facturation').map(a => (
                               <option key={a.id} value={a.id}>
-                                {a.type === 'facturation' ? '[Fact.] ' : ''}{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}{a.parDefaut ? ' (défaut)' : ''}
+                                {a.libelle} — {a.adresse}, {a.codePostal} {a.ville}{a.parDefaut ? ' (défaut)' : ''}
                               </option>
                             ))}
                           </select>
