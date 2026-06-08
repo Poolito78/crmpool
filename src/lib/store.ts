@@ -25,6 +25,7 @@ export interface Contact {
   telephoneMobile?: string;
   fonction?: string;
   facturation?: boolean; // contact destinataire de la facturation (défaut : le 1er/principal)
+  livraison?: boolean;   // contact destinataire de la livraison
 }
 
 export interface Client {

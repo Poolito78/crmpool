@@ -1358,9 +1358,12 @@ export default function Clients() {
               )}
               {(form.contacts || []).map((ct, idx) => (
                 <div key={ct.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
-                  <div className="flex items-center justify-between mb-1 gap-2">
-                    <span className="text-xs font-semibold text-muted-foreground">
+                  <div className="flex items-center justify-between mb-1 gap-2 flex-wrap">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
                       {idx === 0 ? 'Contact principal' : `Contact ${idx + 1}`}
+                      {ct.facturation && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Facturation</Badge>}
+                      {ct.livraison && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Livraison</Badge>}
+                      {!ct.facturation && !ct.livraison && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Devis</Badge>}
                     </span>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Destinataire de la facturation">
@@ -1371,6 +1374,15 @@ export default function Clients() {
                           onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, facturation: e.target.checked } : { ...c, facturation: e.target.checked ? false : c.facturation }) }))}
                         />
                         <span className={ct.facturation ? 'text-primary font-medium' : 'text-muted-foreground'}>Facturation</span>
+                      </label>
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Destinataire de la livraison">
+                        <input
+                          type="checkbox"
+                          className="rounded border-input accent-primary"
+                          checked={!!ct.livraison}
+                          onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, livraison: e.target.checked } : { ...c, livraison: e.target.checked ? false : c.livraison }) }))}
+                        />
+                        <span className={ct.livraison ? 'text-primary font-medium' : 'text-muted-foreground'}>Livraison</span>
                       </label>
                       <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
                     </div>

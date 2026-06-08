@@ -1990,7 +1990,8 @@ export default function Devis() {
                         const allContacts = selectedClient.contacts || [];
                         const hasContactPrincipal = selectedClient.nom || selectedClient.telephone;
                         if (allContacts.length === 0 && !hasContactPrincipal) return null;
-                        const livrId = contactLivraisonId || '__principal__';
+                        const defaultLivr = allContacts.find(c => c.livraison);
+                        const livrId = contactLivraisonId || (defaultLivr ? defaultLivr.id : '__principal__');
                         const isPrincipal = livrId === '__principal__';
                         const livrContact = isPrincipal ? null : allContacts.find(c => c.id === livrId);
                         const livrEmail = isPrincipal ? selectedClient.email : livrContact?.email;
