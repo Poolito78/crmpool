@@ -295,6 +295,24 @@ export default function Produits() {
   // Catégories distinctes existantes (suggestions pour le champ Catégorie)
   const categoriesList = useMemo(() => [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'fr')), [produits]);
 
+  // ── Image d'option de variante : upload (glisser-déposer / coller) ───────────
+  const [varImgUploading, setVarImgUploading] = useState<string | null>(null); // id option en cours
+  const setOptImageUrl = (dIdx: number, oIdx: number, url: string | undefined) =>
+    setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, imageUrl: url } : o) } : d));
+  async function uploadVarianteImage(file: File, dIdx: number, oIdx: number, optId: string) {
+    if (!file.type.startsWith('image/')) { toast.error('Le fichier n\'est pas une image'); return; }
+    setVarImgUploading(optId);
+    try {
+      const ext = (file.name.split('.').pop() || file.type.split('/')[1] || 'png').toLowerCase();
+      const path = `variantes/${generateId()}.${ext}`;
+      const { error } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false, contentType: file.type || undefined });
+      if (error) { toast.error('Upload échoué : ' + error.message); return; }
+      const { data } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      if (data?.signedUrl) { setOptImageUrl(dIdx, oIdx, data.signedUrl); toast.success('Image ajoutée'); }
+    } catch (e) { toast.error('Erreur lors de l\'upload'); console.error(e); }
+    finally { setVarImgUploading(null); }
+  }
+
   // Quantité totale commandée par produit (somme des lignes de toutes les commandes clients)
   const qteVendueParProduit = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1612,12 +1630,19 @@ export default function Produits() {
                               placeholder="Option (ex: RAL 9010, 0.5-1mm…)"
                               className="h-6 text-xs flex-1"
                             />
+                            {opt.imageUrl && (
+                              <img src={opt.imageUrl} alt="" className="w-6 h-6 rounded border border-input object-cover shrink-0" />
+                            )}
                             <Input
                               value={opt.imageUrl || ''}
                               onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, options: d.options.map((o, j) => j === oIdx ? { ...o, imageUrl: e.target.value || undefined } : o) } : d))}
-                              placeholder="URL image…"
+                              onDragOver={e => { e.preventDefault(); }}
+                              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) uploadVarianteImage(f, dIdx, oIdx, opt.id); }}
+                              onPaste={e => { const item = Array.from(e.clipboardData.items).find(it => it.type.startsWith('image/')); const f = item?.getAsFile(); if (f) { e.preventDefault(); uploadVarianteImage(f, dIdx, oIdx, opt.id); } }}
+                              placeholder={varImgUploading === opt.id ? 'Upload…' : 'URL / glisser / coller image…'}
+                              disabled={varImgUploading === opt.id}
                               className="h-6 text-xs w-28"
-                              title="URL de l'image de l'option (texture, photo…)"
+                              title="URL de l'image, ou glissez-déposez / collez (Ctrl+V) une image"
                             />
                             <Input
                               type="number"
