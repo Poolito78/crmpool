@@ -1110,7 +1110,40 @@ export function useStore() {
       if (ffRes.data) setFacturesFournisseur(ffRes.data.map(dbToFactureFournisseur));
       setLoading(false);
     }
-    load();
+
+    // ── Synchro temps réel (Supabase Realtime) ───────────────────────────────
+    // Re-charge la table concernée à chaque INSERT/UPDATE/DELETE (debounce léger)
+    // → les modifs faites sur un autre appareil/onglet apparaissent sans rafraîchir.
+    const refetchers: Record<string, () => Promise<void>> = {
+      clients: async () => { const { data } = await supabase.from('clients').select('*'); if (data) setClients(data.map(dbToClient)); },
+      fournisseurs: async () => { const { data } = await supabase.from('fournisseurs').select('*'); if (data) setFournisseurs(data.map(dbToFournisseur)); },
+      produits: async () => { const { data } = await supabase.from('produits').select('*'); if (data) setProduits(data.map(dbToProduit)); },
+      devis: async () => { const { data } = await supabase.from('devis').select('*'); if (data) setDevis(data.map(dbToDevis)); },
+      produit_fournisseurs: async () => { const { data } = await supabase.from('produit_fournisseurs').select('*'); if (data) setProduitFournisseurs(data.map(dbToProduitFournisseur)); },
+      commandes_fournisseur: async () => { const { data } = await supabase.from('commandes_fournisseur').select('*'); if (data) setCommandesFournisseur(data.map(dbToCommandeFournisseur)); },
+      commandes_client: async () => { const { data } = await supabase.from('commandes_client').select('*'); if (data) setCommandesClient(data.map(dbToCommandeClient)); },
+      factures_client: async () => { const { data } = await supabase.from('factures_client').select('*'); if (data) setFacturesClient(data.map(dbToFactureClient)); },
+      factures_fournisseur: async () => { const { data } = await supabase.from('factures_fournisseur').select('*'); if (data) setFacturesFournisseur(data.map(dbToFactureFournisseur)); },
+    };
+    const timers: Record<string, ReturnType<typeof setTimeout>> = {};
+    const scheduleRefetch = (table: string) => {
+      clearTimeout(timers[table]);
+      timers[table] = setTimeout(() => { refetchers[table]?.(); }, 400);
+    };
+
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+    load().then(() => {
+      channel = supabase.channel('crm-realtime');
+      for (const table of Object.keys(refetchers)) {
+        channel.on('postgres_changes' as any, { event: '*', schema: 'public', table }, () => scheduleRefetch(table));
+      }
+      channel.subscribe();
+    });
+
+    return () => {
+      Object.values(timers).forEach(clearTimeout);
+      if (channel) supabase.removeChannel(channel);
+    };
   }, []);
 
   const updateClients = useCallback((fn: (prev: Client[]) => Client[]) => {
