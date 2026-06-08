@@ -562,15 +562,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   contactLivrNom = client?.nom || '';
                   contactLivrTel = client?.telephone || client?.telephoneMobile || '';
                 }
+                // Contact de facturation : contact sélectionné dans le devis, sinon contact « facturation », sinon principal (1er)
+                const facturationContact = devis.contactId
+                  ? allContacts.find(c => c.id === devis.contactId)
+                  : (allContacts.find(c => c.facturation) ?? allContacts[0]);
+                const facturationNom = facturationContact ? ([facturationContact.prenom, facturationContact.nom].filter(Boolean).join(' ') || facturationContact.email || '') : '';
+                const facturationEmail = facturationContact?.email || client?.email || '';
+                const facturationTel = facturationContact?.telephone || facturationContact?.telephoneMobile || '';
                 return (
                   <div className="grid grid-cols-2 gap-4 mb-3">
                     <div className="bg-muted/30 rounded-lg p-4">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de facturation</p>
                       <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
-                      {client?.societe && <p className="text-muted-foreground">{client.nom}</p>}
+                      {facturationNom && <p className="text-muted-foreground">À l'attention de {facturationNom}</p>}
                       {client && <p className="text-muted-foreground">{client.adresse}</p>}
                       {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                      {client?.email && <p className="text-muted-foreground">{client.email}</p>}
+                      {facturationEmail && <p className="text-muted-foreground">{facturationEmail}</p>}
+                      {facturationTel && <p className="text-muted-foreground">Tél : {facturationTel}</p>}
                     </div>
                     <div className="bg-muted/30 rounded-lg p-4">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Adresse de livraison</p>

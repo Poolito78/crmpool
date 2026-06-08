@@ -1358,11 +1358,22 @@ export default function Clients() {
               )}
               {(form.contacts || []).map((ct, idx) => (
                 <div key={ct.id} className="rounded-lg border border-border p-3 space-y-2 bg-muted/20">
-                  <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center justify-between mb-1 gap-2">
                     <span className="text-xs font-semibold text-muted-foreground">
                       {idx === 0 ? 'Contact principal' : `Contact ${idx + 1}`}
                     </span>
-                    <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Destinataire de la facturation">
+                        <input
+                          type="checkbox"
+                          className="rounded border-input accent-primary"
+                          checked={!!ct.facturation}
+                          onChange={e => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).map(c => c.id === ct.id ? { ...c, facturation: e.target.checked } : { ...c, facturation: e.target.checked ? false : c.facturation }) }))}
+                        />
+                        <span className={ct.facturation ? 'text-primary font-medium' : 'text-muted-foreground'}>Facturation</span>
+                      </label>
+                      <button type="button" onClick={() => setForm(prev => ({ ...prev, contacts: (prev.contacts || []).filter(c => c.id !== ct.id) }))} className="text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
+                    </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
