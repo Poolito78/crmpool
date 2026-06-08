@@ -551,12 +551,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 const allContacts = client?.contacts || [];
                 let contactLivrNom = '';
                 let contactLivrTel = '';
-                if (devis.contactLivraisonId && devis.contactLivraisonId !== '__principal__') {
-                  const ct = allContacts.find(c => c.id === devis.contactLivraisonId);
-                  if (ct) {
-                    contactLivrNom = [ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email || '';
-                    contactLivrTel = ct.telephone || ct.telephoneMobile || '';
-                  }
+                // Contact explicitement choisi, sinon contact marqué « livraison », sinon principal
+                const livrCt = (devis.contactLivraisonId && devis.contactLivraisonId !== '__principal__')
+                  ? allContacts.find(c => c.id === devis.contactLivraisonId)
+                  : (!devis.contactLivraisonId ? allContacts.find(c => c.livraison) : undefined);
+                if (livrCt) {
+                  contactLivrNom = [livrCt.prenom, livrCt.nom].filter(Boolean).join(' ') || livrCt.email || '';
+                  contactLivrTel = livrCt.telephone || livrCt.telephoneMobile || '';
                 } else {
                   // Contact principal : utiliser le nom individuel du client + son téléphone
                   contactLivrNom = client?.nom || '';
@@ -575,7 +576,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <p className="font-semibold">{client?.societe || client?.nom || '—'}</p>
                       {client && <p className="text-muted-foreground">{client.adresse}</p>}
                       {client && <p className="text-muted-foreground">{client.codePostal} {client.ville}</p>}
-                      {client?.email && <p className="text-muted-foreground">{client.email}</p>}
                       {facturationNom && <p className="text-muted-foreground">À l'attention de {facturationNom}</p>}
                       {facturationTel && <p className="text-muted-foreground">Tél : {facturationTel}</p>}
                     </div>
