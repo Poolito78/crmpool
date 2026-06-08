@@ -303,8 +303,12 @@ export default function Produits() {
     if (!file.type.startsWith('image/')) { toast.error('Le fichier n\'est pas une image'); return; }
     setVarImgUploading(optId);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const uid = user?.id;
+      if (!uid) { toast.error('Session expirée'); return; }
       const ext = (file.name.split('.').pop() || file.type.split('/')[1] || 'png').toLowerCase();
-      const path = `variantes/${generateId()}.${ext}`;
+      // Le 1er dossier doit être l'UID utilisateur (politique RLS du bucket devis-pj)
+      const path = `${uid}/variantes/${generateId()}.${ext}`;
       const { error } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false, contentType: file.type || undefined });
       if (error) { toast.error('Upload échoué : ' + error.message); return; }
       const { data } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
