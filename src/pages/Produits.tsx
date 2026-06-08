@@ -292,6 +292,9 @@ export default function Produits() {
     return safe;
   }, [produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Catégories distinctes existantes (suggestions pour le champ Catégorie)
+  const categoriesList = useMemo(() => [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, 'fr')), [produits]);
+
   // Quantité totale commandée par produit (somme des lignes de toutes les commandes clients)
   const qteVendueParProduit = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1312,7 +1315,11 @@ export default function Produits() {
           <div className="grid gap-4 py-2 overflow-x-hidden min-w-0">
             <div className="grid grid-cols-2 gap-3">
               <div><Label>Référence *</Label><Input value={form.reference} onChange={e => setForm(p => ({ ...p, reference: e.target.value }))} /></div>
-              <div><Label>Catégorie</Label><Input value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} /></div>
+              <div>
+                <Label>Catégorie</Label>
+                <Input list="produit-categories-list" value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} placeholder="Choisir ou saisir…" autoComplete="off" />
+                <datalist id="produit-categories-list">{categoriesList.map(c => <option key={c} value={c} />)}</datalist>
+              </div>
             </div>
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
