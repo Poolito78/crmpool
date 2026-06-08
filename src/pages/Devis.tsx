@@ -1973,33 +1973,20 @@ export default function Devis() {
                         </div>
                       )}
                       {selectedClient.adressesLivraison?.length > 0 && (
-                        <div className="border-t border-border pt-2 mt-2 space-y-1">
-                          <p className="font-medium text-muted-foreground text-xs">Adresse de livraison :</p>
-                          {/* Option "identique facturation" */}
-                          <button
-                            type="button"
-                            onClick={() => setAdresseLivraisonId('')}
-                            className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${!adresseLivraisonId ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                        <div className="border-t border-border pt-2 mt-2">
+                          <label className="text-xs font-medium text-muted-foreground block mb-1">Adresse de livraison</label>
+                          <select
+                            value={adresseLivraisonId}
+                            onChange={e => setAdresseLivraisonId(e.target.value)}
+                            className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
                           >
-                            <span className="text-[10px] px-1.5 py-0 rounded-full border border-border shrink-0">Fact.</span>
-                            <span>Identique à l'adresse de facturation</span>
-                            {!adresseLivraisonId && <span className="ml-auto text-[10px]">✓</span>}
-                          </button>
-                          {selectedClient.adressesLivraison.map(a => (
-                            <button
-                              key={a.id}
-                              type="button"
-                              onClick={() => setAdresseLivraisonId(a.id)}
-                              className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${adresseLivraisonId === a.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
-                            >
-                              <span className={`text-[10px] px-1.5 py-0 rounded-full border shrink-0 ${a.type === 'facturation' ? 'border-primary/30 text-primary' : 'border-border'}`}>
-                                {a.type === 'facturation' ? 'Fact.' : 'Livr.'}
-                              </span>
-                              <span className="truncate">{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}</span>
-                              {a.parDefaut && <span className="text-[10px] text-muted-foreground shrink-0">(défaut)</span>}
-                              {adresseLivraisonId === a.id && <span className="ml-auto text-[10px] shrink-0">✓</span>}
-                            </button>
-                          ))}
+                            <option value="">Identique à l'adresse de facturation</option>
+                            {selectedClient.adressesLivraison.map(a => (
+                              <option key={a.id} value={a.id}>
+                                {a.type === 'facturation' ? '[Fact.] ' : ''}{a.libelle} — {a.adresse}, {a.codePostal} {a.ville}{a.parDefaut ? ' (défaut)' : ''}
+                              </option>
+                            ))}
+                          </select>
                         </div>
                       )}
                       {/* Contact de livraison */}
@@ -2007,29 +1994,32 @@ export default function Devis() {
                         const allContacts = selectedClient.contacts || [];
                         const hasContactPrincipal = selectedClient.nom || selectedClient.telephone;
                         if (allContacts.length === 0 && !hasContactPrincipal) return null;
+                        const livrId = contactLivraisonId || '__principal__';
+                        const isPrincipal = livrId === '__principal__';
+                        const livrContact = isPrincipal ? null : allContacts.find(c => c.id === livrId);
+                        const livrEmail = isPrincipal ? selectedClient.email : livrContact?.email;
+                        const livrTel = isPrincipal ? selectedClient.telephone : (livrContact?.telephone || livrContact?.telephoneMobile);
                         return (
-                          <div className="border-t border-border pt-2 mt-2 space-y-1">
-                            <p className="font-medium text-muted-foreground text-xs">Contact livraison :</p>
-                            {/* Contact principal (client lui-même) */}
-                            <button
-                              type="button"
-                              onClick={() => setContactLivraisonId('__principal__')}
-                              className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${contactLivraisonId === '__principal__' || (!contactLivraisonId && !allContacts.find(c => c.id === contactLivraisonId)) ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
+                          <div className="border-t border-border pt-2 mt-2">
+                            <label className="text-xs font-medium text-muted-foreground block mb-1">Contact livraison</label>
+                            <select
+                              value={livrId}
+                              onChange={e => setContactLivraisonId(e.target.value)}
+                              className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
                             >
-                              <span className="truncate">{selectedClient.societe || selectedClient.nom} {selectedClient.telephone ? `· ${selectedClient.telephone}` : ''}</span>
-                              {(contactLivraisonId === '__principal__' || !contactLivraisonId) && <span className="ml-auto text-[10px] shrink-0">✓</span>}
-                            </button>
-                            {allContacts.map(ct => (
-                              <button
-                                key={ct.id}
-                                type="button"
-                                onClick={() => setContactLivraisonId(ct.id)}
-                                className={`w-full text-left flex items-center gap-1.5 rounded px-1.5 py-1 text-xs transition-colors ${contactLivraisonId === ct.id ? 'bg-primary/10 text-primary font-medium' : 'hover:bg-muted text-muted-foreground'}`}
-                              >
-                                <span className="truncate">{[ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email}{ct.telephone || ct.telephoneMobile ? ` · ${ct.telephone || ct.telephoneMobile}` : ''}</span>
-                                {contactLivraisonId === ct.id && <span className="ml-auto text-[10px] shrink-0">✓</span>}
-                              </button>
-                            ))}
+                              <option value="__principal__">{selectedClient.societe || selectedClient.nom}{selectedClient.telephone ? ` · ${selectedClient.telephone}` : ''}</option>
+                              {allContacts.map(ct => (
+                                <option key={ct.id} value={ct.id}>
+                                  {[ct.prenom, ct.nom].filter(Boolean).join(' ') || ct.email}{ct.telephone || ct.telephoneMobile ? ` · ${ct.telephone || ct.telephoneMobile}` : ''}
+                                </option>
+                              ))}
+                            </select>
+                            {(livrEmail || livrTel) && (
+                              <div className="mt-1 text-muted-foreground space-y-0.5">
+                                {livrEmail && <p>{livrEmail}</p>}
+                                {livrTel && <p>{livrTel}</p>}
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
