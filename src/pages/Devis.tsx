@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment, type ReactNode } fr
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +21,7 @@ import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
+import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
 import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -121,6 +122,7 @@ export default function Devis() {
   // Images collées dans les notes de ligne : ligneId → [{url, name}]
   const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
   const kitPickerRef = useRef<HTMLDivElement>(null);
@@ -1853,6 +1855,9 @@ export default function Devis() {
                         <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
                           <Bot className="w-4 h-4 mr-2" /> Assistant Claude
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setVoiceAssistantOpen(true)} className="text-primary">
+                          <Mic className="w-4 h-4 mr-2" /> Assistant vocal
+                        </DropdownMenuItem>
                       </>
                     )}
                   </DropdownMenuContent>
@@ -3404,6 +3409,55 @@ export default function Devis() {
           const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
           return `Lignes du devis:\n${lines}\n\nTotal HT: ${formatMontant(total.totalHT)}\nTotal TTC: ${formatMontant(total.totalTTC)}`;
         })()}
+      />
+
+      <DevisVoiceAssistantDialog
+        open={voiceAssistantOpen}
+        onOpenChange={setVoiceAssistantOpen}
+        produits={produits}
+        onApply={(parsed: VoiceDevis) => {
+          saveSnapshot();
+          // 1. Client : correspondance souple sur société / nom
+          if (parsed.client && parsed.client.trim()) {
+            const q = parsed.client.trim().toLowerCase();
+            const match = clients.find(c => {
+              const soc = (c.societe || '').toLowerCase();
+              const nom = (c.nom || '').toLowerCase();
+              return soc === q || nom === q || (soc && (soc.includes(q) || q.includes(soc))) || (nom && (nom.includes(q) || q.includes(nom)));
+            });
+            if (match) { setClientId(match.id); setContactId(''); }
+            else toast.warning(`Client « ${parsed.client} » introuvable — sélectionnez-le manuellement.`);
+          }
+          // 2. Chantier → référence affaire
+          if (parsed.chantier && parsed.chantier.trim()) setReferenceAffaire(parsed.chantier.trim());
+          // 3. Système
+          if (parsed.systeme && parsed.systeme.trim()) setSysteme(parsed.systeme.trim());
+          // 4. Surface → mode surface
+          if (parsed.surface != null && Number(parsed.surface) > 0) {
+            setModeCalcul('surface');
+            setSurfaceGlobaleM2(Number(parsed.surface));
+          }
+          // 5. Lignes produits
+          const newLignes: LigneDevis[] = (parsed.lignes || []).map(s => {
+            const prod = s.produitId ? produits.find(p => p.id === s.produitId) : null;
+            return {
+              id: generateId(),
+              produitId: s.produitId || undefined,
+              description: s.description || prod?.description || '',
+              quantite: s.quantite || 1,
+              unite: s.unite || prod?.unite || 'U',
+              prixUnitaireHT: s.prixUnitaireHT != null && s.prixUnitaireHT > 0 ? s.prixUnitaireHT : (prod?.prixHT ?? 0),
+              tva: prod?.tva ?? 20,
+              remise: s.remise || 0,
+              note: s.note || undefined,
+            };
+          });
+          if (newLignes.length > 0) {
+            setLignes(prev => [...prev, ...newLignes]);
+            setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
+          }
+          toast.success('Devis pré-rempli depuis la dictée vocale');
+        }}
       />
 
     </div>
