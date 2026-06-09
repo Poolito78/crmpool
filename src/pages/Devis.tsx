@@ -1362,8 +1362,14 @@ export default function Devis() {
                 <DropdownMenuItem onClick={() => setEmailAnalyzerOpen(true)} className="border-t border-border mt-1">
                   <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Analyser un mail
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => { openNew(); setVoiceAssistantOpen(true); }} className="text-primary">
+                  <Mic className="w-4 h-4 mr-2" /> Nouveau devis vocal
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            <Button variant="outline" size="icon" className="shrink-0" title="Nouveau devis vocal" onClick={() => { openNew(); setVoiceAssistantOpen(true); }}>
+              <Mic className="w-4 h-4" />
+            </Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
