@@ -22,6 +22,7 @@ import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
+import VoiceButton from '@/components/ui/VoiceButton';
 import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -123,6 +124,39 @@ export default function Devis() {
   const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
+  // Dictée contextuelle : mémorise le dernier champ focalisé pour y router la transcription
+  type VoiceField =
+    | { kind: 'systeme' | 'chantier' | 'surface' | 'adresse' }
+    | { kind: 'ligne-desc' | 'ligne-qte'; id: string };
+  const voiceTargetRef = useRef<VoiceField | null>(null);
+  const onVoiceFocusCapture = (e: React.FocusEvent) => {
+    const el = e.target as HTMLElement;
+    const v = el?.dataset?.voice;
+    if (!v) return;
+    if (v === 'ligne-desc' || v === 'ligne-qte') voiceTargetRef.current = { kind: v, id: el.dataset.ligneId || '' };
+    else if (v === 'systeme' || v === 'chantier' || v === 'surface' || v === 'adresse') voiceTargetRef.current = { kind: v };
+  };
+  const routeVoiceTranscript = (text: string) => {
+    const t = voiceTargetRef.current;
+    const clean = text.trim();
+    if (!clean) return;
+    if (!t) { toast.info('Cliquez d\'abord dans un champ à dicter (ligne, système, chantier, adresse ou surface).'); return; }
+    const parseNum = (s: string) => { const n = parseFloat(s.replace(',', '.').replace(/[^\d.]/g, '')); return isNaN(n) ? null : n; };
+    switch (t.kind) {
+      case 'systeme': setSysteme(clean); toast.success('Système dicté'); break;
+      case 'chantier': setReferenceAffaire(clean); toast.success('Chantier dicté'); break;
+      case 'surface': { const n = parseNum(clean); if (n != null) { setSurfaceGlobaleM2(n); setModeCalcul('surface'); toast.success(`Surface : ${n} m²`); } else toast.error('Surface non comprise'); break; }
+      case 'adresse': {
+        const cl = clients.find(c => c.id === clientId);
+        const q = clean.toLowerCase();
+        const a = cl?.adressesLivraison?.find(ad => [ad.libelle, ad.ville, ad.adresse, ad.codePostal].filter(Boolean).some(f => f!.toLowerCase().includes(q) || q.includes(f!.toLowerCase())));
+        if (a) { setAdresseLivraisonId(a.id); toast.success(`Adresse : ${a.libelle}`); } else toast.error('Adresse de livraison non trouvée');
+        break;
+      }
+      case 'ligne-desc': updateLigne(t.id, 'description', clean); toast.success('Description dictée'); break;
+      case 'ligne-qte': { const n = parseNum(clean); if (n != null) { updateLigne(t.id, 'quantite', n); toast.success(`Quantité : ${n}`); } else toast.error('Quantité non comprise'); break; }
+    }
+  };
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
   const kitPickerRef = useRef<HTMLDivElement>(null);
@@ -1776,7 +1810,7 @@ export default function Devis() {
         if (!open) { closeDevisDialog(); return; }
         setDialogOpen(open);
       }}>
-        <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent mobileFullscreen onFocusCapture={onVoiceFocusCapture} className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between gap-2 pr-8">
               <DialogTitle className="truncate text-base sm:text-lg">
@@ -1786,6 +1820,7 @@ export default function Devis() {
                 </>) : 'Nouveau devis'}
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
+                <VoiceButton onTranscript={routeVoiceTranscript} />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
@@ -1995,6 +2030,7 @@ export default function Devis() {
                         <div className="border-t border-border pt-2 mt-2">
                           <label className="text-xs font-medium text-muted-foreground block mb-1">Adresse de livraison</label>
                           <select
+                            data-voice="adresse"
                             value={adresseLivraisonId}
                             onChange={e => setAdresseLivraisonId(e.target.value)}
                             className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
@@ -2086,18 +2122,18 @@ export default function Devis() {
               </div>{/* fin grille dates/statut */}
               <div>
                 <Label>Référence affaire</Label>
-                <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
+                <Input data-voice="chantier" placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
               </div>
               <div>
                 <Label>Système</Label>
-                <Input placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
+                <Input data-voice="systeme" placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
               </div>
               {/* Surface globale + % de réussite */}
               <div className="border border-border rounded-lg p-3 bg-muted/30">
                 <div className="flex items-end gap-4 flex-wrap">
                   <div className="w-32">
                     <Label className="text-xs">Surface globale (m²)</Label>
-                    <Input type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" title="Si surface + conso. renseignées → quantité calculée automatiquement" />
+                    <Input data-voice="surface" type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" title="Si surface + conso. renseignées → quantité calculée automatiquement" />
                   </div>
                   <div className="w-32">
                     <Label className="text-xs">% de réussite</Label>
@@ -2296,6 +2332,7 @@ export default function Devis() {
                         <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0 mt-0.5" />
                         <StickyNote className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                         <textarea
+                          data-voice="ligne-desc" data-ligne-id={l.id}
                           value={l.description}
                           onChange={e => updateLigne(l.id, 'description', e.target.value)}
                           onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
@@ -2327,7 +2364,7 @@ export default function Devis() {
                         <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
                         <GripVertical className="w-4 h-4 text-primary/40 shrink-0" />
                         <FolderPlus className="w-4 h-4 text-primary shrink-0" />
-                        <input type="text" value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                        <input type="text" data-voice="ligne-desc" data-ligne-id={l.id} value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)}
                           autoFocus={l.id === newLigneId}
                           onFocus={e => { if (l.id === newLigneId) { e.target.select(); setNewLigneId(null); } }}
                           className="flex-1 font-semibold text-sm bg-transparent border-none outline-none text-primary placeholder:text-primary/50" placeholder="Titre du groupe…" />
@@ -2413,7 +2450,7 @@ export default function Devis() {
                                     )}
                                   </div>
                                 ),
-                                description: <Input value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
+                                description: <Input data-voice="ligne-desc" data-ligne-id={l.id} value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                   const surface = parseFloat(e.target.value) || 0;
                                   const conso = l.consommation ?? prod?.consommation;
@@ -2432,7 +2469,7 @@ export default function Devis() {
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
                                 }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
                                 poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
-                                qte: <Input type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />,
+                                qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />,
                                 unite: <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />,
                                 prixht: <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />,
                                 remise: <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />,
