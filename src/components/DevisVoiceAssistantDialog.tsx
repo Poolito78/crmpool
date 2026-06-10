@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +30,8 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   produits?: Produit[];
+  /** Clients existants — pour proposer la liste si le client dicté n'est pas reconnu */
+  clients?: { id: string; nom: string; societe?: string }[];
   /** Devis modèles (statut « système ») existants — pour reconnaissance du système dicté */
   systemes?: { id: string; nom: string }[];
   /** Appelé avec les infos extraites validées par l'utilisateur */
@@ -72,7 +74,7 @@ function parseVoiceDevis(text: string): VoiceDevis | null {
   }
 }
 
-export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits = [], systemes, onApply }: Props) {
+export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits = [], clients = [], systemes, onApply }: Props) {
   const [transcript, setTranscript] = useState('');
   const [loading, setLoading] = useState(false);
   const [parsed, setParsed] = useState<VoiceDevis | null>(null);
@@ -80,6 +82,32 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
   useEffect(() => {
     if (open) { setTranscript(''); setParsed(null); setLoading(false); }
   }, [open]);
+
+  // Glossaire de termes « collés » (noms de systèmes, références produits, marques) pour
+  // recoller les mots éclatés par la dictée vocale (« flow fast » → « flowfast »).
+  const glueTerms = useMemo(() => {
+    const set = new Set<string>();
+    const addWords = (s: string) => {
+      for (const w of s.split(/\s+/)) {
+        const c = w.replace(/[^a-zA-ZÀ-ÿ]/g, '');
+        if (c.length >= 6) set.add(c);
+      }
+    };
+    (systemes || []).forEach(s => addWords(s.nom || ''));
+    produits.forEach(p => addWords(`${p.reference || ''} ${p.description || ''}`));
+    ['flowfast', 'flowcoat', 'flowfresh', 'flowcrete', 'flowshield', 'isocrete', 'peran'].forEach(w => set.add(w));
+    return [...set].slice(0, 120);
+  }, [systemes, produits]);
+
+  const normalizeTerms = (text: string): string => {
+    let out = text;
+    for (const term of glueTerms) {
+      // autorise des espaces entre chaque lettre ; ne recolle que si le texte était espacé
+      const re = new RegExp(term.split('').join('\\s*'), 'gi');
+      out = out.replace(re, m => (/\s/.test(m) ? term : m));
+    }
+    return out;
+  };
 
   const produitsCatalog = (() => {
     if (produits.length === 0) return null;
@@ -96,7 +124,8 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
   })();
 
   async function analyser() {
-    const text = transcript.trim();
+    const text = normalizeTerms(transcript.trim());
+    if (text !== transcript) setTranscript(text);
     if (!text || loading) return;
     setLoading(true);
     setParsed(null);
@@ -141,7 +170,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
               <p className="text-xs font-medium text-muted-foreground">
                 Dictez <span className="text-muted-foreground/70">ou collez un email client</span> : client, chantier, surface (m²), système et produits avec quantités.
               </p>
-              <VoiceButton onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + t)} />
+              <VoiceButton onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + normalizeTerms(t))} />
             </div>
             <textarea
               value={transcript}
@@ -162,8 +191,22 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
 
               <div className="grid grid-cols-1 gap-2">
                 <FieldRow icon={<Building2 className="w-4 h-4" />} label="Client">
-                  <Input className="h-8 text-sm" value={parsed.client || ''} placeholder="(non détecté)"
+                  <Input className="h-8 text-sm" list="voice-clients" value={parsed.client || ''} placeholder="Choisir ou taper un client…"
                     onChange={e => setParsed(p => p ? { ...p, client: e.target.value } : p)} />
+                  <datalist id="voice-clients">
+                    {clients.map(c => <option key={c.id} value={c.societe || c.nom} />)}
+                  </datalist>
+                  {(() => {
+                    const q = (parsed.client || '').trim().toLowerCase();
+                    if (!q) return null;
+                    const found = clients.some(c => {
+                      const soc = (c.societe || '').toLowerCase(); const nom = (c.nom || '').toLowerCase();
+                      return soc === q || nom === q || (soc && (soc.includes(q) || q.includes(soc))) || (nom && (nom.includes(q) || q.includes(nom)));
+                    });
+                    return found
+                      ? <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5">✓ Client trouvé dans la base</p>
+                      : <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-0.5">Client non trouvé — choisissez dans la liste ou tapez le nom exact</p>;
+                  })()}
                 </FieldRow>
                 <FieldRow icon={<Package className="w-4 h-4" />} label="Chantier">
                   <Input className="h-8 text-sm" value={parsed.chantier || ''} placeholder="(non détecté)"

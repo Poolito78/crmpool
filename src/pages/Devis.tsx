@@ -3449,6 +3449,7 @@ export default function Devis() {
         open={voiceAssistantOpen}
         onOpenChange={setVoiceAssistantOpen}
         produits={produits}
+        clients={clients.map(c => ({ id: c.id, nom: c.nom, societe: c.societe }))}
         systemes={devis.filter(d => d.statut === 'système').map(d => ({ id: d.id, nom: d.systeme || d.referenceAffaire || d.numero }))}
         onApply={(parsed: VoiceDevis) => {
           saveSnapshot();
