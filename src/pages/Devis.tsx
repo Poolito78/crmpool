@@ -611,6 +611,36 @@ export default function Devis() {
     });
   }
 
+  // Copie les pièces jointes (notes + fichiers, dont le PDF Mise en œuvre) d'un devis vers un autre
+  async function copyDevisPiecesJointes(srcId: string, newId: string): Promise<number> {
+    const { data: pjs } = await supabase
+      .from('devis_pieces_jointes')
+      .select('*')
+      .eq('devis_id', srcId)
+      .order('date', { ascending: true });
+    if (!pjs || pjs.length === 0) return 0;
+    const newPjs: any[] = [];
+    for (const pj of pjs) {
+      const newPjId = generateId();
+      if (pj.type === 'fichier' && pj.fichier_url) {
+        const pathMatch = (pj.fichier_url as string).match(/\/devis-pj\/([^?]+)/);
+        if (pathMatch) {
+          const oldPath = decodeURIComponent(pathMatch[1]);
+          const newPath = oldPath.replace(srcId, newId);
+          const { error: copyErr } = await supabase.storage.from('devis-pj').copy(oldPath, newPath);
+          if (!copyErr) {
+            const { data: { publicUrl } } = supabase.storage.from('devis-pj').getPublicUrl(newPath);
+            newPjs.push({ ...pj, id: newPjId, devis_id: newId, fichier_url: publicUrl });
+          }
+        }
+      } else {
+        newPjs.push({ ...pj, id: newPjId, devis_id: newId });
+      }
+    }
+    if (newPjs.length > 0) await supabase.from('devis_pieces_jointes').insert(newPjs);
+    return newPjs.length;
+  }
+
   async function duplicate(d: DevisType) {
     const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
     const newId = generateId();
@@ -624,53 +654,55 @@ export default function Devis() {
       lignes: d.lignes.map(l => ({ ...l, id: generateId() })),
     };
     updateDevis(prev => [...prev, newDevis]);
+    const n = await copyDevisPiecesJointes(d.id, newId);
+    toast.success(n > 0 ? `Devis dupliqué avec ${n} pièce${n > 1 ? 's jointes' : ' jointe'}` : 'Devis dupliqué');
+  }
 
-    // Copier les pièces jointes (notes + fichiers)
-    const { data: pjs } = await supabase
-      .from('devis_pieces_jointes')
-      .select('*')
-      .eq('devis_id', d.id)
-      .order('date', { ascending: true });
-
-    if (pjs && pjs.length > 0) {
-      const newPjs: any[] = [];
-      for (const pj of pjs) {
-        const newPjId = generateId();
-        if (pj.type === 'fichier' && pj.fichier_url) {
-          // Extraire le chemin dans le bucket depuis l'URL
-          const pathMatch = (pj.fichier_url as string).match(/\/devis-pj\/([^?]+)/);
-          if (pathMatch) {
-            const oldPath = decodeURIComponent(pathMatch[1]);
-            // Nouveau chemin : remplacer l'ancien devisId par le nouveau
-            const newPath = oldPath.replace(d.id, newId);
-            const { error: copyErr } = await supabase.storage
-              .from('devis-pj')
-              .copy(oldPath, newPath);
-            if (!copyErr) {
-              // Construire la nouvelle URL publique
-              const { data: { publicUrl } } = supabase.storage
-                .from('devis-pj')
-                .getPublicUrl(newPath);
-              newPjs.push({
-                ...pj,
-                id: newPjId,
-                devis_id: newId,
-                fichier_url: publicUrl,
-              });
-            }
-          }
-        } else {
-          // Note : copier directement
-          newPjs.push({ ...pj, id: newPjId, devis_id: newId });
-        }
+  // Duplique un modèle « système » puis le remplit avec les infos dictées (client, chantier, surface…)
+  async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: { client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[] }) {
+    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const newId = generateId();
+    const surf = opts.surf;
+    // Lignes du modèle (nouveaux ids) + lignes dictées, quantités/prix recalculés selon la surface
+    const applySurface = (l: LigneDevis): LigneDevis => {
+      if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
+      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      const conso = l.consommation ?? prod?.consommation;
+      if (prod && conso && prod.poids) {
+        const quantite = calcQuantiteSurface(prod, surf, l.consommation);
+        const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur);
+        return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
       }
-      if (newPjs.length > 0) {
-        await supabase.from('devis_pieces_jointes').insert(newPjs);
-      }
-      toast.success(`Devis dupliqué avec ${newPjs.length} pièce${newPjs.length > 1 ? 's jointes' : ' jointe'}`);
-    } else {
-      toast.success('Devis dupliqué');
-    }
+      return l;
+    };
+    const lignes = [
+      ...sysDevis.lignes.map(l => applySurface({ ...l, id: generateId() })),
+      ...opts.dictees.map(applySurface),
+    ];
+    const newDevis: DevisType = {
+      ...sysDevis,
+      id: newId,
+      numero,
+      dateCreation: new Date().toISOString().split('T')[0],
+      dateValidite: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+      statut: 'brouillon',
+      clientId: opts.client?.id ?? '',
+      contactId: undefined,
+      contactLivraisonId: undefined,
+      adresseLivraisonId: undefined,
+      referenceAffaire: opts.chantier || '',
+      systeme: opts.systeme || sysDevis.systeme,
+      modeCalcul: surf > 0 ? 'surface' : (sysDevis.modeCalcul || 'standard'),
+      surfaceGlobaleM2: surf > 0 ? surf : sysDevis.surfaceGlobaleM2,
+      probabiliteReussite: 0,
+      dateRealisation: undefined,
+      dateEnvoi: undefined,
+      lignes,
+    };
+    updateDevis(prev => [...prev, newDevis]);
+    openEdit(newDevis); // ouvre la copie persistée pour vérification / enregistrement
+    const n = await copyDevisPiecesJointes(sysDevis.id, newId);
+    toast.success(`Modèle « ${sysDevis.systeme || sysDevis.numero} » dupliqué${n > 0 ? ` (+ ${n} pièce${n > 1 ? 's' : ''})` : ''} et pré-rempli`);
   }
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);
@@ -3452,8 +3484,7 @@ export default function Devis() {
         clients={clients.map(c => ({ id: c.id, nom: c.nom, societe: c.societe }))}
         systemes={devis.filter(d => d.statut === 'système').map(d => ({ id: d.id, nom: d.systeme || d.referenceAffaire || d.numero }))}
         onApply={(parsed: VoiceDevis) => {
-          saveSnapshot();
-          // 1. Client : correspondance souple sur société / nom
+          // Client : correspondance souple sur société / nom
           let matchedClient: typeof clients[number] | undefined;
           if (parsed.client && parsed.client.trim()) {
             const q = parsed.client.trim().toLowerCase();
@@ -3462,34 +3493,10 @@ export default function Devis() {
               const nom = (c.nom || '').toLowerCase();
               return soc === q || nom === q || (soc && (soc.includes(q) || q.includes(soc))) || (nom && (nom.includes(q) || q.includes(nom)));
             });
-            if (matchedClient) { setClientId(matchedClient.id); setContactId(''); }
-            else toast.warning(`Client « ${parsed.client} » introuvable — sélectionnez-le manuellement.`);
+            if (!matchedClient) toast.warning(`Client « ${parsed.client} » introuvable — sélectionnez-le manuellement.`);
           }
-          // 2. Chantier → référence affaire
-          if (parsed.chantier && parsed.chantier.trim()) setReferenceAffaire(parsed.chantier.trim());
-          // 3. Système : si correspond à un devis modèle (statut « système »), on le duplique
-          let sysDevis: DevisType | undefined;
-          if (parsed.systeme && parsed.systeme.trim()) {
-            const nq = parsed.systeme.trim().toLowerCase();
-            sysDevis = devis.find(d => d.statut === 'système' && [d.systeme, d.referenceAffaire, d.numero].some(n => {
-              const v = (n || '').toLowerCase();
-              return v && (v === nq || v.includes(nq) || nq.includes(v));
-            }));
-            setSysteme(sysDevis?.systeme || parsed.systeme.trim());
-            if (sysDevis?.conditions) setConditions(sysDevis.conditions);
-            // Reprend le contenu Mise en œuvre du modèle (le PDF MO pourra être régénéré depuis l'onglet MO)
-            if (sysDevis?.moContent) setMoContent(sysDevis.moContent);
-            if (sysDevis?.notes) setNotes(sysDevis.notes);
-            if (sysDevis?.fraisPortHT != null) { setFraisPortHT(sysDevis.fraisPortHT); setFraisPortAuto(sysDevis.fraisPortAuto ?? !(sysDevis.fraisPortHT > 0)); }
-          }
-          // 4. Surface → mode surface
           const surf = parsed.surface != null && Number(parsed.surface) > 0 ? Number(parsed.surface) : 0;
-          if (surf > 0) {
-            setModeCalcul('surface');
-            setSurfaceGlobaleM2(surf);
-          }
-          // 5. Lignes : modèle système dupliqué (nouveaux ids) + lignes dictées
-          const templateLignes: LigneDevis[] = sysDevis ? sysDevis.lignes.map(l => ({ ...l, id: generateId() })) : [];
+          // Lignes dictées (en plus du modèle)
           const dictees: LigneDevis[] = (parsed.lignes || []).map(s => {
             const prod = s.produitId ? produits.find(p => p.id === s.produitId) : null;
             return {
@@ -3504,7 +3511,26 @@ export default function Devis() {
               note: s.note || undefined,
             };
           });
-          // Recalcule quantités/prix selon la surface dictée (lignes produit avec conso + poids)
+
+          // Système dicté → cherche un devis modèle (statut « système »)
+          const nq = (parsed.systeme || '').trim().toLowerCase();
+          const sysDevis = nq ? devis.find(d => d.statut === 'système' && [d.systeme, d.referenceAffaire, d.numero].some(n => {
+            const v = (n || '').toLowerCase();
+            return v && (v === nq || v.includes(nq) || nq.includes(v));
+          })) : undefined;
+
+          // ── Cas modèle reconnu : VRAIE duplication (lignes + MO + pièces jointes) puis remplissage
+          if (sysDevis) {
+            duplicateSystemeEtRemplir(sysDevis, { client: matchedClient, chantier: parsed.chantier?.trim(), systeme: parsed.systeme?.trim(), surf, dictees });
+            return;
+          }
+
+          // ── Cas sans modèle : remplit le formulaire vide ouvert
+          saveSnapshot();
+          if (matchedClient) { setClientId(matchedClient.id); setContactId(''); }
+          if (parsed.chantier && parsed.chantier.trim()) setReferenceAffaire(parsed.chantier.trim());
+          if (parsed.systeme && parsed.systeme.trim()) setSysteme(parsed.systeme.trim());
+          if (surf > 0) { setModeCalcul('surface'); setSurfaceGlobaleM2(surf); }
           const applySurface = (ls: LigneDevis[]): LigneDevis[] => surf > 0 ? ls.map(l => {
             if (l.type && l.type !== 'ligne') return l;
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
@@ -3516,17 +3542,15 @@ export default function Devis() {
             }
             return l;
           }) : ls;
-          const newLignes = applySurface([...templateLignes, ...dictees]);
+          const newLignes = applySurface(dictees);
           if (newLignes.length > 0) {
-            // Retire les lignes vides de départ (placeholder créé par openNew) avant d'ajouter
             setLignes(prev => {
               const base = prev.filter(l => !((!l.type || l.type === 'ligne') && !l.produitId && !(l.description || '').trim()));
               return [...base, ...newLignes];
             });
             setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
           }
-          if (sysDevis) toast.success(`Modèle « ${sysDevis.systeme || sysDevis.numero} » dupliqué (${templateLignes.length} lignes)`);
-          else toast.success('Devis pré-rempli depuis la dictée vocale');
+          toast.success('Devis pré-rempli depuis la dictée vocale');
         }}
       />
 
