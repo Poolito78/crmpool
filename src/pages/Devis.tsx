@@ -1841,6 +1841,78 @@ export default function Devis() {
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
                 <VoiceButton onTranscript={routeVoiceTranscript} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => {
+                      const existing = editingId ? devis.find(d => d.id === editingId) : null;
+                      const preview: DevisType = {
+                        id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
+                        clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
+                        dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
+                        fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
+                      };
+                      setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
+                      setPreviewDevis(preview);
+                    }}>
+                      <Eye className="w-4 h-4 mr-2 text-muted-foreground" /> Aperçu
+                    </DropdownMenuItem>
+                    {editingId && (
+                      <DropdownMenuItem onClick={() => {
+                        save(true);
+                        const existing = devis.find(d => d.id === editingId);
+                        const current: DevisType = {
+                          id: editingId, numero: existing?.numero || editingId,
+                          clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
+                          systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                          surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                        };
+                        setEmailDevis(current);
+                      }}>
+                        <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer par mail
+                      </DropdownMenuItem>
+                    )}
+                    {editingId && (
+                      <DropdownMenuItem onClick={async () => {
+                        try {
+                          save(true);
+                          const selectedClient = clients.find(c => c.id === clientId);
+                          if (!selectedClient) { toast.error('Client introuvable'); return; }
+                          const defaultName = selectedClient.societe || selectedClient.nom;
+                          const odooNom = promptOdooPartnerName(clientId, defaultName);
+                          if (odooNom === null) return;
+                          const allContacts = selectedClient.contacts || [];
+                          const contact = allContacts.find(ct => ct.id === contactId);
+                          const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+                          const current: DevisType = {
+                            id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
+                            clientId, contactId: contactId || undefined,
+                            dateCreation, dateValidite, statut, lignes, referenceAffaire,
+                            systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                            surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                          };
+                          const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
+                          await navigator.clipboard.writeText(script);
+                          toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
+                        } catch (err) {
+                          toast.error('Erreur lors de la génération du script Odoo');
+                          console.error(err);
+                        }
+                      }}>
+                        <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer vers Odoo
+                      </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
+                      <Bot className="w-4 h-4 mr-2" /> Assistant Claude
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setVoiceAssistantOpen(true)} className="text-primary">
+                      <Mic className="w-4 h-4 mr-2" /> Assistant vocal
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 {dialogTab === 'devis' && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
