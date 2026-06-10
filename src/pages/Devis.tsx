@@ -1030,7 +1030,7 @@ export default function Devis() {
     const parts: string[] = [];
     for (const l of lignes) {
       if (l.type === 'groupe') {
-        parts.push(`<h2>${escapeHtml(l.description || 'Groupe')}</h2>`);
+        parts.push(`<h2 style="color:#dc2626">${escapeHtml(l.description || 'Groupe')}</h2>`);
       } else if (l.type === 'texte') {
         if (l.description?.trim()) parts.push(`<p>${escapeHtml(l.description)}</p>`);
       } else if (l.type === 'soustotal') {
