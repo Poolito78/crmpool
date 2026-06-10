@@ -10,6 +10,8 @@ interface Props {
   lang?: string;
   className?: string;
   size?: 'sm' | 'default';
+  /** N'affiche que l'icône micro (pas de texte « Dicter »/« Stop ») */
+  iconOnly?: boolean;
 }
 
 // Typage minimal de la Web Speech API (non présent dans le tslib standard)
@@ -20,7 +22,7 @@ declare global {
   }
 }
 
-export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm' }: Props) {
+export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm', iconOnly = false }: Props) {
   const [listening, setListening] = useState(false);
   const recogRef = useRef<SpeechRecognition | null>(null);
 
@@ -75,13 +77,13 @@ export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = 
     <Button
       type="button"
       variant={listening ? 'default' : 'outline'}
-      size={size}
+      size={iconOnly ? 'icon' : size}
       onClick={toggle}
       title={listening ? 'Arrêter la dictée' : 'Dicter vocalement'}
       className={`gap-1.5 shrink-0 ${listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''} ${className}`}
     >
       {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-      {listening ? 'Stop' : 'Dicter'}
+      {!iconOnly && (listening ? 'Stop' : 'Dicter')}
     </Button>
   );
 }

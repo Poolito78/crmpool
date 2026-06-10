@@ -1840,7 +1840,7 @@ export default function Devis() {
                 </>) : 'Nouveau devis'}
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
-                <VoiceButton onTranscript={routeVoiceTranscript} />
+                <VoiceButton onTranscript={routeVoiceTranscript} iconOnly />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
@@ -1917,9 +1917,6 @@ export default function Devis() {
                     )}
                     <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
                       <Bot className="w-4 h-4 mr-2" /> Assistant Claude
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setVoiceAssistantOpen(true)} className="text-primary">
-                      <Mic className="w-4 h-4 mr-2" /> Assistant vocal
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
