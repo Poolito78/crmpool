@@ -1905,6 +1905,16 @@ export default function Devis() {
                         <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer vers Odoo
                       </DropdownMenuItem>
                     )}
+                    {dialogTab === 'devis' && (
+                      <>
+                        <DropdownMenuItem onClick={() => setLignesView('cartes')} className="border-t border-border mt-1 pt-1.5">
+                          <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue cartes {lignesView === 'cartes' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setLignesView('tableau')}>
+                          <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {lignesView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                     <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
                       <Bot className="w-4 h-4 mr-2" /> Assistant Claude
                     </DropdownMenuItem>
@@ -1913,21 +1923,6 @@ export default function Devis() {
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
-                {dialogTab === 'devis' && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="sm" className="px-3 gap-1">Vue <ChevronDown className="w-3 h-3 opacity-60" /></Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
-                      <DropdownMenuItem onClick={() => setLignesView('cartes')}>
-                        <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue cartes {lignesView === 'cartes' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLignesView('tableau')}>
-                        <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {lignesView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
                 <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>
                 <Button size="sm" onClick={() => save()}>
                   <FileText className="w-4 h-4 sm:mr-1.5" />
