@@ -15,8 +15,9 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { Label } from '@/components/ui/label';
 import {
   Building2, Package, FileText, Plus, Trash2, Pencil, X, Search, Download, Upload, Check,
-  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, LayoutList, Table2,
+  Mail, Globe, Phone, User, BarChart3, Filter, ArrowUpDown, ChevronUp, ChevronDown, ChevronsUpDown, ChevronRight, Settings, Loader2, LayoutList, Table2, Mic,
 } from 'lucide-react';
+import VeilleVoiceDialog, { type VoiceVeille } from '@/components/VeilleVoiceDialog';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { useConcurrents, formatCreateur, type ConcurrentProduit } from '@/lib/concurrents';
@@ -270,8 +271,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [addProdOpen, setAddProdOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [editingProdId, setEditingProdId] = useState<string | null>(null);
-  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', quantiteUnite: '', prixHT: '', prixUnite: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
   // Si un concurrent est créé depuis le dialog produit, l'auto-sélectionner.
   const prevConcIdsRef = useRef<Set<string>>(new Set());
@@ -425,7 +427,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     setEditingProdId(null);
     setAddProdForm({
       concurrentId: concurrents[0]?.id || '',
-      nom: '', reference: '', categorie: '', quantite: '', prixHT: '', description: '',
+      nom: '', reference: '', categorie: '', quantite: '', quantiteUnite: '', prixHT: '', prixUnite: '', description: '',
       clientId: '', clientNom: '', informateur: formatCreateur(myEmail), dateRenseignement: new Date().toISOString().split('T')[0],
     });
     setAddProdOpen(true);
@@ -439,7 +441,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       reference: p.reference || '',
       categorie: p.categorie || '',
       quantite: p.quantite != null ? String(p.quantite) : '',
+      quantiteUnite: p.quantiteUnite || '',
       prixHT: p.prixHT != null ? String(p.prixHT) : '',
+      prixUnite: p.prixUnite || '',
       description: p.description || '',
       clientId: p.clientId || '',
       clientNom: p.clientNom || '',
@@ -464,7 +468,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           reference: addProdForm.reference || undefined,
           categorie: addProdForm.categorie || undefined,
           quantite,
+          quantiteUnite: addProdForm.quantiteUnite || undefined,
           prixHT,
+          prixUnite: addProdForm.prixUnite || undefined,
           description: addProdForm.description || undefined,
           clientId: addProdForm.clientId || undefined,
           clientNom: addProdForm.clientNom || undefined,
@@ -483,7 +489,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       reference: addProdForm.reference || undefined,
       categorie: addProdForm.categorie || undefined,
       quantite,
+      quantiteUnite: addProdForm.quantiteUnite || undefined,
       prixHT,
+      prixUnite: addProdForm.prixUnite || undefined,
       description: addProdForm.description || undefined,
       clientNom: addProdForm.clientNom || undefined,
       informateur: addProdForm.informateur || undefined,
@@ -583,6 +591,9 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        <Button variant="outline" size="sm" className="px-2 shrink-0" onClick={() => setVoiceOpen(true)} title="Dictée vocale — produit concurrent">
+          <Mic className="w-4 h-4" />
+        </Button>
         <Button size="sm" className="px-3" onClick={openAddProd} title="Ajouter (produit ou concurrent)">
           <Plus className="w-4 h-4 mr-1" /> Ajout
         </Button>
@@ -836,8 +847,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                         case 'produit': return <TableCell key={col} style={prodCols.widthStyle(col)}><div className="font-medium">{p.nom}</div></TableCell>;
                         case 'reference': return <TableCell key={col} style={prodCols.widthStyle(col)} className="font-mono text-xs">{p.reference || '—'}</TableCell>;
                         case 'categorie': return <TableCell key={col} style={prodCols.widthStyle(col)}>{p.categorie ? <Badge variant="outline" className="text-xs">{p.categorie}</Badge> : '—'}</TableCell>;
-                        case 'quantite': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right tabular-nums">{p.quantite != null ? p.quantite : '—'}</TableCell>;
-                        case 'prixHT': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right font-semibold">{p.prixHT != null ? `${formatMontant(p.prixHT)} €` : '—'}</TableCell>;
+                        case 'quantite': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right tabular-nums">{p.quantite != null ? <>{p.quantite}{p.quantiteUnite && <span className="text-xs text-muted-foreground"> {p.quantiteUnite}</span>}</> : '—'}</TableCell>;
+                        case 'prixHT': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-right font-semibold">{p.prixHT != null ? <>{formatMontant(p.prixHT)} {p.prixUnite || '€'}</> : '—'}</TableCell>;
                         case 'description': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-sm text-muted-foreground max-w-40 truncate">{p.description || '—'}</TableCell>;
                         case 'clientSource': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-xs text-muted-foreground">{p.clientNom || (sourceClient ? (sourceClient.societe || sourceClient.nom) : '—')}</TableCell>;
                         case 'informateur': return <TableCell key={col} style={prodCols.widthStyle(col)} className="text-xs text-muted-foreground">{p.informateur || formatCreateur(p.createdByEmail)}</TableCell>;
@@ -1231,11 +1242,23 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Quantité</Label>
-                <Input type="number" step="any" value={addProdForm.quantite} onChange={e => setAddProdForm(f => ({ ...f, quantite: e.target.value }))} placeholder="Ex : 1, 25, 1000…" />
+                <div className="flex gap-1.5">
+                  <Input type="number" step="any" value={addProdForm.quantite} onChange={e => setAddProdForm(f => ({ ...f, quantite: e.target.value }))} placeholder="Ex : 1, 25, 1000…" />
+                  <Input className="w-20 shrink-0" list="qte-unites" value={addProdForm.quantiteUnite} onChange={e => setAddProdForm(f => ({ ...f, quantiteUnite: e.target.value }))} placeholder="Unité" title="Unité de la quantité (m², kg, L, U…)" />
+                  <datalist id="qte-unites">
+                    {['m²', 'kg', 'L', 'U', 'seau', 'sac', 'ml', 'm³'].map(u => <option key={u} value={u} />)}
+                  </datalist>
+                </div>
               </div>
               <div className="space-y-1.5">
                 <Label>Prix HT (€)</Label>
-                <Input type="number" step="0.01" value={addProdForm.prixHT} onChange={e => setAddProdForm(f => ({ ...f, prixHT: e.target.value }))} />
+                <div className="flex gap-1.5">
+                  <Input type="number" step="0.01" value={addProdForm.prixHT} onChange={e => setAddProdForm(f => ({ ...f, prixHT: e.target.value }))} />
+                  <Input className="w-20 shrink-0" list="prix-unites" value={addProdForm.prixUnite} onChange={e => setAddProdForm(f => ({ ...f, prixUnite: e.target.value }))} placeholder="Unité" title="Unité du prix (€/m², €/kg, €/U…)" />
+                  <datalist id="prix-unites">
+                    {['€/m²', '€/kg', '€/L', '€/U', '€/seau', '€/sac', '€/ml'].map(u => <option key={u} value={u} />)}
+                  </datalist>
+                </div>
               </div>
             </div>
             <div className="space-y-1.5">
@@ -1290,6 +1313,46 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
         onAddNote={addNote}
         onUpdateNote={updateNote}
         onDeleteNote={deleteNote}
+      />
+
+      <VeilleVoiceDialog
+        open={voiceOpen}
+        onOpenChange={setVoiceOpen}
+        concurrents={concurrents.map(c => ({ id: c.id, nom: c.nom }))}
+        categories={categories}
+        onApply={(v: VoiceVeille) => {
+          // Concurrent : correspondance souple sur le nom
+          const cq = (v.concurrent || '').trim().toLowerCase();
+          const conc = cq ? concurrents.find(c => {
+            const n = c.nom.toLowerCase();
+            return n === cq || n.includes(cq) || cq.includes(n);
+          }) : undefined;
+          if (v.concurrent && !conc) toast.warning(`Concurrent « ${v.concurrent} » introuvable — sélectionnez-le ou créez-le dans le formulaire.`);
+          // Client source : correspondance sur société / nom
+          const clq = (v.client || '').trim().toLowerCase();
+          const cl = clq ? clients.find(c => {
+            const soc = (c.societe || '').toLowerCase();
+            const nom = (c.nom || '').toLowerCase();
+            return soc === clq || nom === clq || (soc && (soc.includes(clq) || clq.includes(soc))) || (nom && nom.includes(clq));
+          }) : undefined;
+          setEditingProdId(null);
+          setAddProdForm({
+            concurrentId: conc?.id || '',
+            nom: v.produit || '',
+            reference: v.reference || '',
+            categorie: v.categorie || '',
+            quantite: v.quantite != null ? String(v.quantite) : '',
+            quantiteUnite: v.quantiteUnite || '',
+            prixHT: v.prixHT != null ? String(v.prixHT) : '',
+            prixUnite: v.prixUnite || '',
+            description: v.description || '',
+            clientId: cl?.id || '',
+            clientNom: cl ? (cl.societe || cl.nom) : (v.client || ''),
+            informateur: v.informateur || '',
+            dateRenseignement: new Date().toISOString().split('T')[0],
+          });
+          setAddProdOpen(true);
+        }}
       />
     </div>
   );

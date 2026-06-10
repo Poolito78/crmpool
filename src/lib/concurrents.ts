@@ -43,7 +43,9 @@ export interface ConcurrentProduit {
   reference?: string;
   categorie?: string;
   quantite?: number;
+  quantiteUnite?: string;  // unité de la quantité (m², kg, L, U, seau…)
   prixHT?: number;
+  prixUnite?: string;      // unité du prix de vente (€/m², €/kg, €/U…)
   description?: string;
   clientId?: string;
   clientNom?: string;
@@ -104,7 +106,9 @@ function dbToConcurrentProduit(r: any): ConcurrentProduit {
     reference: r.reference || undefined,
     categorie: r.categorie || undefined,
     quantite: r.quantite != null ? Number(r.quantite) : undefined,
+    quantiteUnite: r.quantite_unite || undefined,
     prixHT: r.prix_ht != null ? Number(r.prix_ht) : undefined,
+    prixUnite: r.prix_unite || undefined,
     description: r.description || undefined,
     clientId: r.client_id || undefined,
     clientNom: r.client_nom || undefined,
@@ -134,6 +138,8 @@ function concurrentProduitToDb(p: ConcurrentProduit) {
     ...(p.informateur !== undefined ? { informateur: p.informateur || null } : {}),
     ...(p.dateRenseignement !== undefined ? { date_renseignement: p.dateRenseignement || null } : {}),
     ...(p.quantite !== undefined ? { quantite: p.quantite ?? null } : {}),
+    ...(p.quantiteUnite !== undefined ? { quantite_unite: p.quantiteUnite || null } : {}),
+    ...(p.prixUnite !== undefined ? { prix_unite: p.prixUnite || null } : {}),
   };
 }
 

@@ -30,11 +30,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   produits?: Produit[];
+  /** Devis modèles (statut « système ») existants — pour reconnaissance du système dicté */
+  systemes?: { id: string; nom: string }[];
   /** Appelé avec les infos extraites validées par l'utilisateur */
   onApply: (parsed: VoiceDevis) => void;
 }
 
-const EXTRACT_PROMPT = (transcript: string) => `Tu dois extraire les informations d'un devis à partir de cette demande dictée vocalement par un commercial du bâtiment (revêtements de sol, résines, chapes...).
+const EXTRACT_PROMPT = (transcript: string, systemes?: { id: string; nom: string }[]) => `Tu dois extraire les informations d'un devis à partir de cette demande dictée vocalement par un commercial du bâtiment (revêtements de sol, résines, chapes...).
 
 Réponds UNIQUEMENT avec un bloc JSON entre les balises ci-dessous, sans aucun autre texte avant ou après :
 
@@ -49,6 +51,10 @@ RÈGLES :
 - "prixUnitaireHT" = prix du catalogue si le produit est trouvé, sinon 0.
 - Si une information est absente, mets une chaîne vide "" (ou null pour surface). Ne devine pas le client.
 - "lignes" peut être vide [] si aucun produit n'est mentionné.
+${systemes && systemes.length > 0 ? `
+SYSTÈMES MODÈLES EXISTANTS (devis types réutilisables) :
+${systemes.map(s => `- ${s.nom}`).join('\n')}
+Si la demande fait référence à l'un de ces systèmes (même approximativement), renvoie son nom EXACT tel qu'écrit ci-dessus dans "systeme". Dans ce cas, ne génère PAS de lignes pour les produits de ce système (le modèle sera dupliqué) — ne mets dans "lignes" que les produits supplémentaires explicitement dictés en plus du système.` : ''}
 
 Demande vocale à analyser : "${transcript}"`;
 
@@ -66,7 +72,7 @@ function parseVoiceDevis(text: string): VoiceDevis | null {
   }
 }
 
-export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits = [], onApply }: Props) {
+export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits = [], systemes, onApply }: Props) {
   const [transcript, setTranscript] = useState('');
   const [loading, setLoading] = useState(false);
   const [parsed, setParsed] = useState<VoiceDevis | null>(null);
@@ -96,7 +102,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
     setParsed(null);
     try {
       const { data, error } = await supabase.functions.invoke('devis-assistant', {
-        body: { message: EXTRACT_PROMPT(text), history: [], produitsCatalog },
+        body: { message: EXTRACT_PROMPT(text, systemes), history: [], produitsCatalog },
       });
       if (error) throw error;
       const raw: string = data?.response || '';

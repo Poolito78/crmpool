@@ -153,7 +153,34 @@ export default function Devis() {
         if (a) { setAdresseLivraisonId(a.id); toast.success(`Adresse : ${a.libelle}`); } else toast.error('Adresse de livraison non trouvée');
         break;
       }
-      case 'ligne-desc': updateLigne(t.id, 'description', clean); toast.success('Description dictée'); break;
+      case 'ligne-desc': {
+        // Cherche d'abord une correspondance dans le catalogue produits (réf. ou description)
+        const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+        const q = norm(clean);
+        const qTokens = q.split(' ').filter(w => w.length > 1);
+        let best: { p: Produit; score: number } | null = null;
+        for (const p of produits) {
+          const ref = norm(p.reference || '');
+          const desc = norm(p.description || '');
+          let score = 0;
+          if (ref && (ref === q || ref.includes(q) || q.includes(ref))) score += 3;
+          if (desc && (desc === q || desc.includes(q) || q.includes(desc))) score += 3;
+          // score par mots communs avec la description
+          if (qTokens.length > 0) {
+            const hits = qTokens.filter(w => desc.includes(w) || ref.includes(w)).length;
+            score += hits / qTokens.length * 2;
+          }
+          if (score > (best?.score ?? 0)) best = { p, score };
+        }
+        if (best && best.score >= 2) {
+          selectProduit(t.id, best.p.id);
+          toast.success(`Produit reconnu : ${best.p.reference || best.p.description}`);
+        } else {
+          updateLigne(t.id, 'description', clean);
+          toast.success('Description dictée (aucun produit du catalogue reconnu)');
+        }
+        break;
+      }
       case 'ligne-qte': { const n = parseNum(clean); if (n != null) { updateLigne(t.id, 'quantite', n); toast.success(`Quantité : ${n}`); } else toast.error('Quantité non comprise'); break; }
     }
   };
@@ -1393,17 +1420,23 @@ export default function Devis() {
                 <DropdownMenuItem onClick={() => setDevisView('tableau')}>
                   <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {devisView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEmailAnalyzerOpen(true)} className="border-t border-border mt-1">
-                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Analyser un mail
-                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="shrink-0" title="Commandes vocales & IA">
+                  <Mic className="w-4 h-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-52">
                 <DropdownMenuItem onClick={() => { openNew(); setVoiceAssistantOpen(true); }} className="text-primary">
                   <Mic className="w-4 h-4 mr-2" /> Nouveau devis vocal
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setEmailAnalyzerOpen(true)}>
+                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Analyser un mail
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <Button variant="outline" size="icon" className="shrink-0" title="Nouveau devis vocal" onClick={() => { openNew(); setVoiceAssistantOpen(true); }}>
-              <Mic className="w-4 h-4" />
-            </Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
@@ -3458,30 +3491,43 @@ export default function Devis() {
         open={voiceAssistantOpen}
         onOpenChange={setVoiceAssistantOpen}
         produits={produits}
+        systemes={devis.filter(d => d.statut === 'système').map(d => ({ id: d.id, nom: d.systeme || d.referenceAffaire || d.numero }))}
         onApply={(parsed: VoiceDevis) => {
           saveSnapshot();
           // 1. Client : correspondance souple sur société / nom
+          let matchedClient: typeof clients[number] | undefined;
           if (parsed.client && parsed.client.trim()) {
             const q = parsed.client.trim().toLowerCase();
-            const match = clients.find(c => {
+            matchedClient = clients.find(c => {
               const soc = (c.societe || '').toLowerCase();
               const nom = (c.nom || '').toLowerCase();
               return soc === q || nom === q || (soc && (soc.includes(q) || q.includes(soc))) || (nom && (nom.includes(q) || q.includes(nom)));
             });
-            if (match) { setClientId(match.id); setContactId(''); }
+            if (matchedClient) { setClientId(matchedClient.id); setContactId(''); }
             else toast.warning(`Client « ${parsed.client} » introuvable — sélectionnez-le manuellement.`);
           }
           // 2. Chantier → référence affaire
           if (parsed.chantier && parsed.chantier.trim()) setReferenceAffaire(parsed.chantier.trim());
-          // 3. Système
-          if (parsed.systeme && parsed.systeme.trim()) setSysteme(parsed.systeme.trim());
-          // 4. Surface → mode surface
-          if (parsed.surface != null && Number(parsed.surface) > 0) {
-            setModeCalcul('surface');
-            setSurfaceGlobaleM2(Number(parsed.surface));
+          // 3. Système : si correspond à un devis modèle (statut « système »), on le duplique
+          let sysDevis: DevisType | undefined;
+          if (parsed.systeme && parsed.systeme.trim()) {
+            const nq = parsed.systeme.trim().toLowerCase();
+            sysDevis = devis.find(d => d.statut === 'système' && [d.systeme, d.referenceAffaire, d.numero].some(n => {
+              const v = (n || '').toLowerCase();
+              return v && (v === nq || v.includes(nq) || nq.includes(v));
+            }));
+            setSysteme(sysDevis?.systeme || parsed.systeme.trim());
+            if (sysDevis?.conditions) setConditions(sysDevis.conditions);
           }
-          // 5. Lignes produits
-          const newLignes: LigneDevis[] = (parsed.lignes || []).map(s => {
+          // 4. Surface → mode surface
+          const surf = parsed.surface != null && Number(parsed.surface) > 0 ? Number(parsed.surface) : 0;
+          if (surf > 0) {
+            setModeCalcul('surface');
+            setSurfaceGlobaleM2(surf);
+          }
+          // 5. Lignes : modèle système dupliqué (nouveaux ids) + lignes dictées
+          const templateLignes: LigneDevis[] = sysDevis ? sysDevis.lignes.map(l => ({ ...l, id: generateId() })) : [];
+          const dictees: LigneDevis[] = (parsed.lignes || []).map(s => {
             const prod = s.produitId ? produits.find(p => p.id === s.produitId) : null;
             return {
               id: generateId(),
@@ -3495,11 +3541,25 @@ export default function Devis() {
               note: s.note || undefined,
             };
           });
+          // Recalcule quantités/prix selon la surface dictée (lignes produit avec conso + poids)
+          const applySurface = (ls: LigneDevis[]): LigneDevis[] => surf > 0 ? ls.map(l => {
+            if (l.type && l.type !== 'ligne') return l;
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const conso = l.consommation ?? prod?.consommation;
+            if (prod && conso && prod.poids) {
+              const quantite = calcQuantiteSurface(prod, surf, l.consommation);
+              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur);
+              return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
+            }
+            return l;
+          }) : ls;
+          const newLignes = applySurface([...templateLignes, ...dictees]);
           if (newLignes.length > 0) {
             setLignes(prev => [...prev, ...newLignes]);
             setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
           }
-          toast.success('Devis pré-rempli depuis la dictée vocale');
+          if (sysDevis) toast.success(`Modèle « ${sysDevis.systeme || sysDevis.numero} » dupliqué (${templateLignes.length} lignes)`);
+          else toast.success('Devis pré-rempli depuis la dictée vocale');
         }}
       />
 
