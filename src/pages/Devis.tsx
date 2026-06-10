@@ -3477,6 +3477,10 @@ export default function Devis() {
             }));
             setSysteme(sysDevis?.systeme || parsed.systeme.trim());
             if (sysDevis?.conditions) setConditions(sysDevis.conditions);
+            // Reprend le contenu Mise en œuvre du modèle (le PDF MO pourra être régénéré depuis l'onglet MO)
+            if (sysDevis?.moContent) setMoContent(sysDevis.moContent);
+            if (sysDevis?.notes) setNotes(sysDevis.notes);
+            if (sysDevis?.fraisPortHT != null) { setFraisPortHT(sysDevis.fraisPortHT); setFraisPortAuto(sysDevis.fraisPortAuto ?? !(sysDevis.fraisPortHT > 0)); }
           }
           // 4. Surface → mode surface
           const surf = parsed.surface != null && Number(parsed.surface) > 0 ? Number(parsed.surface) : 0;
@@ -3514,7 +3518,11 @@ export default function Devis() {
           }) : ls;
           const newLignes = applySurface([...templateLignes, ...dictees]);
           if (newLignes.length > 0) {
-            setLignes(prev => [...prev, ...newLignes]);
+            // Retire les lignes vides de départ (placeholder créé par openNew) avant d'ajouter
+            setLignes(prev => {
+              const base = prev.filter(l => !((!l.type || l.type === 'ligne') && !l.produitId && !(l.description || '').trim()));
+              return [...base, ...newLignes];
+            });
             setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
           }
           if (sysDevis) toast.success(`Modèle « ${sysDevis.systeme || sysDevis.numero} » dupliqué (${templateLignes.length} lignes)`);
