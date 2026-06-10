@@ -7,7 +7,7 @@ import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
@@ -187,8 +187,6 @@ export default function Devis() {
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
   const kitPickerRef = useRef<HTMLDivElement>(null);
-  const [colChooserOpen, setColChooserOpen] = useState(false);
-  const colChooserRef = useRef<HTMLDivElement>(null);
 
   // ── Vue tableau devis ───────────────────────────────────────────────────────
   const [devisView, setDevisView] = useState<'liste' | 'tableau'>(() => {
@@ -797,17 +795,6 @@ export default function Devis() {
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
   }, [kitPickerOpen]);
-
-  useEffect(() => {
-    if (!colChooserOpen) return;
-    function handleClick(e: MouseEvent) {
-      if (colChooserRef.current && !colChooserRef.current.contains(e.target as Node)) {
-        setColChooserOpen(false);
-      }
-    }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [colChooserOpen]);
 
   useEffect(() => {
     localStorage.setItem('devis_ligne_cols_v3', JSON.stringify([...visibleLigneCols]));
@@ -1854,88 +1841,21 @@ export default function Devis() {
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
                 <VoiceButton onTranscript={routeVoiceTranscript} />
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={() => {
-                      const existing = editingId ? devis.find(d => d.id === editingId) : null;
-                      const preview: DevisType = {
-                        id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
-                        clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
-                        dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
-                        fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
-                      };
-                      setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
-                      setPreviewDevis(preview);
-                    }}>
-                      <Eye className="w-4 h-4 mr-2 text-muted-foreground" /> Aperçu
-                    </DropdownMenuItem>
-                    {editingId && (
-                      <DropdownMenuItem onClick={() => {
-                        save(true);
-                        const existing = devis.find(d => d.id === editingId);
-                        const current: DevisType = {
-                          id: editingId, numero: existing?.numero || editingId,
-                          clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
-                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
-                          systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                          surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                        };
-                        setEmailDevis(current);
-                      }}>
-                        <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer par mail
+                {dialogTab === 'devis' && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="px-3 gap-1">Vue <ChevronDown className="w-3 h-3 opacity-60" /></Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-48">
+                      <DropdownMenuItem onClick={() => setLignesView('cartes')}>
+                        <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue cartes {lignesView === 'cartes' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                       </DropdownMenuItem>
-                    )}
-                    {editingId && (
-                      <DropdownMenuItem onClick={async () => {
-                        try {
-                          save(true);
-                          const selectedClient = clients.find(c => c.id === clientId);
-                          if (!selectedClient) { toast.error('Client introuvable'); return; }
-                          const defaultName = selectedClient.societe || selectedClient.nom;
-                          const odooNom = promptOdooPartnerName(clientId, defaultName);
-                          if (odooNom === null) return;
-                          const allContacts = selectedClient.contacts || [];
-                          const contact = allContacts.find(ct => ct.id === contactId);
-                          const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
-                          const current: DevisType = {
-                            id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
-                            clientId, contactId: contactId || undefined,
-                            dateCreation, dateValidite, statut, lignes, referenceAffaire,
-                            systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                            surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                          };
-                          const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
-                          await navigator.clipboard.writeText(script);
-                          toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
-                        } catch (err) {
-                          toast.error('Erreur lors de la génération du script Odoo');
-                          console.error(err);
-                        }
-                      }}>
-                        <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer vers Odoo
+                      <DropdownMenuItem onClick={() => setLignesView('tableau')}>
+                        <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {lignesView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
                       </DropdownMenuItem>
-                    )}
-                    {dialogTab === 'devis' && (
-                      <>
-                        <DropdownMenuItem onClick={() => setLignesView('cartes')} className="border-t border-border mt-1 pt-1.5">
-                          <LayoutList className="w-4 h-4 mr-2 text-muted-foreground" /> Vue cartes {lignesView === 'cartes' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setLignesView('tableau')}>
-                          <Table2 className="w-4 h-4 mr-2 text-muted-foreground" /> Vue tableau {lignesView === 'tableau' && <Check className="w-3.5 h-3.5 ml-auto text-primary" />}
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
-                          <Bot className="w-4 h-4 mr-2" /> Assistant Claude
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => setVoiceAssistantOpen(true)} className="text-primary">
-                          <Mic className="w-4 h-4 mr-2" /> Assistant vocal
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>
                 <Button size="sm" onClick={() => save()}>
                   <FileText className="w-4 h-4 sm:mr-1.5" />
@@ -2241,38 +2161,38 @@ export default function Devis() {
                       </div>
                     )}
                   </div>
-                  {/* Roue crantée : colonnes visibles */}
-                  <div ref={colChooserRef} className="relative shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => setColChooserOpen(o => !o)} title="Colonnes visibles">
-                      <Settings className="w-3.5 h-3.5" />
-                    </Button>
-                    {colChooserOpen && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[200px]">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">Colonnes visibles</p>
-                        {LIGNE_COLS.map(col => (
-                          <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
-                            <input
-                              type="checkbox"
-                              checked={visibleLigneCols.has(col.key)}
-                              onChange={() => setVisibleLigneCols(prev => {
-                                const next = new Set(prev);
-                                next.has(col.key) ? next.delete(col.key) : next.add(col.key);
-                                return next;
-                              })}
-                              className="rounded border-input accent-primary"
-                            />
-                            {col.label}
-                          </label>
-                        ))}
-                        <button
-                          className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground border-t border-border pt-2 text-left"
-                          onClick={() => setVisibleLigneCols(new Set(DEFAULT_LIGNE_COLS))}
+                  {/* Roue crantée : colonnes visibles — menu Radix (premier plan, jamais rogné) */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm" className="shrink-0" title="Colonnes visibles">
+                        <Settings className="w-3.5 h-3.5" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-52">
+                      <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Colonnes visibles</p>
+                      {LIGNE_COLS.map(col => (
+                        <DropdownMenuCheckboxItem
+                          key={col.key}
+                          checked={visibleLigneCols.has(col.key)}
+                          onSelect={e => e.preventDefault()}
+                          onCheckedChange={() => setVisibleLigneCols(prev => {
+                            const next = new Set(prev);
+                            next.has(col.key) ? next.delete(col.key) : next.add(col.key);
+                            return next;
+                          })}
                         >
-                          Réinitialiser
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                          {col.label}
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                      <DropdownMenuItem
+                        className="border-t border-border mt-1 pt-1.5 text-xs text-muted-foreground"
+                        onSelect={e => e.preventDefault()}
+                        onClick={() => setVisibleLigneCols(new Set(DEFAULT_LIGNE_COLS))}
+                      >
+                        Réinitialiser
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
                 </div>
                 {/* En-tête de colonnes (figé avec les boutons, dessous), défilement H synchronisé avec les lignes */}
