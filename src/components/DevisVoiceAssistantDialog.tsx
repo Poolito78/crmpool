@@ -36,7 +36,7 @@ interface Props {
   onApply: (parsed: VoiceDevis) => void;
 }
 
-const EXTRACT_PROMPT = (transcript: string, systemes?: { id: string; nom: string }[]) => `Tu dois extraire les informations d'un devis à partir de cette demande dictée vocalement par un commercial du bâtiment (revêtements de sol, résines, chapes...).
+const EXTRACT_PROMPT = (transcript: string, systemes?: { id: string; nom: string }[]) => `Tu dois extraire les informations d'un devis à partir de ce texte, qui est soit une demande dictée vocalement, soit le texte d'un email/message d'un client, pour un commercial du bâtiment (revêtements de sol, résines, chapes...).
 
 Réponds UNIQUEMENT avec un bloc JSON entre les balises ci-dessous, sans aucun autre texte avant ou après :
 
@@ -56,7 +56,7 @@ SYSTÈMES MODÈLES EXISTANTS (devis types réutilisables) :
 ${systemes.map(s => `- ${s.nom}`).join('\n')}
 Si la demande fait référence à l'un de ces systèmes (même approximativement), renvoie son nom EXACT tel qu'écrit ci-dessus dans "systeme". Dans ce cas, ne génère PAS de lignes pour les produits de ce système (le modèle sera dupliqué) — ne mets dans "lignes" que les produits supplémentaires explicitement dictés en plus du système.` : ''}
 
-Demande vocale à analyser : "${transcript}"`;
+Texte à analyser (dictée vocale ou email client) : "${transcript}"`;
 
 function parseVoiceDevis(text: string): VoiceDevis | null {
   const m = text.match(/<<<DEVIS>>>([\s\S]*?)<<<FIN_DEVIS>>>/);
@@ -130,7 +130,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
       <DialogContent className="sm:max-w-[600px] flex flex-col max-h-[85vh] p-0 gap-0">
         <DialogHeader className="px-4 pt-4 pb-2 border-b border-border shrink-0">
           <DialogTitle className="flex items-center gap-2 text-base">
-            <Mic className="w-4 h-4 text-primary" /> Assistant vocal — Nouveau devis
+            <Mic className="w-4 h-4 text-primary" /> Nouveau devis — dictée vocale ou email
           </DialogTitle>
         </DialogHeader>
 
@@ -139,19 +139,19 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs font-medium text-muted-foreground">
-                Dictez : nom du client, chantier, surface (m²), système et produits avec quantités.
+                Dictez <span className="text-muted-foreground/70">ou collez un email client</span> : client, chantier, surface (m²), système et produits avec quantités.
               </p>
               <VoiceButton onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + t)} />
             </div>
             <textarea
               value={transcript}
               onChange={e => setTranscript(e.target.value)}
-              placeholder='Ex : « Devis pour la société Dubois, chantier parking Nord, 250 m², système Flowfast 319, ajoute 250 m² de résine et 12 seaux de primaire. »'
-              className="w-full min-h-[90px] text-sm rounded-md border border-input bg-background px-3 py-2 resize-y"
+              placeholder='Dictez ou collez un email. Ex : « Devis pour la société Dubois, chantier parking Nord, 250 m², système Flowfast 319, ajoute 250 m² de résine et 12 seaux de primaire. »'
+              className="w-full min-h-[110px] text-sm rounded-md border border-input bg-background px-3 py-2 resize-y"
             />
             <Button onClick={analyser} disabled={loading || !transcript.trim()} className="w-full gap-2">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-              {loading ? 'Analyse en cours…' : 'Analyser la demande'}
+              {loading ? 'Analyse en cours…' : 'Analyser'}
             </Button>
           </div>
 

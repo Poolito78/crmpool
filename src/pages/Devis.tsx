@@ -19,7 +19,6 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
-import EmailAnalyzerDialog from '@/components/EmailAnalyzerDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
 import VoiceButton from '@/components/ui/VoiceButton';
@@ -116,7 +115,6 @@ export default function Devis() {
   useEffect(() => { try { localStorage.setItem('crm_devis_preview_opts', JSON.stringify(previewOptions)); } catch {} }, [previewOptions]);
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
   const [commandeConfirmDevis, setCommandeConfirmDevis] = useState<DevisType | null>(null);
-  const [emailAnalyzerOpen, setEmailAnalyzerOpen] = useState(false);
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
@@ -1404,21 +1402,9 @@ export default function Devis() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon" className="shrink-0" title="Commandes vocales & IA">
-                  <Mic className="w-4 h-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-52">
-                <DropdownMenuItem onClick={() => { openNew(); setVoiceAssistantOpen(true); }} className="text-primary">
-                  <Mic className="w-4 h-4 mr-2" /> Nouveau devis vocal
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEmailAnalyzerOpen(true)}>
-                  <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Analyser un mail
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <Button variant="outline" size="icon" className="shrink-0" title="Nouveau devis vocal / analyse de mail" onClick={() => { openNew(); setVoiceAssistantOpen(true); }}>
+              <Mic className="w-4 h-4" />
+            </Button>
             <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau devis</Button>
           </div>
       </PageHeaderSlot>
@@ -3399,15 +3385,6 @@ export default function Devis() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      <EmailAnalyzerDialog
-        open={emailAnalyzerOpen}
-        onOpenChange={setEmailAnalyzerOpen}
-        onDevisCreated={(devisId) => {
-          const d = devis.find(dv => dv.id === devisId);
-          if (d) openEdit(d);
-        }}
-      />
 
       {chatterDevis && (
         <DevisChatter
