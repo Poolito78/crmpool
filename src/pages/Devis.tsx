@@ -206,14 +206,6 @@ export default function Devis() {
   const devisCols = useTableColumns<DevisTableColKey>('devis_table', DEVIS_TABLE_COLS_DEF.map(c => c.key));
   // Colonnes de la vue tableau éditable des lignes (resize + ordre persistés)
   const ligneTableCols = useTableColumns<TLCKey>('devis_lignes_table', TABLE_LIGNE_COLS.map(c => c.key));
-  const [colMenuDevis, setColMenuDevis] = useState(false);
-  const colMenuDevisRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!colMenuDevis) return;
-    const h = (e: MouseEvent) => { if (colMenuDevisRef.current && !colMenuDevisRef.current.contains(e.target as Node)) setColMenuDevis(false); };
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [colMenuDevis]);
 
   function toggleFilterColD(col: DevisTableColKey) {
     setOpenFilterColsD(prev => {
@@ -1496,27 +1488,29 @@ export default function Devis() {
                     );
                   })}
                   <th className="px-2 py-2 sticky top-0 z-10 bg-muted text-right whitespace-nowrap">
-                    <div className="relative inline-block" ref={colMenuDevisRef}>
-                      <button onClick={() => setColMenuDevis(o => !o)} title="Colonnes & export" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
-                        <Settings className="w-4 h-4" />
-                      </button>
-                      {colMenuDevis && (
-                        <div className="absolute right-0 top-full mt-1 z-40 bg-card border border-border rounded-xl shadow-lg py-1 min-w-48 text-left font-normal">
-                          <p className="px-3 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Colonnes affichées</p>
-                          <div className="max-h-72 overflow-y-auto">
-                            {DEVIS_TABLE_COLS_DEF.map(c => (
-                              <label key={c.key} className="flex items-center gap-2.5 px-3 py-1.5 hover:bg-muted/50 cursor-pointer text-sm select-none">
-                                <input type="checkbox" checked={visDevisTableCols.has(c.key)} onChange={() => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })} className="rounded accent-primary w-3.5 h-3.5" />
-                                {c.label}
-                              </label>
-                            ))}
-                          </div>
-                          <button onClick={() => { setColMenuDevis(false); exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis'); }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm hover:bg-muted/60 text-foreground border-t border-border mt-1">
-                            <Download className="w-4 h-4 text-muted-foreground" /> Exporter (Excel)
-                          </button>
-                        </div>
-                      )}
-                    </div>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button title="Colonnes & export" className="p-1.5 rounded hover:bg-muted-foreground/10 text-muted-foreground hover:text-foreground transition-colors">
+                          <Settings className="w-4 h-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-52 max-h-[70vh] overflow-y-auto">
+                        <p className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Colonnes affichées</p>
+                        {DEVIS_TABLE_COLS_DEF.map(c => (
+                          <DropdownMenuCheckboxItem
+                            key={c.key}
+                            checked={visDevisTableCols.has(c.key)}
+                            onSelect={e => e.preventDefault()}
+                            onCheckedChange={() => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(c.key) ? n.delete(c.key) : n.add(c.key); return n; })}
+                          >
+                            {c.label}
+                          </DropdownMenuCheckboxItem>
+                        ))}
+                        <DropdownMenuItem className="border-t border-border mt-1" onClick={() => { exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis'); }}>
+                          <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter (Excel)
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </th>
                 </tr>
               </thead>
