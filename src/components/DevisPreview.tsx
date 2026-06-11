@@ -212,6 +212,46 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     });
   }
 
+  // Redimensionne en conservant le ratio (sans marge blanche), borné à maxW×maxH — html2canvas-safe
+  function resizeUrlContain(url: string, maxW: number, maxH: number): Promise<string> {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = () => {
+        try {
+          const ratio = Math.min(maxW / img.naturalWidth, maxH / img.naturalHeight, 1);
+          const w = Math.max(1, Math.round(img.naturalWidth * ratio));
+          const h = Math.max(1, Math.round(img.naturalHeight * ratio));
+          const c = document.createElement('canvas');
+          c.width = w; c.height = h;
+          const ctx = c.getContext('2d')!;
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve(c.toDataURL('image/jpeg', 0.85));
+        } catch { resolve(''); }
+      };
+      img.onerror = () => resolve('');
+      img.src = url;
+    });
+  }
+
+  // Images des lignes « texte libre » (captures d'écran) — data URL plus grande, ratio conservé
+  const texteLineIds = new Set(devis.lignes.filter(l => l.type === 'texte').map(l => l.id));
+  const [texteImageDataUrls, setTexteImageDataUrls] = useState<Record<string, string[]>>({});
+  useEffect(() => {
+    const entries = Object.entries(allLineImages).filter(([id]) => texteLineIds.has(id));
+    if (entries.length === 0) { setTexteImageDataUrls({}); return; }
+    let cancelled = false;
+    (async () => {
+      const result: Record<string, string[]> = {};
+      for (const [ligneId, imgs] of entries) {
+        result[ligneId] = await Promise.all(imgs.map(img => resizeUrlContain(img.url, 520, 400)));
+      }
+      if (!cancelled) setTexteImageDataUrls(result);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(Object.fromEntries(Object.entries(allLineImages).filter(([id]) => texteLineIds.has(id)).map(([k, v]) => [k, v.map(i => i.url)])))]);
+
   // Images pasted pré-traitées en data URL 48×38px via canvas (html2canvas-safe)
   const [dataUrlImages, setDataUrlImages] = useState<Record<string, string[]>>({});
   useEffect(() => {
@@ -851,9 +891,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     }
                     // texte → render text-only row
                     if (dl.type === 'texte') {
-                      return dl.description ? (
+                      const timgs = (texteImageDataUrls[dl.id] || []).filter(Boolean);
+                      return (dl.description || timgs.length > 0) ? (
                         <tr key={dl.id} className="border-b border-border/40">
-                          <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>{dl.description}</td>
+                          <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>
+                            {dl.description}
+                            {timgs.length > 0 && (
+                              <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                {timgs.map((url, i) => <img key={i} src={url} alt="" style={{ maxWidth: '260px', maxHeight: '200px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)' }} />)}
+                              </div>
+                            )}
+                          </td>
                         </tr>
                       ) : null;
                     }
@@ -1072,9 +1120,17 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     );
                   }
                   if (dl.type === 'texte') {
-                    return dl.description ? (
+                    const timgs = (texteImageDataUrls[dl.id] || []).filter(Boolean);
+                    return (dl.description || timgs.length > 0) ? (
                       <tr key={dl.id} className="border-b border-border/40">
-                        <td colSpan={colSpan} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>{dl.description}</td>
+                        <td colSpan={colSpan} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>
+                          {dl.description}
+                          {timgs.length > 0 && (
+                            <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {timgs.map((url, i) => <img key={i} src={url} alt="" style={{ maxWidth: '260px', maxHeight: '200px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)' }} />)}
+                            </div>
+                          )}
+                        </td>
                       </tr>
                     ) : null;
                   }
