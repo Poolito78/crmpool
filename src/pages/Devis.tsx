@@ -2396,18 +2396,35 @@ export default function Devis() {
                         <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 mt-0.5 rounded border-input accent-primary cursor-pointer" />
                         <GripVertical className="w-4 h-4 text-amber-400/50 shrink-0 mt-0.5" />
                         <StickyNote className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                        <textarea
-                          data-voice="ligne-desc" data-ligne-id={l.id}
-                          value={l.description}
-                          onChange={e => updateLigne(l.id, 'description', e.target.value)}
-                          onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
-                          autoFocus={l.id === newLigneId}
-                          rows={1}
-                          className="flex-1 text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 resize-none overflow-hidden leading-normal"
-                          placeholder="Texte libre…"
-                          style={{ minHeight: '1.5rem' }}
-                        />
-                        <div className="flex items-center gap-1">
+                        <div className="flex-1 min-w-0">
+                          <textarea
+                            data-voice="ligne-desc" data-ligne-id={l.id}
+                            value={l.description}
+                            onChange={e => updateLigne(l.id, 'description', e.target.value)}
+                            onInput={e => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = t.scrollHeight + 'px'; }}
+                            onPaste={e => handleLigneNotePaste(l.id, e)}
+                            autoFocus={l.id === newLigneId}
+                            rows={1}
+                            className="w-full text-sm bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/50 resize-none overflow-hidden leading-normal"
+                            placeholder="Texte libre… (Ctrl+V pour coller une image / capture d'écran)"
+                            style={{ minHeight: '1.5rem' }}
+                          />
+                          {(lineImages[l.id] || []).length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mt-1">
+                              {(lineImages[l.id] || []).map((img, ii) => (
+                                <div key={ii} className="relative group/img">
+                                  <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => window.open(img.url, '_blank')} />
+                                  <button
+                                    type="button"
+                                    onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== ii) }))}
+                                    className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
+                                  >×</button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-0.5">
                           <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                           <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
                           <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
