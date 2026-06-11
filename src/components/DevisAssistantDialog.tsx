@@ -3,9 +3,23 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Loader2, Send, Bot, User, Paperclip, X, Plus } from 'lucide-react';
+import VoiceButton from '@/components/ui/VoiceButton';
 import { supabase } from '@/integrations/supabase/client';
 import type { Produit, LigneDevis } from '@/lib/store';
 import { generateId } from '@/lib/store';
+
+// Tableau de référence : pourcentage (en poids) de catalyst C2 et grammes pour 10 kg de résine,
+// selon la température. Injecté dans le contexte IA pour le calcul du catalyst nécessaire au devis.
+const CATALYST_TABLE = `
+
+--- TABLE CATALYST C2 (pourcentage en poids et grammes pour 10 kg de résine, selon la température) ---
+Produit | +30°C | +20°C | +15°C | +10°C | 0°C
+Flowfast 107 | 1.0% (100g) | 2.0% (200g) | 3.0% (300g) | 4.0% (400g) | 6.0% (600g)
+Flowfast 215 | 1.0% (100g) | 2.0% (200g) | 3.0% (300g) | 4.0% (400g) | 5.0% (500g)
+Flowfast 208 & 319 unpigmenté (unpig.) | 1.0% (100g) | 1.5% (150g) | 2.25% (225g) | 3.0% (300g) | 4.0% (400g)
+Flowfast 319 clear | 0.9% (90g) | 1.0% (100g) | 1.5% (150g) | 2.0% (200g) | 3.0% (300g)
+Règle de calcul : poids de catalyst = poids de résine × pourcentage à la température choisie (les grammes du tableau valent pour 10 kg de résine). Pour calculer le catalyst d'un devis, identifie pour chaque ligne le produit Flowfast et son poids total de résine, applique le pourcentage de la température demandée (par défaut +15°C si non précisé), et donne le total de catalyst par produit puis le total général.
+---`;
 
 interface Message {
   role: 'user' | 'assistant';
@@ -155,7 +169,7 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
       // Garde les 10 derniers messages pour éviter les dépassements de tokens Groq
       const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke('devis-assistant', {
-        body: { message: userContent, history, devisContext, produitsCatalog },
+        body: { message: userContent, history, devisContext: `${devisContext || ''}${CATALYST_TABLE}`, produitsCatalog },
       });
       if (error) throw error;
       const raw: string = data.response || 'Erreur de réponse.';
@@ -224,7 +238,7 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
               <p className="font-medium text-foreground">Assistant IA</p>
               <p className="text-xs">Calculs · Génération de lignes · Analyse de documents</p>
               <div className="flex flex-wrap gap-1.5 justify-center mt-3">
-                {['Génère les lignes pour Flowfast 319 Road', 'Vérifie les marges du devis', 'Calcule la surface totale'].map(s => (
+                {['Calcule le catalyst nécessaire par produit (à +15°C)', 'Génère les lignes pour Flowfast 319 Road', 'Vérifie les marges du devis', 'Calcule la surface totale'].map(s => (
                   <button key={s} onClick={() => { setInput(s); setTimeout(() => inputRef.current?.focus(), 50); }}
                     className="text-xs px-2.5 py-1 rounded-full border border-border hover:bg-accent transition-colors">
                     {s}
@@ -289,6 +303,7 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
               className="h-9 text-sm"
               disabled={loading}
             />
+            <VoiceButton iconOnly className="h-9 w-9" onTranscript={t => setInput(prev => (prev ? prev.trim() + ' ' : '') + t)} />
             <Button onClick={send} disabled={loading || (!input.trim() && !attachedFile)} size="sm" className="h-9 px-3">
               <Send className="w-4 h-4" />
             </Button>

@@ -3470,10 +3470,12 @@ export default function Devis() {
             if (l.type === 'texte') return `[Note] ${l.description}`;
             if (l.type === 'soustotal') return `[Sous-total]`;
             const t = calculerTotalLigne(l);
-            return `${i + 1}. ${l.description || 'sans nom'} | Réf: ${l.produitId ? (produits.find(p => p.id === l.produitId)?.reference ?? l.produitId) : 'libre'} | Qté: ${l.quantite} ${l.unite || ''} | Prix HT: ${l.prixUnitaireHT} | Remise: ${l.remise}% | Total HT: ${formatMontant(t.totalHT)}`;
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const poidsKg = prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
+            return `${i + 1}. ${l.description || 'sans nom'} | Réf: ${prod?.reference ?? (l.produitId || 'libre')} | Qté: ${l.quantite} ${l.unite || ''}${poidsKg != null ? ` | Poids résine: ${poidsKg} kg` : ''} | Prix HT: ${l.prixUnitaireHT} | Remise: ${l.remise}% | Total HT: ${formatMontant(t.totalHT)}`;
           }).join('\n');
           const total = calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA);
-          return `Lignes du devis:\n${lines}\n\nTotal HT: ${formatMontant(total.totalHT)}\nTotal TTC: ${formatMontant(total.totalTTC)}`;
+          return `Lignes du devis (surface globale: ${surfaceGlobaleM2 || 0} m²):\n${lines}\n\nTotal HT: ${formatMontant(total.totalHT)}\nTotal TTC: ${formatMontant(total.totalTTC)}`;
         })()}
       />
 
