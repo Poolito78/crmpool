@@ -3483,15 +3483,33 @@ export default function Devis() {
         onInsertLignes={(newLignes) => {
           saveSnapshot();
           const cl = clients.find(c => c.id === clientId);
-          // Lignes avec consommation (ex. catalyst) → recalcule la quantité chantier = conso × surface / poids
           const prepared = newLignes.map(l => {
-            if (l.consommation != null && l.consommation > 0 && surfaceGlobaleM2 > 0) {
-              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-              if (prod && prod.poids) {
-                const quantite = calcQuantiteSurface(prod, surfaceGlobaleM2, l.consommation);
-                const prix = getPrixLigne(prod, quantite, l.variantesChoisies, cl?.estRevendeur);
-                return { ...l, surfaceM2: surfaceGlobaleM2, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const isCatalyst = /catalyst|catalyseur/i.test(`${prod?.reference || ''} ${l.description || ''}`);
+            // Ligne catalyst → Quantité = nombre d'unités de conditionnement (arrondi sup. du total kg / poids)
+            if (isCatalyst && prod?.poids) {
+              const totalKg = (l.consommation && l.consommation > 0 && surfaceGlobaleM2 > 0)
+                ? surfaceGlobaleM2 * l.consommation
+                : (l.quantite || 0); // sinon la quantité fournie par l'IA est le poids total de catalyst en kg
+              if (totalKg > 0) {
+                const unites = Math.max(1, Math.ceil(totalKg / prod.poids));
+                const conso = surfaceGlobaleM2 > 0 ? Math.round((totalKg / surfaceGlobaleM2) * 100000) / 100000 : l.consommation;
+                const prix = getPrixLigne(prod, unites, l.variantesChoisies, cl?.estRevendeur);
+                return {
+                  ...l,
+                  quantite: unites,
+                  unite: prod.unite || l.unite || 'U',
+                  ...(surfaceGlobaleM2 > 0 ? { surfaceM2: surfaceGlobaleM2 } : {}),
+                  ...(conso != null ? { consommation: conso } : {}),
+                  ...(prix != null ? { prixUnitaireHT: prix } : {}),
+                };
               }
+            }
+            // Autres lignes avec consommation → quantité chantier = conso × surface / poids (en unités)
+            if (l.consommation != null && l.consommation > 0 && surfaceGlobaleM2 > 0 && prod?.poids) {
+              const quantite = calcQuantiteSurface(prod, surfaceGlobaleM2, l.consommation);
+              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, cl?.estRevendeur);
+              return { ...l, surfaceM2: surfaceGlobaleM2, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
             }
             return l;
           });
