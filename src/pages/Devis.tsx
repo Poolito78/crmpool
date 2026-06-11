@@ -98,6 +98,7 @@ export default function Devis() {
   const [sortBy, setSortBy] = useState<string>(_savedFilters.sortBy ?? 'date_desc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
+  const [surchargeDetailOpen, setSurchargeDetailOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -834,20 +835,31 @@ export default function Devis() {
     const isPigment = cat.includes('pigment') || txt.includes('pigment');
     return isSnlRoad || isPigment;
   }
-  function addSurchargeEnergieCategories() {
-    let totalVente = 0, totalAchat = 0, nb = 0;
+  // Détail du calcul de la surcharge énergie, ligne par ligne (achat + vente)
+  function computeSurchargeEnergieDetail() {
+    const rows: Array<{ id: string; description: string; categorie: string; pct: number; exclu: boolean; baseAchat: number; baseVente: number; surchargeAchat: number; surchargeVente: number }> = [];
+    let totalAchat = 0, totalVente = 0;
     for (const l of lignes) {
       if (l.type && l.type !== 'ligne') continue;
       if (!l.produitId) continue;
       const prod = produits.find(p => p.id === l.produitId);
-      if (!prod || estExcluHausse(prod)) continue;
-      const pct = pctHausseCategorie(prod) / 100;
+      if (!prod) continue;
+      const exclu = estExcluHausse(prod);
+      const pct = exclu ? 0 : pctHausseCategorie(prod);
       const coeff = 1 - (l.remise || 0) / 100;
-      totalVente += l.quantite * l.prixUnitaireHT * coeff * pct;
-      totalAchat += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff * pct;
-      nb++;
+      const baseVente = l.quantite * l.prixUnitaireHT * coeff;
+      const baseAchat = getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
+      const surchargeVente = baseVente * pct / 100;
+      const surchargeAchat = baseAchat * pct / 100;
+      totalAchat += surchargeAchat;
+      totalVente += surchargeVente;
+      rows.push({ id: l.id, description: l.description || prod.reference || '—', categorie: prod.categorie || '—', pct, exclu, baseAchat, baseVente, surchargeAchat, surchargeVente });
     }
-    if (nb === 0) { toast.warning('Aucun produit éligible à la surcharge énergie.'); return; }
+    return { rows, totalAchat, totalVente };
+  }
+  function addSurchargeEnergieCategories() {
+    const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail();
+    if (rows.length === 0) { toast.warning('Aucun produit éligible à la surcharge énergie.'); return; }
     saveSnapshot();
     const montantVente = Math.round(totalVente * 100) / 100;
     const montantAchat = Math.round(totalAchat * 100) / 100;
@@ -3029,7 +3041,7 @@ export default function Devis() {
                         // selPf.prixAchat est un champ distinct (prix kg fournisseur) — on n'utilise pas
                         // Paliers : on utilise getPrixPourQuantite pour tenir compte des tarifs par palier
                         const prixPalier = prod ? getPrixPourQuantite(prod, l.quantite) : null;
-                        const isSurcharge = !!l.description?.includes('Surcharge énergie');
+                        const isSurcharge = /surcharge\s*[ée]nergie/i.test(l.description || '');
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         // Surcharges et lignes libres : utiliser prixAchatLigne stocké (calculé sur base achat)
                         const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
@@ -3054,6 +3066,16 @@ export default function Devis() {
                                     className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
                                   >
                                     <ExternalLink className="w-3 h-3" />
+                                  </button>
+                                )}
+                                {isSurcharge && (
+                                  <button
+                                    type="button"
+                                    title="Détail du calcul de la surcharge énergie par produit (achat / vente)"
+                                    onClick={() => setSurchargeDetailOpen(true)}
+                                    className="shrink-0 text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-0.5"
+                                  >
+                                    <Zap className="w-3 h-3" /><span className="text-[10px] hidden sm:inline">détail</span>
                                   </button>
                                 )}
                               </div>
@@ -3386,6 +3408,57 @@ export default function Devis() {
 
         </DialogContent>
       </Dialog>
+
+      {/* Détail du calcul de la surcharge énergie par produit */}
+      {surchargeDetailOpen && (() => {
+        const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail();
+        return (
+          <Dialog open={surchargeDetailOpen} onOpenChange={setSurchargeDetailOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
+              <DialogHeader className="shrink-0">
+                <DialogTitle className="flex items-center gap-2 text-base"><Zap className="w-4 h-4 text-primary" /> Détail surcharge énergie par produit</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 overflow-auto">
+                <table className="w-full text-xs">
+                  <thead className="sticky top-0 bg-muted">
+                    <tr className="border-b border-border">
+                      <th className="text-left px-2 py-1.5 font-medium">Produit</th>
+                      <th className="text-left px-2 py-1.5 font-medium">Catégorie</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Hausse</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Base achat</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Surch. achat</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Base vente</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Surch. vente</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map(r => (
+                      <tr key={r.id} className={`border-b border-border/50 ${r.exclu ? 'text-muted-foreground' : ''}`}>
+                        <td className="px-2 py-1.5 max-w-[200px] truncate" title={r.description}>{r.description}</td>
+                        <td className="px-2 py-1.5">{r.categorie}</td>
+                        <td className="px-2 py-1.5 text-right">{r.exclu ? <span className="italic">exclu</span> : `+${r.pct}%`}</td>
+                        <td className="px-2 py-1.5 text-right">{formatMontant(r.baseAchat)}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{r.surchargeAchat > 0 ? formatMontant(r.surchargeAchat) : '—'}</td>
+                        <td className="px-2 py-1.5 text-right">{formatMontant(r.baseVente)}</td>
+                        <td className="px-2 py-1.5 text-right font-medium">{r.surchargeVente > 0 ? formatMontant(r.surchargeVente) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="sticky bottom-0 bg-muted font-semibold">
+                    <tr className="border-t-2 border-border">
+                      <td className="px-2 py-2" colSpan={4}>Total surcharge énergie</td>
+                      <td className="px-2 py-2 text-right text-primary">{formatMontant(totalAchat)}</td>
+                      <td className="px-2 py-2"></td>
+                      <td className="px-2 py-2 text-right text-primary">{formatMontant(totalVente)}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+              <p className="text-[11px] text-muted-foreground shrink-0">Hausse par catégorie : MMA/PUMA +18% · Mousses PU +13% · Coupe-Feu/Silicones/Acryliques +9% · autres +7%. Exclus : pigments et charges SNL Road.</p>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* Preview Dialog */}
       {previewDevis && (
