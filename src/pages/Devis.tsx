@@ -121,8 +121,9 @@ export default function Devis() {
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
-  // Images collées dans les notes de ligne : ligneId → [{url, name}]
-  const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
+  // Images collées dans les notes de ligne : ligneId → [{url, name, taille}]
+  type ImgTaille = 'S' | 'M' | 'L';
+  const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string; taille?: ImgTaille }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   // Dictée contextuelle : mémorise le dernier champ focalisé pour y router la transcription
@@ -1322,7 +1323,7 @@ export default function Devis() {
       const name = `image_${Date.now()}.${ext}`;
       // Aperçu immédiat avec URL blob locale
       const preview = URL.createObjectURL(file);
-      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name }] }));
+      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name, taille: 'L' as ImgTaille }] }));
       // Upload en arrière-plan
       if (editingId) {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -1345,14 +1346,40 @@ export default function Devis() {
               supabase.from('devis_pieces_jointes').insert({
                 user_id: user.id, devis_id: editingId, type: 'fichier',
                 fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
-                ligne_id: ligneId,
-              });
+                ligne_id: ligneId, image_taille: 'L',
+              } as any);
             });
         });
       }
     }
     toast.success('Image(s) collée(s)');
   }
+
+  // Change la taille d'impression d'une image collée (S/M/L) + persiste
+  function setLineImageTaille(ligneId: string, url: string, taille: ImgTaille) {
+    setLineImages(prev => ({ ...prev, [ligneId]: (prev[ligneId] || []).map(img => img.url === url ? { ...img, taille } : img) }));
+    supabase.from('devis_pieces_jointes').update({ image_taille: taille } as any).eq('fichier_url', url).then(() => {});
+  }
+
+  // Charge les images des lignes du devis à l'ouverture (pour réafficher + régler la taille après rechargement)
+  useEffect(() => {
+    if (!editingId) { setLineImages({}); return; }
+    let cancelled = false;
+    supabase.from('devis_pieces_jointes')
+      .select('ligne_id, fichier_url, fichier_nom, fichier_mime, image_taille')
+      .eq('devis_id', editingId).eq('type', 'fichier').not('ligne_id', 'is', null)
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        const map: Record<string, { url: string; name: string; taille?: ImgTaille }[]> = {};
+        for (const row of data as any[]) {
+          if (!row.ligne_id || !row.fichier_mime?.startsWith('image/')) continue;
+          if (!map[row.ligne_id]) map[row.ligne_id] = [];
+          map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: (row.image_taille as ImgTaille) || 'L' });
+        }
+        setLineImages(map);
+      });
+    return () => { cancelled = true; };
+  }, [editingId]);
 
   // Contrôle de filtre par colonne (rendu dans un popover ancré à l'icône filtre)
   // onClose : si fermé sans filtre actif → replie la colonne (retour à l'icône seule)
@@ -2413,13 +2440,22 @@ export default function Devis() {
                           {(lineImages[l.id] || []).length > 0 && (
                             <div className="flex flex-wrap gap-1.5 mt-1">
                               {(lineImages[l.id] || []).map((img, ii) => (
-                                <div key={ii} className="relative group/img">
+                                <div key={ii} className="relative group/img flex flex-col items-center gap-0.5">
                                   <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => setZoomImage(img.url)} />
                                   <button
                                     type="button"
                                     onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== ii) }))}
                                     className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
                                   >×</button>
+                                  {/* Taille d'impression S / M / L */}
+                                  <div className="flex gap-0.5" title="Taille à l'impression">
+                                    {(['S', 'M', 'L'] as const).map(t => (
+                                      <button key={t} type="button" onClick={() => setLineImageTaille(l.id, img.url, t)}
+                                        className={`w-4 h-4 text-[9px] leading-none rounded ${(img.taille || 'L') === t ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted-foreground/20'}`}>
+                                        {t}
+                                      </button>
+                                    ))}
+                                  </div>
                                 </div>
                               ))}
                             </div>

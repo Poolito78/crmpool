@@ -99,9 +99,14 @@ interface Props {
   initialShowCoutChantier?: boolean;
   onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean }) => void;
   onPrint?: () => void;
-  lineImages?: Record<string, { url: string; name: string }[]>;
+  lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
 }
+
+export type ImgTaille = 'S' | 'M' | 'L';
+export interface LineImg { url: string; name: string; taille?: ImgTaille }
+// Largeur d'impression max selon la taille choisie
+const TAILLE_MAXW: Record<ImgTaille, string> = { S: '200px', M: '400px', L: '100%' };
 
 export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
@@ -121,21 +126,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
   // Images associées aux lignes (fetched depuis Supabase + merged avec lineImages prop)
-  const [fetchedLineImages, setFetchedLineImages] = useState<Record<string, { url: string; name: string }[]>>({});
+  const [fetchedLineImages, setFetchedLineImages] = useState<Record<string, LineImg[]>>({});
   const loadLineImages = useCallback(async () => {
     if (!devis.id || devis.id === 'preview') return;
     const { data } = await supabase
       .from('devis_pieces_jointes')
-      .select('ligne_id, fichier_url, fichier_nom, fichier_mime')
+      .select('ligne_id, fichier_url, fichier_nom, fichier_mime, image_taille')
       .eq('devis_id', devis.id)
       .eq('type', 'fichier')
       .not('ligne_id', 'is', null);
     if (!data) return;
-    const map: Record<string, { url: string; name: string }[]> = {};
-    for (const row of data) {
+    const map: Record<string, LineImg[]> = {};
+    for (const row of data as any[]) {
       if (!row.ligne_id || !row.fichier_mime?.startsWith('image/')) continue;
       if (!map[row.ligne_id]) map[row.ligne_id] = [];
-      map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '' });
+      map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: (row.image_taille as ImgTaille) || undefined });
     }
     setFetchedLineImages(map);
   }, [devis.id]);
@@ -182,7 +187,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const totals = calculerTotalDevis(lignesEffectives, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
   // Fusion : prop lineImages (session courante) + fetchedLineImages (Supabase persisté)
   // lineImages prend priorité (contient les URLs fraîches de la session)
-  const allLineImages: Record<string, { url: string; name: string }[]> = {};
+  const allLineImages: Record<string, LineImg[]> = {};
   for (const [k, v] of Object.entries(fetchedLineImages)) allLineImages[k] = [...v];
   for (const [k, v] of Object.entries(lineImages)) {
     if (v.length > 0) allLineImages[k] = v; // remplace complètement (URLs session = plus à jour)
@@ -901,7 +906,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             {dl.description}
                             {timgs.length > 0 && (
                               <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: '100%', maxHeight: '460px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
+                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: TAILLE_MAXW[allLineImages[dl.id]?.[i]?.taille || 'L'], maxHeight: '460px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
                               </div>
                             )}
                           </td>
