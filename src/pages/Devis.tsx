@@ -751,65 +751,6 @@ export default function Devis() {
     setNewLigneId(id);
   }
 
-  // ─── Surcharge énergie — taux lus depuis le catalogue produits (fallback hardcodé) ──
-  const _prodSurchargeMMA    = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_MMA');
-  const _prodSurchargeHorsMMA = produits.find(p => p.reference === 'SURCHARGE_ENERGIE_HORS_MMA');
-  const SURCHARGE_ENERGIE_MMA_VENTE_PCT      = _prodSurchargeMMA?.prixRevendeur ?? 15;
-  const SURCHARGE_ENERGIE_MMA_ACHAT_PCT      = _prodSurchargeMMA?.prixAchat     ?? 14.8;
-  const SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT = _prodSurchargeHorsMMA?.prixRevendeur ?? 5;
-  const SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT = _prodSurchargeHorsMMA?.prixAchat     ?? 4.8;
-
-  function addSurchargeEnergie() {
-    // Totaux vente et achat MMA séparés
-    let totalVenteMMA = 0, totalAchatMMA = 0;
-    for (const l of lignes) {
-      if (!l.produitId) continue;
-      const prod = produits.find(p => p.id === l.produitId);
-      if (!prod || prod.categorie?.toLowerCase() !== 'mma') continue;
-      const coeff = 1 - (l.remise || 0) / 100;
-      totalVenteMMA += l.quantite * l.prixUnitaireHT * coeff;
-      totalAchatMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
-    }
-    if (totalVenteMMA <= 0) {
-      toast.warning('Aucun produit MMA trouvé dans le devis.');
-      return;
-    }
-    saveSnapshot();
-    const montantVente = Math.round(totalVenteMMA * SURCHARGE_ENERGIE_MMA_VENTE_PCT) / 100;
-    const montantAchat = Math.round(totalAchatMMA * SURCHARGE_ENERGIE_MMA_ACHAT_PCT) / 100;
-    const id = generateId();
-    setLignes(prev => [
-      ...prev,
-      { id, description: `Surcharge énergie MMA (${SURCHARGE_ENERGIE_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 },
-    ]);
-    setNewLigneId(id);
-  }
-
-  function addSurchargeEnergieHorsMMA() {
-    let totalVenteHorsMMA = 0, totalAchatHorsMMA = 0;
-    for (const l of lignes) {
-      if (!l.produitId) continue;
-      const prod = produits.find(p => p.id === l.produitId);
-      if (!prod || prod.categorie?.toLowerCase() === 'mma') continue;
-      const coeff = 1 - (l.remise || 0) / 100;
-      totalVenteHorsMMA += l.quantite * l.prixUnitaireHT * coeff;
-      totalAchatHorsMMA += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
-    }
-    if (totalVenteHorsMMA <= 0) {
-      toast.warning('Aucun produit hors MMA trouvé dans le devis.');
-      return;
-    }
-    saveSnapshot();
-    const montantVente = Math.round(totalVenteHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT) / 100;
-    const montantAchat = Math.round(totalAchatHorsMMA * SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT) / 100;
-    const id = generateId();
-    setLignes(prev => [
-      ...prev,
-      { id, description: `Surcharge énergie hors MMA (${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}%)`, quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 },
-    ]);
-    setNewLigneId(id);
-  }
-
   // ─── Surcharge énergie par catégorie de produit (hausse de prix) ──────────────
   // Pourcentages de hausse par catégorie (sinon « tous les autres produits »).
   const HAUSSE_PCT_PAR_CATEGORIE: Record<string, number> = {
@@ -2296,9 +2237,7 @@ export default function Devis() {
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addLigne}><Plus className="w-3 h-3 mr-1" /> Ligne</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addGroupe} title="Ajouter un en-tête de groupe"><FolderPlus className="w-3 h-3 mr-1" /> Groupe</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>MMA</Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>hors MMA</Button>
-                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieCategories} title="Calculer la surcharge énergie par catégorie (MMA 18% · Mousses PU 13% · Coupe-Feu/Silicones/Acryliques 9% · autres 7% ; hors pigments QRM et charges SNL Road) — remplit la ligne SURCHARGE ENERGIE (achat + vente)"><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Énergie </span>catég.</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieCategories} title="Calculer la surcharge énergie par catégorie (MMA 18% · Mousses PU 13% · Coupe-Feu/Silicones/Acryliques 9% · autres 7% ; hors pigments QRM et charges SNL Road) — remplit la ligne SURCHARGE ENERGIE (achat + vente)"><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>énergie</Button>
                   </div>
                   <div ref={kitPickerRef} className="relative shrink-0">
                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
