@@ -808,6 +808,62 @@ export default function Devis() {
     setNewLigneId(id);
   }
 
+  // ─── Surcharge énergie par catégorie de produit (hausse de prix) ──────────────
+  // Pourcentages de hausse par catégorie (sinon « tous les autres produits »).
+  const HAUSSE_PCT_PAR_CATEGORIE: Record<string, number> = {
+    'mma': 18, 'puma': 18, 'mma & puma': 18, 'mma et puma': 18,
+    'mousses pu': 13, 'mousse pu': 13, 'pu': 13,
+    'solutions coupe-feu': 9, 'coupe-feu': 9, 'coupe feu': 9,
+    'silicones & mastics hybrides': 9, 'silicone': 9, 'silicones': 9, 'mastic hybride': 9, 'mastics hybrides': 9,
+    'mastics acryliques': 9, 'mastic acrylique': 9, 'acrylique': 9, 'acryliques': 9,
+  };
+  const HAUSSE_PCT_DEFAUT = 7;
+  function pctHausseCategorie(prod: Produit): number {
+    const cat = (prod.categorie || '').toLowerCase().trim();
+    if (cat && HAUSSE_PCT_PAR_CATEGORIE[cat] != null) return HAUSSE_PCT_PAR_CATEGORIE[cat];
+    for (const [k, v] of Object.entries(HAUSSE_PCT_PAR_CATEGORIE)) {
+      if (cat && (cat.includes(k) || k.includes(cat))) return v;
+    }
+    return HAUSSE_PCT_DEFAUT;
+  }
+  // Exclusions : pas de hausse sur les pigments (QRM) ni les charges SNL Road
+  function estExcluHausse(prod: Produit): boolean {
+    const txt = `${prod.reference || ''} ${prod.description || ''}`.toLowerCase();
+    const cat = (prod.categorie || '').toLowerCase();
+    const isSnlRoad = txt.includes('snl') && txt.includes('road');
+    const isPigment = cat.includes('pigment') || txt.includes('pigment');
+    return isSnlRoad || isPigment;
+  }
+  function addSurchargeEnergieCategories() {
+    let totalVente = 0, totalAchat = 0, nb = 0;
+    for (const l of lignes) {
+      if (l.type && l.type !== 'ligne') continue;
+      if (!l.produitId) continue;
+      const prod = produits.find(p => p.id === l.produitId);
+      if (!prod || estExcluHausse(prod)) continue;
+      const pct = pctHausseCategorie(prod) / 100;
+      const coeff = 1 - (l.remise || 0) / 100;
+      totalVente += l.quantite * l.prixUnitaireHT * coeff * pct;
+      totalAchat += getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff * pct;
+      nb++;
+    }
+    if (nb === 0) { toast.warning('Aucun produit éligible à la surcharge énergie.'); return; }
+    saveSnapshot();
+    const montantVente = Math.round(totalVente * 100) / 100;
+    const montantAchat = Math.round(totalAchat * 100) / 100;
+    setLignes(prev => {
+      // Met à jour la ligne « SURCHARGE ENERGIE » existante (sans accent), sinon en crée une
+      const idx = prev.findIndex(l => (!l.type || l.type === 'ligne') && (l.description || '').toUpperCase().includes('SURCHARGE ENERGIE'));
+      if (idx >= 0) {
+        return prev.map((l, i) => i === idx ? { ...l, quantite: 1, prixUnitaireHT: montantVente, prixAchatLigne: montantAchat } : l);
+      }
+      const id = generateId();
+      setNewLigneId(id);
+      return [...prev, { id, description: 'SURCHARGE ENERGIE', quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 }];
+    });
+    toast.success(`Surcharge énergie : achat ${montantAchat.toFixed(2)} € · vente ${montantVente.toFixed(2)} €`);
+  }
+
   useEffect(() => {
     if (!kitPickerOpen) return;
     function handleClick(e: MouseEvent) {
@@ -2226,6 +2282,7 @@ export default function Devis() {
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addTexte} title="Ajouter une ligne de texte"><StickyNote className="w-3 h-3 mr-1" /> Note</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergie} title={`Ajouter surcharge énergie MMA (vente ${SURCHARGE_ENERGIE_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>MMA</Button>
                   <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieHorsMMA} title={`Ajouter surcharge énergie hors MMA (vente ${SURCHARGE_ENERGIE_HORS_MMA_VENTE_PCT}% / achat ${SURCHARGE_ENERGIE_HORS_MMA_ACHAT_PCT}%)`}><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Surcharge </span>hors MMA</Button>
+                  <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={addSurchargeEnergieCategories} title="Calculer la surcharge énergie par catégorie (MMA 18% · Mousses PU 13% · Coupe-Feu/Silicones/Acryliques 9% · autres 7% ; hors pigments QRM et charges SNL Road) — remplit la ligne SURCHARGE ENERGIE (achat + vente)"><Zap className="w-3 h-3 mr-1" /> <span className="hidden lg:inline">Énergie </span>catég.</Button>
                   </div>
                   <div ref={kitPickerRef} className="relative shrink-0">
                     <Button variant="outline" size="sm" className="h-7 px-2 text-xs" onClick={() => { setKitPickerOpen(o => !o); setKitSearch(''); }} title="Insérer un kit (groupe de lignes type)">
