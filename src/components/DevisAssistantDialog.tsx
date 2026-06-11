@@ -19,6 +19,12 @@ Flowfast 215 | 1.0% (100g) | 2.0% (200g) | 3.0% (300g) | 4.0% (400g) | 5.0% (500
 Flowfast 208 & 319 unpigmenté (unpig.) | 1.0% (100g) | 1.5% (150g) | 2.25% (225g) | 3.0% (300g) | 4.0% (400g)
 Flowfast 319 clear | 0.9% (90g) | 1.0% (100g) | 1.5% (150g) | 2.0% (200g) | 3.0% (300g)
 Règle de calcul : poids de catalyst = poids de résine × pourcentage à la température choisie (les grammes du tableau valent pour 10 kg de résine). Pour calculer le catalyst d'un devis, identifie pour chaque ligne le produit Flowfast et son poids total de résine, applique le pourcentage de la température demandée (par défaut +15°C si non précisé), et donne le total de catalyst par produit puis le total général.
+
+INSERTION DU CATALYST DANS LE DEVIS (bloc <<<LIGNES>>>) :
+Quand tu génères une ligne de catalyst à insérer, pour CHAQUE ligne de catalyst inclus EN PLUS ces deux champs :
+- "consommation" : consommation du catalyst en kg/m² = (consommation de résine du produit en kg/m²) × (pourcentage de catalyst à la température choisie). Déduis la consommation de résine de la ligne = (Poids résine en kg) ÷ (surface globale en m²).
+- "note" : exactement « Quantité de Catalyst pour les besoins de ce chantier à une température de X°c » en remplaçant X par la température utilisée (ex. 15).
+La "quantite" reste le poids total de catalyst en kg (= consommation catalyst × surface globale). Utilise le produit catalyst du catalogue si une référence contient "CATALYST".
 ---`;
 
 interface Message {
@@ -35,6 +41,7 @@ interface SuggestedLigne {
   prixUnitaireHT: number;
   remise: number;
   note?: string;
+  consommation?: number; // kg/m² — utilisé pour le calcul catalyst (recalc qté selon surface)
 }
 
 interface Props {
@@ -201,6 +208,7 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
         tva: prod?.tva ?? 20,
         remise: s.remise || 0,
         note: s.note,
+        ...(s.consommation != null ? { consommation: s.consommation } : {}),
       };
     });
     onInsertLignes(lignes);

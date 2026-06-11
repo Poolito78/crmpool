@@ -3461,8 +3461,21 @@ export default function Devis() {
         produits={produits}
         onInsertLignes={(newLignes) => {
           saveSnapshot();
-          setLignes(prev => [...prev, ...newLignes]);
-          setNewLigneId(newLignes[newLignes.length - 1]?.id ?? null);
+          const cl = clients.find(c => c.id === clientId);
+          // Lignes avec consommation (ex. catalyst) → recalcule la quantité chantier = conso × surface / poids
+          const prepared = newLignes.map(l => {
+            if (l.consommation != null && l.consommation > 0 && surfaceGlobaleM2 > 0) {
+              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              if (prod && prod.poids) {
+                const quantite = calcQuantiteSurface(prod, surfaceGlobaleM2, l.consommation);
+                const prix = getPrixLigne(prod, quantite, l.variantesChoisies, cl?.estRevendeur);
+                return { ...l, surfaceM2: surfaceGlobaleM2, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
+              }
+            }
+            return l;
+          });
+          setLignes(prev => [...prev, ...prepared]);
+          setNewLigneId(prepared[prepared.length - 1]?.id ?? null);
         }}
         devisContext={(() => {
           const lines = lignes.map((l, i) => {
