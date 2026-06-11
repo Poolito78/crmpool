@@ -1857,24 +1857,28 @@ export default function Devis() {
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
                 {headerVoice.supported && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="outline" size="icon" title="Dictée vocale & Assistant IA"
-                        className={headerVoice.listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''}>
-                        {headerVoice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuItem onClick={() => headerVoice.toggle()}>
-                        {headerVoice.listening
-                          ? <><MicOff className="w-4 h-4 mr-2 text-destructive" /> Arrêter la dictée</>
-                          : <><Mic className="w-4 h-4 mr-2 text-muted-foreground" /> Dicter le champ sélectionné</>}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="text-primary">
-                        <Bot className="w-4 h-4 mr-2" /> Assistant IA Claude
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                  <div className="flex items-center shrink-0">
+                    {/* Dictée en clic direct (sans menu) → le champ ciblé garde le focus */}
+                    <Button
+                      variant="outline" size="icon" title={headerVoice.listening ? 'Arrêter la dictée' : 'Dicter le champ sélectionné'}
+                      onMouseDown={e => e.preventDefault()} onClick={() => headerVoice.toggle()}
+                      className={`rounded-r-none border-r-0 ${headerVoice.listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''}`}
+                    >
+                      {headerVoice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="rounded-l-none w-6 px-0" title="Assistant IA">
+                          <ChevronDown className="w-3 h-3 opacity-60" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="text-primary">
+                          <Bot className="w-4 h-4 mr-2" /> Assistant IA Claude
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
