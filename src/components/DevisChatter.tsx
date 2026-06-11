@@ -11,6 +11,7 @@ import {
   Link2, ExternalLink,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import * as XLSX from 'xlsx';
 import DevisPreview from '@/components/DevisPreview';
 import type { Client, Produit, Devis as DevisType } from '@/lib/store';
 
@@ -100,6 +101,9 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
   const [pastedImages, setPastedImages] = useState<{ file: File; preview: string }[]>([]);
   const [mode, setMode] = useState<'note' | 'fichier' | 'lien' | null>(null);
   const [linkForm, setLinkForm] = useState({ label: '', url: '', confidentiel: false });
+  // Aperçu feuille Excel (parsé côté navigateur)
+  const [xlsxPreview, setXlsxPreview] = useState<{ name: string; sheets: { name: string; html: string }[]; active: number } | null>(null);
+  const [xlsxLoading, setXlsxLoading] = useState(false);
   const [tab, setTab] = useState<'documents' | 'historique'>('documents');
   const [isDragOver, setIsDragOver] = useState(false);
   const [snapshotDevis, setSnapshotDevis] = useState<DevisType | null>(null);
@@ -348,11 +352,33 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
     return pj.fichierUrl;
   }
 
-  /* ── Afficher dans le navigateur (PDF / image / lien) ── */
+  /* ── Détection fichier tableur ── */
+  function isExcel(pj: PieceJointe): boolean {
+    const n = (pj.fichierNom || '').toLowerCase();
+    const m = (pj.fichierMime || '').toLowerCase();
+    return /\.(xlsx|xls|csv|ods)$/.test(n) || m.includes('spreadsheet') || m.includes('excel') || m === 'text/csv';
+  }
+
+  /* ── Afficher dans le navigateur (PDF / image / lien / aperçu Excel) ── */
   async function handleView(pj: PieceJointe) {
     if (isLink(pj)) { if (pj.fichierUrl) window.open(pj.fichierUrl, '_blank', 'noopener'); return; }
     const url = await getSignedUrl(pj, false);
-    if (url) window.open(url, '_blank');
+    if (!url) return;
+    if (isExcel(pj)) {
+      setXlsxLoading(true);
+      try {
+        const buf = await fetch(url).then(r => r.arrayBuffer());
+        const wb = XLSX.read(buf, { type: 'array' });
+        const sheets = wb.SheetNames.map(name => ({ name, html: XLSX.utils.sheet_to_html(wb.Sheets[name], { editable: false }) }));
+        if (sheets.length === 0) { window.open(url, '_blank'); return; }
+        setXlsxPreview({ name: pj.fichierNom || 'Feuille Excel', sheets, active: 0 });
+      } catch (e) {
+        console.error('[xlsx preview]', e);
+        toast.error("Aperçu impossible — ouverture du fichier"); window.open(url, '_blank');
+      } finally { setXlsxLoading(false); }
+      return;
+    }
+    window.open(url, '_blank');
   }
 
   /* ── Télécharger ── */
@@ -793,6 +819,30 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
             produits={produits}
             hideControls
           />
+        </DialogContent>
+      </Dialog>
+    )}
+
+    {/* Aperçu feuille Excel */}
+    {xlsxPreview && (
+      <Dialog open={!!xlsxPreview} onOpenChange={(o) => { if (!o) setXlsxPreview(null); }}>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col overflow-hidden">
+          <DialogHeader className="shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <FileSpreadsheet className="w-4 h-4 text-green-600" /> {xlsxPreview.name}
+            </DialogTitle>
+          </DialogHeader>
+          {xlsxPreview.sheets.length > 1 && (
+            <div className="flex gap-1 flex-wrap shrink-0 border-b border-border pb-2">
+              {xlsxPreview.sheets.map((s, i) => (
+                <button key={i} onClick={() => setXlsxPreview(p => p ? { ...p, active: i } : p)}
+                  className={`px-2.5 py-1 rounded text-xs ${i === xlsxPreview.active ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/70'}`}>
+                  {s.name}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex-1 overflow-auto xlsx-preview" dangerouslySetInnerHTML={{ __html: xlsxPreview.sheets[xlsxPreview.active]?.html || '' }} />
         </DialogContent>
       </Dialog>
     )}

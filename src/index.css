@@ -151,6 +151,16 @@ body[data-scroll-locked] {
   pointer-events: none;
 }
 
+/* Aperçu feuille Excel (HTML généré par SheetJS) */
+.xlsx-preview table { border-collapse: collapse; font-size: 12px; }
+.xlsx-preview td, .xlsx-preview th {
+  border: 1px solid hsl(var(--border));
+  padding: 3px 8px;
+  white-space: nowrap;
+  color: hsl(var(--foreground));
+}
+.xlsx-preview tr:nth-child(even) td { background: hsl(var(--muted) / 0.4); }
+
 @media print {
   @page { margin: 10mm; size: A4 portrait; }
   body { visibility: hidden; }
