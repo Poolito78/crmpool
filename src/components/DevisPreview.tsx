@@ -438,10 +438,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               </>
             )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked }); }} className="rounded" />
-              Coût chantier
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
               Remise
             </label>
@@ -1190,12 +1186,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <div className="text-sm text-muted-foreground space-y-1">
           </div>
           <div className="w-64 space-y-1 ml-auto">
-            {showCoutChantier && coutChantierRef.current != null && (
-              <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
-                <span>Coût chantier</span>
-                <span>{coutChantierRef.current.toFixed(2)} €/m²</span>
-              </div>
-            )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
             {(devis.fraisPortHT || 0) > 0 && (
               <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>
