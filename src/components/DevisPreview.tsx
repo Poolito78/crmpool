@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
 import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
-import { Printer, Pencil, Loader2, Send, FolderOpen, FileText } from 'lucide-react';
+import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -251,6 +251,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(Object.fromEntries(Object.entries(allLineImages).filter(([id]) => texteLineIds.has(id)).map(([k, v]) => [k, v.map(i => i.url)])))]);
+
+  // Agrandissement d'une image collée (lightbox, écran uniquement — hors PDF)
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
 
   // Images pasted pré-traitées en data URL 48×38px via canvas (html2canvas-safe)
   const [dataUrlImages, setDataUrlImages] = useState<Record<string, string[]>>({});
@@ -898,7 +901,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             {dl.description}
                             {timgs.length > 0 && (
                               <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {timgs.map((url, i) => <img key={i} src={url} alt="" style={{ maxWidth: '260px', maxHeight: '200px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)' }} />)}
+                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: '260px', maxHeight: '200px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
                               </div>
                             )}
                           </td>
@@ -1049,7 +1052,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <tr className="border-b border-border/60">
                         <td colSpan={9} style={{ padding: '3px 8px 6px 8px' }}>
                           {(dataUrlImages[l.id] || []).filter(Boolean).map((dataUrl, i) => (
-                            <img key={i} src={dataUrl} alt="" width={48} height={38} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', marginRight: '6px', verticalAlign: 'middle' }} />
+                            <img key={i} src={dataUrl} alt="" width={48} height={38} onClick={() => setZoomImage(allLineImages[l.id]?.[i]?.url || dataUrl)} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', marginRight: '6px', verticalAlign: 'middle', cursor: 'zoom-in' }} />
                           ))}
                         </td>
                       </tr>
@@ -1204,7 +1207,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             return (
                               <div style={{ marginTop: '4px' }}>
                                 {imgs.map((img, i) => (
-                                  <img key={i} src={img.url} alt="" width={48} height={38} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle' }} />
+                                  <img key={i} src={img.url} alt="" width={48} height={38} onClick={() => setZoomImage(allLineImages[l.id]?.[i]?.url || img.url)} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle', cursor: 'zoom-in' }} />
                                 ))}
                                 {l.note && (rsNote
                                   ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{l.note}</span>
@@ -1312,6 +1315,14 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       </div>{/* fin printAreaRef */}
       </div>{/* fin page A4 */}
       </div>{/* fin zone défilement */}
+
+      {/* Agrandissement image collée (écran uniquement — zoomImage null pendant la génération PDF) */}
+      {zoomImage && (
+        <div className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out" onClick={() => setZoomImage(null)}>
+          <img src={zoomImage} alt="" className="max-w-full max-h-full object-contain rounded shadow-2xl" onClick={e => e.stopPropagation()} />
+          <button type="button" onClick={() => setZoomImage(null)} className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/90 text-black flex items-center justify-center hover:bg-white" title="Fermer"><X className="w-5 h-5" /></button>
+        </div>
+      )}
     </div>
   );
 }
