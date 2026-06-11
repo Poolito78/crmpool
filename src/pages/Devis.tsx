@@ -99,6 +99,7 @@ export default function Devis() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [surchargeDetailOpen, setSurchargeDetailOpen] = useState(false);
+  const [zoomImage, setZoomImage] = useState<string | null>(null);
   const [surchargePctOverrides, setSurchargePctOverrides] = useState<Record<string, number>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
@@ -2413,7 +2414,7 @@ export default function Devis() {
                             <div className="flex flex-wrap gap-1.5 mt-1">
                               {(lineImages[l.id] || []).map((img, ii) => (
                                 <div key={ii} className="relative group/img">
-                                  <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => window.open(img.url, '_blank')} />
+                                  <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => setZoomImage(img.url)} />
                                   <button
                                     type="button"
                                     onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== ii) }))}
@@ -2638,7 +2639,7 @@ export default function Devis() {
                                 <div className="flex flex-wrap gap-1.5 mt-1">
                                   {(lineImages[l.id] || []).map((img, i) => (
                                     <div key={i} className="relative group/img">
-                                      <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => window.open(img.url, '_blank')} />
+                                      <img src={img.url} alt={img.name} className="h-14 w-auto rounded border border-border object-cover cursor-pointer" onClick={() => setZoomImage(img.url)} />
                                       <button
                                         type="button"
                                         onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== i) }))}
@@ -3368,6 +3369,22 @@ export default function Devis() {
 
         </DialogContent>
       </Dialog>
+
+      {/* Agrandissement d'une image collée (lightbox) */}
+      {zoomImage && (
+        <div
+          className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
+          onClick={() => setZoomImage(null)}
+        >
+          <img src={zoomImage} alt="" className="max-w-full max-h-full object-contain rounded shadow-2xl" onClick={e => e.stopPropagation()} />
+          <button
+            type="button"
+            onClick={() => setZoomImage(null)}
+            className="absolute top-4 right-4 w-9 h-9 rounded-full bg-white/90 text-black flex items-center justify-center hover:bg-white"
+            title="Fermer"
+          ><XIcon className="w-5 h-5" /></button>
+        </div>
+      )}
 
       {/* Détail du calcul de la surcharge énergie par produit (Hausse % éditable, recalcul auto) */}
       {surchargeDetailOpen && (() => {
