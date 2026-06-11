@@ -263,6 +263,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [selectedLinkIds, setSelectedLinkIds] = useState<Set<string>>(new Set());
   const pdfBase64Ref = useRef<string | null>(null);
   const regenTimer = useRef<ReturnType<typeof setTimeout>>();
+  // PDF Mise en œuvre généré à la volée depuis moContent (si pas déjà en pièce jointe)
+  const moPrintRef = useRef<HTMLDivElement>(null);
+  const moPdfBase64Ref = useRef<string | null>(null);
+  const [moPdfReady, setMoPdfReady] = useState(false);
+  const [includeMoPdf, setIncludeMoPdf] = useState(true);
+  const moPdfName = devis ? `Mise_en_oeuvre_${devis.numero}.pdf` : 'Mise_en_oeuvre.pdf';
+  const hasMoPj = pjFichiers.some(f => /mise.?en.?(o|œ)?euvre|mise_en_oeuvre/i.test(f.fichierNom));
 
   // Quand les options d'affichage changent → invalider le PDF et régénérer après rendu DOM
   function handleOptionChange(opts: PreviewOptions) {
@@ -348,6 +355,20 @@ Restant à ta disposition pour tout complément d'information.`
       setTimeout(() => generatePdf(), 600);
     }
   }, [devis, client, open, produits]);
+
+  // Génère le PDF Mise en œuvre depuis moContent (si présent et pas déjà joint)
+  useEffect(() => {
+    if (!devis || !open || !devis.moContent?.trim()) { moPdfBase64Ref.current = null; setMoPdfReady(false); return; }
+    setIncludeMoPdf(true);
+    const t = setTimeout(async () => {
+      if (!moPrintRef.current) return;
+      try {
+        moPdfBase64Ref.current = await generatePdfFromElement(moPrintRef.current, { docTitle: `Mise en œuvre — ${devis.numero}` });
+        setMoPdfReady(true);
+      } catch (e) { console.error('[MO PDF mail]', e); setMoPdfReady(false); }
+    }, 700);
+    return () => clearTimeout(t);
+  }, [devis, open]);
 
   async function generatePdf() {
     if (!pdfContainerRef?.current || !devis) return;
@@ -436,6 +457,10 @@ Restant à ta disposition pour tout complément d'information.`
         const b64 = await fetchFileAsBase64(signed.signedUrl);
         extraAttachments.push({ filename: pj.fichierNom, content: b64 });
       } catch { /* ignorer si échec sur un fichier */ }
+    }
+    // PDF Mise en œuvre généré à la volée (si pas déjà présent en pièce jointe)
+    if (!hasMoPj && includeMoPdf && moPdfBase64Ref.current) {
+      extraAttachments.push({ filename: moPdfName, content: moPdfBase64Ref.current });
     }
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
@@ -531,6 +556,29 @@ Restant à ta disposition pour tout complément d'information.`
                   <span className="text-primary underline truncate">{f.label}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* Rendu MO caché (offscreen) pour générer le PDF Mise en œuvre */}
+          {devis?.moContent?.trim() && (
+            <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden>
+              <div ref={moPrintRef} style={{ width: 794, padding: 32, background: '#fff', color: '#000', fontFamily: 'Arial, sans-serif' }}>
+                <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Mise en œuvre</h1>
+                <p style={{ fontSize: 13, color: '#555', marginBottom: 16 }}>{devis.numero}{devis.systeme ? ` — ${devis.systeme}` : ''}</p>
+                <div style={{ fontSize: 13, lineHeight: 1.5 }} dangerouslySetInnerHTML={{ __html: devis.moContent }} />
+              </div>
+            </div>
+          )}
+
+          {/* ── PDF Mise en œuvre généré (si présent dans le devis et pas déjà joint) ── */}
+          {!hasMoPj && devis?.moContent?.trim() && (
+            <div className="rounded-md border px-3 py-2">
+              <label className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-muted/50 transition-colors">
+                <input type="checkbox" className="rounded" checked={includeMoPdf} onChange={e => setIncludeMoPdf(e.target.checked)} />
+                <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                <span className="text-sm flex-1 truncate">{moPdfName} <span className="text-xs text-muted-foreground">(Mise en œuvre)</span></span>
+                {!moPdfReady && includeMoPdf && <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" />}
+              </label>
             </div>
           )}
 
