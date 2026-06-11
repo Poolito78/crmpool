@@ -99,6 +99,7 @@ export default function Devis() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [previewDevis, setPreviewDevis] = useState<DevisType | null>(null);
   const [surchargeDetailOpen, setSurchargeDetailOpen] = useState(false);
+  const [surchargePctOverrides, setSurchargePctOverrides] = useState<Record<string, number>>({});
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -832,11 +833,13 @@ export default function Devis() {
     const txt = `${prod.reference || ''} ${prod.description || ''}`.toLowerCase();
     const cat = (prod.categorie || '').toLowerCase();
     const isSnlRoad = txt.includes('snl') && txt.includes('road');
-    const isPigment = cat.includes('pigment') || txt.includes('pigment');
+    // Pigment = catégorie PIGMENTS (et non « unpigmented » dans une désignation Flowfast)
+    const isPigment = cat.includes('pigment');
     return isSnlRoad || isPigment;
   }
-  // Détail du calcul de la surcharge énergie, ligne par ligne (achat + vente)
-  function computeSurchargeEnergieDetail() {
+  // Détail du calcul de la surcharge énergie, ligne par ligne (achat + vente).
+  // `overrides` : pourcentage forcé par ligne (édition manuelle dans la fenêtre détail).
+  function computeSurchargeEnergieDetail(overrides: Record<string, number> = {}) {
     const rows: Array<{ id: string; description: string; categorie: string; pct: number; exclu: boolean; baseAchat: number; baseVente: number; surchargeAchat: number; surchargeVente: number }> = [];
     let totalAchat = 0, totalVente = 0;
     for (const l of lignes) {
@@ -845,7 +848,8 @@ export default function Devis() {
       const prod = produits.find(p => p.id === l.produitId);
       if (!prod) continue;
       const exclu = estExcluHausse(prod);
-      const pct = exclu ? 0 : pctHausseCategorie(prod);
+      const defaultPct = exclu ? 0 : pctHausseCategorie(prod);
+      const pct = overrides[l.id] !== undefined ? overrides[l.id] : defaultPct;
       const coeff = 1 - (l.remise || 0) / 100;
       const baseVente = l.quantite * l.prixUnitaireHT * coeff;
       const baseAchat = getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * coeff;
@@ -853,27 +857,27 @@ export default function Devis() {
       const surchargeAchat = baseAchat * pct / 100;
       totalAchat += surchargeAchat;
       totalVente += surchargeVente;
-      rows.push({ id: l.id, description: l.description || prod.reference || '—', categorie: prod.categorie || '—', pct, exclu, baseAchat, baseVente, surchargeAchat, surchargeVente });
+      rows.push({ id: l.id, description: l.description || prod.reference || '—', categorie: prod.categorie || '—', pct, exclu: exclu && overrides[l.id] === undefined, baseAchat, baseVente, surchargeAchat, surchargeVente });
     }
     return { rows, totalAchat, totalVente };
   }
-  function addSurchargeEnergieCategories() {
-    const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail();
-    if (rows.length === 0) { toast.warning('Aucun produit éligible à la surcharge énergie.'); return; }
+  function applySurchargeEnergie(totalAchat: number, totalVente: number) {
     saveSnapshot();
     const montantVente = Math.round(totalVente * 100) / 100;
     const montantAchat = Math.round(totalAchat * 100) / 100;
     setLignes(prev => {
-      // Met à jour la ligne « SURCHARGE ENERGIE » existante (sans accent), sinon en crée une
       const idx = prev.findIndex(l => (!l.type || l.type === 'ligne') && (l.description || '').toUpperCase().includes('SURCHARGE ENERGIE'));
-      if (idx >= 0) {
-        return prev.map((l, i) => i === idx ? { ...l, quantite: 1, prixUnitaireHT: montantVente, prixAchatLigne: montantAchat } : l);
-      }
+      if (idx >= 0) return prev.map((l, i) => i === idx ? { ...l, quantite: 1, prixUnitaireHT: montantVente, prixAchatLigne: montantAchat } : l);
       const id = generateId();
       setNewLigneId(id);
       return [...prev, { id, description: 'SURCHARGE ENERGIE', quantite: 1, unite: 'forfait', prixUnitaireHT: montantVente, prixAchatLigne: montantAchat, tva: 20, remise: 0 }];
     });
     toast.success(`Surcharge énergie : achat ${montantAchat.toFixed(2)} € · vente ${montantVente.toFixed(2)} €`);
+  }
+  function addSurchargeEnergieCategories() {
+    const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail();
+    if (rows.length === 0) { toast.warning('Aucun produit éligible à la surcharge énergie.'); return; }
+    applySurchargeEnergie(totalAchat, totalVente);
   }
 
   useEffect(() => {
@@ -3072,7 +3076,7 @@ export default function Devis() {
                                   <button
                                     type="button"
                                     title="Détail du calcul de la surcharge énergie par produit (achat / vente)"
-                                    onClick={() => setSurchargeDetailOpen(true)}
+                                    onClick={() => { setSurchargePctOverrides({}); setSurchargeDetailOpen(true); }}
                                     className="shrink-0 text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-0.5"
                                   >
                                     <Zap className="w-3 h-3" /><span className="text-[10px] hidden sm:inline">détail</span>
@@ -3409,22 +3413,27 @@ export default function Devis() {
         </DialogContent>
       </Dialog>
 
-      {/* Détail du calcul de la surcharge énergie par produit */}
+      {/* Détail du calcul de la surcharge énergie par produit (Hausse % éditable, recalcul auto) */}
       {surchargeDetailOpen && (() => {
-        const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail();
+        const { rows, totalAchat, totalVente } = computeSurchargeEnergieDetail(surchargePctOverrides);
+        const setPct = (id: string, v: string) => {
+          const n = v === '' ? 0 : parseFloat(v.replace(',', '.'));
+          setSurchargePctOverrides(prev => ({ ...prev, [id]: isNaN(n) ? 0 : n }));
+        };
         return (
           <Dialog open={surchargeDetailOpen} onOpenChange={setSurchargeDetailOpen}>
             <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col overflow-hidden">
               <DialogHeader className="shrink-0">
                 <DialogTitle className="flex items-center gap-2 text-base"><Zap className="w-4 h-4 text-primary" /> Détail surcharge énergie par produit</DialogTitle>
               </DialogHeader>
+              <p className="text-[11px] text-muted-foreground shrink-0">Modifiez le <strong>% de hausse</strong> d'une ligne pour recalculer automatiquement. Puis « Appliquer » pour reporter sur la ligne SURCHARGE ENERGIE.</p>
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <thead className="sticky top-0 bg-muted">
                     <tr className="border-b border-border">
                       <th className="text-left px-2 py-1.5 font-medium">Produit</th>
                       <th className="text-left px-2 py-1.5 font-medium">Catégorie</th>
-                      <th className="text-right px-2 py-1.5 font-medium">Hausse</th>
+                      <th className="text-right px-2 py-1.5 font-medium">Hausse %</th>
                       <th className="text-right px-2 py-1.5 font-medium">Base achat</th>
                       <th className="text-right px-2 py-1.5 font-medium">Surch. achat</th>
                       <th className="text-right px-2 py-1.5 font-medium">Base vente</th>
@@ -3433,13 +3442,20 @@ export default function Devis() {
                   </thead>
                   <tbody>
                     {rows.map(r => (
-                      <tr key={r.id} className={`border-b border-border/50 ${r.exclu ? 'text-muted-foreground' : ''}`}>
+                      <tr key={r.id} className="border-b border-border/50 hover:bg-muted/30">
                         <td className="px-2 py-1.5 max-w-[200px] truncate" title={r.description}>{r.description}</td>
-                        <td className="px-2 py-1.5">{r.categorie}</td>
-                        <td className="px-2 py-1.5 text-right">{r.exclu ? <span className="italic">exclu</span> : `+${r.pct}%`}</td>
-                        <td className="px-2 py-1.5 text-right">{formatMontant(r.baseAchat)}</td>
+                        <td className="px-2 py-1.5 text-muted-foreground">{r.categorie}</td>
+                        <td className="px-2 py-1.5 text-right">
+                          <input
+                            type="number" step="0.1" value={surchargePctOverrides[r.id] !== undefined ? surchargePctOverrides[r.id] : r.pct}
+                            onChange={e => setPct(r.id, e.target.value)} onFocus={e => e.target.select()}
+                            className={`w-16 text-right border rounded px-1 py-0.5 bg-background ${surchargePctOverrides[r.id] !== undefined ? 'border-amber-400 text-amber-600 dark:text-amber-400 font-medium' : 'border-border'}`}
+                          />
+                          <span className="ml-0.5">%</span>
+                        </td>
+                        <td className="px-2 py-1.5 text-right text-muted-foreground">{formatMontant(r.baseAchat)}</td>
                         <td className="px-2 py-1.5 text-right font-medium">{r.surchargeAchat > 0 ? formatMontant(r.surchargeAchat) : '—'}</td>
-                        <td className="px-2 py-1.5 text-right">{formatMontant(r.baseVente)}</td>
+                        <td className="px-2 py-1.5 text-right text-muted-foreground">{formatMontant(r.baseVente)}</td>
                         <td className="px-2 py-1.5 text-right font-medium">{r.surchargeVente > 0 ? formatMontant(r.surchargeVente) : '—'}</td>
                       </tr>
                     ))}
@@ -3454,7 +3470,17 @@ export default function Devis() {
                   </tfoot>
                 </table>
               </div>
-              <p className="text-[11px] text-muted-foreground shrink-0">Hausse par catégorie : MMA/PUMA +18% · Mousses PU +13% · Coupe-Feu/Silicones/Acryliques +9% · autres +7%. Exclus : pigments et charges SNL Road.</p>
+              <div className="flex items-center justify-between gap-2 shrink-0 pt-1">
+                <p className="text-[11px] text-muted-foreground">Défaut : MMA/PUMA +18% · Mousses PU +13% · Coupe-Feu/Silicones/Acryliques +9% · autres +7%. Exclus : pigments et charges SNL Road.</p>
+                <div className="flex gap-2 shrink-0">
+                  {Object.keys(surchargePctOverrides).length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSurchargePctOverrides({})}>Réinitialiser</Button>
+                  )}
+                  <Button size="sm" onClick={() => { applySurchargeEnergie(totalAchat, totalVente); setSurchargeDetailOpen(false); }}>
+                    <Check className="w-4 h-4 mr-1" /> Appliquer au devis
+                  </Button>
+                </div>
+              </div>
             </DialogContent>
           </Dialog>
         );
