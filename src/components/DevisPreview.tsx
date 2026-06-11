@@ -244,7 +244,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     (async () => {
       const result: Record<string, string[]> = {};
       for (const [ligneId, imgs] of entries) {
-        result[ligneId] = await Promise.all(imgs.map(img => resizeUrlContain(img.url, 520, 400)));
+        result[ligneId] = await Promise.all(imgs.map(img => resizeUrlContain(img.url, 1100, 850)));
       }
       if (!cancelled) setTexteImageDataUrls(result);
     })();
@@ -901,7 +901,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             {dl.description}
                             {timgs.length > 0 && (
                               <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: '260px', maxHeight: '200px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
+                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: '100%', maxHeight: '460px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
                               </div>
                             )}
                           </td>
