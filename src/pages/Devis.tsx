@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback, Fragment, type ReactNode } fr
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,7 +21,7 @@ import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
-import VoiceButton from '@/components/ui/VoiceButton';
+import { useVoiceDictation } from '@/components/ui/VoiceButton';
 import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -182,6 +182,7 @@ export default function Devis() {
       case 'ligne-qte': { const n = parseNum(clean); if (n != null) { updateLigne(t.id, 'quantite', n); toast.success(`Quantité : ${n}`); } else toast.error('Quantité non comprise'); break; }
     }
   };
+  const headerVoice = useVoiceDictation(routeVoiceTranscript);
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
   const kitPickerRef = useRef<HTMLDivElement>(null);
@@ -1855,7 +1856,26 @@ export default function Devis() {
                 </>) : 'Nouveau devis'}
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
-                <VoiceButton onTranscript={routeVoiceTranscript} iconOnly />
+                {headerVoice.supported && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon" title="Dictée vocale & Assistant IA"
+                        className={headerVoice.listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''}>
+                        {headerVoice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuItem onClick={() => headerVoice.toggle()}>
+                        {headerVoice.listening
+                          ? <><MicOff className="w-4 h-4 mr-2 text-destructive" /> Arrêter la dictée</>
+                          : <><Mic className="w-4 h-4 mr-2 text-muted-foreground" /> Dicter le champ sélectionné</>}
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="text-primary">
+                        <Bot className="w-4 h-4 mr-2" /> Assistant IA Claude
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm" className="px-3 gap-1">Action <ChevronDown className="w-3 h-3 opacity-60" /></Button>
@@ -1930,9 +1950,6 @@ export default function Devis() {
                         </DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuItem onClick={() => setAssistantOpen(true)} className="border-t border-border mt-1 pt-1.5 text-primary">
-                      <Bot className="w-4 h-4 mr-2" /> Assistant Claude
-                    </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
                 <Button variant="outline" size="sm" onClick={() => closeDevisDialog()}>Annuler</Button>

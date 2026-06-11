@@ -22,7 +22,8 @@ declare global {
   }
 }
 
-export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm', iconOnly = false }: Props) {
+/** Hook de dictée vocale réutilisable (Web Speech API). */
+export function useVoiceDictation(onTranscript: (text: string) => void, lang = 'fr-FR') {
   const [listening, setListening] = useState(false);
   const recogRef = useRef<SpeechRecognition | null>(null);
 
@@ -70,6 +71,12 @@ export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = 
     setListening(true);
     toast.info('Dictée démarrée — parlez maintenant', { duration: 2000 });
   }, [listening, lang, onTranscript, stop]);
+
+  return { listening, toggle, stop, supported };
+}
+
+export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm', iconOnly = false }: Props) {
+  const { listening, toggle, supported } = useVoiceDictation(onTranscript, lang);
 
   if (!supported) return null;
 
