@@ -1060,6 +1060,8 @@ export default function Devis() {
         logHistorique({ entiteType: 'devis', entiteId: savedId!, entiteNumero: numero, action: 'creation', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined } });
       }
     }
+    // Devis neuf : uploader les images collées avant le 1er enregistrement (le paste ne pouvait pas, sans id)
+    if (!editingId && savedId) uploadPendingLineImages(savedId);
     if (!silent) {
       dialogOpenRef.current = false; // évite la ré-entrance via popstate
       setDialogOpen(false);
@@ -1353,6 +1355,34 @@ export default function Devis() {
       }
     }
     toast.success('Image(s) collée(s)');
+  }
+
+  // Upload les images encore en blob (collées avant 1er enregistrement) vers le devis enregistré
+  async function uploadPendingLineImages(devisId: string) {
+    const entries = Object.entries(lineImages);
+    if (entries.length === 0) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    for (const [ligneId, imgs] of entries) {
+      for (const img of imgs) {
+        if (!img.url.startsWith('blob:')) continue;
+        try {
+          const blob = await fetch(img.url).then(r => r.blob());
+          const name = img.name || `image_${Date.now()}.png`;
+          const path = `${user.id}/${devisId}/${Date.now()}_${name}`;
+          const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, blob, { upsert: false });
+          if (upErr) continue;
+          const { data: signed } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+          const signedUrl = signed?.signedUrl ?? path;
+          await supabase.from('devis_pieces_jointes').insert({
+            user_id: user.id, devis_id: devisId, type: 'fichier',
+            fichier_nom: name, fichier_url: signedUrl, fichier_taille: blob.size, fichier_mime: blob.type || 'image/png',
+            ligne_id: ligneId,
+          });
+          setLineImages(prev => ({ ...prev, [ligneId]: (prev[ligneId] || []).map(x => x.url === img.url ? { ...x, url: signedUrl } : x) }));
+        } catch (e) { console.error('[upload pending img]', e); }
+      }
+    }
   }
 
   // Fixe la taille d'impression (% de largeur) d'une image collée + persiste (update séparé)
