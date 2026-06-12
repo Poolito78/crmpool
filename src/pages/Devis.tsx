@@ -1325,33 +1325,28 @@ export default function Devis() {
       // Aperçu immédiat avec URL blob locale
       const preview = URL.createObjectURL(file);
       setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name, taille: 100 }] }));
-      // Upload en arrière-plan
+      // Upload + enregistrement (await pour que les requêtes Supabase s'exécutent réellement)
       if (editingId) {
-        supabase.auth.getUser().then(({ data: { user } }) => {
-          if (!user) return;
-          const path = `${user.id}/${editingId}/${Date.now()}_${name}`;
-          supabase.storage.from('devis-pj').upload(path, file, { upsert: false })
-            .then(({ error: upErr }) => {
-              if (upErr) { toast.error('Erreur upload image'); return; }
-              return supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
-            })
-            .then(res => {
-              if (!res?.data) return;
-              const signedUrl = res.data.signedUrl;
-              // Remplace l'URL blob par l'URL signée Supabase
-              setLineImages(prev => ({
-                ...prev,
-                [ligneId]: (prev[ligneId] || []).map(img => img.url === preview ? { ...img, url: signedUrl } : img),
-              }));
-              URL.revokeObjectURL(preview);
-              // image_taille géré séparément (update) pour ne pas casser l'insert si la colonne n'existe pas encore
-              supabase.from('devis_pieces_jointes').insert({
-                user_id: user.id, devis_id: editingId, type: 'fichier',
-                fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
-                ligne_id: ligneId,
-              });
+        const did = editingId;
+        (async () => {
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return;
+            const path = `${user.id}/${did}/${Date.now()}_${name}`;
+            const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false });
+            if (upErr) { console.error('[img upload]', upErr); toast.error('Erreur upload image'); return; }
+            const { data: signed } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+            const signedUrl = signed?.signedUrl ?? path;
+            setLineImages(prev => ({ ...prev, [ligneId]: (prev[ligneId] || []).map(img => img.url === preview ? { ...img, url: signedUrl } : img) }));
+            URL.revokeObjectURL(preview);
+            const { error: insErr } = await supabase.from('devis_pieces_jointes').insert({
+              user_id: user.id, devis_id: did, type: 'fichier',
+              fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
+              ligne_id: ligneId,
             });
-        });
+            if (insErr) { console.error('[img pj insert]', insErr); toast.error('Image non enregistrée : ' + insErr.message); }
+          } catch (err) { console.error('[img paste]', err); }
+        })();
       }
     }
     toast.success('Image(s) collée(s)');
