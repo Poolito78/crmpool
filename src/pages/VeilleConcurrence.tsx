@@ -171,6 +171,29 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
   throw new Error('Aucune clé API configurée (VITE_GROQ_API_KEY, VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY)');
 }
 
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Analyse d'une image (capture/PNG) via vision Gemini
+async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
+  const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!gemKey) throw new Error("Analyse d'image : clé Gemini requise (VITE_GEMINI_API_KEY).");
+  const b64 = await fileToBase64(file);
+  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gemKey}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
+  });
+  const d = await r.json();
+  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+}
+
 async function extractTarifText(file: File): Promise<string> {
   if (file.name.match(/\.(xlsx?|csv|ods)$/i)) {
     const { texte } = await parseExcel(file);
@@ -505,16 +528,16 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const handleImportFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     const file = files[0];
-    if (!file.name.match(/\.(pdf|xlsx?|csv|ods)$/i)) {
-      setImportError('Format non supporté. Utilisez PDF, Excel ou CSV.');
+    const isImage = /\.(png|jpe?g|webp|gif|bmp)$/i.test(file.name) || file.type.startsWith('image/');
+    if (!isImage && !file.name.match(/\.(pdf|xlsx?|csv|ods)$/i)) {
+      setImportError('Format non supporté. Utilisez PDF, Excel, CSV ou image (PNG/JPG).');
       return;
     }
     setAnalysing(true);
     setImportError('');
     setExtracted([]);
     try {
-      const text = await extractTarifText(file);
-      const results = await callTarifAI(text);
+      const results = isImage ? await callTarifAIVision(file) : await callTarifAI(await extractTarifText(file));
       setExtracted(results.map((r, i) => ({ ...r, _id: String(i), selected: true })));
     } catch (e: any) {
       setImportError(e.message || 'Erreur lors de l\'analyse.');
@@ -1091,8 +1114,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               >
                 <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-3" />
                 <p className="font-medium">Glissez votre tarif ici</p>
-                <p className="text-sm text-muted-foreground mt-1">PDF, Excel (.xlsx, .xls), CSV — analyse IA automatique</p>
-                <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.ods" onChange={e => handleImportFiles(e.target.files)} />
+                <p className="text-sm text-muted-foreground mt-1">PDF, Excel (.xlsx, .xls), CSV, Image (PNG/JPG) — analyse IA automatique</p>
+                <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.ods,.png,.jpg,.jpeg,.webp,image/*" onChange={e => handleImportFiles(e.target.files)} />
               </div>
             )}
 
