@@ -187,19 +187,23 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
   const b64 = await fileToBase64(file);
   const dataUrl = `data:${file.type || 'image/png'};base64,${b64}`;
 
-  // 1) Gemini (vision) si clé dispo
+  let lastErr: Error | null = null;
+
+  // 1) Gemini (vision) si clé dispo ; en cas d'échec (quota, etc.) → repli OpenRouter
   if (gemKey) {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(`Gemini : ${d.error?.message || r.status}`);
-    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    try {
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(`Gemini : ${d.error?.message || r.status}`);
+      const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    } catch (e: any) { lastErr = e; }
   }
 
-  // 2) OpenRouter (modèle vision gratuit) en repli
+  // 2) OpenRouter (modèle vision) en repli
   if (orKey) {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
@@ -215,7 +219,7 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
     return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
   }
 
-  throw new Error("Analyse d'image : clé vision requise (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY).");
+  throw lastErr || new Error("Analyse d'image : clé vision requise (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY).");
 }
 
 async function extractTarifText(file: File): Promise<string> {
