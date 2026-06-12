@@ -101,6 +101,8 @@ interface Props {
   onPrint?: () => void;
   lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
+  /** Changement live de la taille d'impression d'une image collée (aperçu) */
+  onImageTailleChange?: (ligneId: string, url: string, taille: number) => void;
 }
 
 // taille = pourcentage de largeur à l'impression (10–100). Compat ancien S/M/L.
@@ -111,7 +113,7 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -134,7 +136,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     if (!devis.id || devis.id === 'preview') return;
     const { data } = await supabase
       .from('devis_pieces_jointes')
-      .select('ligne_id, fichier_url, fichier_nom, fichier_mime, image_taille')
+      .select('*')
       .eq('devis_id', devis.id)
       .eq('type', 'fichier')
       .not('ligne_id', 'is', null);
@@ -410,6 +412,39 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
     if (onPrint) onPrint();
   }
+
+  // Change la taille d'une image : maj locale (aperçu live) + remonte au parent (persiste)
+  const changeImgTaille = (dlId: string, url: string, taille: number) => {
+    const t = Math.min(100, Math.max(10, Math.round(taille)));
+    setFetchedLineImages(prev => ({ ...prev, [dlId]: (prev[dlId] || []).map(img => img.url === url ? { ...img, taille: t } : img) }));
+    onImageTailleChange?.(dlId, url, t);
+  };
+
+  // Rendu des images d'une ligne texte (image dimensionnée + contrôles zoom non imprimés)
+  const renderTexteImages = (dlId: string, hasDesc: boolean) => {
+    const timgs = (texteImageDataUrls[dlId] || []).filter(Boolean);
+    if (timgs.length === 0) return null;
+    return (
+      <div style={{ marginTop: hasDesc ? '4px' : 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+        {timgs.map((url, i) => {
+          const orig = allLineImages[dlId]?.[i];
+          const pct = orig?.taille ?? 100;
+          return (
+            <div key={i}>
+              <img src={url} alt="" onClick={() => setZoomImage(orig?.url || url)} style={{ width: `${pct}%`, maxWidth: '100%', display: 'block', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />
+              {onImageTailleChange && orig && (
+                <div data-html2canvas-ignore="true" style={{ display: 'flex', gap: '6px', alignItems: 'center', marginTop: '2px', fontSize: '11px', color: '#888' }} title="Taille à l'impression">
+                  <button type="button" disabled={pct <= 10} onClick={() => changeImgTaille(dlId, orig.url, pct - 10)} style={{ border: '1px solid #ccc', borderRadius: '3px', width: '18px', height: '18px', lineHeight: '14px', background: '#fff', cursor: 'pointer' }}>−</button>
+                  <span style={{ minWidth: '34px', textAlign: 'center' }}>{pct}%</span>
+                  <button type="button" disabled={pct >= 100} onClick={() => changeImgTaille(dlId, orig.url, pct + 10)} style={{ border: '1px solid #ccc', borderRadius: '3px', width: '18px', height: '18px', lineHeight: '14px', background: '#fff', cursor: 'pointer' }}>+</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <div className="flex flex-col min-h-0">
@@ -907,11 +942,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         <tr key={dl.id} className="border-b border-border/40">
                           <td colSpan={9} className="py-1.5 px-2 text-xs italic text-muted-foreground" style={{ whiteSpace: 'pre-line' }}>
                             {dl.description}
-                            {timgs.length > 0 && (
-                              <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ width: `${allLineImages[dl.id]?.[i]?.taille ?? 100}%`, maxWidth: '100%', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
-                              </div>
-                            )}
+                            {renderTexteImages(dl.id, !!dl.description)}
                           </td>
                         </tr>
                       ) : null;

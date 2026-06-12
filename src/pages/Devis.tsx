@@ -1342,11 +1342,12 @@ export default function Devis() {
                 [ligneId]: (prev[ligneId] || []).map(img => img.url === preview ? { ...img, url: signedUrl } : img),
               }));
               URL.revokeObjectURL(preview);
+              // image_taille géré séparément (update) pour ne pas casser l'insert si la colonne n'existe pas encore
               supabase.from('devis_pieces_jointes').insert({
                 user_id: user.id, devis_id: editingId, type: 'fichier',
                 fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
-                ligne_id: ligneId, image_taille: '100',
-              } as any);
+                ligne_id: ligneId,
+              });
             });
         });
       }
@@ -1354,18 +1355,15 @@ export default function Devis() {
     toast.success('Image(s) collée(s)');
   }
 
-  // Ajuste le zoom (% de largeur à l'impression) d'une image collée par pas de 10 % + persiste
-  function zoomLineImage(ligneId: string, url: string, delta: number) {
-    let next = 100;
-    setLineImages(prev => ({
-      ...prev,
-      [ligneId]: (prev[ligneId] || []).map(img => {
-        if (img.url !== url) return img;
-        next = Math.min(100, Math.max(10, (img.taille ?? 100) + delta));
-        return { ...img, taille: next };
-      }),
-    }));
+  // Fixe la taille d'impression (% de largeur) d'une image collée + persiste (update séparé)
+  function applyLineImageTaille(ligneId: string, url: string, taille: number) {
+    const next = Math.min(100, Math.max(10, Math.round(taille)));
+    setLineImages(prev => ({ ...prev, [ligneId]: (prev[ligneId] || []).map(img => img.url === url ? { ...img, taille: next } : img) }));
     supabase.from('devis_pieces_jointes').update({ image_taille: String(next) } as any).eq('fichier_url', url).then(() => {});
+  }
+  function zoomLineImage(ligneId: string, url: string, delta: number) {
+    const cur = (lineImages[ligneId] || []).find(img => img.url === url)?.taille ?? 100;
+    applyLineImageTaille(ligneId, url, cur + delta);
   }
 
   // Charge les images des lignes du devis à l'ouverture (pour réafficher + régler la taille après rechargement)
@@ -1373,7 +1371,7 @@ export default function Devis() {
     if (!editingId) { setLineImages({}); return; }
     let cancelled = false;
     supabase.from('devis_pieces_jointes')
-      .select('ligne_id, fichier_url, fichier_nom, fichier_mime, image_taille')
+      .select('*')
       .eq('devis_id', editingId).eq('type', 'fichier').not('ligne_id', 'is', null)
       .then(({ data }) => {
         if (cancelled || !data) return;
@@ -3505,7 +3503,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-[98vw] md:max-w-[960px] max-h-[95vh] overflow-y-auto p-0 bg-muted/30">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
           </DialogContent>
         </Dialog>
       )}
