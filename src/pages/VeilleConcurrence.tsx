@@ -210,20 +210,30 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
     } catch (e: any) { lastErr = e; }
   }
 
-  // 2) OpenRouter (modèle vision) en repli
+  // 2) OpenRouter — on essaie plusieurs modèles vision gratuits (dispo qui change souvent)
   if (orKey) {
-    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
-      body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
-        max_tokens: 2000, temperature: 0.1,
-        messages: [{ role: 'user', content: [{ type: 'text', text: IMPORT_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
-      }),
-    });
-    const d = await r.json();
-    if (!r.ok || d.error) throw new Error(`OpenRouter : ${d.error?.message || r.status}`);
-    const text = d.choices?.[0]?.message?.content || '';
-    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    const visionModels = [
+      'google/gemini-2.0-flash-exp:free',
+      'qwen/qwen2.5-vl-72b-instruct:free',
+      'qwen/qwen2.5-vl-32b-instruct:free',
+      'mistralai/mistral-small-3.1-24b-instruct:free',
+      'meta-llama/llama-3.2-11b-vision-instruct:free',
+    ];
+    for (const model of visionModels) {
+      try {
+        const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
+          body: JSON.stringify({
+            model, max_tokens: 2000, temperature: 0.1,
+            messages: [{ role: 'user', content: [{ type: 'text', text: IMPORT_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+          }),
+        });
+        const d = await r.json();
+        if (!r.ok || d.error) { lastErr = new Error(`OpenRouter (${model}) : ${d.error?.message || r.status}`); continue; }
+        const text = d.choices?.[0]?.message?.content || '';
+        return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+      } catch (e: any) { lastErr = e; }
+    }
   }
 
   throw lastErr || new Error("Analyse d'image : clé vision requise (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY).");
