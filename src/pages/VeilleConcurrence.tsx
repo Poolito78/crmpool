@@ -183,15 +183,39 @@ function fileToBase64(file: File): Promise<string> {
 // Analyse d'une image (capture/PNG) via vision Gemini
 async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
   const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (!gemKey) throw new Error("Analyse d'image : clé Gemini requise (VITE_GEMINI_API_KEY).");
+  const orKey = import.meta.env.VITE_OPENROUTER_API_KEY;
   const b64 = await fileToBase64(file);
-  const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${gemKey}`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
-  });
-  const d = await r.json();
-  const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  const dataUrl = `data:${file.type || 'image/png'};base64,${b64}`;
+
+  // 1) Gemini (vision) si clé dispo
+  if (gemKey) {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(`Gemini : ${d.error?.message || r.status}`);
+    const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  }
+
+  // 2) OpenRouter (modèle vision gratuit) en repli
+  if (orKey) {
+    const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
+      body: JSON.stringify({
+        model: 'meta-llama/llama-3.2-11b-vision-instruct',
+        max_tokens: 2000, temperature: 0.1,
+        messages: [{ role: 'user', content: [{ type: 'text', text: IMPORT_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
+      }),
+    });
+    const d = await r.json();
+    if (!r.ok || d.error) throw new Error(`OpenRouter : ${d.error?.message || r.status}`);
+    const text = d.choices?.[0]?.message?.content || '';
+    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  }
+
+  throw new Error("Analyse d'image : clé vision requise (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY).");
 }
 
 async function extractTarifText(file: File): Promise<string> {
@@ -538,7 +562,11 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     setExtracted([]);
     try {
       const results = isImage ? await callTarifAIVision(file) : await callTarifAI(await extractTarifText(file));
-      setExtracted(results.map((r, i) => ({ ...r, _id: String(i), selected: true })));
+      if (!results || results.length === 0) {
+        setImportError('Aucun produit/tarif détecté. Vérifiez que le fichier contient bien une liste de prix lisible.');
+      } else {
+        setExtracted(results.map((r, i) => ({ ...r, _id: String(i), selected: true })));
+      }
     } catch (e: any) {
       setImportError(e.message || 'Erreur lors de l\'analyse.');
     }
