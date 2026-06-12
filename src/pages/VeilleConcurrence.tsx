@@ -128,6 +128,12 @@ const IMPORT_PROMPT = `Extrais toutes les lignes produit/article/prestation de c
 Retourne un JSON array (uniquement, sans markdown) : [{"nom":"...","reference":"...","categorie":"...","prixHT":"...","description":"..."}]
 Si un champ est absent, utilise une chaîne vide. prixHT doit être un nombre décimal (ex: "12.50").`;
 
+// Clé OpenRouter : saisie dans l'app (localStorage) en priorité, sinon variable d'env
+function getOpenRouterApiKey(): string {
+  try { return localStorage.getItem('crm_openrouter_key') || import.meta.env.VITE_OPENROUTER_API_KEY || ''; }
+  catch { return import.meta.env.VITE_OPENROUTER_API_KEY || ''; }
+}
+
 async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
   const body = { model: '', messages: [{ role: 'user', content: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }], max_tokens: 2000, temperature: 0.1 };
 
@@ -157,7 +163,7 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
     } catch { /* fallthrough */ }
   }
 
-  const orKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  const orKey = getOpenRouterApiKey();
   if (orKey) {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
@@ -183,7 +189,7 @@ function fileToBase64(file: File): Promise<string> {
 // Analyse d'une image (capture/PNG) via vision Gemini
 async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
   const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
-  const orKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  const orKey = getOpenRouterApiKey();
   const b64 = await fileToBase64(file);
   const dataUrl = `data:${file.type || 'image/png'};base64,${b64}`;
 
@@ -344,6 +350,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const [extracted, setExtracted] = useState<ExtractedProduit[]>([]);
   const [importError, setImportError] = useState('');
   const [importSaving, setImportSaving] = useState(false);
+  const [orKeyInput, setOrKeyInput] = useState(() => { try { return localStorage.getItem('crm_openrouter_key') || ''; } catch { return ''; } });
+  const saveOrKey = (v: string) => { setOrKeyInput(v); try { localStorage.setItem('crm_openrouter_key', v); } catch { /* ignore */ } };
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1148,6 +1156,17 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
                 <p className="font-medium">Glissez votre tarif ici</p>
                 <p className="text-sm text-muted-foreground mt-1">PDF, Excel (.xlsx, .xls), CSV, Image (PNG/JPG) — analyse IA automatique</p>
                 <input ref={fileInputRef} type="file" className="hidden" accept=".pdf,.xlsx,.xls,.csv,.ods,.png,.jpg,.jpeg,.webp,image/*" onChange={e => handleImportFiles(e.target.files)} />
+              </div>
+            )}
+
+            {extracted.length === 0 && !analysing && (
+              <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+                <Label className="text-xs flex items-center justify-between">
+                  <span>Clé API OpenRouter (analyse IA)</span>
+                  <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary underline font-normal">obtenir une clé gratuite</a>
+                </Label>
+                <Input type="password" value={orKeyInput} onChange={e => saveOrKey(e.target.value.trim())} placeholder="sk-or-v1-…" className="h-8 text-sm font-mono" autoComplete="off" />
+                <p className="text-[11px] text-muted-foreground">{orKeyInput ? '✓ Clé enregistrée (locale, ce navigateur). Analyse PDF / Excel / CSV / Image.' : 'Collez votre clé OpenRouter pour activer l\'analyse IA (texte + image).'}</p>
               </div>
             )}
 
