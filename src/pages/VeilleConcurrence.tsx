@@ -167,9 +167,10 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
   if (orKey) {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
-      body: JSON.stringify({ ...body, model: 'mistralai/mistral-7b-instruct' }),
+      body: JSON.stringify({ ...body, model: 'meta-llama/llama-3.3-70b-instruct:free' }),
     });
     const d = await r.json();
+    if (!r.ok || d.error) throw new Error(`OpenRouter : ${d.error?.message || r.status}`);
     const text = d.choices?.[0]?.message?.content || '';
     return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
   }
@@ -214,7 +215,7 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
       body: JSON.stringify({
-        model: 'meta-llama/llama-3.2-11b-vision-instruct',
+        model: 'meta-llama/llama-3.2-11b-vision-instruct:free',
         max_tokens: 2000, temperature: 0.1,
         messages: [{ role: 'user', content: [{ type: 'text', text: IMPORT_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
       }),
