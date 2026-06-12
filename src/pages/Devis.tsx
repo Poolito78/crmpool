@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { exportToExcel } from '@/lib/exportExcel';
 import { logHistorique } from '@/lib/historique';
-import DevisPreview from '@/components/DevisPreview';
+import DevisPreview, { parseImgPct } from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
@@ -121,9 +121,8 @@ export default function Devis() {
   const [chatterDevis, setChatterDevis] = useState<DevisType | null>(null);
   const [chatterMode, setChatterMode] = useState<'note' | 'fichier' | null>(null);
   const [sidebarPjs, setSidebarPjs] = useState<Array<{ id: string; type: string; contenu?: string; fichierNom?: string; fichierUrl?: string; fichierTaille?: number; fichierMime?: string; confidentiel?: boolean; date: string }>>([]);
-  // Images collées dans les notes de ligne : ligneId → [{url, name, taille}]
-  type ImgTaille = 'S' | 'M' | 'L';
-  const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string; taille?: ImgTaille }[]>>({});
+  // Images collées dans les notes de ligne : ligneId → [{url, name, taille}] (taille = % largeur impression)
+  const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string; taille?: number }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
   // Dictée contextuelle : mémorise le dernier champ focalisé pour y router la transcription
@@ -1323,7 +1322,7 @@ export default function Devis() {
       const name = `image_${Date.now()}.${ext}`;
       // Aperçu immédiat avec URL blob locale
       const preview = URL.createObjectURL(file);
-      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name, taille: 'L' as ImgTaille }] }));
+      setLineImages(prev => ({ ...prev, [ligneId]: [...(prev[ligneId] || []), { url: preview, name, taille: 100 }] }));
       // Upload en arrière-plan
       if (editingId) {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -1346,7 +1345,7 @@ export default function Devis() {
               supabase.from('devis_pieces_jointes').insert({
                 user_id: user.id, devis_id: editingId, type: 'fichier',
                 fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type,
-                ligne_id: ligneId, image_taille: 'L',
+                ligne_id: ligneId, image_taille: '100',
               } as any);
             });
         });
@@ -1355,10 +1354,18 @@ export default function Devis() {
     toast.success('Image(s) collée(s)');
   }
 
-  // Change la taille d'impression d'une image collée (S/M/L) + persiste
-  function setLineImageTaille(ligneId: string, url: string, taille: ImgTaille) {
-    setLineImages(prev => ({ ...prev, [ligneId]: (prev[ligneId] || []).map(img => img.url === url ? { ...img, taille } : img) }));
-    supabase.from('devis_pieces_jointes').update({ image_taille: taille } as any).eq('fichier_url', url).then(() => {});
+  // Ajuste le zoom (% de largeur à l'impression) d'une image collée par pas de 10 % + persiste
+  function zoomLineImage(ligneId: string, url: string, delta: number) {
+    let next = 100;
+    setLineImages(prev => ({
+      ...prev,
+      [ligneId]: (prev[ligneId] || []).map(img => {
+        if (img.url !== url) return img;
+        next = Math.min(100, Math.max(10, (img.taille ?? 100) + delta));
+        return { ...img, taille: next };
+      }),
+    }));
+    supabase.from('devis_pieces_jointes').update({ image_taille: String(next) } as any).eq('fichier_url', url).then(() => {});
   }
 
   // Charge les images des lignes du devis à l'ouverture (pour réafficher + régler la taille après rechargement)
@@ -1370,11 +1377,11 @@ export default function Devis() {
       .eq('devis_id', editingId).eq('type', 'fichier').not('ligne_id', 'is', null)
       .then(({ data }) => {
         if (cancelled || !data) return;
-        const map: Record<string, { url: string; name: string; taille?: ImgTaille }[]> = {};
+        const map: Record<string, { url: string; name: string; taille?: number }[]> = {};
         for (const row of data as any[]) {
           if (!row.ligne_id || !row.fichier_mime?.startsWith('image/')) continue;
           if (!map[row.ligne_id]) map[row.ligne_id] = [];
-          map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: (row.image_taille as ImgTaille) || 'L' });
+          map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: parseImgPct(row.image_taille) });
         }
         setLineImages(map);
       });
@@ -2447,14 +2454,13 @@ export default function Devis() {
                                     onClick={() => setLineImages(prev => ({ ...prev, [l.id]: prev[l.id].filter((_, j) => j !== ii) }))}
                                     className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-destructive text-white text-[10px] flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity"
                                   >×</button>
-                                  {/* Taille d'impression S / M / L */}
-                                  <div className="flex gap-0.5" title="Taille à l'impression">
-                                    {(['S', 'M', 'L'] as const).map(t => (
-                                      <button key={t} type="button" onClick={() => setLineImageTaille(l.id, img.url, t)}
-                                        className={`w-4 h-4 text-[9px] leading-none rounded ${(img.taille || 'L') === t ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted-foreground/20'}`}>
-                                        {t}
-                                      </button>
-                                    ))}
+                                  {/* Zoom impression ± 10 % */}
+                                  <div className="flex items-center gap-0.5" title="Taille à l'impression">
+                                    <button type="button" onClick={() => zoomLineImage(l.id, img.url, -10)} disabled={(img.taille ?? 100) <= 10}
+                                      className="w-4 h-4 text-[11px] leading-none rounded bg-muted text-muted-foreground hover:bg-muted-foreground/20 disabled:opacity-30">−</button>
+                                    <span className="text-[9px] tabular-nums w-7 text-center text-muted-foreground">{img.taille ?? 100}%</span>
+                                    <button type="button" onClick={() => zoomLineImage(l.id, img.url, 10)} disabled={(img.taille ?? 100) >= 100}
+                                      className="w-4 h-4 text-[11px] leading-none rounded bg-muted text-muted-foreground hover:bg-muted-foreground/20 disabled:opacity-30">+</button>
                                   </div>
                                 </div>
                               ))}

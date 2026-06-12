@@ -103,10 +103,13 @@ interface Props {
   onSurfaceChange?: (ligneId: string, val: number) => void;
 }
 
-export type ImgTaille = 'S' | 'M' | 'L';
-export interface LineImg { url: string; name: string; taille?: ImgTaille }
-// Largeur d'impression max selon la taille choisie
-const TAILLE_MAXW: Record<ImgTaille, string> = { S: '200px', M: '400px', L: '100%' };
+// taille = pourcentage de largeur à l'impression (10–100). Compat ancien S/M/L.
+export interface LineImg { url: string; name: string; taille?: number }
+export function parseImgPct(v: unknown): number {
+  if (typeof v === 'number' && !isNaN(v)) return v;
+  if (v === 'S') return 30; if (v === 'M') return 55; if (v === 'L') return 100;
+  const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
+}
 
 export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
@@ -140,7 +143,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     for (const row of data as any[]) {
       if (!row.ligne_id || !row.fichier_mime?.startsWith('image/')) continue;
       if (!map[row.ligne_id]) map[row.ligne_id] = [];
-      map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: (row.image_taille as ImgTaille) || undefined });
+      map[row.ligne_id].push({ url: row.fichier_url ?? '', name: row.fichier_nom ?? '', taille: parseImgPct(row.image_taille) });
     }
     setFetchedLineImages(map);
   }, [devis.id]);
@@ -906,7 +909,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             {dl.description}
                             {timgs.length > 0 && (
                               <div style={{ marginTop: dl.description ? '4px' : 0, display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ maxWidth: TAILLE_MAXW[allLineImages[dl.id]?.[i]?.taille || 'L'], maxHeight: '460px', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
+                                {timgs.map((url, i) => <img key={i} src={url} alt="" onClick={() => setZoomImage(allLineImages[dl.id]?.[i]?.url || url)} style={{ width: `${allLineImages[dl.id]?.[i]?.taille ?? 100}%`, maxWidth: '100%', borderRadius: '3px', border: '1px solid rgba(0,0,0,0.12)', cursor: 'zoom-in' }} />)}
                               </div>
                             )}
                           </td>
