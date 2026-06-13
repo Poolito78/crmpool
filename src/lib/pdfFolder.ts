@@ -154,10 +154,14 @@ export async function generatePdfFromElement(
   // sur chaque <th> du clone avec !important pour garantir le rendu html2canvas.
   clone.querySelectorAll<HTMLElement>('thead tr').forEach((tr, rowIdx) => {
     const padV = rowIdx === 0 ? '4px' : '2px';
+    // Les rangées à fond rouge sont redessinées par l'overlay jsPDF (centrage parfait) :
+    // on masque leur texte dans la capture html2canvas pour éviter le doublement.
+    const isRed = window.getComputedStyle(tr).backgroundColor === 'rgb(204, 0, 0)';
     tr.querySelectorAll<HTMLElement>('th').forEach(th => {
       th.style.setProperty('vertical-align', 'middle', 'important');
       th.style.setProperty('padding-top', padV, 'important');
       th.style.setProperty('padding-bottom', padV, 'important');
+      if (isRed) th.style.setProperty('color', 'transparent', 'important');
     });
   });
   // 1 frame supplémentaire pour appliquer les nouveaux styles avant capture
