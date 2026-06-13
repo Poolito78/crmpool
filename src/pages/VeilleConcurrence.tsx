@@ -142,7 +142,7 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
     try {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-        body: JSON.stringify({ ...body, model: 'llama-3.1-70b-versatile' }),
+        body: JSON.stringify({ ...body, model: 'llama-3.3-70b-versatile' }),
       });
       const d = await r.json();
       const text = d.choices?.[0]?.message?.content || '';
@@ -190,9 +190,25 @@ function fileToBase64(file: File): Promise<string> {
 // Analyse vision sur une ou plusieurs images (PNG/JPG, ou pages de PDF scanné)
 async function callVisionAI(images: { mimeType: string; b64: string }[]): Promise<ExtractedProduit[]> {
   if (images.length === 0) return [];
+  const groqKey = import.meta.env.VITE_GROQ_API_KEY;
   const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
   const orKey = getOpenRouterApiKey();
   let lastErr: Error | null = null;
+
+  // 0) Groq vision (gratuit) — modèle Llama 4 Scout
+  if (groqKey) {
+    try {
+      const content: any[] = [{ type: 'text', text: IMPORT_PROMPT }, ...images.map(im => ({ type: 'image_url', image_url: { url: `data:${im.mimeType};base64,${im.b64}` } }))];
+      const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
+        body: JSON.stringify({ model: 'meta-llama/llama-4-scout-17b-16e-instruct', max_tokens: 2000, temperature: 0.1, messages: [{ role: 'user', content }] }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(`Groq : ${d.error?.message || r.status}`);
+      const text = d.choices?.[0]?.message?.content || '';
+      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+    } catch (e: any) { lastErr = e; }
+  }
 
   // 1) Gemini (vision) si clé dispo
   if (gemKey) {
@@ -382,8 +398,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
   const [extracted, setExtracted] = useState<ExtractedProduit[]>([]);
   const [importError, setImportError] = useState('');
   const [importSaving, setImportSaving] = useState(false);
-  const [orKeyInput, setOrKeyInput] = useState(() => { try { return localStorage.getItem('crm_openrouter_key') || ''; } catch { return ''; } });
-  const saveOrKey = (v: string) => { setOrKeyInput(v); try { localStorage.setItem('crm_openrouter_key', v); } catch { /* ignore */ } };
   const [dragOver, setDragOver] = useState(false);
   const dragCounter = useRef(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1202,16 +1216,6 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               </div>
             )}
 
-            {extracted.length === 0 && !analysing && (
-              <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
-                <Label className="text-xs flex items-center justify-between">
-                  <span>Clé API OpenRouter (analyse IA)</span>
-                  <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" className="text-primary underline font-normal">obtenir une clé gratuite</a>
-                </Label>
-                <Input type="password" value={orKeyInput} onChange={e => saveOrKey(e.target.value.trim())} placeholder="sk-or-v1-…" className="h-8 text-sm font-mono" autoComplete="off" />
-                <p className="text-[11px] text-muted-foreground">{orKeyInput ? '✓ Clé enregistrée (locale, ce navigateur). Analyse PDF / Excel / CSV / Image.' : 'Collez votre clé OpenRouter pour activer l\'analyse IA (texte + image).'}</p>
-              </div>
-            )}
 
             {analysing && (
               <div className="flex flex-col items-center justify-center py-12 gap-3">
