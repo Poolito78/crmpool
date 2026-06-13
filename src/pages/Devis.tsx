@@ -1613,10 +1613,9 @@ export default function Devis() {
                   const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
                   const totalAchat = d.lignes.reduce((acc, l) => {
                     if (l.type && l.type !== 'ligne') return acc;
-                    if (!l.produitId) return acc + (l.prixAchatLigne ?? 0) * l.quantite;
-                    const prod = produits.find(p => p.id === l.produitId);
-                    if (!prod) return acc;
-                    return acc + getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
+                    return acc + puA * l.quantite;
                   }, 0);
                   const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
                   const margeD = totalHTD > 0 ? ((totalHTD - totalAchat) / totalHTD * 100) : 0;
@@ -1740,14 +1739,10 @@ export default function Devis() {
           const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
           const totalAchatD = d.lignes.reduce((acc, l) => {
             if (l.type && l.type !== 'ligne') return acc;
-            if (!l.produitId) {
-              // Toutes les lignes libres (surcharges incluses) : utiliser prixAchatLigne stocké
-              return acc + (l.prixAchatLigne ?? 0) * l.quantite;
-            }
-            const prod = produits.find(p => p.id === l.produitId);
-            if (!prod) return acc;
-            const prixAchat = getPrixPourQuantite(prod, l.quantite).prixAchat;
-            return acc + prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+            // prixAchatLigne (override manuel / surcharge) prioritaire, sinon palier ; pas de remise sur l'achat
+            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
+            return acc + puA * l.quantite;
           }, 0);
           const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
           const margeD = totalHTD - totalAchatD;
@@ -2844,15 +2839,12 @@ export default function Devis() {
                 const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                 return acc + (prod?.poids || 0) * l.quantite;
               }, 0);
+              // Identique au comparatif : prixAchatLigne (override manuel) prioritaire, sinon palier ; pas de remise sur l'achat
               const totalAchat = lignes.reduce((acc, l) => {
                 if (l.type && l.type !== 'ligne') return acc;
-                if (!l.produitId) {
-                  return acc + (l.prixAchatLigne ?? 0) * l.quantite;
-                }
-                const prod = produits.find(p => p.id === l.produitId);
-                if (!prod) return acc;
-                const prixAchat = getPrixPourQuantite(prod, l.quantite).prixAchat;
-                return acc + prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
+                return acc + puAchat * l.quantite;
               }, 0);
               // Inclure transport dans le total achat pour marge/coeff cohérents avec comparatif
               const portAchatApercu = (() => {
