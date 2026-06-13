@@ -197,7 +197,7 @@ export async function generatePdfFromElement(
   const headerH = 14;
   // Page 1 : hauteur pleine ; pages suivantes : réduite de headerH
   const contentH1 = ph - footerH;          // page 1
-  const contentHn = ph - footerH - headerH; // pages 2+
+  let contentHn = ph - footerH - headerH;  // pages 2+ (réduit + si bandeau d'en-tête répété)
   const contentH = contentH1;              // alias pour calculs globaux
 
   const LEGAL_LINE1 = 'ISOSIGN® • ZA du Monay - 71210 SAINT-EUSÈBE - France - Tél. : 03 85 77 07 25 • Fax : 03 85 55 41 14 • isosign@isosign.fr • www.isosign.fr';
@@ -383,6 +383,48 @@ export async function generatePdfFromElement(
     });
   }
 
+  // ── Bandeau d'en-tête (rangées rouges) à répéter en haut des pages 2+ ─────────
+  const redHeadRows = theadRowData.filter(r => r.hasBgRed);
+  const bandTopMm = redHeadRows.length ? Math.min(...redHeadRows.map(r => r.yMm)) : 0;
+  const bandBotMm = redHeadRows.length ? Math.max(...redHeadRows.map(r => r.yMm + r.hMm)) : 0;
+  const tableHeadH = redHeadRows.length ? (bandBotMm - bandTopMm) : 0;
+  // Réserve la place du bandeau répété sur les pages 2+ (en plus de l'entête logo/DEVIS)
+  if (tableHeadH > 0) contentHn = ph - footerH - headerH - tableHeadH;
+
+  // Dessine le bandeau d'en-tête (rangées rouges) décalé de yShiftMm (0 = position page 1)
+  function drawTheadBand(yShiftMm: number) {
+    redHeadRows.forEach(row => {
+      const y = row.yMm + yShiftMm;
+      const leftX = row.cells.length > 0 ? Math.min(...row.cells.map(c => c.xMm)) : 0;
+      const rightX = row.cells.length > 0 ? Math.max(...row.cells.map(c => c.xMm + c.wMm)) : pw;
+      pdf.setFillColor(204, 0, 0);
+      pdf.rect(leftX, y, rightX - leftX, row.hMm, 'F');
+      pdf.setDrawColor(214, 51, 51);
+      pdf.setLineWidth(0.25);
+      row.cells.forEach(cell => {
+        if (cell.hasBorderLeft && cell.xMm > leftX + 0.5) pdf.line(cell.xMm, y, cell.xMm, y + row.hMm);
+      });
+      row.cells.forEach(cell => {
+        if (!cell.text) return;
+        const fontStyle = cell.bold ? (cell.italic ? 'bolditalic' : 'bold') : (cell.italic ? 'italic' : 'normal');
+        pdf.setFont('helvetica', fontStyle);
+        const hPad = 0.5;
+        const availW = Math.max(0.5, cell.wMm - 2 * hPad);
+        const unitW = pdf.getStringUnitWidth(cell.text);
+        const maxFontPt = unitW > 0 ? availW * (pdf.internal.scaleFactor) / unitW : cell.fontSizePt;
+        const useFontPt = Math.min(cell.fontSizePt, Math.max(4, maxFontPt));
+        pdf.setFontSize(useFontPt);
+        const bl = (c: number) => Math.round(255 * cell.opacity + c * (1 - cell.opacity));
+        pdf.setTextColor(bl(204), bl(0), bl(0));
+        const midY = y + row.hMm / 2;
+        if (cell.alignH === 'center') pdf.text(cell.text, cell.xMm + cell.wMm / 2, midY, { align: 'center', baseline: 'middle' });
+        else if (cell.alignH === 'right') pdf.text(cell.text, cell.xMm + cell.wMm - hPad, midY, { align: 'right', baseline: 'middle' });
+        else pdf.text(cell.text, cell.xMm + hPad, midY, { align: 'left', baseline: 'middle' });
+      });
+    });
+    pdf.setTextColor(0, 0, 0);
+  }
+
   // ── Zones interdites de coupure : headers de groupe ─────────────────────────
   // IMPORTANT : collecté ici, AVANT removeChild. Après détachement du DOM,
   // offsetParent === null → getOffsetRelative ne remonte plus jusqu'à captureEl
@@ -442,64 +484,15 @@ export async function generatePdfFromElement(
       const tmp = document.createElement('canvas');
       tmp.width = canvas.width; tmp.height = Math.max(1, srcH);
       tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-      // Page 1 : contenu commence à y=0 ; pages suivantes : décalé sous l'entête
-      const yContent = page === 0 ? 0 : headerH;
+      // Page 1 : contenu commence à y=0 ; pages 2+ : décalé sous l'entête + le bandeau répété
+      const yContent = page === 0 ? 0 : headerH + tableHeadH;
       pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
       if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
 
-      // ── Overlay en-tête : redessine les rangées <thead> avec jsPDF
-      // pour un centrage vertical parfait (contourne les bugs html2canvas sur <th>).
-      if (page === 0 && theadRowData.length > 0) {
-        theadRowData.forEach(row => {
-          // Ne redessiner que les rangées qui ont effectivement un fond rouge en HTML
-          if (!row.hasBgRed) return;
-          // Bornes X de la table depuis les mesures réelles des cellules
-          // (exclut automatiquement le padding du container — ex. px-10 — qui décale tout)
-          const leftX = row.cells.length > 0 ? Math.min(...row.cells.map(c => c.xMm)) : 0;
-          const rightX = row.cells.length > 0 ? Math.max(...row.cells.map(c => c.xMm + c.wMm)) : pw;
-          // Rectangle rouge aligné sur la table
-          pdf.setFillColor(204, 0, 0);
-          pdf.rect(leftX, row.yMm, rightX - leftX, row.hMm, 'F');
-          // Séparateurs verticaux entre groupes de colonnes (border-l border-white/20)
-          // Couleur = blanc 20% sur #CC0000 → (255*0.2+204*0.8, ...) ≈ (214,51,51)
-          pdf.setDrawColor(214, 51, 51);
-          pdf.setLineWidth(0.25);
-          row.cells.forEach(cell => {
-            if (cell.hasBorderLeft && cell.xMm > leftX + 0.5) {
-              pdf.line(cell.xMm, row.yMm, cell.xMm, row.yMm + row.hMm);
-            }
-          });
-          // Texte centré dans chaque cellule
-          row.cells.forEach(cell => {
-            if (!cell.text) return;
-            const fontStyle = cell.bold ? (cell.italic ? 'bolditalic' : 'bold') : (cell.italic ? 'italic' : 'normal');
-            pdf.setFont('helvetica', fontStyle);
-            // Auto-réduit la fonte si le texte dépasse la cellule.
-            // Les métriques Helvetica de jsPDF sont plus larges que le rendu navigateur →
-            // les cellules étroites (<32px) débordent sur la cellule voisine sans ce clamp.
-            const hPad = 0.5; // mm padding horizontal (réduit pour maximiser l'espace)
-            const availW = Math.max(0.5, cell.wMm - 2 * hPad);
-            const unitW = pdf.getStringUnitWidth(cell.text); // indépendant de la taille courante
-            const maxFontPt = unitW > 0
-              ? availW * (pdf.internal.scaleFactor) / unitW
-              : cell.fontSizePt;
-            const useFontPt = Math.min(cell.fontSizePt, Math.max(4, maxFontPt));
-            pdf.setFontSize(useFontPt);
-            // Blanc mélangé au fond rouge selon opacité (simule opacity CSS)
-            const bl = (c: number) => Math.round(255 * cell.opacity + c * (1 - cell.opacity));
-            pdf.setTextColor(bl(204), bl(0), bl(0));
-            const midY = row.yMm + row.hMm / 2;
-            if (cell.alignH === 'center') {
-              pdf.text(cell.text, cell.xMm + cell.wMm / 2, midY, { align: 'center', baseline: 'middle' });
-            } else if (cell.alignH === 'right') {
-              pdf.text(cell.text, cell.xMm + cell.wMm - hPad, midY, { align: 'right', baseline: 'middle' });
-            } else {
-              pdf.text(cell.text, cell.xMm + hPad, midY, { align: 'left', baseline: 'middle' });
-            }
-          });
-        });
-        pdf.setTextColor(0, 0, 0); // reset
+      // Bandeau d'en-tête du tableau : page 1 à sa position naturelle ; pages 2+ répété sous l'entête
+      if (theadRowData.length > 0) {
+        drawTheadBand(page === 0 ? 0 : headerH - bandTopMm);
       }
 
       // Liens sur cette page
