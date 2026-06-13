@@ -444,6 +444,20 @@ export async function generatePdfFromElement(
     }
   }
 
+  // Bas du tableau (dernière rangée) en mm — pour ne pas répéter le bandeau sur une
+  // page qui ne contient que les totaux / signature / mentions (aucune ligne de devis).
+  let tableBottomMm = 0;
+  {
+    const cloneH = captureEl.scrollHeight || captureEl.offsetHeight;
+    if (cloneH > 0) {
+      const dY = imgH / cloneH;
+      captureEl.querySelectorAll('tr').forEach(tr => {
+        const { bottom } = getOffsetRelative(tr as HTMLElement);
+        tableBottomMm = Math.max(tableBottomMm, bottom * dY);
+      });
+    }
+  }
+
   // Calcul des slices AVANT retrait du clone : offsetTop/offsetParent fiables
   const precomputedSlices = computePageSlices();
 
@@ -484,14 +498,16 @@ export async function generatePdfFromElement(
       const tmp = document.createElement('canvas');
       tmp.width = canvas.width; tmp.height = Math.max(1, srcH);
       tmp.getContext('2d')!.drawImage(canvas, 0, srcY, canvas.width, srcH, 0, 0, canvas.width, srcH);
-      // Page 1 : contenu commence à y=0 ; pages 2+ : décalé sous l'entête + le bandeau répété
-      const yContent = page === 0 ? 0 : headerH + tableHeadH;
+      // Bandeau répété seulement si la page contient des lignes de tableau
+      const drawBand = theadRowData.length > 0 && (page === 0 || yOffsetMm < tableBottomMm - 2);
+      // Page 1 : contenu à y=0 ; pages 2+ : sous l'entête (+ bandeau si présent)
+      const yContent = page === 0 ? 0 : headerH + (drawBand ? tableHeadH : 0);
       pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
       if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
 
       // Bandeau d'en-tête du tableau : page 1 à sa position naturelle ; pages 2+ répété sous l'entête
-      if (theadRowData.length > 0) {
+      if (drawBand) {
         drawTheadBand(page === 0 ? 0 : headerH - bandTopMm);
       }
 

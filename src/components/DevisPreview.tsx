@@ -1326,21 +1326,21 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           );
         })()}
 
-        <div className="mt-5 grid grid-cols-2 gap-6">
-          <div className="border-t border-border pt-3">
+        <div className="mt-3 grid grid-cols-2 gap-6">
+          <div className="border-t border-border pt-2">
             <p className="text-xs text-muted-foreground">Signature du client</p>
             <p className="text-xs text-muted-foreground mt-1">Bon pour accord, date et signature</p>
-            <div className="h-14"></div>
+            <div className="h-8"></div>
           </div>
-          <div className="border-t border-border pt-3">
+          <div className="border-t border-border pt-2">
             <p className="text-xs text-muted-foreground">Cachet de l'entreprise</p>
-            <div className="h-14"></div>
+            <div className="h-8"></div>
           </div>
         </div>
 
         {/* Pied de page */}
-        <div className="mt-6 pt-4 border-t border-border">
-          <div className="text-xs text-muted-foreground space-y-0.5 mb-3">
+        <div className="mt-3 pt-3 border-t border-border">
+          <div className="text-xs text-muted-foreground space-y-0.5 mb-2">
             <p>Pour tout renseignement, consultez la fiche technique et fiche de données de sécurité</p>
             <p>La préparation des supports doit être conforme aux normes et DTU en vigueur</p>
             <p>Après toute livraison, il est important de procéder à la répartition des composants par N° de lot</p>
