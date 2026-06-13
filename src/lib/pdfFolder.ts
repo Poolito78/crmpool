@@ -190,6 +190,7 @@ export async function generatePdfFromElement(
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
   const imgH = (canvas.height * pw) / canvas.width;
+  let effectiveImgH = imgH; // hauteur réelle du contenu (sans l'espace blanc final) — ajustée plus bas
 
   // Zone réservée en bas pour le pied de page (mentions légales + numéro de page)
   const footerH = 12;
@@ -298,9 +299,9 @@ export async function generatePdfFromElement(
     const slices: number[] = [];
     let consumed = 0;
     let pageIdx = 0;
-    while (consumed < imgH) {
+    while (consumed < effectiveImgH) {
       const pageContentH = pageIdx === 0 ? contentH1 : contentHn;
-      const remaining = imgH - consumed;
+      const remaining = effectiveImgH - consumed;
       if (remaining <= pageContentH) { slices.push(remaining); break; }
       const naturalBreak = consumed + pageContentH;
       // On ne recule que faiblement (max ~18%) pour aligner sur une fin de ligne :
@@ -458,6 +459,23 @@ export async function generatePdfFromElement(
     }
   }
 
+  // Bas réel du contenu (dernier élément visible) — exclut l'espace blanc / padding final
+  // du conteneur, pour ne pas générer une page quasi vide en bas du document.
+  {
+    const cloneH = captureEl.scrollHeight || captureEl.offsetHeight;
+    if (cloneH > 0) {
+      const dY = imgH / cloneH;
+      let maxBottomPx = 0;
+      captureEl.querySelectorAll<HTMLElement>('*').forEach(el => {
+        if (el.offsetWidth === 0 && el.offsetHeight === 0) return;
+        const { bottom } = getOffsetRelative(el);
+        if (bottom > maxBottomPx) maxBottomPx = bottom;
+      });
+      const bottomMm = maxBottomPx * dY;
+      if (bottomMm > 1) effectiveImgH = Math.min(imgH, bottomMm + 1); // +1mm de marge
+    }
+  }
+
   // Calcul des slices AVANT retrait du clone : offsetTop/offsetParent fiables
   const precomputedSlices = computePageSlices();
 
@@ -470,8 +488,8 @@ export async function generatePdfFromElement(
     let effectiveSlices = slices.length > 0 ? slices : (() => {
       const fallback: number[] = [];
       let y = 0; let idx = 0;
-      while (y < imgH) {
-        const h = Math.min(idx === 0 ? contentH1 : contentHn, imgH - y);
+      while (y < effectiveImgH) {
+        const h = Math.min(idx === 0 ? contentH1 : contentHn, effectiveImgH - y);
         fallback.push(h); y += h; idx++;
       }
       return fallback;
