@@ -187,21 +187,20 @@ function fileToBase64(file: File): Promise<string> {
   });
 }
 
-// Analyse d'une image (capture/PNG) via vision Gemini
-async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
+// Analyse vision sur une ou plusieurs images (PNG/JPG, ou pages de PDF scanné)
+async function callVisionAI(images: { mimeType: string; b64: string }[]): Promise<ExtractedProduit[]> {
+  if (images.length === 0) return [];
   const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
   const orKey = getOpenRouterApiKey();
-  const b64 = await fileToBase64(file);
-  const dataUrl = `data:${file.type || 'image/png'};base64,${b64}`;
-
   let lastErr: Error | null = null;
 
-  // 1) Gemini (vision) si clé dispo ; en cas d'échec (quota, etc.) → repli OpenRouter
+  // 1) Gemini (vision) si clé dispo
   if (gemKey) {
     try {
+      const parts: any[] = [{ text: IMPORT_PROMPT }, ...images.map(im => ({ inlineData: { mimeType: im.mimeType, data: im.b64 } }))];
       const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: IMPORT_PROMPT }, { inlineData: { mimeType: file.type || 'image/png', data: b64 } }] }] }),
+        body: JSON.stringify({ contents: [{ parts }] }),
       });
       const d = await r.json();
       if (!r.ok || d.error) throw new Error(`Gemini : ${d.error?.message || r.status}`);
@@ -210,7 +209,7 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
     } catch (e: any) { lastErr = e; }
   }
 
-  // 2) OpenRouter — on essaie plusieurs modèles vision gratuits (dispo qui change souvent)
+  // 2) OpenRouter — plusieurs modèles vision gratuits (dispo qui change souvent)
   if (orKey) {
     const visionModels = [
       'google/gemini-2.0-flash-exp:free',
@@ -219,14 +218,12 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
       'mistralai/mistral-small-3.1-24b-instruct:free',
       'meta-llama/llama-3.2-11b-vision-instruct:free',
     ];
+    const content: any[] = [{ type: 'text', text: IMPORT_PROMPT }, ...images.map(im => ({ type: 'image_url', image_url: { url: `data:${im.mimeType};base64,${im.b64}` } }))];
     for (const model of visionModels) {
       try {
         const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
           method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${orKey}` },
-          body: JSON.stringify({
-            model, max_tokens: 2000, temperature: 0.1,
-            messages: [{ role: 'user', content: [{ type: 'text', text: IMPORT_PROMPT }, { type: 'image_url', image_url: { url: dataUrl } }] }],
-          }),
+          body: JSON.stringify({ model, max_tokens: 2000, temperature: 0.1, messages: [{ role: 'user', content }] }),
         });
         const d = await r.json();
         if (!r.ok || d.error) { lastErr = new Error(`OpenRouter (${model}) : ${d.error?.message || r.status}`); continue; }
@@ -236,7 +233,31 @@ async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
     }
   }
 
-  throw lastErr || new Error("Analyse d'image : clé vision requise (VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY).");
+  throw lastErr || new Error("Analyse d'image : clé vision requise (Gemini ou OpenRouter).");
+}
+
+async function callTarifAIVision(file: File): Promise<ExtractedProduit[]> {
+  const b64 = await fileToBase64(file);
+  return callVisionAI([{ mimeType: file.type || 'image/png', b64 }]);
+}
+
+// Rend les pages d'un PDF (scanné) en images JPEG base64 pour l'analyse vision
+async function pdfToImages(file: File, maxPages = 5): Promise<{ mimeType: string; b64: string }[]> {
+  const buffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+  const out: { mimeType: string; b64: string }[] = [];
+  for (let i = 1; i <= Math.min(pdf.numPages, maxPages); i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 2 });
+    const canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) continue;
+    await page.render({ canvas, canvasContext: ctx, viewport } as any).promise;
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    out.push({ mimeType: 'image/jpeg', b64: dataUrl.split(',')[1] || '' });
+  }
+  return out;
 }
 
 async function extractTarifText(file: File): Promise<string> {
@@ -584,7 +605,18 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     setImportError('');
     setExtracted([]);
     try {
-      const results = isImage ? await callTarifAIVision(file) : await callTarifAI(await extractTarifText(file));
+      let results: ExtractedProduit[];
+      if (isImage) {
+        results = await callTarifAIVision(file);
+      } else if (/\.pdf$/i.test(file.name)) {
+        const text = await extractTarifText(file);
+        // PDF texte exploitable → analyse texte ; sinon (PDF scanné/image) → vision sur les pages
+        results = text.trim().length >= 80
+          ? await callTarifAI(text)
+          : await callVisionAI(await pdfToImages(file));
+      } else {
+        results = await callTarifAI(await extractTarifText(file));
+      }
       if (!results || results.length === 0) {
         setImportError('Aucun produit/tarif détecté. Vérifiez que le fichier contient bien une liste de prix lisible.');
       } else {
