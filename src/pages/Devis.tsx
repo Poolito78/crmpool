@@ -3126,11 +3126,8 @@ export default function Devis() {
                               )}
                             </td>
                             <td className="px-2 py-1.5 text-right">
-                              {isSurcharge ? (
-                                // Surcharge : valeur auto-calculée, lecture seule
-                                puAchat > 0 ? <span className="text-muted-foreground italic">{formatMontant(puAchat)}</span> : <span className="text-muted-foreground">—</span>
-                              ) : !l.produitId ? (
-                                // Ligne libre : input toujours éditable
+                              {!l.produitId ? (
+                                // Ligne libre / surcharge : input toujours éditable (montant achat)
                                 <input
                                   type="number" min={0} step={0.01}
                                   value={l.prixAchatLigne ?? ''}
@@ -3182,9 +3179,7 @@ export default function Devis() {
                             <td className="px-2 py-1.5 text-right">{totAchat > 0 ? formatMontant(totAchat) : <span className="text-muted-foreground">—</span>}</td>
                             {/* PU Vente — éditable par clic */}
                             <td className="px-2 py-1.5 text-right">
-                              {isSurcharge ? (
-                                <span className="text-muted-foreground italic">{formatMontant(puVente)}</span>
-                              ) : compaEditingId === l.id && compaEditingField === 'vente' ? (
+                              {compaEditingId === l.id && compaEditingField === 'vente' ? (
                                 <input
                                   type="number" min={0} step={0.01}
                                   value={compaEditVal}
