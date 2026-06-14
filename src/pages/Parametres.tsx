@@ -32,7 +32,7 @@ export default function Parametres() {
   const activeTab = searchParams.get('tab') || 'dashboard';
   const setActiveTab = (t: string) => setSearchParams(t === 'dashboard' ? {} : { tab: t }, { replace: true });
   const hidden = useHiddenTiles();
-  const { isAdmin } = useCurrentUser();
+  const { isAdmin, canAchat } = useCurrentUser();
   const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
   const { clients, produits, fournisseurs, devis } = useCRM();
 
@@ -142,8 +142,8 @@ export default function Parametres() {
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           {isAdmin && <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>}
           <TabsTrigger value="devis">Devis</TabsTrigger>
-          <TabsTrigger value="clients">Clients</TabsTrigger>
-          <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
+          {isAdmin && <TabsTrigger value="clients">Clients</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>}
           {isAdmin && <TabsTrigger value="administration">Administration</TabsTrigger>}
         </TabsList>
 
@@ -305,7 +305,7 @@ export default function Parametres() {
             </Button>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-            {DEVIS_TABLE_COLS_DEF.map(col => {
+            {DEVIS_TABLE_COLS_DEF.filter(col => canAchat || col.key !== 'marge').map(col => {
               const visible = visDevisTableCols.has(col.key);
               return (
                 <label key={col.key} htmlFor={`dc-${col.key}`} className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-muted/50 cursor-pointer transition-colors">
@@ -320,7 +320,10 @@ export default function Parametres() {
         </TabsContent>
 
         <TabsContent value="clients" className="space-y-6 mt-4">
-          {/* ══ Section Clients ═══════════════════════════════════════════════ */}
+          {!isAdmin ? (
+            <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">Accès réservé aux administrateurs.</div>
+          ) : (
+          /* ══ Section Clients ═══════════════════════════════════════════════ */
           <div className="bg-card rounded-xl border border-border p-5 space-y-4">
             <div>
               <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -332,10 +335,14 @@ export default function Parametres() {
             </div>
             <ClientsImportExport />
           </div>
+          )}
         </TabsContent>
 
         <TabsContent value="veille" className="space-y-6 mt-4">
-      {/* ══ Section Veille Concurrence ═══════════════════════════════════════ */}
+      {!isAdmin ? (
+        <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">Accès réservé aux administrateurs.</div>
+      ) : (
+      /* ══ Section Veille Concurrence ═══════════════════════════════════════ */
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <div>
           <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -350,6 +357,7 @@ export default function Parametres() {
           <VeilleCorrectionPanel />
         </div>
       </div>
+      )}
         </TabsContent>
 
         <TabsContent value="dashboard" className="space-y-6 mt-4">
