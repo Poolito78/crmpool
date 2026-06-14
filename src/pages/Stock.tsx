@@ -112,8 +112,26 @@ function applyFilter(val: string, test: (nonVide: boolean, v: string) => boolean
 
 export default function Stock() {
   const navigate = useNavigate();
-  const { produits, fournisseurs, produitFournisseurs, updateProduits } = useCRM();
+  const { produits, fournisseurs, produitFournisseurs, updateProduits, commandesClient } = useCRM();
   const { canAchat, isAdmin } = useCurrentUser();
+
+  // Quantité réservée par produit (commandes clients en cours) → dispo finale = stock − réservé.
+  const stockReserveParProduit = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const cc of commandesClient.filter(c => ['a_traiter', 'accuse_envoye', 'commande_envoyee'].includes(c.statut))) {
+      for (const l of cc.lignes) {
+        if (l.produitId) map[l.produitId] = (map[l.produitId] || 0) + (l.quantite || 0);
+      }
+    }
+    return map;
+  }, [commandesClient]);
+
+  // Délai de livraison d'un produit = délai du fournisseur prioritaire.
+  const delaiProduit = (produitId: string) => {
+    const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
+    const prio = pfs.find(x => x.estPrioritaire) || pfs[0];
+    return prio?.delaiLivraison || 0;
+  };
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
   const [tab, setTab] = useState<TabId>('global');
@@ -296,7 +314,46 @@ export default function Stock() {
       </div>
 
       {/* ══ Tab : Stock global ══════════════════════════════════════════════ */}
-      {tab === 'global' && (() => {
+      {tab === 'global' && !isAdmin && (() => {
+        // Vue simplifiée invité : seulement produit + dispo finale + délai.
+        const q = globalSearch.toLowerCase();
+        const list = produits
+          .filter(p => !q || [p.description, p.reference, p.categorie].some(x => x?.toLowerCase().includes(q)))
+          .sort((a, b) => a.description.localeCompare(b.description));
+        return (
+          <div className="bg-card md:flex md:flex-col flex-1 min-h-0 rounded-xl border border-border overflow-hidden">
+            <div className="flex-1 min-h-0 overflow-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50">
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Produit</th>
+                    <th className="text-left px-4 py-3 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Catégorie</th>
+                    <th className="text-right px-4 py-3 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Disponible</th>
+                    <th className="text-center px-4 py-3 font-medium text-muted-foreground sticky top-0 z-10 bg-muted">Délai</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map(p => {
+                    const dispo = p.stock - (stockReserveParProduit[p.id] || 0);
+                    const delai = delaiProduit(p.id);
+                    return (
+                      <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30">
+                        <td className="px-4 py-3"><p className="font-medium">{p.description}</p>{p.reference && <p className="text-xs text-muted-foreground">{p.reference}</p>}</td>
+                        <td className="px-4 py-3 text-muted-foreground text-xs">{p.categorie || '—'}</td>
+                        <td className={`px-4 py-3 text-right font-semibold ${dispo <= 0 ? 'text-destructive' : 'text-success'}`}>{dispo}</td>
+                        <td className="px-4 py-3 text-center text-xs text-muted-foreground">{dispo > 0 ? 'Immédiat' : delai > 0 ? `${delai} j` : '—'}</td>
+                      </tr>
+                    );
+                  })}
+                  {list.length === 0 && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">Aucun produit.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
+      {tab === 'global' && isAdmin && (() => {
         const enriched = produits.map(p => {
           const info = getBestSupplierInfo(p);
           const low = p.stock < p.stockMin;
