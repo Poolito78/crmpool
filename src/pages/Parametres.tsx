@@ -140,7 +140,7 @@ export default function Parametres() {
         <TabsList className="flex flex-wrap h-auto justify-start">
           <TabsTrigger value="general">Général</TabsTrigger>
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
-          <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>
+          {isAdmin && <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>}
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
@@ -171,6 +171,11 @@ export default function Parametres() {
         </TabsContent>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">
+      {!isAdmin ? (
+        <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
+          Accès réservé aux administrateurs.
+        </div>
+      ) : (<>
       {/* ══ Section Entrepôts ════════════════════════════════════════════════ */}
       <div className="bg-card rounded-xl border border-border p-5 space-y-4">
         <div className="flex items-center justify-between gap-3">
@@ -253,6 +258,7 @@ export default function Parametres() {
           </div>
         )}
       </div>
+      </>)}
         </TabsContent>
 
         <TabsContent value="devis" className="space-y-6 mt-4">

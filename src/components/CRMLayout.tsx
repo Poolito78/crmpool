@@ -67,7 +67,7 @@ export default function CRMLayout() {
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
     .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
     .map(e => e.type === 'group'
-      ? { ...e, items: e.items.filter(i => isAdmin || i.path !== '/parametres?tab=administration') }
+      ? { ...e, items: e.items.filter(i => isAdmin || !['/parametres?tab=administration', '/parametres?tab=entrepots'].includes(i.path)) }
       : e),
   [canAchat, canCrm, isAdmin]);
   const navFlat = useMemo<NavLink[]>(() => nav.flatMap(e => e.type === 'group' ? e.items : [e]), [nav]);

@@ -113,7 +113,7 @@ function applyFilter(val: string, test: (nonVide: boolean, v: string) => boolean
 export default function Stock() {
   const navigate = useNavigate();
   const { produits, fournisseurs, produitFournisseurs, updateProduits } = useCRM();
-  const { canAchat } = useCurrentUser();
+  const { canAchat, isAdmin } = useCurrentUser();
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
   const [tab, setTab] = useState<TabId>('global');
@@ -278,7 +278,8 @@ export default function Stock() {
 
   const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
     { id: 'global', label: 'Stock global', icon: Package },
-    { id: 'entrepots', label: 'Par entrepôt', icon: Warehouse },
+    // Vue par entrepôt réservée à l'admin.
+    ...(isAdmin ? [{ id: 'entrepots' as TabId, label: 'Par entrepôt', icon: Warehouse }] : []),
     // Onglet stockistes (prix d'achat fournisseurs) réservé au droit Achat.
     ...(canAchat ? [{ id: 'stockistes' as TabId, label: 'Fournisseurs stockistes', icon: Building2 }] : []),
   ];
