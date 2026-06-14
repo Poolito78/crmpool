@@ -1109,7 +1109,7 @@ export default function Produits() {
                       {colChooserOpen && (
                         <div className="absolute right-0 top-full mt-1 z-50 bg-card border border-border rounded-lg shadow-xl p-3 min-w-[190px] text-left font-normal">
                           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Colonnes visibles</p>
-                          {COLUMNS.map(col => (
+                          {COLUMNS.filter(col => canAchat || !ACHAT_COLS.includes(col.key)).map(col => (
                             <label key={col.key} className="flex items-center gap-2 py-1 cursor-pointer text-sm hover:text-foreground text-muted-foreground">
                               <input
                                 type="checkbox"

@@ -427,7 +427,7 @@ export default function Stock() {
                     <SlidersHorizontal className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Colonnes</span>
                     {visGlobal.size < ALL_GLOBAL_COLS.length && <span className="ml-1 text-xs bg-primary text-primary-foreground rounded-full px-1.5">{visGlobal.size}</span>}
                   </Button>
-                  {colMenuGlobal && <ColDropdown cols={ALL_GLOBAL_COLS} visible={visGlobal as Set<string>} onToggle={toggleVisGlobal} onClose={() => setColMenuGlobal(false)} />}
+                  {colMenuGlobal && <ColDropdown cols={canAchat ? ALL_GLOBAL_COLS : ALL_GLOBAL_COLS.filter(c => !['qteReappro', 'fournisseur', 'valeur'].includes(c.key))} visible={visGlobal as Set<string>} onToggle={toggleVisGlobal} onClose={() => setColMenuGlobal(false)} />}
                 </div>
                 <Button variant="outline" size="sm" onClick={() => exportToExcel(sortedFiltered.map(({ p, info, proprioFourn }) => ({ Référence: p.reference, Description: p.description, Stock: p.stock, 'Stock Min': p.stockMin, Alerte: p.stock < p.stockMin ? 'Oui' : 'Non', 'Dispo vente': p.disponibleVente !== false ? 'Oui' : 'Non', 'Prix HT': p.prixHT, 'Valeur Stock': p.stock * p.prixHT, Catégorie: p.categorie || '', Propriétaire: p.proprietaire === 'fournisseur' ? (proprioFourn?.societe || 'Fournisseur') : 'ISOSIGN', 'Fournisseur optimal': info?.fourn.societe || '', 'Prix achat': info?.prixAchat || '' })), 'stock', 'Stock')}>
                   <Download className="w-4 h-4 sm:mr-1.5" /><span className="hidden sm:inline">Exporter</span>

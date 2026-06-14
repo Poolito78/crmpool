@@ -1591,7 +1591,7 @@ export default function Devis() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-52 max-h-[70vh] overflow-y-auto">
                         <p className="px-2 py-1.5 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Colonnes affichées</p>
-                        {DEVIS_TABLE_COLS_DEF.map(c => (
+                        {DEVIS_TABLE_COLS_DEF.filter(c => canAchat || c.key !== 'marge').map(c => (
                           <DropdownMenuCheckboxItem
                             key={c.key}
                             checked={visDevisTableCols.has(c.key)}
@@ -1680,7 +1680,7 @@ export default function Devis() {
         {/* Barre tri + filtres (reprend l'en-tête du tableau) — une seule ligne défilante */}
         <div className="flex flex-nowrap items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 overflow-x-auto [&>*]:shrink-0">
           <span className="text-xs text-muted-foreground mr-1 shrink-0">Trier / filtrer :</span>
-          {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key)).map(col => {
+          {DEVIS_TABLE_COLS_DEF.filter(c => visDevisTableCols.has(c.key) && (canAchat || c.key !== 'marge')).map(col => {
             const sortKey = col.key === 'totalHT' ? 'total' : col.key;
             const isAsc = sortBy === `${sortKey}_asc`;
             const isDesc = sortBy === `${sortKey}_desc`;
@@ -1711,7 +1711,7 @@ export default function Devis() {
           })}
           <div className="ml-auto shrink-0">
             <TableGearMenu
-              cols={DEVIS_TABLE_COLS_DEF}
+              cols={canAchat ? DEVIS_TABLE_COLS_DEF : DEVIS_TABLE_COLS_DEF.filter(c => c.key !== 'marge')}
               visible={visDevisTableCols}
               onToggle={k => setVisDevisTableCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n; })}
               onExport={() => exportToExcel(devis.map(d => { const client = clients.find(c => c.id === d.clientId); const totals = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA); return { Numéro: d.numero, Client: client?.nom || '', Société: client?.societe || '', Date: d.dateCreation, Validité: d.dateValidite, Statut: d.statut, 'Réf. Affaire': d.referenceAffaire || '', 'Total HT': totals.totalHT, 'Total TVA': totals.totalTVA, 'Total TTC': totals.totalTTC, Notes: d.notes || '' }; }), 'devis', 'Devis')}
@@ -2337,7 +2337,7 @@ export default function Devis() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end" className="w-52">
                       <p className="px-2 py-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Colonnes visibles</p>
-                      {LIGNE_COLS.map(col => (
+                      {LIGNE_COLS.filter(col => canAchat || col.key !== 'marge').map(col => (
                         <DropdownMenuCheckboxItem
                           key={col.key}
                           checked={visibleLigneCols.has(col.key)}
