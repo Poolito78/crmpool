@@ -59,16 +59,17 @@ export default function CRMLayout() {
   });
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
-  const { canAchat, isAdmin } = useCurrentUser();
+  const { canAchat, canCrm, isAdmin } = useCurrentUser();
 
   // Nav filtrée selon les droits : groupe « Achat » masqué sans droit Achat,
-  // onglet « Admin » masqué aux non-admins.
+  // lien « CRM » masqué sans droit CRM, onglet « Admin » masqué aux non-admins.
   const nav = useMemo<NavEntry[]>(() => NAV
     .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
+    .filter(e => canCrm || !(e.type === 'link' && e.path === '/crm'))
     .map(e => e.type === 'group'
       ? { ...e, items: e.items.filter(i => isAdmin || i.path !== '/parametres?tab=administration') }
       : e),
-  [canAchat, isAdmin]);
+  [canAchat, canCrm, isAdmin]);
   const navFlat = useMemo<NavLink[]>(() => nav.flatMap(e => e.type === 'group' ? e.items : [e]), [nav]);
 
   // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.

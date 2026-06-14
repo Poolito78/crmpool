@@ -8,9 +8,12 @@ type Row = {
   email: string | null;
   display_name: string | null;
   role: string;
+  crm_active?: boolean | null;
   crm_access: boolean | null;
   crm_achat_access?: boolean | null;
 };
+
+type AccessField = 'crm_active' | 'crm_access' | 'crm_achat_access';
 
 // Panneau admin natif : gère les droits crmpool par utilisateur (table partagée
 // veille_roles). Réservé aux administrateurs (role = 'admin').
@@ -36,7 +39,7 @@ export default function AdminAccessPanel() {
 
   useEffect(() => { load(); }, []);
 
-  async function toggle(r: Row, field: 'crm_access' | 'crm_achat_access', value: boolean) {
+  async function toggle(r: Row, field: AccessField, value: boolean) {
     setSavingId(r.user_id);
     setRows(prev => prev.map(x => x.user_id === r.user_id ? { ...x, [field]: value } : x));
     // cast : crm_achat_access peut ne pas encore figurer dans les types générés.
@@ -58,7 +61,9 @@ export default function AdminAccessPanel() {
             <ShieldCheck className="w-5 h-5 text-primary" /> Droits des utilisateurs
           </h2>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Cochez les droits accordés à chaque utilisateur. Les administrateurs ont tous les droits.
+            Cochez les droits accordés à chaque utilisateur. « Compte actif » conditionne l'accès
+          à l'application ; « Accès CRM » ouvre la page CRM ; « Accès Achat » le périmètre achats.
+          Les administrateurs ont tous les droits.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -85,6 +90,7 @@ export default function AdminAccessPanel() {
               <tr className="border-b border-border text-muted-foreground text-left">
                 <th className="py-2 pr-3 font-medium">Utilisateur</th>
                 <th className="py-2 px-3 font-medium">Rôle</th>
+                <th className="py-2 px-3 font-medium text-center">Compte actif</th>
                 <th className="py-2 px-3 font-medium text-center">Accès CRM</th>
                 <th className="py-2 pl-3 font-medium text-center">Accès Achat</th>
               </tr>
@@ -111,8 +117,22 @@ export default function AdminAccessPanel() {
                         <input
                           type="checkbox"
                           className="w-4 h-4 rounded border-input accent-primary cursor-pointer disabled:opacity-50"
-                          checked={!!r.crm_access}
+                          checked={!!r.crm_active}
                           disabled={saving}
+                          onChange={e => toggle(r, 'crm_active', e.target.checked)}
+                        />
+                      )}
+                    </td>
+                    <td className="py-2.5 px-3 text-center">
+                      {isAdminRow ? (
+                        <span className="text-xs text-muted-foreground">tous droits</span>
+                      ) : (
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 rounded border-input accent-primary cursor-pointer disabled:opacity-50"
+                          checked={!!r.crm_access}
+                          disabled={saving || !r.crm_active}
+                          title={!r.crm_active ? 'Activez d\'abord le compte' : undefined}
                           onChange={e => toggle(r, 'crm_access', e.target.checked)}
                         />
                       )}
@@ -125,8 +145,8 @@ export default function AdminAccessPanel() {
                           type="checkbox"
                           className="w-4 h-4 rounded border-input accent-primary cursor-pointer disabled:opacity-50"
                           checked={!!r.crm_achat_access}
-                          disabled={saving || !r.crm_access}
-                          title={!r.crm_access ? 'Activez d\'abord l\'accès CRM' : undefined}
+                          disabled={saving || !r.crm_active}
+                          title={!r.crm_active ? 'Activez d\'abord le compte' : undefined}
                           onChange={e => toggle(r, 'crm_achat_access', e.target.checked)}
                         />
                       )}

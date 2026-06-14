@@ -33,7 +33,13 @@ npx tsc -p tsconfig.app.json --noEmit
 
 `App` wraps everything in `ErrorBoundary → QueryClientProvider → TooltipProvider → BrowserRouter`. Inside `AppRoutes`, `useAuth()` guards routes: unauthenticated users go to `/auth`, password-recovery flows show `<ResetPassword>` regardless of session. All authenticated routes render inside `<StoreProvider><CRMLayout>` — so `useCRM()` is only valid inside authenticated pages.
 
-**Garde d'accès CRM :** après la session Supabase, `useAuth()` interroge `veille_roles.crm_access` pour l'utilisateur courant. Si `crm_access = false` (ou absent), un écran "Accès refusé" est affiché avec un bouton de déconnexion — l'app n'est jamais rendue. `crmAccess === null` pendant le chargement affiche un spinner. Les utilisateurs doivent être ajoutés dans `veille_roles` avec `crm_access = true` via le panel Admin de l'app Veille (`veille-alpha.vercel.app`).
+**Droits par utilisateur (`src/hooks/useAuth.tsx`) :** après la session Supabase, `useAuth()` lit la ligne `veille_roles` de l'utilisateur (`select('*')`, indépendant des migrations) et expose, partagés via `<AuthProvider>` + `useCurrentUser()` (appelé une seule fois, pas de double souscription) :
+- `active` (`crm_active`, admin = toujours actif) — **interrupteur maître**. `null` = chargement (spinner) ; `false` = écran « Accès refusé » complet (l'app n'est jamais rendue).
+- `canCrm` (`crm_access`, admin = oui) — accès à la **page CRM** (`/crm` : Pipeline/Actions/Calendrier/Analyse). Sans ce droit, l'utilisateur garde le reste (Ventes, Devis, Stock…).
+- `canAchat` (`crm_achat_access`, admin = oui) — périmètre **Achat** (menu Achat + routes `/fournisseurs` `/commandes` `/factures-fournisseur` ; et masque coûts/marges/prix d'achat dans Devis, Produits, Dashboard, Stock, Calcul Transport).
+- `isAdmin` = `role === 'admin'` (tous droits + voit Paramètres → Administration).
+
+`crm_active` retombe sur `crm_access` si la colonne n'existe pas encore (pré-migration). Les routes protégées redirigent vers `/` si le droit manque. La gestion se fait dans le **panneau admin natif** `src/components/AdminAccessPanel.tsx` (Paramètres → Administration, admins only) : cases Compte actif / Accès CRM / Accès Achat écrites dans `veille_roles`. ⚠️ Masquage **UI seulement** — pour un cloisonnement dur, ajouter des policies RLS sur les tables sensibles. Voir migrations `20260614100000` (crm_achat_access) et `20260614110000` (crm_active).
 
 ### State management — `useStore` / `useCRM`
 

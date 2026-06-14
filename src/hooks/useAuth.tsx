@@ -6,35 +6,51 @@ export type AuthState = {
   session: Session | null;
   loading: boolean;
   authEvent: AuthChangeEvent | null;
-  /** Accès global à crmpool (veille_roles.crm_access). */
-  crmAccess: boolean | null;
   /** Rôle Veille (veille_roles.role) — 'admin' = administrateur. */
   role: string | null;
   /** Vrai si l'utilisateur courant est administrateur. */
   isAdmin: boolean;
-  /** Accès au périmètre Achat (admin OU veille_roles.crm_achat_access). */
+  /** Interrupteur maître : accès à l'application. null = en cours de chargement,
+   *  false = écran « Accès refusé ». (veille_roles.crm_active, admin = toujours actif) */
+  active: boolean | null;
+  /** Accès au module CRM (page Pipeline/Actions/Calendrier/Analyse).
+   *  (veille_roles.crm_access, admin = oui) */
+  canCrm: boolean;
+  /** Accès au périmètre Achat. (veille_roles.crm_achat_access, admin = oui) */
   canAchat: boolean;
+};
+
+type RoleRow = {
+  crm_access?: boolean | null;
+  crm_active?: boolean | null;
+  crm_achat_access?: boolean | null;
+  role?: string | null;
 };
 
 export function useAuth(): AuthState {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [authEvent, setAuthEvent] = useState<AuthChangeEvent | null>(null);
-  const [crmAccess, setCrmAccess] = useState<boolean | null>(null);
+  const [crmActive, setCrmActive] = useState<boolean | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [crmFlag, setCrmFlag] = useState<boolean>(false);
   const [achatFlag, setAchatFlag] = useState<boolean>(false);
 
-  async function checkCrmAccess(userId: string) {
-    // select('*') pour rester indépendant des migrations (crm_achat_access peut
-    // ne pas encore exister) — sinon PostgREST rejette toute la requête.
+  async function checkAccess(userId: string) {
+    // select('*') : indépendant des migrations (crm_active/crm_achat_access
+    // peuvent ne pas encore exister) — sinon PostgREST rejette la requête.
     const { data } = await supabase
       .from('veille_roles')
       .select('*')
       .eq('user_id', userId)
       .maybeSingle();
-    setCrmAccess(data?.crm_access ?? false);
-    setRole(data?.role ?? null);
-    setAchatFlag(((data as { crm_achat_access?: boolean } | null)?.crm_achat_access) ?? false);
+    const row = data as RoleRow | null;
+    setRole(row?.role ?? null);
+    setCrmFlag(row?.crm_access ?? false);
+    setAchatFlag(row?.crm_achat_access ?? false);
+    // Repli pré-migration : si crm_active n'existe pas encore, on retombe sur
+    // crm_access (ancien interrupteur global) pour ne bloquer personne.
+    setCrmActive(row?.crm_active ?? row?.crm_access ?? false);
   }
 
   useEffect(() => {
@@ -43,10 +59,11 @@ export function useAuth(): AuthState {
       setSession(session);
       setLoading(false);
       if (session?.user) {
-        checkCrmAccess(session.user.id);
+        checkAccess(session.user.id);
       } else {
-        setCrmAccess(null);
+        setCrmActive(null);
         setRole(null);
+        setCrmFlag(false);
         setAchatFlag(false);
       }
     });
@@ -55,7 +72,7 @@ export function useAuth(): AuthState {
       setSession(session);
       setLoading(false);
       if (session?.user) {
-        checkCrmAccess(session.user.id);
+        checkAccess(session.user.id);
       }
     });
 
@@ -63,9 +80,11 @@ export function useAuth(): AuthState {
   }, []);
 
   const isAdmin = role === 'admin';
+  const active = crmActive === null ? null : (isAdmin || crmActive);
+  const canCrm = isAdmin || crmFlag;
   const canAchat = isAdmin || achatFlag;
 
-  return { session, loading, authEvent, crmAccess, role, isAdmin, canAchat };
+  return { session, loading, authEvent, role, isAdmin, active, canCrm, canAchat };
 }
 
 // ── Contexte partagé : useAuth est appelé une seule fois (AuthProvider) et les

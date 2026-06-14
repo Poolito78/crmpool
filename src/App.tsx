@@ -103,7 +103,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { session, loading, authEvent, crmAccess, canAchat } = useCurrentUser();
+  const { session, loading, authEvent, active, canCrm, canAchat } = useCurrentUser();
 
   if (loading) {
     return (
@@ -131,8 +131,8 @@ function AppRoutes() {
     );
   }
 
-  // Vérification accès CRM en cours
-  if (crmAccess === null) {
+  // Vérification de l'accès en cours
+  if (active === null) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
@@ -140,8 +140,8 @@ function AppRoutes() {
     );
   }
 
-  // Accès CRM refusé
-  if (!crmAccess) {
+  // Compte inactif → accès totalement refusé
+  if (!active) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4 text-center px-4">
         <div className="text-5xl">🔒</div>
@@ -180,7 +180,7 @@ function AppRoutes() {
             <Route path="/ged" element={<GED />} />
             <Route path="/factures-client" element={<FacturesClient />} />
             <Route path="/factures-fournisseur" element={canAchat ? <FacturesFournisseur /> : <Navigate to="/" replace />} />
-            <Route path="/crm" element={<CRM />} />
+            <Route path="/crm" element={canCrm ? <CRM /> : <Navigate to="/" replace />} />
             <Route path="/stats-variantes" element={<StatsVariantes />} />
             <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
             <Route path="/parametres" element={<Parametres />} />
