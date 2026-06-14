@@ -18,12 +18,14 @@ import { supabase } from '@/integrations/supabase/client';
 import { Fragment } from 'react';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useCommercials } from '@/hooks/useCommercials';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput from '@/components/FilterChoiceInput';
 import RowActionsMenu from '@/components/RowActionsMenu';
 
-type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours';
+type ClientColKey = 'societe' | 'contacts' | 'ville' | 'adresses' | 'devis' | 'encours' | 'commercial';
 const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; sortable: boolean; filterCol: 'societe' | 'contacts' | 'ville' | 'adresses' | null }[] = [
   { key: 'societe',  label: 'Société',       align: 'left',  sortable: true,  filterCol: 'societe' },
   { key: 'contacts', label: 'Contacts',      align: 'left',  sortable: false, filterCol: 'contacts' },
@@ -31,6 +33,7 @@ const CLIENT_COLS: { key: ClientColKey; label: string; align: 'left' | 'right'; 
   { key: 'adresses', label: 'Adresses liv.', align: 'left',  sortable: true,  filterCol: 'adresses' },
   { key: 'devis',    label: 'Devis',         align: 'left',  sortable: true,  filterCol: null },
   { key: 'encours',  label: 'Encours dû',    align: 'right', sortable: true,  filterCol: null },
+  { key: 'commercial', label: 'Commercial',  align: 'left',  sortable: false, filterCol: null },
 ];
 
 const DELAI_REGLEMENT_OPTIONS = [
@@ -115,6 +118,9 @@ const emptyAdresse: Omit<AdresseLivraison, 'id'> = {
 
 export default function Clients() {
   const { clients, updateClients, produits, devis, commandesClient } = useCRM();
+  const { isAdmin, userId } = useCurrentUser();
+  const { commercials, nameOf } = useCommercials();
+  const [filterCommercial, setFilterCommercial] = useState('');
 
   // Calculate encours dû per client (commandes facturées non payées)
   const encoursDuParClient = useMemo(() => {
@@ -237,6 +243,9 @@ export default function Clients() {
 
   const filtered = useMemo(() => {
     return clients.filter(c => {
+      // Périmètre commercial : un non-admin ne voit que ses propres clients.
+      if (!isAdmin && c.userId && c.userId !== userId) return false;
+      if (filterCommercial && nameOf(c.userId) !== filterCommercial) return false;
       if (search) {
         const s = search.toLowerCase();
         const inBase = [c.nom, c.email, c.societe, c.telephone, c.ville].some(v => v?.toLowerCase().includes(s));
@@ -261,7 +270,7 @@ export default function Clients() {
       if (filterHasAdresse === 'non' && c.adressesLivraison && c.adressesLivraison.length > 0) return false;
       return true;
     });
-  }, [clients, search, searchMode, filterVille, filterDepartement, filterSociete, filterContact, filterRevendeur, filterHasAdresse]);
+  }, [clients, search, searchMode, filterVille, filterDepartement, filterSociete, filterContact, filterRevendeur, filterHasAdresse, isAdmin, userId, filterCommercial, nameOf]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortCol) return filtered;
@@ -644,7 +653,7 @@ export default function Clients() {
           <thead>
             <tr className="border-b border-border bg-muted/50">
               {cCols.ordered(CLIENT_COLS).map(({ key, label, align, sortable, filterCol }) => {
-                const col = sortable ? key : null;
+                const col = sortable ? (key as typeof sortCol) : null;
                 const hasFilter = filterCol === 'societe' ? !!filterSociete
                   : filterCol === 'contacts' ? !!(filterContact || filterRevendeur)
                   : filterCol === 'ville' ? !!(filterVille || filterDepartement)
@@ -682,6 +691,20 @@ export default function Clients() {
                             <Filter className="w-3 h-3" />
                           </button>
                         )
+                      )}
+                      {key === 'commercial' && isAdmin && (
+                        <select
+                          value={filterCommercial}
+                          onChange={e => setFilterCommercial(e.target.value)}
+                          onClick={e => e.stopPropagation()}
+                          onMouseDown={e => e.stopPropagation()}
+                          draggable={false}
+                          title="Filtrer par commercial"
+                          className={`ml-1 h-6 text-xs rounded border bg-background px-1 font-normal ${filterCommercial ? 'border-primary text-primary' : 'border-input text-muted-foreground'}`}
+                        >
+                          <option value="">Tous</option>
+                          {commercials.map(cm => <option key={cm.userId} value={cm.name}>{cm.name}</option>)}
+                        </select>
                       )}
                     </div>
                     <ColResizeHandle {...cCols.resizeHandleProps(key)} />
@@ -732,6 +755,7 @@ export default function Clients() {
                     if (montantDu === 0) return <span className="text-muted-foreground text-xs">—</span>;
                     return <div><span className="font-medium text-xs">{formatMontant(montantDu)}</span>{montantDepasse > 0 && <div className="text-xs text-destructive font-medium">{formatMontant(montantDepasse)} échu</div>}</div>;
                   })()}</td>;
+                  case 'commercial': return <td style={ws} className={`px-4 py-3 text-muted-foreground text-xs${trunc}`} title={nameOf(c.userId)}>{nameOf(c.userId)}</td>;
                   default: return <td style={ws} className="px-4 py-3" />;
                 }
               };

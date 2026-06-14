@@ -10,6 +10,9 @@ import TableGearMenu from '@/components/TableGearMenu';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useCommercials } from '@/hooks/useCommercials';
+import FilterChoiceInput from '@/components/FilterChoiceInput';
 import { generateId, calculerTotalDevis, calculerTotalLigne, formatMontant, formatDate, formatDateISO, calculerDateEcheance, STATUTS_COMMANDE_CLIENT, type CommandeClient, type StatutCommandeClient, type LigneDevis, type FactureClient } from '@/lib/store';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import { Plus, Search, Trash2, Pencil, Eye, FileText, ShoppingCart, Send, Receipt, Mail, CalendarDays, Filter, X, Settings, Package, Check } from 'lucide-react';
@@ -27,7 +30,7 @@ import CommandeEmailDialog from '@/components/CommandeEmailDialog';
 import CommandeARDialog from '@/components/CommandeARDialog';
 const allStatuts = Object.keys(STATUTS_COMMANDE_CLIENT) as StatutCommandeClient[];
 
-type CCColKey = 'numero' | 'client' | 'ref' | 'date' | 'livraison' | 'echeance' | 'total' | 'statut';
+type CCColKey = 'numero' | 'client' | 'ref' | 'date' | 'livraison' | 'echeance' | 'total' | 'statut' | 'commercial';
 const CC_COLS: { key: CCColKey; label: string; cls: string }[] = [
   { key: 'numero', label: 'N°', cls: 'text-left' },
   { key: 'client', label: 'Client', cls: 'text-left' },
@@ -37,6 +40,7 @@ const CC_COLS: { key: CCColKey; label: string; cls: string }[] = [
   { key: 'echeance', label: 'Échéance', cls: 'text-left hidden lg:table-cell' },
   { key: 'total', label: 'Total HT', cls: 'text-right' },
   { key: 'statut', label: 'Statut', cls: 'text-center' },
+  { key: 'commercial', label: 'Commercial', cls: 'text-left' },
 ];
 
 export default function CommandesClient() {
@@ -44,6 +48,8 @@ export default function CommandesClient() {
   const [searchParams] = useSearchParams();
   const ccCols = useTableColumns<CCColKey>('commandes_client_table', CC_COLS.map(c => c.key));
   const { commandesClient, updateCommandesClient, clients, devis, produits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, facturesClient, updateFacturesClient } = useCRM();
+  const { isAdmin, userId } = useCurrentUser();
+  const { commercials, nameOf } = useCommercials();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
   const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
@@ -51,7 +57,7 @@ export default function CommandesClient() {
   const [colFilters, setColFilters] = useState<Partial<Record<CCColKey, string>>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<CCColKey>>(new Set());
   const [visCols, setVisCols] = useState<Set<CCColKey>>(() => {
-    try { const s = localStorage.getItem('commandes_client_visible'); if (s) return new Set(JSON.parse(s) as CCColKey[]); } catch { /* ignore */ }
+    try { const s = localStorage.getItem('commandes_client_visible'); if (s) return new Set([...(JSON.parse(s) as CCColKey[]), 'commercial']); } catch { /* ignore */ }
     return new Set(CC_COLS.map(c => c.key));
   });
   function toggleVisCol(k: CCColKey) { setVisCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('commandes_client_visible', JSON.stringify([...n])); } catch { /* ignore */ } return n; }); }
@@ -313,6 +319,8 @@ export default function CommandesClient() {
 
   const filtered = commandesClient
     .filter(c => {
+      // Périmètre commercial : un non-admin ne voit que ses propres commandes.
+      if (!isAdmin && c.userId && c.userId !== userId) return false;
       if (filterStatut !== 'tous' && c.statut !== filterStatut) return false;
       if (filterProduit.trim()) {
         const fp = filterProduit.trim().toLowerCase();
@@ -336,6 +344,7 @@ export default function CommandesClient() {
           case 'livraison': if (!matchDateFilter(v, c.dateLivraisonPrevue || c.dateDepart)) return false; break;
           case 'echeance': if (!matchDateFilter(v, c.dateEcheance)) return false; break;
           case 'total': if (!matchAmountFilter(v, c.totalHT)) return false; break;
+          case 'commercial': if (nameOf(c.userId) !== v) return false; break;
         }
       }
       if (!search) return true;
@@ -361,6 +370,7 @@ export default function CommandesClient() {
       case 'ref': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={ccRefs} placeholder="Réf…" />;
       case 'date': case 'livraison': case 'echeance': return <FilterDateInput value={v} onChange={x => setColFilter(key, x)} />;
       case 'total': return <FilterAmountInput value={v} onChange={x => setColFilter(key, x)} />;
+      case 'commercial': return <FilterChoiceInput value={v} onChange={x => setColFilter(key, x)} options={[{ value: '', label: 'Tous' }, ...commercials.map(cm => ({ value: cm.name, label: cm.name }))]} />;
       default: return null;
     }
   }
@@ -462,7 +472,7 @@ export default function CommandesClient() {
             <tr className="border-b border-border bg-muted/50">
               {ccCols.ordered(CC_COLS, k => visCols.has(k)).map(col => {
                 const isDragOver = ccCols.dragOverKey === col.key && ccCols.dragKey !== col.key;
-                const filterable = col.key !== 'statut';
+                const filterable = col.key !== 'statut' && (col.key !== 'commercial' || isAdmin);
                 const hasFilter = !!colFilters[col.key];
                 const isFilterOpen = openFilterCols.has(col.key);
                 const alignRight = col.cls.includes('text-right');
@@ -521,6 +531,7 @@ export default function CommandesClient() {
                   case 'echeance': return <td style={ws} className={base}>{cmd.dateEcheance ? <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-muted-foreground'}`}>{formatDate(cmd.dateEcheance)}{isOverdue && <span className="block text-[10px]">Échu</span>}</span> : <span className="text-muted-foreground text-xs">—</span>}</td>;
                   case 'total': return <td style={ws} className={`${base} font-medium`}>{formatMontant(cmd.totalHT)}</td>;
                   case 'statut': return <td style={ws} className={base}><select value={cmd.statut} onChange={e => updateStatut(cmd.id, e.target.value as StatutCommandeClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_COMMANDE_CLIENT[s].label}</option>)}</select></td>;
+                  case 'commercial': return <td style={ws} className={`${base} text-muted-foreground text-xs`} title={nameOf(cmd.userId)}>{nameOf(cmd.userId)}</td>;
                   default: return <td style={ws} className={base} />;
                 }
               };

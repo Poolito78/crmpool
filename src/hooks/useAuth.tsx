@@ -6,6 +6,8 @@ export type AuthState = {
   session: Session | null;
   loading: boolean;
   authEvent: AuthChangeEvent | null;
+  /** Identifiant de l'utilisateur courant (auth.users.id). */
+  userId: string | null;
   /** Rôle Veille (veille_roles.role) — 'admin' = administrateur. */
   role: string | null;
   /** Vrai si l'utilisateur courant est administrateur. */
@@ -84,7 +86,7 @@ export function useAuth(): AuthState {
   const canCrm = isAdmin || crmFlag;
   const canAchat = isAdmin || achatFlag;
 
-  return { session, loading, authEvent, role, isAdmin, active, canCrm, canAchat };
+  return { session, loading, authEvent, userId: session?.user?.id ?? null, role, isAdmin, active, canCrm, canAchat };
 }
 
 // ── Contexte partagé : useAuth est appelé une seule fois (AuthProvider) et les

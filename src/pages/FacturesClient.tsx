@@ -8,8 +8,11 @@ import FilterDateInput, { matchDateFilter, parseDateFilter } from '@/components/
 import FilterAmountInput, { matchAmountFilter, parseAmountFilter } from '@/components/FilterAmountInput';
 import TableGearMenu from '@/components/TableGearMenu';
 import RowActionsMenu from '@/components/RowActionsMenu';
+import FilterChoiceInput from '@/components/FilterChoiceInput';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCRM } from '@/lib/StoreContext';
+import { useCurrentUser } from '@/hooks/useAuth';
+import { useCommercials } from '@/hooks/useCommercials';
 import {
   generateId, formatMontant, formatDate,
   STATUTS_FACTURE_CLIENT, type FactureClient, type StatutFactureClient, type LigneDevis,
@@ -28,7 +31,7 @@ const allStatuts = Object.keys(STATUTS_FACTURE_CLIENT) as StatutFactureClient[];
 
 type ViewMode = 'toutes' | 'factures' | 'proformas';
 
-type FCColKey = 'numero' | 'client' | 'ref' | 'date' | 'echeance' | 'paiement' | 'total' | 'statut';
+type FCColKey = 'numero' | 'client' | 'ref' | 'date' | 'echeance' | 'paiement' | 'total' | 'statut' | 'commercial';
 const FC_COLS: { key: FCColKey; label: string; cls: string }[] = [
   { key: 'numero', label: 'N°', cls: 'text-left' },
   { key: 'client', label: 'Client', cls: 'text-left' },
@@ -38,12 +41,15 @@ const FC_COLS: { key: FCColKey; label: string; cls: string }[] = [
   { key: 'paiement', label: 'Paiement', cls: 'text-left hidden lg:table-cell' },
   { key: 'total', label: 'Total TTC', cls: 'text-right' },
   { key: 'statut', label: 'Statut', cls: 'text-center' },
+  { key: 'commercial', label: 'Commercial', cls: 'text-left' },
 ];
 
 export default function FacturesClient() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { facturesClient, updateFacturesClient, clients, devis, commandesClient } = useCRM();
+  const { isAdmin, userId } = useCurrentUser();
+  const { commercials, nameOf } = useCommercials();
   const fcCols = useTableColumns<FCColKey>('factures_client_table', FC_COLS.map(c => c.key));
 
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -52,7 +58,7 @@ export default function FacturesClient() {
   const [colFilters, setColFilters] = useState<Partial<Record<FCColKey, string>>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<FCColKey>>(new Set());
   const [visCols, setVisCols] = useState<Set<FCColKey>>(() => {
-    try { const s = localStorage.getItem('factures_client_visible'); if (s) return new Set(JSON.parse(s) as FCColKey[]); } catch { /* ignore */ }
+    try { const s = localStorage.getItem('factures_client_visible'); if (s) return new Set([...(JSON.parse(s) as FCColKey[]), 'commercial']); } catch { /* ignore */ }
     return new Set(FC_COLS.map(c => c.key));
   });
   function toggleVisCol(k: FCColKey) { setVisCols(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); try { localStorage.setItem('factures_client_visible', JSON.stringify([...n])); } catch { /* ignore */ } return n; }); }
@@ -209,6 +215,8 @@ export default function FacturesClient() {
 
   const filtered = baseList
     .filter(f => {
+      // Périmètre commercial : un non-admin ne voit que ses propres factures.
+      if (!isAdmin && f.userId && f.userId !== userId) return false;
       if (filterStatut !== 'tous' && f.statut !== filterStatut) return false;
       const client = clients.find(c => c.id === f.clientId);
       for (const [k, v] of Object.entries(colFilters)) {
@@ -222,6 +230,7 @@ export default function FacturesClient() {
           case 'echeance': if (!matchDateFilter(v, f.dateEcheance)) return false; break;
           case 'paiement': if (!matchDateFilter(v, f.datePaiement)) return false; break;
           case 'total': if (!matchAmountFilter(v, f.totalTTC)) return false; break;
+          case 'commercial': if (nameOf(f.userId) !== v) return false; break;
         }
       }
       if (!search) return true;
@@ -245,6 +254,7 @@ export default function FacturesClient() {
       case 'ref': return <FilterSuggestInput value={v} onChange={x => setColFilter(key, x)} suggestions={fcRefs} placeholder="Réf…" />;
       case 'date': case 'echeance': case 'paiement': return <FilterDateInput value={v} onChange={x => setColFilter(key, x)} />;
       case 'total': return <FilterAmountInput value={v} onChange={x => setColFilter(key, x)} />;
+      case 'commercial': return <FilterChoiceInput value={v} onChange={x => setColFilter(key, x)} options={[{ value: '', label: 'Tous' }, ...commercials.map(cm => ({ value: cm.name, label: cm.name }))]} />;
       default: return null;
     }
   }
@@ -349,7 +359,7 @@ export default function FacturesClient() {
             <tr className="border-b border-border bg-muted/50">
               {fcCols.ordered(FC_COLS, k => visCols.has(k)).map(col => {
                 const isDragOver = fcCols.dragOverKey === col.key && fcCols.dragKey !== col.key;
-                const filterable = col.key !== 'statut';
+                const filterable = col.key !== 'statut' && (col.key !== 'commercial' || isAdmin);
                 const hasFilter = !!colFilters[col.key];
                 const isFilterOpen = openFilterCols.has(col.key);
                 const alignRight = col.cls.includes('text-right');
@@ -398,6 +408,7 @@ export default function FacturesClient() {
                   case 'paiement': return <td style={ws} className={`${base} text-xs text-muted-foreground`}>{f.datePaiement ? formatDate(f.datePaiement) : '—'}</td>;
                   case 'total': return <td style={ws} className={`${base} font-semibold`}>{formatMontant(f.totalTTC)}</td>;
                   case 'statut': return <td style={ws} className={base}>{f.estProforma ? <span className="text-xs px-2 py-1 rounded bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400 font-medium">{STATUTS_FACTURE_CLIENT[f.statut].label}</span> : <select value={f.statut} onChange={e => updateStatut(f.id, e.target.value as StatutFactureClient)} className={`text-xs font-medium px-2 py-1 rounded cursor-pointer border-0 ${statutInfo.color}`}>{allStatuts.map(s => <option key={s} value={s}>{STATUTS_FACTURE_CLIENT[s].label}</option>)}</select>}</td>;
+                  case 'commercial': return <td style={ws} className={`${base} text-muted-foreground text-xs`} title={nameOf(f.userId)}>{nameOf(f.userId)}</td>;
                   default: return <td style={ws} className={base} />;
                 }
               };

@@ -41,6 +41,7 @@ import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
 import RichTextEditor from '@/components/RichTextEditor';
 import { useCurrentUser } from '@/hooks/useAuth';
+import { useCommercials } from '@/hooks/useCommercials';
 import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
@@ -87,7 +88,8 @@ const statutColors: Record<string, string> = {
 
 export default function Devis() {
   const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
-  const { canAchat } = useCurrentUser();
+  const { canAchat, isAdmin, userId } = useCurrentUser();
+  const { commercials, nameOf } = useCommercials();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -202,7 +204,8 @@ export default function Devis() {
   const [visDevisTableCols, setVisDevisTableCols] = useState<Set<DevisTableColKey>>(() => {
     try {
       const s = localStorage.getItem('devis_table_cols');
-      if (s) { const p = JSON.parse(s) as DevisTableColKey[]; if (Array.isArray(p) && p.length > 0) return new Set(p); }
+      // Fusionne la nouvelle colonne « commercial » pour les utilisateurs existants.
+      if (s) { const p = JSON.parse(s) as DevisTableColKey[]; if (Array.isArray(p) && p.length > 0) return new Set([...p, 'commercial']); }
     } catch {}
     return new Set(DEFAULT_DEVIS_TABLE_COLS);
   });
@@ -380,6 +383,8 @@ export default function Devis() {
   const [editingCrmAction, setEditingCrmAction] = useState<import('@/lib/store').CrmAction | null>(null);
 
   const filtered = devis.filter(d => {
+    // Périmètre commercial : un non-admin ne voit que ses propres devis.
+    if (!isAdmin && d.userId && d.userId !== userId) return false;
     const client = clients.find(c => c.id === d.clientId);
     const q = search.toLowerCase();
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
@@ -481,6 +486,8 @@ export default function Devis() {
         if (fDate && !matchDateFilter(fDate, d.dateCreation)) return false;
         const fTotal = colFiltersD.totalHT || '';
         if (fTotal && !matchAmountFilter(fTotal, calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20).totalHT)) return false;
+        const fCom = colFiltersD.commercial || '';
+        if (fCom && fCom !== nameOf(d.userId)) return false;
         return true;
       });
     }
@@ -1443,6 +1450,7 @@ export default function Devis() {
     }
     if (colKey === 'date') return <FilterDateInput value={fVal} onChange={v => setFilterD('date', v)} onClose={handleClose} />;
     if (colKey === 'totalHT') return <FilterAmountInput value={fVal} onChange={v => setFilterD('totalHT', v)} onClose={handleClose} />;
+    if (colKey === 'commercial') return <FilterChoiceInput value={fVal} onChange={v => setFilterD('commercial', v)} onClose={handleClose} options={[{ value: '', label: 'Tous' }, ...commercials.map(c => ({ value: c.name, label: c.name }))]} />;
     const clientSugg = [
       ...clients.map(c => c.societe || c.nom).filter(Boolean) as string[],
       ...clients.flatMap(c => (c.contacts || []).map(ct => [ct.prenom, ct.nom].filter(Boolean).join(' ')).filter(Boolean)),
@@ -1548,7 +1556,7 @@ export default function Devis() {
                     const isDesc = sortBy === `${sortKey}_desc`;
                     const isSorted = isAsc || isDesc;
                     const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
+                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
                     const hasFilter = !!(colFiltersD[col.key]);
                     const isFilterOpen = openFilterColsD.has(col.key);
                     const isDragOver = devisCols.dragOverKey === col.key && devisCols.dragKey !== col.key;
@@ -1644,6 +1652,7 @@ export default function Devis() {
                       case 'port': return <td style={ws} className="px-3 py-2.5 text-right text-sm text-muted-foreground whitespace-nowrap">{d.fraisPortHT ? formatMontant(d.fraisPortHT) : '—'}</td>;
                       case 'reussite': return <td style={ws} className="px-3 py-2.5 text-right text-sm whitespace-nowrap">{d.probabiliteReussite != null ? <span className={`font-medium ${d.probabiliteReussite >= 75 ? 'text-success' : d.probabiliteReussite >= 50 ? 'text-warning' : d.probabiliteReussite > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{d.probabiliteReussite}%</span> : <span className="text-muted-foreground">—</span>}</td>;
                       case 'realisation': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>;
+                      case 'commercial': return <td style={ws} className={`px-3 py-2.5 text-sm text-muted-foreground${trunc}`} title={nameOf(d.userId)}>{nameOf(d.userId)}</td>;
                       default: return <td style={ws} className="px-3 py-2.5" />;
                     }
                   };
@@ -1686,7 +1695,7 @@ export default function Devis() {
             const isDesc = sortBy === `${sortKey}_desc`;
             const isSorted = isAsc || isDesc;
             const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-            const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key);
+            const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
             const hasFilter = !!(colFiltersD[col.key]);
             const isFilterOpen = openFilterColsD.has(col.key);
             const isChoice = col.key === 'statut' || col.key === 'validite';

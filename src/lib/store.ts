@@ -30,6 +30,8 @@ export interface Contact {
 
 export interface Client {
   id: string;
+  /** Créateur (commercial) — user_id Supabase. */
+  userId?: string;
   nom: string;
   email: string;
   telephone: string;
@@ -248,6 +250,8 @@ export type StatutCommandeClient = 'a_traiter' | 'accuse_envoye' | 'commande_env
 
 export interface CommandeClient {
   id: string;
+  /** Créateur (commercial) — user_id Supabase. */
+  userId?: string;
   devisId?: string;
   clientId: string;
   numero: string;
@@ -273,6 +277,8 @@ export type StatutFactureClient = 'brouillon' | 'envoyée' | 'payée' | 'annulé
 
 export interface FactureClient {
   id: string;
+  /** Créateur (commercial) — user_id Supabase. */
+  userId?: string;
   numero: string;
   clientId: string;
   commandeClientId?: string;
@@ -380,6 +386,8 @@ export interface DevisMessageTemplate {
 
 export interface Devis {
   id: string;
+  /** Créateur (commercial) — user_id Supabase. */
+  userId?: string;
   numero: string;
   clientId: string;
   contactId?: string;
@@ -477,6 +485,7 @@ function dbToClient(r: any): Client {
     societe: r.societe || undefined,
     notes: r.notes || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
+    userId: r.user_id || undefined,
     adressesLivraison: (r.adresses_livraison as any[]) || [],
     estRevendeur: r.est_revendeur || false,
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
@@ -497,7 +506,7 @@ function dbToClient(r: any): Client {
 function clientToDb(c: Client, userId: string): Record<string, unknown> {
   return {
     id: c.id,
-    user_id: userId,
+    user_id: c.userId || userId,
     nom: c.nom,
     email: c.email,
     telephone: c.telephone,
@@ -643,6 +652,7 @@ function dbToDevis(r: any): Devis {
   return {
     id: r.id,
     numero: r.numero,
+    userId: r.user_id || undefined,
     clientId: r.client_id || '',
     contactId: r.contact_id || undefined,
     adresseLivraisonId: r.adresse_livraison_id || undefined,
@@ -675,7 +685,7 @@ function dbToDevis(r: any): Devis {
 function devisToDb(d: Devis, userId: string) {
   return {
     id: d.id,
-    user_id: userId,
+    user_id: d.userId || userId,
     numero: d.numero,
     client_id: d.clientId || null,
     contact_id: d.contactId || null,
@@ -917,6 +927,7 @@ function commandeFournisseurToDb(cf: CommandeFournisseur, userId: string) {
 function dbToCommandeClient(r: any): CommandeClient {
   return {
     id: r.id,
+    userId: r.user_id || undefined,
     devisId: r.devis_id || undefined,
     clientId: r.client_id,
     numero: r.numero,
@@ -941,7 +952,7 @@ function dbToCommandeClient(r: any): CommandeClient {
 function commandeClientToDb(cc: CommandeClient, userId: string) {
   return {
     id: cc.id,
-    user_id: userId,
+    user_id: cc.userId || userId,
     devis_id: cc.devisId || null,
     client_id: cc.clientId,
     numero: cc.numero,
@@ -968,6 +979,7 @@ function commandeClientToDb(cc: CommandeClient, userId: string) {
 function dbToFactureClient(r: any): FactureClient {
   return {
     id: r.id,
+    userId: r.user_id || undefined,
     numero: r.numero,
     clientId: r.client_id,
     commandeClientId: r.commande_client_id || undefined,
@@ -990,7 +1002,7 @@ function dbToFactureClient(r: any): FactureClient {
 function factureClientToDb(f: FactureClient, userId: string) {
   return {
     id: f.id,
-    user_id: userId,
+    user_id: f.userId || userId,
     numero: f.numero,
     client_id: f.clientId,
     commande_client_id: f.commandeClientId || null,
