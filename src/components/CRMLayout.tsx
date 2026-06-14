@@ -1,8 +1,9 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { useCurrentUser } from '@/hooks/useAuth';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 
@@ -49,9 +50,6 @@ const NAV: NavEntry[] = [
   },
 ];
 
-// Flat list for mobile bottom nav and top-bar title
-const NAV_FLAT: NavLink[] = NAV.flatMap(e => e.type === 'group' ? e.items : [e]);
-
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
@@ -61,6 +59,17 @@ export default function CRMLayout() {
   });
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
+  const { canAchat, isAdmin } = useCurrentUser();
+
+  // Nav filtrée selon les droits : groupe « Achat » masqué sans droit Achat,
+  // onglet « Admin » masqué aux non-admins.
+  const nav = useMemo<NavEntry[]>(() => NAV
+    .filter(e => canAchat || !(e.type === 'group' && e.label === 'Achat'))
+    .map(e => e.type === 'group'
+      ? { ...e, items: e.items.filter(i => isAdmin || i.path !== '/parametres?tab=administration') }
+      : e),
+  [canAchat, isAdmin]);
+  const navFlat = useMemo<NavLink[]>(() => nav.flatMap(e => e.type === 'group' ? e.items : [e]), [nav]);
 
   // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.
   const isLinkActive = (path: string) => {
@@ -75,14 +84,14 @@ export default function CRMLayout() {
   const isSectionActive = (path: string) => location.pathname === path.split('?')[0];
 
   // Auto-open groups containing the active route
-  const initialOpen = NAV
+  const initialOpen = nav
     .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => isSectionActive(i.path)))
     .map(e => e.label);
   const [openGroups, setOpenGroups] = useState<string[]>(initialOpen);
 
   // Keep groups open when navigating into them
   useEffect(() => {
-    const active = NAV
+    const active = nav
       .filter((e): e is NavGroup => e.type === 'group' && e.items.some(i => isSectionActive(i.path)))
       .map(e => e.label);
     setOpenGroups(prev => Array.from(new Set([...prev, ...active])));
@@ -185,8 +194,8 @@ export default function CRMLayout() {
     });
   }
 
-  const currentNav = NAV_FLAT.find(i => isLinkActive(i.path))
-    ?? NAV_FLAT.find(i => i.path.split('?')[0] === location.pathname);
+  const currentNav = navFlat.find(i => isLinkActive(i.path))
+    ?? navFlat.find(i => i.path.split('?')[0] === location.pathname);
   const currentLabel = currentNav?.label ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
   const currentShort = currentNav?.shortLabel ?? currentLabel;
 
@@ -211,7 +220,7 @@ export default function CRMLayout() {
           </button>
         </div>
         <nav className={cn('flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden', collapsed ? 'px-2' : 'px-3')}>
-          {renderNavEntries(NAV, undefined, collapsed)}
+          {renderNavEntries(nav, undefined, collapsed)}
           <button
             onClick={() => setAnalyseOpen(true)}
             title="Analyse de document"
@@ -256,7 +265,7 @@ export default function CRMLayout() {
           </button>
         </div>
         <nav className="px-3 py-4 space-y-1 overflow-y-auto max-h-[calc(100vh-4rem)]">
-          {renderNavEntries(NAV, () => setSidebarOpen(false))}
+          {renderNavEntries(nav, () => setSidebarOpen(false))}
           <button
             onClick={() => { setAnalyseOpen(true); setSidebarOpen(false); }}
             className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors"
@@ -300,7 +309,7 @@ export default function CRMLayout() {
 
       {/* Mobile bottom nav — show first 5 flat items */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-30 flex justify-around py-2">
-        {NAV_FLAT.slice(0, 5).map(item => {
+        {navFlat.slice(0, 5).map(item => {
           const active = location.pathname === item.path;
           return (
             <Link

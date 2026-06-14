@@ -5,13 +5,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (Vite, localhost:8080 by default)
+npm run dev          # Start dev server (Vite, http://localhost:8080 ; PWA SW disabled in dev)
 npm run build        # Production build (clears Vite cache first via prebuild)
 npm run build:dev    # Dev-mode build (skips minification, useful for debugging)
 npm run lint         # ESLint
 npm run test         # Run tests once (Vitest)
 npm run test:watch   # Vitest in watch mode
+
+# Run a single test file / test by name (Vitest)
+npx vitest run src/test/example.test.ts
+npx vitest run -t "name of the test"
+
+# Type-check. The root `tsc --noEmit` is effectively a no-op (solution-style
+# tsconfig with project references), so always target the app config:
+npx tsc -p tsconfig.app.json --noEmit
 ```
+
+⚠️ Keep `npx tsc -p tsconfig.app.json --noEmit` at **0 errors**. The esbuild-based `npm run build` succeeds even with type errors, so it does **not** substitute for the type-check.
 
 ## Architecture
 

@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, ShieldCheck, ExternalLink, Settings, Download, Users } from 'lucide-react';
+import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, Settings, Download, Users } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import VeilleDisplayName from '@/components/VeilleDisplayName';
 import ClientsImportExport from '@/components/ClientsImportExport';
+import AdminAccessPanel from '@/components/AdminAccessPanel';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +32,7 @@ export default function Parametres() {
   const activeTab = searchParams.get('tab') || 'dashboard';
   const setActiveTab = (t: string) => setSearchParams(t === 'dashboard' ? {} : { tab: t }, { replace: true });
   const hidden = useHiddenTiles();
+  const { isAdmin } = useCurrentUser();
   const { entrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot } = useEntrepots();
   const { clients, produits, fournisseurs, devis } = useCRM();
 
@@ -141,7 +144,7 @@ export default function Parametres() {
           <TabsTrigger value="devis">Devis</TabsTrigger>
           <TabsTrigger value="clients">Clients</TabsTrigger>
           <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>
-          <TabsTrigger value="administration">Admin App Veille ext</TabsTrigger>
+          {isAdmin && <TabsTrigger value="administration">Administration</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-4">
@@ -392,33 +395,13 @@ export default function Parametres() {
       ))}
         </TabsContent>
         <TabsContent value="administration" className="space-y-4 mt-4">
-          <div className="bg-card rounded-xl border border-border p-5 space-y-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-primary" /> Admin App Veille ext
-                </h2>
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  Gérez les utilisateurs et les accès CRM depuis le panel d'administration de l'application Veille.
-                </p>
-              </div>
-              <a
-                href="https://veille-alpha.vercel.app"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
-              >
-                <ExternalLink className="w-3.5 h-3.5" /> Ouvrir dans un nouvel onglet
-              </a>
+          {isAdmin ? (
+            <AdminAccessPanel />
+          ) : (
+            <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
+              Accès réservé aux administrateurs.
             </div>
-          </div>
-          <div className="rounded-xl border border-border overflow-hidden" style={{ height: 'calc(100vh - 260px)' }}>
-            <iframe
-              src="https://veille-alpha.vercel.app"
-              className="w-full h-full"
-              title="Administration Veille"
-            />
-          </div>
+          )}
         </TabsContent>
       </Tabs>
 

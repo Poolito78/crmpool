@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Truck, MapPin, Pencil, Check, X, RotateCcw, Plus, GripVertical, Trash2, TrendingUp, FileText, Loader2, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { useCurrentUser } from '@/hooks/useAuth';
 
 // Coordonnées approximatives des centres de départements français (lat, lng)
 const DEPT_COORDS: Record<string, [number, number]> = {
@@ -118,6 +119,7 @@ function loadAchats(): AchatTransport[] {
 // ── Composant ─────────────────────────────────────────────────────────────────
 
 export default function CalculateurUPS() {
+  const { canAchat } = useCurrentUser();
   const { fournisseurs } = useCRM();
   const [pageTab, setPageTab] = useState<PageTab>('standard');
 
@@ -441,7 +443,7 @@ export default function CalculateurUPS() {
           ['baremes',  'Barèmes transporteurs'],
           ['manuel',   'Saisie manuelle'],
           ['achat',    'Achat'],
-        ] as [PageTab, string][]).map(([t, label]) => (
+        ] as [PageTab, string][]).filter(([t]) => canAchat || t !== 'achat').map(([t, label]) => (
           <button
             key={t}
             onClick={() => { setPageTab(t); setEditIdx(null); }}

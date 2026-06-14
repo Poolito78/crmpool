@@ -11,6 +11,7 @@ import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
+import { useCurrentUser } from '@/hooks/useAuth';
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -18,6 +19,7 @@ const TYPE_ICON: Record<string, any> = {
 
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
+  const { canAchat } = useCurrentUser();
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
@@ -157,7 +159,7 @@ export default function Dashboard() {
     { id: 'stat-marge-mensuelle', label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
     { id: 'stat-stock-bas', label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
     { id: 'stat-concurrents', label: 'Concurrents suivis', value: concurrentsList.length, icon: Eye, color: 'text-rose-500', bg: 'bg-rose-500/10', link: '/veille-concurrence' },
-  ].filter(s => !hidden.has(s.id as any));
+  ].filter(s => !hidden.has(s.id as any) && (canAchat || !['stat-fournisseurs', 'stat-marge-annuelle', 'stat-marge-mensuelle'].includes(s.id)));
 
   const statutColors: Record<string, string> = {
     brouillon: 'bg-muted text-muted-foreground',
@@ -192,10 +194,10 @@ export default function Dashboard() {
       {/* ── Onglets tableau de bord ── */}
       <div className="flex gap-1 border-b border-border">
         <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
-        <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>
+        {canAchat && <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>}
       </div>
 
-      {dashTab === 'previsionnel' ? (
+      {dashTab === 'previsionnel' && canAchat ? (
         <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
       ) : (
       <>
@@ -315,7 +317,7 @@ export default function Dashboard() {
       {((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Fournisseurs FDM */}
-          {totalFournFDM > 0 && !hidden.has('encours-fourn-fdm') && (
+          {canAchat && totalFournFDM > 0 && !hidden.has('encours-fourn-fdm') && (
             <Link to="/commandes" className="bg-card rounded-xl border border-border p-4 hover:bg-muted/30 transition-colors">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-8 h-8 rounded-lg bg-destructive/10 flex items-center justify-center shrink-0">
@@ -358,7 +360,7 @@ export default function Dashboard() {
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}
-        {echeancesFournisseurs.length > 0 && !hidden.has('panel-echeances-fourn') && (
+        {canAchat && echeancesFournisseurs.length > 0 && !hidden.has('panel-echeances-fourn') && (
           <div className="bg-card rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-heading font-semibold text-lg flex items-center gap-2">

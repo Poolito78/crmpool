@@ -40,6 +40,7 @@ import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceI
 import FilterDateInput, { matchDateFilter } from '@/components/FilterDateInput';
 import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountInput';
 import RichTextEditor from '@/components/RichTextEditor';
+import { useCurrentUser } from '@/hooks/useAuth';
 import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
@@ -86,6 +87,7 @@ const statutColors: Record<string, string> = {
 
 export default function Devis() {
   const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
+  const { canAchat } = useCurrentUser();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -1540,7 +1542,7 @@ export default function Devis() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50">
-                  {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => {
+                  {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k) && (canAchat || k !== 'marge')).map(col => {
                     const sortKey = col.key === 'totalHT' ? 'total' : col.key === 'date' ? 'date' : col.key === 'validite' ? 'validite' : col.key === 'marge' ? 'marge' : col.key === 'port' ? 'port' : col.key === 'numero' ? 'numero' : col.key === 'client' ? 'client' : col.key;
                     const isAsc = sortBy === `${sortKey}_asc`;
                     const isDesc = sortBy === `${sortKey}_desc`;
@@ -1647,7 +1649,7 @@ export default function Devis() {
                   };
                   return (
                     <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('select, button, a')) return; openEdit(d); }}>
-                      {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k)).map(col => <Fragment key={col.key}>{renderCellD(col.key)}</Fragment>)}
+                      {devisCols.ordered(DEVIS_TABLE_COLS_DEF, k => visDevisTableCols.has(k) && (canAchat || k !== 'marge')).map(col => <Fragment key={col.key}>{renderCellD(col.key)}</Fragment>)}
                       <td className="px-3 py-2.5">
                         <div className="flex items-center justify-end">
                           <RowActionsMenu actions={[
@@ -1863,7 +1865,7 @@ export default function Devis() {
                   )}
                 </div>
                 <div className="flex items-center gap-3">
-                  {visDevisTableCols.has('marge') && totalAchatD > 0 && (
+                  {canAchat && visDevisTableCols.has('marge') && totalAchatD > 0 && (
                     <div className="text-right text-xs hidden sm:block">
                       <p className={`font-semibold ${coeffD == null ? 'text-muted-foreground' : coeffD >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffD >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>
                         {formatMontant(margeD)} · {tauxMargeD.toFixed(1)}%
@@ -2034,7 +2036,7 @@ export default function Devis() {
           {/* Onglets (barre fixe) */}
           <div className="flex items-end gap-1 border-b border-border shrink-0 overflow-x-auto">
             <button type="button" onClick={() => setDialogTab('devis')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'devis' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Devis</button>
-            <button type="button" onClick={() => setDialogTab('comparatif')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>
+            {canAchat && <button type="button" onClick={() => setDialogTab('comparatif')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'comparatif' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comparatif achat / vente</button>}
             <button type="button" onClick={() => setDialogTab('mo')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'mo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>MO</button>
             {editingId && <button type="button" onClick={() => setDialogTab('crm')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
             {editingId && <button type="button" onClick={() => setDialogTab('notes')} className={`shrink-0 px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${dialogTab === 'notes' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Notes & Fichiers</button>}
@@ -2634,7 +2636,7 @@ export default function Devis() {
                                   <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80"><Trash2 className="w-3.5 h-3.5" /></button>
                                 </div>
                               );
-                              const colVisible = (c: typeof TABLE_LIGNE_COLS[number]) => !c.optional || visibleLigneCols.has(c.optional);
+                              const colVisible = (c: typeof TABLE_LIGNE_COLS[number]) => (!c.optional || visibleLigneCols.has(c.optional)) && (canAchat || c.optional !== 'marge');
 
                               // ── Mode TABLEAU : colonnes redimensionnables + déplaçables, une seule ligne ──
                               if (lignesView === 'tableau') {
@@ -2711,10 +2713,10 @@ export default function Devis() {
                               )}
                             </div>
                             {/* Infos marges */}
-                            {(tauxMarque !== null || coeff !== null || prixKg !== null || kgReel !== null) && (
+                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
-                                {tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
-                                {coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
+                                {canAchat && tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
+                                {canAchat && coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
                                 {kgReel !== null && (() => {
                                   const poidsConditionne = prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
@@ -2881,13 +2883,15 @@ export default function Devis() {
                     <span>Poids total</span>
                     <span className="font-medium">{poidsTotal.toFixed(2)} kg</span>
                   </div>
+                  {canAchat && (
                   <div className="flex justify-between text-muted-foreground">
                     <span>Marge totale</span>
                     <span className={`font-medium ${margeTotal < 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
                       {formatMontant(margeTotal)} ({tauxMarque.toFixed(1)}%{coeffTotal !== null ? ` · coeff ${coeffTotal.toFixed(2)}` : ''})
                     </span>
                   </div>
-                  {(() => {
+                  )}
+                  {canAchat && (() => {
                     // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg)
                     let sumCoutConso = 0;
                     for (const l of lignes) {
@@ -3002,7 +3006,7 @@ export default function Devis() {
             )}
           </div>
           {/* ── Onglet Comparatif achat / vente ─────────────────────────────── */}
-          {dialogTab === 'comparatif' && (() => {
+          {canAchat && dialogTab === 'comparatif' && (() => {
             const lignesCompa = lignes.filter(l => !l.type || l.type === 'ligne');
             let totalAchat = 0, totalVente = 0;
             // ── Transport ──

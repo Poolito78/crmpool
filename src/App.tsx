@@ -75,7 +75,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
 }
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { StoreProvider } from "@/lib/StoreContext";
-import { useAuth } from "@/hooks/useAuth";
+import { AuthProvider, useCurrentUser } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import CRMLayout from "@/components/CRMLayout";
 // Auth/Reset chargés en statique (écrans d'entrée, requis immédiatement)
@@ -103,7 +103,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { session, loading, authEvent, crmAccess } = useAuth();
+  const { session, loading, authEvent, crmAccess, canAchat } = useCurrentUser();
 
   if (loading) {
     return (
@@ -171,15 +171,15 @@ function AppRoutes() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/clients" element={<Clients />} />
             <Route path="/produits" element={<Produits />} />
-            <Route path="/fournisseurs" element={<Fournisseurs />} />
+            <Route path="/fournisseurs" element={canAchat ? <Fournisseurs /> : <Navigate to="/" replace />} />
             <Route path="/stock" element={<Stock />} />
             <Route path="/devis" element={<Devis />} />
-            <Route path="/commandes" element={<Commandes />} />
+            <Route path="/commandes" element={canAchat ? <Commandes /> : <Navigate to="/" replace />} />
             <Route path="/commandes-client" element={<CommandesClient />} />
             <Route path="/calculateur-ups" element={<CalculateurUPS />} />
             <Route path="/ged" element={<GED />} />
             <Route path="/factures-client" element={<FacturesClient />} />
-            <Route path="/factures-fournisseur" element={<FacturesFournisseur />} />
+            <Route path="/factures-fournisseur" element={canAchat ? <FacturesFournisseur /> : <Navigate to="/" replace />} />
             <Route path="/crm" element={<CRM />} />
             <Route path="/stats-variantes" element={<StatsVariantes />} />
             <Route path="/veille-concurrence" element={<VeilleConcurrence />} />
@@ -200,7 +200,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <AppRoutes />
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

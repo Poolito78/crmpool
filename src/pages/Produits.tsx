@@ -11,6 +11,7 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import ProduitFournisseursPanel from '@/components/ProduitFournisseursPanel';
+import { useCurrentUser } from '@/hooks/useAuth';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -77,6 +78,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 
 export default function Produits() {
   const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -165,8 +167,10 @@ export default function Produits() {
     else { setSortCol(key); setSortDir('asc'); }
   }
 
+  // Colonnes liées aux achats/marges — masquées sans droit Achat.
+  const ACHAT_COLS: ColKey[] = ['prixAchat', 'coefficient', 'valeurStock'];
   // Colonnes visibles dans l'ordre choisi par l'utilisateur (via le hook partagé)
-  const orderedVisibleCols = prodCols.ordered(COLUMNS, k => visibleCols.has(k));
+  const orderedVisibleCols = prodCols.ordered(COLUMNS, k => visibleCols.has(k) && (canAchat || !ACHAT_COLS.includes(k)));
 
   function toggleFilterCol(col: ColKey) {
     setOpenFilterCols(prev => {
@@ -1154,8 +1158,8 @@ export default function Produits() {
                     case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
                     case 'prixAchat':    return <td className="px-2 py-2.5 text-right">{formatMontant(p.prixAchat)}</td>;
                     case 'coefficient':  return <td className="px-2 py-2.5 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
-                    case 'prixRevendeur':return <td className="px-2 py-2.5 text-right font-semibold">{formatMontant(p.prixRevendeur)}<span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span></td>;
-                    case 'prixHT':       return <td className="px-2 py-2.5 text-right text-muted-foreground">{formatMontant(p.prixHT)}<span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span></td>;
+                    case 'prixRevendeur':return <td className="px-2 py-2.5 text-right font-semibold">{formatMontant(p.prixRevendeur)}{canAchat && <span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span>}</td>;
+                    case 'prixHT':       return <td className="px-2 py-2.5 text-right text-muted-foreground">{formatMontant(p.prixHT)}{canAchat && <span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span>}</td>;
                     case 'poids':        return <td className="px-2 py-2.5 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
                     case 'consommation': return <td className="px-2 py-2.5 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
                     case 'tva':          return <td className="px-2 py-2.5 text-right">{p.tva}%</td>;
@@ -1241,15 +1245,17 @@ export default function Produits() {
                 </div>
               </div>
               {/* Prix row */}
-              <div className="grid grid-cols-3 divide-x divide-border border-t border-border text-xs">
+              <div className={`grid ${canAchat ? 'grid-cols-3' : 'grid-cols-2'} divide-x divide-border border-t border-border text-xs`}>
+                {canAchat && (
+                  <div className="px-3 py-2">
+                    <p className="text-muted-foreground mb-0.5">P. Achat</p>
+                    <p className="font-semibold text-sm">{formatMontant(p.prixAchat)}</p>
+                  </div>
+                )}
                 <div className="px-3 py-2">
-                  <p className="text-muted-foreground mb-0.5">P. Achat</p>
-                  <p className="font-semibold text-sm">{formatMontant(p.prixAchat)}</p>
-                </div>
-                <div className="px-3 py-2">
-                  <p className="text-muted-foreground mb-0.5">Revendeur × {p.coefficient.toFixed(2)}</p>
+                  <p className="text-muted-foreground mb-0.5">Revendeur{canAchat ? ` × ${p.coefficient.toFixed(2)}` : ''}</p>
                   <p className="font-semibold text-sm text-primary">{formatMontant(p.prixRevendeur)}</p>
-                  <p className="text-muted-foreground">{formatMontant(margeRevend)} · {tauxMarque.toFixed(0)}%</p>
+                  {canAchat && <p className="text-muted-foreground">{formatMontant(margeRevend)} · {tauxMarque.toFixed(0)}%</p>}
                 </div>
                 <div className="px-3 py-2">
                   <p className="text-muted-foreground mb-0.5">Stock</p>
@@ -1317,7 +1323,7 @@ export default function Produits() {
               { id: 'commandes',   label: 'Cmd client', icon: ShoppingCart },
               { id: 'commandesF',  label: 'Cmd fourn.', icon: Truck },
               { id: 'valorisation', label: 'Valorisation', icon: Euro },
-            ] as const).map(t => (
+            ] as const).filter(t => canAchat || !(['fournisseurs', 'commandesF', 'valorisation'] as const).includes(t.id as 'fournisseurs' | 'commandesF' | 'valorisation')).map(t => (
               <button
                 key={t.id}
                 type="button"
@@ -1388,6 +1394,7 @@ export default function Produits() {
 
               {/* Tarif Revendeur */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+                {canAchat && (
                 <div>
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
                   {composants.length > 0
@@ -1395,22 +1402,29 @@ export default function Produits() {
                     : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
                   }
                 </div>
+                )}
+                {canAchat && (
                 <div>
                   <Label className="text-xs">Coefficient</Label>
                   <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
                 </div>
+                )}
                 <div>
                   <Label className="text-xs">Prix Revendeur HT</Label>
                   <Input type="number" step="0.01" value={form.prixRevendeur} onChange={e => updateFormPrixRevendeur(parseFloat(e.target.value) || 0)} className="font-semibold" />
                 </div>
+                {canAchat && (
                 <div>
                   <Label className="text-xs">Marge brute revend.</Label>
                   <Input value={formatMontant(calcMargeBrute(form.prixRevendeur, form.prixAchat))} readOnly className="bg-muted" />
                 </div>
+                )}
+                {canAchat && (
                 <div>
                   <Label className="text-xs">Marge %</Label>
                   <Input value={`${calcTauxMarque(form.prixRevendeur, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                 </div>
+                )}
               </div>
 
               {/* Tarif Public — masqué par défaut */}
@@ -1423,15 +1437,18 @@ export default function Produits() {
                         <Label className="text-xs">Remise revendeur %</Label>
                         <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
                       </div>
+                      {canAchat && (
                       <div>
                         <Label className="text-xs">Coeff. public</Label>
                         <Input value={calcCoeffPublic(form.prixHT, form.prixAchat).toFixed(2)} readOnly className="bg-muted" />
                       </div>
+                      )}
                       <div className="col-span-2 sm:col-span-1">
                         <Label className="text-xs">Prix Vente HT (public)</Label>
                         <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                       </div>
                     </div>
+                    {canAchat && (
                     <div className="grid grid-cols-2 gap-3 mt-3">
                       <div>
                         <Label className="text-xs">Marge brute pub.</Label>
@@ -1442,6 +1459,7 @@ export default function Produits() {
                         <Input value={`${calcTauxMarque(form.prixHT, form.prixAchat).toFixed(1)}%`} readOnly className="bg-muted" />
                       </div>
                     </div>
+                    )}
                   </div>
                 </>
               )}
@@ -1477,19 +1495,19 @@ export default function Produits() {
                   <table className="w-full text-xs table-fixed">
                     <colgroup>
                       <col style={{ width: '18%' }} />
+                      {canAchat && <col style={{ width: '20%' }} />}
                       <col style={{ width: '20%' }} />
                       <col style={{ width: '20%' }} />
-                      <col style={{ width: '20%' }} />
-                      <col style={{ width: '14%' }} />
+                      {canAchat && <col style={{ width: '14%' }} />}
                       <col style={{ width: '8%' }} />
                     </colgroup>
                     <thead>
                       <tr className="text-muted-foreground border-b border-border">
                         <th className="text-left pb-1 pr-1 font-medium">Qté min</th>
-                        <th className="text-right pb-1 px-1 font-medium">Prix Achat HT</th>
+                        {canAchat && <th className="text-right pb-1 px-1 font-medium">Prix Achat HT</th>}
                         <th className="text-right pb-1 px-1 font-medium">Prix Revendeur HT</th>
                         <th className="text-right pb-1 px-1 font-medium">Prix Public HT</th>
-                        <th className="text-right pb-1 px-1 font-medium">Marge %</th>
+                        {canAchat && <th className="text-right pb-1 px-1 font-medium">Marge %</th>}
                         <th className="pb-1"></th>
                       </tr>
                     </thead>
@@ -1506,6 +1524,7 @@ export default function Produits() {
                               className="h-7 text-xs w-full"
                             />
                           </td>
+                          {canAchat && (
                           <td className="py-1 px-1">
                             <Input
                               type="number"
@@ -1522,6 +1541,7 @@ export default function Produits() {
                             />
                             {form.poids > 0 && palier.prixAchat > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixAchat / form.poids)}/kg</div>}
                           </td>
+                          )}
                           <td className="py-1 px-1">
                             <Input
                               type="number"
@@ -1548,11 +1568,13 @@ export default function Produits() {
                             />
                             {form.poids > 0 && palier.prixHT > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixHT / form.poids)}/kg</div>}
                           </td>
+                          {canAchat && (
                           <td className="py-1 px-2 text-right text-muted-foreground whitespace-nowrap">
                             {palier.prixRevendeur > 0 && palier.prixAchat > 0
                               ? `${Math.round((palier.prixRevendeur - palier.prixAchat) / palier.prixRevendeur * 100 * 10) / 10}%`
                               : '—'}
                           </td>
+                          )}
                           <td className="py-1 pl-1">
                             <button
                               type="button"
@@ -1568,7 +1590,7 @@ export default function Produits() {
                     </tbody>
                   </table>
                   <p className="text-xs text-muted-foreground mt-1">
-                    Prix de base (qté &lt; {Math.min(...paliersPrix.map(p => p.qteMin))} {form.unite || 'u.'}) : Achat {formatMontant(form.prixAchat)} · Revend. {formatMontant(form.prixRevendeur)} · Public {formatMontant(form.prixHT)}
+                    Prix de base (qté &lt; {Math.min(...paliersPrix.map(p => p.qteMin))} {form.unite || 'u.'}) : {canAchat ? `Achat ${formatMontant(form.prixAchat)} · ` : ''}Revend. {formatMontant(form.prixRevendeur)} · Public {formatMontant(form.prixHT)}
                   </p>
                 </div>
               )}
@@ -2359,7 +2381,7 @@ export default function Produits() {
                 </div>
 
                 {/* Valeur de stock (cumul des achats datés) */}
-                {editing && (
+                {editing && canAchat && (
                   <button type="button" onClick={() => setProduitTab('valorisation')} className="w-full flex items-center justify-between rounded-xl border border-border bg-muted/20 px-4 py-3 hover:bg-muted/40 transition-colors text-left">
                     <div>
                       <p className="text-sm font-medium">Valeur de stock (PMP × stock)</p>
