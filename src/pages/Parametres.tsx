@@ -138,7 +138,7 @@ export default function Parametres() {
     <div className="max-w-3xl mx-auto">
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto justify-start">
-          <TabsTrigger value="general">Général</TabsTrigger>
+          {isAdmin && <TabsTrigger value="general">Général</TabsTrigger>}
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           {isAdmin && <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>}
           <TabsTrigger value="devis">Devis</TabsTrigger>
@@ -148,6 +148,11 @@ export default function Parametres() {
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-4">
+          {!isAdmin ? (
+            <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
+              Accès réservé aux administrateurs.
+            </div>
+          ) : (<>
           {/* ══ Section Général ═══════════════════════════════════════════════ */}
           <div className="bg-card rounded-xl border border-border p-5 space-y-4">
             <div>
@@ -168,6 +173,7 @@ export default function Parametres() {
               </Button>
             </div>
           </div>
+          </>)}
         </TabsContent>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">

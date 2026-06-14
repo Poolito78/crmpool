@@ -19,7 +19,7 @@ const TYPE_ICON: Record<string, any> = {
 
 export default function Dashboard() {
   const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
-  const { canAchat } = useCurrentUser();
+  const { canAchat, isAdmin } = useCurrentUser();
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
@@ -159,7 +159,7 @@ export default function Dashboard() {
     { id: 'stat-marge-mensuelle', label: 'Marge mensuelle', value: formatMontant(margeMensuelle), icon: TrendingUp, color: 'text-accent', bg: 'bg-accent/10', link: '/devis' },
     { id: 'stat-stock-bas', label: 'Stock bas', value: produitsStockBas.length, icon: AlertTriangle, color: 'text-warning', bg: 'bg-warning/10', link: '/stock' },
     { id: 'stat-concurrents', label: 'Concurrents suivis', value: concurrentsList.length, icon: Eye, color: 'text-rose-500', bg: 'bg-rose-500/10', link: '/veille-concurrence' },
-  ].filter(s => !hidden.has(s.id as any) && (canAchat || !['stat-fournisseurs', 'stat-marge-annuelle', 'stat-marge-mensuelle'].includes(s.id)));
+  ].filter(s => !hidden.has(s.id as any) && (canAchat || !['stat-fournisseurs', 'stat-marge-annuelle', 'stat-marge-mensuelle'].includes(s.id)) && (isAdmin || s.id !== 'stat-stock-bas'));
 
   const statutColors: Record<string, string> = {
     brouillon: 'bg-muted text-muted-foreground',
@@ -202,11 +202,11 @@ export default function Dashboard() {
       ) : (
       <>
       {/* ── Alertes prioritaires ── */}
-      {((commandesATraiter.length > 0 && !hidden.has('alerte-commandes')) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
+      {(((isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes'))) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-          {/* Commandes client à traiter */}
-          {commandesATraiter.length > 0 && !hidden.has('alerte-commandes') && (
+          {/* Commandes client à traiter (admin uniquement) */}
+          {isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes') && (
             <Link to="/commandes-client" className="block rounded-xl border-2 border-orange-300 dark:border-orange-700 bg-orange-50 dark:bg-orange-900/20 p-4 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-9 h-9 rounded-lg bg-orange-100 dark:bg-orange-900/40 flex items-center justify-center shrink-0">
@@ -313,8 +313,8 @@ export default function Dashboard() {
         initialText={droppedText || undefined}
       />
 
-      {/* ── Encours fin de mois ── */}
-      {((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (
+      {/* ── Encours fin de mois (admin uniquement) ── */}
+      {isAdmin && ((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {/* Fournisseurs FDM */}
           {canAchat && totalFournFDM > 0 && !hidden.has('encours-fourn-fdm') && (
@@ -360,7 +360,7 @@ export default function Dashboard() {
 
       <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Encours fournisseurs */}
-        {canAchat && echeancesFournisseurs.length > 0 && !hidden.has('panel-echeances-fourn') && (
+        {isAdmin && echeancesFournisseurs.length > 0 && !hidden.has('panel-echeances-fourn') && (
           <div className="bg-card rounded-xl border border-border p-5">
             <div className="flex items-center justify-between mb-4">
               <h2 className="font-heading font-semibold text-lg flex items-center gap-2">
@@ -437,7 +437,7 @@ export default function Dashboard() {
         )}
 
         {/* Low Stock Alerts */}
-        {!hidden.has('panel-alertes-stock') && (
+        {isAdmin && !hidden.has('panel-alertes-stock') && (
         <div className="bg-card rounded-xl border border-border p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg">Alertes stock</h2>
