@@ -13,6 +13,7 @@ import { cn } from '@/lib/utils';
 import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import { Fragment } from 'react';
+import { useCurrentUser } from '@/hooks/useAuth';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 type StockColKey = 'statut' | 'description' | 'categorie' | 'proprietaire' | 'disponibleVente' | 'stock' | 'stockMin' | 'qteReappro' | 'fournisseur' | 'valeur';
@@ -112,6 +113,7 @@ function applyFilter(val: string, test: (nonVide: boolean, v: string) => boolean
 export default function Stock() {
   const navigate = useNavigate();
   const { produits, fournisseurs, produitFournisseurs, updateProduits } = useCRM();
+  const { canAchat } = useCurrentUser();
   const { entrepots, stockEntrepots, loading: loadingE, addEntrepot, updateEntrepot, deleteEntrepot, upsertStock } = useEntrepots();
 
   const [tab, setTab] = useState<TabId>('global');
@@ -277,7 +279,8 @@ export default function Stock() {
   const TABS: { id: TabId; label: string; icon: typeof Package }[] = [
     { id: 'global', label: 'Stock global', icon: Package },
     { id: 'entrepots', label: 'Par entrepôt', icon: Warehouse },
-    { id: 'stockistes', label: 'Fournisseurs stockistes', icon: Building2 },
+    // Onglet stockistes (prix d'achat fournisseurs) réservé au droit Achat.
+    ...(canAchat ? [{ id: 'stockistes' as TabId, label: 'Fournisseurs stockistes', icon: Building2 }] : []),
   ];
 
   return (
@@ -372,13 +375,13 @@ export default function Stock() {
         };
         return (
           <div className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className={`grid grid-cols-1 ${canAchat ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-4`}>
               <div className="stat-card text-center"><Package className="w-5 h-5 mx-auto text-primary mb-1" /><p className="text-2xl font-heading font-bold">{totalStock}</p><p className="text-xs text-muted-foreground">Unités totales</p></div>
-              <div className="stat-card text-center"><p className="text-2xl font-heading font-bold">{formatMontant(totalValeur)}</p><p className="text-xs text-muted-foreground">Valeur stock HT</p></div>
+              {canAchat && <div className="stat-card text-center"><p className="text-2xl font-heading font-bold">{formatMontant(totalValeur)}</p><p className="text-xs text-muted-foreground">Valeur stock HT</p></div>}
               <div className="stat-card text-center"><AlertTriangle className={`w-5 h-5 mx-auto mb-1 ${alertes > 0 ? 'text-warning' : 'text-success'}`} /><p className="text-2xl font-heading font-bold">{alertes}</p><p className="text-xs text-muted-foreground">Alertes</p></div>
             </div>
 
-            {reapproParFournisseur.size > 0 && (
+            {canAchat && reapproParFournisseur.size > 0 && (
               <div className="space-y-3">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2"><Truck className="w-4 h-4" /> Réappro optimale par fournisseur</h3>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -449,7 +452,7 @@ export default function Stock() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
-                      {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => <SortTh key={col.key} col={col.key} label={GLOBAL_LABELS[col.key].label} align={GLOBAL_LABELS[col.key].align} />)}
+                      {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k) && (canAchat || !['qteReappro', 'fournisseur', 'valeur'].includes(k))).map(col => <SortTh key={col.key} col={col.key} label={GLOBAL_LABELS[col.key].label} align={GLOBAL_LABELS[col.key].align} />)}
                     </tr>
                   </thead>
                   <tbody>
@@ -472,7 +475,7 @@ export default function Stock() {
                       };
                       return (
                         <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => navigate(`/produits?highlight=${p.id}`)} title="Ouvrir la fiche produit">
-                          {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k)).map(col => <Fragment key={col.key}>{renderG(col.key)}</Fragment>)}
+                          {gCols.ordered(ALL_GLOBAL_COLS, k => vg.has(k) && (canAchat || !['qteReappro', 'fournisseur', 'valeur'].includes(k))).map(col => <Fragment key={col.key}>{renderG(col.key)}</Fragment>)}
                         </tr>
                       );
                     })}
@@ -645,7 +648,7 @@ export default function Stock() {
                       <table className="w-full text-sm">
                         <thead>
                           <tr className="border-b border-border bg-muted/20">
-                            {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => <SortThE key={col.key} col={col.key} label={ENT_LABELS[col.key].label} align={ENT_LABELS[col.key].align} />)}
+                            {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k) && (canAchat || k !== 'valeur')).map(col => <SortThE key={col.key} col={col.key} label={ENT_LABELS[col.key].label} align={ENT_LABELS[col.key].align} />)}
                           </tr>
                         </thead>
                         <tbody>
@@ -675,7 +678,7 @@ export default function Stock() {
                             };
                             return (
                               <tr key={p.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors cursor-pointer" onClick={e => { if ((e.target as HTMLElement).closest('input, button')) return; navigate(`/produits?highlight=${p.id}`); }} title="Ouvrir la fiche produit">
-                                {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k)).map(col => <Fragment key={col.key}>{renderE(col.key)}</Fragment>)}
+                                {eCols.ordered(ALL_ENTREPOT_COLS, k => ve.has(k) && (canAchat || k !== 'valeur')).map(col => <Fragment key={col.key}>{renderE(col.key)}</Fragment>)}
                               </tr>
                             );
                           })}
