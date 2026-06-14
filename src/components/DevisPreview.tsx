@@ -864,7 +864,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {/* ── Ligne 2 : Fiches système + sous-colonnes ── */}
                 <tr className="bg-[#CC0000] text-white">
                   <th className="border-r border-white/20 align-middle"
-                      style={{ padding: '2px 8px', fontWeight: 'normal', fontStyle: 'italic', fontSize: '9px', opacity: 0.75 }}
+                      style={{ padding: '2px 8px', fontWeight: 'normal', fontStyle: 'italic', fontSize: '10.5px', opacity: 0.75 }}
                       data-pdf-href="https://www.isofloor.fr">
                     Fiches système / Produit :{' '}
                     <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
