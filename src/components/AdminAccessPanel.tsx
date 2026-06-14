@@ -53,6 +53,13 @@ export default function AdminAccessPanel() {
     }
   }
 
+  // Enregistre le nom d'affichage (= nom du commercial affiché dans les colonnes Commercial).
+  async function saveName(userId: string, name: string) {
+    const { error } = await supabase.from('veille_roles').update({ display_name: name || null }).eq('user_id', userId);
+    if (error) toast.error('Nom non enregistré : ' + error.message);
+    else toast.success('Nom enregistré');
+  }
+
   return (
     <div className="bg-card rounded-xl border border-border p-5 space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -88,7 +95,8 @@ export default function AdminAccessPanel() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-muted-foreground text-left">
-                <th className="py-2 pr-3 font-medium">Utilisateur</th>
+                <th className="py-2 pr-3 font-medium">Utilisateur (login)</th>
+                <th className="py-2 px-3 font-medium">Nom (commercial)</th>
                 <th className="py-2 px-3 font-medium">Rôle</th>
                 <th className="py-2 px-3 font-medium text-center">Compte actif</th>
                 <th className="py-2 px-3 font-medium text-center">Accès CRM</th>
@@ -102,8 +110,17 @@ export default function AdminAccessPanel() {
                 return (
                   <tr key={r.user_id} className="border-b border-border/50 last:border-0">
                     <td className="py-2.5 pr-3">
-                      <p className="font-medium">{r.display_name || r.email || '—'}</p>
-                      {r.display_name && r.email && <p className="text-xs text-muted-foreground">{r.email}</p>}
+                      <p className="font-medium">{r.email || '—'}</p>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <input
+                        type="text"
+                        value={r.display_name || ''}
+                        placeholder="Nom du commercial…"
+                        onChange={e => setRows(prev => prev.map(x => x.user_id === r.user_id ? { ...x, display_name: e.target.value } : x))}
+                        onBlur={e => saveName(r.user_id, e.target.value.trim())}
+                        className="h-7 w-40 text-sm rounded border border-input bg-background px-2"
+                      />
                     </td>
                     <td className="py-2.5 px-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${isAdminRow ? 'bg-primary/10 text-primary font-medium' : 'bg-muted text-muted-foreground'}`}>
