@@ -42,6 +42,7 @@ import FilterAmountInput, { matchAmountFilter } from '@/components/FilterAmountI
 import RichTextEditor from '@/components/RichTextEditor';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
+import { moFichesSupported, ensureMoFolder, findMoFiches, type MoFiche } from '@/lib/moFiches';
 import { generatePdfFromElement, writeFileToFolder } from '@/lib/pdfFolder';
 
 // ── Colonnes optionnelles (toujours disponibles) ──────────────────────────────
@@ -330,6 +331,9 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
+  const [moFiches, setMoFiches] = useState<MoFiche[]>([]);
+  const [moFolderName, setMoFolderName] = useState<string | null>(null);
+  const [moSearching, setMoSearching] = useState(false);
   const [probabiliteReussite, setProbabiliteReussite] = useState<number>(0);
   const [dateRealisation, setDateRealisation] = useState('');
   const [moGenerating, setMoGenerating] = useState(false);
@@ -1156,6 +1160,75 @@ export default function Devis() {
       setMoGenerating(false);
     }
   }
+
+  // ── Recherche d'une fiche MO dans le dossier local (par système) ───────────
+  async function runMoSearch(interactive: boolean) {
+    if (!systeme.trim()) { if (interactive) toast.error('Renseignez d\'abord le système du devis.'); return; }
+    setMoSearching(true);
+    try {
+      const handle = await ensureMoFolder(interactive);
+      if (!handle) { if (interactive) toast.error('Dossier « Fiches MO » non sélectionné ou inaccessible.'); return; }
+      setMoFolderName(handle.name);
+      const matches = await findMoFiches(handle, systeme);
+      setMoFiches(matches);
+      if (interactive) {
+        if (matches.length) toast.success(`${matches.length} fiche(s) trouvée(s) pour « ${systeme} »`);
+        else toast(`Aucune fiche trouvée pour « ${systeme} »`);
+      }
+    } catch (e) {
+      if (interactive && !(e instanceof DOMException && e.name === 'AbortError')) toast.error('Recherche impossible.');
+    } finally {
+      setMoSearching(false);
+    }
+  }
+
+  async function openMoFiche(handle: FileSystemFileHandle) {
+    try {
+      const file = await handle.getFile();
+      const url = URL.createObjectURL(file);
+      window.open(url, '_blank');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    } catch { toast.error('Impossible d\'ouvrir la fiche.'); }
+  }
+
+  async function attachMoFiche(fiche: MoFiche) {
+    let did = editingId;
+    if (!did) { const saved = save(true); did = saved || editingId; }
+    if (!did) { toast.error('Enregistrez le devis d\'abord.'); return; }
+    const name = fiche.name.split('/').pop() || fiche.name;
+    try {
+      const file = await fiche.handle.getFile();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const path = `${user.id}/${did}/${Date.now()}_${name}`;
+      const { error: upErr } = await supabase.storage.from('devis-pj').upload(path, file, { upsert: false });
+      if (upErr) { toast.error('Erreur upload : ' + upErr.message); return; }
+      const { data: signed } = await supabase.storage.from('devis-pj').createSignedUrl(path, 60 * 60 * 24 * 365 * 10);
+      const signedUrl = signed?.signedUrl ?? path;
+      const { error: insErr } = await supabase.from('devis_pieces_jointes').insert({
+        user_id: user.id, devis_id: did, type: 'fichier',
+        fichier_nom: name, fichier_url: signedUrl, fichier_taille: file.size, fichier_mime: file.type || 'application/octet-stream',
+      });
+      if (insErr) { toast.error('Fiche non jointe : ' + insErr.message); return; }
+      toast.success('Fiche jointe au devis : ' + name);
+      const { data } = await supabase.from('devis_pieces_jointes')
+        .select('id, type, contenu, fichier_nom, fichier_url, fichier_taille, fichier_mime, confidentiel, date')
+        .eq('devis_id', did).order('date', { ascending: false });
+      setSidebarPjs((data ?? []).map(r => ({
+        id: r.id, type: r.type, contenu: r.contenu ?? undefined,
+        fichierNom: r.fichier_nom ?? undefined, fichierUrl: r.fichier_url ?? undefined,
+        fichierTaille: r.fichier_taille ?? undefined, fichierMime: r.fichier_mime ?? undefined,
+        confidentiel: r.confidentiel ?? false, date: r.date,
+      })));
+    } catch { toast.error('Erreur lors du rattachement de la fiche.'); }
+  }
+
+  // Recherche silencieuse à l'ouverture de l'onglet MO (si dossier déjà autorisé).
+  useEffect(() => {
+    if (dialogOpen && dialogTab === 'mo' && systeme.trim() && moFichesSupported()) runMoSearch(false);
+    else if (!systeme.trim()) setMoFiches([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen, dialogTab, systeme]);
 
   // Auto-save en temps réel pour les devis en édition
   const autoSaveRef = useRef<ReturnType<typeof setTimeout>>();
@@ -3362,6 +3435,30 @@ export default function Devis() {
                   <Button size="sm" onClick={exportMoPdf} disabled={moGenerating}><FileText className="w-4 h-4 mr-1.5" /> {moGenerating ? 'Génération…' : 'PDF Mise en œuvre'}</Button>
                 </div>
               </div>
+              {/* ── Recherche de la fiche MO du système dans le dossier local ── */}
+              {moFichesSupported() && (
+                <div className="shrink-0 rounded-lg border border-border bg-muted/30 p-2 space-y-1.5">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button variant="outline" size="sm" onClick={() => runMoSearch(true)} disabled={moSearching}>
+                      <Search className="w-4 h-4 mr-1.5" /> {moSearching ? 'Recherche…' : (moFolderName ? 'Rechercher la fiche du système' : 'Choisir le dossier Fiches MO')}
+                    </Button>
+                    {moFolderName && <span className="text-xs text-muted-foreground">Dossier : <span className="font-medium text-foreground">{moFolderName}</span></span>}
+                    {!systeme.trim() && <span className="text-xs text-amber-600">Renseignez le « Système » du devis pour la recherche.</span>}
+                  </div>
+                  {moFiches.length > 0 && (
+                    <div className="space-y-1">
+                      {moFiches.map((f, i) => (
+                        <div key={i} className="flex items-center gap-2 text-sm bg-background rounded border border-border px-2 py-1">
+                          <FileText className="w-4 h-4 text-primary shrink-0" />
+                          <span className="flex-1 min-w-0 truncate" title={f.name}>{f.name}</span>
+                          <button type="button" onClick={() => openMoFiche(f.handle)} className="shrink-0 text-xs text-primary hover:underline inline-flex items-center gap-1"><ExternalLink className="w-3.5 h-3.5" /> Ouvrir</button>
+                          <button type="button" onClick={() => attachMoFiche(f)} className="shrink-0 text-xs text-primary hover:underline inline-flex items-center gap-1"><Paperclip className="w-3.5 h-3.5" /> Joindre</button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
               <RichTextEditor value={moContent} onChange={setMoContent} placeholder="Cliquez sur « (Re)générer le récap » ou saisissez le texte de mise en œuvre…" className="flex-1 min-h-0" />
               {/* Zone hors-écran pour la génération PDF (titre + contenu) */}
               <div className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden>
