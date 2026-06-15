@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrentUser } from '@/hooks/useAuth';
+import { useCommercials } from '@/hooks/useCommercials';
 import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 
@@ -59,7 +60,11 @@ export default function CRMLayout() {
   });
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
-  const { canAchat, canCrm, isAdmin } = useCurrentUser();
+  const { canAchat, canCrm, isAdmin, userId, session } = useCurrentUser();
+  const { nameOf } = useCommercials();
+  const currentName = nameOf(userId);
+  const currentLabel2 = currentName !== '—' ? currentName : (session?.user?.email ?? 'Utilisateur');
+  const roleLabel = isAdmin ? 'Administrateur' : 'Invité';
 
   // Nav filtrée selon les droits : groupe « Achat » masqué sans droit Achat,
   // lien « CRM » masqué sans droit CRM, onglet « Admin » masqué aux non-admins.
@@ -235,6 +240,17 @@ export default function CRMLayout() {
           </button>
         </nav>
         <div className={cn('pb-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
+          {/* Utilisateur connecté */}
+          {collapsed ? (
+            <div title={`${currentLabel2} · ${roleLabel}`} className="flex items-center justify-center w-9 h-9 mx-auto mb-1 rounded-full bg-sidebar-accent/40 text-sidebar-foreground text-xs font-semibold uppercase">
+              {currentLabel2.charAt(0)}
+            </div>
+          ) : (
+            <div className="px-3 py-2 mb-1 border-t border-sidebar-border/50">
+              <p className="text-sm font-medium text-sidebar-foreground truncate" title={currentLabel2}>{currentLabel2}</p>
+              <p className="text-[11px] text-sidebar-foreground/60">{roleLabel}</p>
+            </div>
+          )}
           <button
             onClick={() => supabase.auth.signOut()}
             title="Déconnexion"
