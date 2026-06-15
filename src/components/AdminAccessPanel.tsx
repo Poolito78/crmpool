@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { ShieldCheck, RefreshCw, ExternalLink } from 'lucide-react';
+import { setCreatorName } from '@/lib/concurrents';
 
 type Row = {
   user_id: string;
@@ -54,7 +55,9 @@ export default function AdminAccessPanel() {
   }
 
   // Enregistre le nom d'affichage (= nom du commercial affiché dans les colonnes Commercial).
-  async function saveName(userId: string, name: string) {
+  async function saveName(userId: string, email: string | null, name: string) {
+    // Mise à jour immédiate de la map des créateurs (colonne « Saisi par » Veille).
+    if (email && name) setCreatorName(email, name);
     const { error } = await supabase.from('veille_roles').update({ display_name: name || null }).eq('user_id', userId);
     if (error) toast.error('Nom non enregistré : ' + error.message);
     else toast.success('Nom enregistré');
@@ -118,7 +121,7 @@ export default function AdminAccessPanel() {
                         value={r.display_name || ''}
                         placeholder="Nom du commercial…"
                         onChange={e => setRows(prev => prev.map(x => x.user_id === r.user_id ? { ...x, display_name: e.target.value } : x))}
-                        onBlur={e => saveName(r.user_id, e.target.value.trim())}
+                        onBlur={e => saveName(r.user_id, r.email, e.target.value.trim())}
                         className="h-7 w-40 text-sm rounded border border-input bg-background px-2"
                       />
                     </td>
