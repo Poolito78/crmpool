@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2, MapPin, Star, FileText, LayoutList, Table2, BarChart3, Settings, Download, Users } from 'lucide-react';
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
-import VeilleDisplayName from '@/components/VeilleDisplayName';
 import ClientsImportExport from '@/components/ClientsImportExport';
 import AdminAccessPanel from '@/components/AdminAccessPanel';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -358,10 +357,7 @@ export default function Parametres() {
             Corrigez globalement les catégories et les noms d'informateurs : renommer une valeur l'applique sur <strong>tous</strong> les produits concernés (corrige fautes et variantes).
           </p>
         </div>
-        <VeilleDisplayName />
-        <div className="border-t border-border pt-4">
-          <VeilleCorrectionPanel />
-        </div>
+        <VeilleCorrectionPanel />
       </div>
       )}
         </TabsContent>

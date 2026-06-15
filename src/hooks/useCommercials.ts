@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { setCreatorName } from '@/lib/concurrents';
 
 export type Commercial = { userId: string; name: string };
 
@@ -14,7 +15,13 @@ export function useCommercials() {
     (async () => {
       const { data } = await supabase.from('veille_roles').select('*');
       if (cancelled || !data) return;
-      const list = (data as { user_id: string; display_name?: string | null; email?: string | null }[])
+      const rows = data as { user_id: string; display_name?: string | null; email?: string | null }[];
+      // Synchronise le nom commercial vers la map utilisée par la Veille (« Saisi par »),
+      // pour unifier avec le nom d'affichage défini dans Admin → Droits utilisateurs.
+      for (const r of rows) {
+        if (r.email && r.display_name && r.display_name.trim()) setCreatorName(r.email, r.display_name.trim());
+      }
+      const list = rows
         .map(r => ({ userId: r.user_id, name: (r.display_name || r.email || '').trim() || 'Commercial' }))
         .sort((a, b) => a.name.localeCompare(b.name));
       setCommercials(list);
