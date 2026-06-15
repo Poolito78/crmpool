@@ -45,7 +45,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Devis',              icon: FileText,        path: '/parametres?tab=devis' },
       { type: 'link', label: 'Clients',            icon: Users,           path: '/parametres?tab=clients' },
       { type: 'link', label: 'Veille Concurrence', icon: Eye,             path: '/parametres?tab=veille' },
-      { type: 'link', label: 'Admin App Veille ext', icon: ShieldCheck,   path: '/parametres?tab=administration' },
+      { type: 'link', label: 'Admin App invité', icon: ShieldCheck,   path: '/parametres?tab=administration' },
       { type: 'link', label: 'Historique GED',     icon: History,         path: '/ged' },
     ],
   },
