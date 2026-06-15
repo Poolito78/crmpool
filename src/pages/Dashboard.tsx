@@ -462,7 +462,7 @@ export default function Dashboard() {
         )}
 
         {/* Veille Concurrence */}
-        {!hidden.has('panel-veille') && (
+        {isAdmin && !hidden.has('panel-veille') && (
         <div className="bg-card rounded-xl border border-rose-200 dark:border-rose-900 p-5">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-heading font-semibold text-lg flex items-center gap-2">

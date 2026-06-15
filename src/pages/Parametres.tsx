@@ -127,12 +127,18 @@ export default function Parametres() {
   }
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
-  const groups = DASHBOARD_TILES.reduce<Record<string, DashboardTileDef[]>>((acc, t) => {
+  // Tuiles réservées : on ne propose dans les réglages que celles que l'utilisateur
+  // peut réellement voir sur son tableau de bord.
+  const ADMIN_TILES = ['stat-stock-bas', 'alerte-commandes', 'encours-fourn-fdm', 'encours-client-fdm', 'panel-echeances-fourn', 'panel-alertes-stock', 'panel-veille'];
+  const ACHAT_TILES = ['stat-fournisseurs', 'stat-marge-annuelle', 'stat-marge-mensuelle'];
+  const dashboardTiles = DASHBOARD_TILES.filter(t =>
+    (isAdmin || !ADMIN_TILES.includes(t.id)) && (canAchat || !ACHAT_TILES.includes(t.id)));
+  const groups = dashboardTiles.reduce<Record<string, DashboardTileDef[]>>((acc, t) => {
     (acc[t.group] ||= []).push(t);
     return acc;
   }, {});
   const groupOrder = ['Indicateurs', 'Alertes', 'Encours fin de mois', 'Panneaux'];
-  const visibleCount = DASHBOARD_TILES.length - hidden.size;
+  const visibleCount = dashboardTiles.filter(t => !hidden.has(t.id)).length;
 
   return (
     <div className="max-w-3xl mx-auto">
@@ -369,7 +375,7 @@ export default function Parametres() {
             Tableau de bord
           </h2>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setHiddenTiles(DASHBOARD_TILES.map(t => t.id))}>
+            <Button variant="outline" size="sm" onClick={() => setHiddenTiles(dashboardTiles.map(t => t.id))}>
               <EyeOff className="w-4 h-4 mr-1.5" /> Tout masquer
             </Button>
             <Button variant="outline" size="sm" onClick={showAllTiles}>
@@ -379,7 +385,7 @@ export default function Parametres() {
         </div>
         <p className="text-sm text-muted-foreground">
           Choisissez les tuiles à afficher sur le tableau de bord.{' '}
-          <span className="font-medium text-foreground">{visibleCount}</span> / {DASHBOARD_TILES.length} visibles.
+          <span className="font-medium text-foreground">{visibleCount}</span> / {dashboardTiles.length} visibles.
         </p>
       </div>
 
