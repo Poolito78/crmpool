@@ -1217,10 +1217,20 @@ export function useStore() {
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('devis').insert(added.map(d => devisToDb(d, userId)) as any).then(({ error }) => {
+        if (added.length) supabase.from('devis').insert(added.map(d => devisToDb(d, userId)) as any).select('id, numero').then(({ data, error }) => {
           if (error) {
             console.error('[devis insert]', error.message, error.details);
             toast.error(`Erreur sauvegarde devis : ${error.message}`);
+            return;
+          }
+          // Le numéro est attribué atomiquement côté serveur (trigger) → on relit la
+          // valeur réelle et on remplace le numéro provisoire localement.
+          const rows = (data as { id: string; numero: string }[] | null) || [];
+          if (rows.length) {
+            setDevis(cur => cur.map(d => {
+              const m = rows.find(r => r.id === d.id);
+              return m && m.numero && m.numero !== d.numero ? { ...d, numero: m.numero } : d;
+            }));
           }
         });
         if (updated.length) {
