@@ -637,17 +637,26 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 const allContacts = client?.contacts || [];
                 let contactLivrNom = '';
                 let contactLivrTel = '';
-                // Contact explicitement choisi, sinon contact marqué « livraison », sinon principal
-                const livrCt = (devis.contactLivraisonId && devis.contactLivraisonId !== '__principal__')
-                  ? allContacts.find(c => c.id === devis.contactLivraisonId)
-                  : (!devis.contactLivraisonId ? allContacts.find(c => c.livraison) : undefined);
-                if (livrCt) {
-                  contactLivrNom = [livrCt.prenom, livrCt.nom].filter(Boolean).join(' ') || livrCt.email || '';
-                  contactLivrTel = livrCt.telephone || livrCt.telephoneMobile || '';
+                const adrContact = adresseLivraison?.contact?.trim() || '';
+                const cid = devis.contactLivraisonId;
+                // Priorité : contact propre à l'adresse de livraison (explicite __adresse__,
+                // ou par défaut si aucun contact choisi et l'adresse en a un).
+                if ((cid === '__adresse__' || !cid) && adrContact) {
+                  contactLivrNom = adrContact;
+                  contactLivrTel = adresseLivraison?.telephone || '';
                 } else {
-                  // Contact principal : utiliser le nom individuel du client + son téléphone
-                  contactLivrNom = client?.nom || '';
-                  contactLivrTel = client?.telephone || client?.telephoneMobile || '';
+                  // Contact explicitement choisi, sinon contact marqué « livraison », sinon principal
+                  const livrCt = (cid && cid !== '__principal__' && cid !== '__adresse__')
+                    ? allContacts.find(c => c.id === cid)
+                    : (!cid ? allContacts.find(c => c.livraison) : undefined);
+                  if (livrCt) {
+                    contactLivrNom = [livrCt.prenom, livrCt.nom].filter(Boolean).join(' ') || livrCt.email || '';
+                    contactLivrTel = livrCt.telephone || livrCt.telephoneMobile || '';
+                  } else {
+                    // Contact principal : utiliser le nom individuel du client + son téléphone
+                    contactLivrNom = client?.nom || '';
+                    contactLivrTel = client?.telephone || client?.telephoneMobile || '';
+                  }
                 }
                 // Contact de facturation : contact sélectionné dans le devis, sinon contact « facturation », sinon principal (1er)
                 const facturationContact = devis.contactId

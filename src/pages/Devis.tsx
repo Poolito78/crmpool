@@ -2251,13 +2251,17 @@ export default function Devis() {
                       {(() => {
                         const allContacts = selectedClient.contacts || [];
                         const hasContactPrincipal = selectedClient.nom || selectedClient.telephone;
-                        if (allContacts.length === 0 && !hasContactPrincipal) return null;
+                        // Contact propre à l'adresse de livraison sélectionnée → prioritaire.
+                        const selAdr = adresseLivraisonId ? selectedClient.adressesLivraison?.find(a => a.id === adresseLivraisonId) : null;
+                        const adrContactNom = selAdr?.contact?.trim() || '';
+                        if (allContacts.length === 0 && !hasContactPrincipal && !adrContactNom) return null;
                         const defaultLivr = allContacts.find(c => c.livraison);
-                        const livrId = contactLivraisonId || (defaultLivr ? defaultLivr.id : '__principal__');
+                        const livrId = contactLivraisonId || (adrContactNom ? '__adresse__' : (defaultLivr ? defaultLivr.id : '__principal__'));
                         const isPrincipal = livrId === '__principal__';
-                        const livrContact = isPrincipal ? null : allContacts.find(c => c.id === livrId);
-                        const livrEmail = isPrincipal ? selectedClient.email : livrContact?.email;
-                        const livrTel = isPrincipal ? selectedClient.telephone : (livrContact?.telephone || livrContact?.telephoneMobile);
+                        const isAdr = livrId === '__adresse__';
+                        const livrContact = (isPrincipal || isAdr) ? null : allContacts.find(c => c.id === livrId);
+                        const livrEmail = isAdr ? '' : (isPrincipal ? selectedClient.email : livrContact?.email);
+                        const livrTel = isAdr ? (selAdr?.telephone || '') : (isPrincipal ? selectedClient.telephone : (livrContact?.telephone || livrContact?.telephoneMobile));
                         return (
                           <div className="border-t border-border pt-2 mt-2">
                             <label className="text-xs font-medium text-muted-foreground block mb-1">Contact livraison</label>
@@ -2266,6 +2270,7 @@ export default function Devis() {
                               onChange={e => setContactLivraisonId(e.target.value)}
                               className="w-full text-xs rounded border border-input bg-background px-2 py-1.5"
                             >
+                              {adrContactNom && <option value="__adresse__">{adrContactNom}{selAdr?.telephone ? ` · ${selAdr.telephone}` : ''} (adresse livr.)</option>}
                               <option value="__principal__">{selectedClient.societe || selectedClient.nom}{selectedClient.telephone ? ` · ${selectedClient.telephone}` : ''}</option>
                               {allContacts.map(ct => (
                                 <option key={ct.id} value={ct.id}>
