@@ -2148,11 +2148,19 @@ export default function Devis() {
                   onSelect={(id) => {
                     setClientId(id);
                     setContactId('');
-                    // Auto-remplir les conditions depuis le délai de règlement du client
                     if (id) {
                       const c = clients.find(cl => cl.id === id);
+                      // Auto-remplir les conditions depuis le délai de règlement du client
                       const opt = DELAI_REGLEMENT_OPTIONS.find(o => o.value === c?.delaiReglement);
                       if (opt) setConditions(opt.conditions);
+                      // Pré-sélectionner l'adresse de livraison par défaut (sinon la 1re) + son contact
+                      const livrAdrs = (c?.adressesLivraison || []).filter(a => a.type !== 'facturation');
+                      const defAdr = livrAdrs.find(a => a.parDefaut) || livrAdrs[0];
+                      setAdresseLivraisonId(defAdr ? defAdr.id : '');
+                      setContactLivraisonId(''); // laisse le défaut « contact de l'adresse » s'appliquer
+                    } else {
+                      setAdresseLivraisonId('');
+                      setContactLivraisonId('');
                     }
                   }}
                   onCreateNew={(societe) => {
