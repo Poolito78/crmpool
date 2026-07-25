@@ -93,6 +93,93 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
   return result;
 }
 
+// ── Pont navigateur (sans console) ───────────────────────────────────────────
+// Même principe que le Chiffrage ISOSIGN : le devis est déposé « en attente »,
+// puis un marque-page injecte le pont DANS la page Odoo (session déjà connectée)
+// qui le lit et crée la commande. Deux transports, essayés dans l'ordre :
+//   1. serveur local du Chiffrage (http://127.0.0.1:8765) s'il tourne ;
+//   2. presse-papiers (aucune installation) — le pont le relit.
+const SRV_LOCAL = 'http://127.0.0.1:8765';
+
+export interface OdooPayload {
+  source: 'crmpool';
+  numero: string;
+  client: string;
+  contact?: string;
+  ref?: string;
+  validity?: string;
+  note?: string;
+  company_id: number;
+  negoce_code: string;
+  negoce_id: number;
+  port_id: number;
+  lines: LigneScript[];
+}
+
+/** Construit le devis à transmettre au pont (prix nets déjà calculés). */
+export function buildOdooPayload(
+  devis: Devis,
+  client: Client,
+  produits: Produit[],
+  options?: { surface?: number; contactNom?: string; odooPartnerName?: string }
+): OdooPayload {
+  const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
+  const lignesProductOnly = devis.lignes.filter(l => !l.type || l.type === 'ligne');
+  const totals = calculerTotalDevis(lignesProductOnly, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
+  const coutM2 = surface > 0 ? Math.round((totals.totalTTC / surface) * 100) / 100 : 0;
+
+  const noteLines: string[] = [];
+  if (devis.systeme) noteLines.push(`Système : ${devis.systeme}`);
+  if (surface > 0) noteLines.push(`Surface globale : ${surface} m²`);
+  if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/m²`);
+
+  // Prix net (remise appliquée), arrondi supérieur au centime — comme l'export console.
+  const lines = buildLignes(devis, produits).map(l =>
+    l.type === 'product'
+      ? { ...l, pu: Math.ceil((l.pu || 0) * (1 - ((l.rem || 0) / 100)) * 100) / 100, rem: 0 }
+      : l
+  );
+
+  return {
+    source: 'crmpool',
+    numero: devis.numero,
+    client: options?.odooPartnerName || client.societe || client.nom,
+    contact: options?.contactNom || undefined,
+    ref: devis.referenceAffaire || undefined,
+    validity: devis.dateValidite || undefined,
+    note: noteLines.join('\n') || undefined,
+    company_id: ODOO_COMPANY_ID,
+    negoce_code: ODOO_NEGOCE_CODE,
+    negoce_id: ODOO_NEGOCE_ID,
+    port_id: ODOO_PORT_PRODUCT_ID,
+    lines,
+  };
+}
+
+/**
+ * Dépose le devis pour le pont Odoo.
+ * Retourne le transport réellement utilisé ('serveur' | 'presse-papiers').
+ */
+export async function envoyerVersOdoo(payload: OdooPayload): Promise<'serveur' | 'presse-papiers'> {
+  // 1. Serveur local du Chiffrage (s'il tourne) — court délai pour ne pas bloquer.
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 900);
+    const r = await fetch(`${SRV_LOCAL}/devispending`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: ctrl.signal,
+    });
+    clearTimeout(t);
+    if (r.ok) return 'serveur';
+  } catch { /* serveur absent → presse-papiers */ }
+
+  // 2. Presse-papiers : le pont le relit dans la page Odoo.
+  await navigator.clipboard.writeText(JSON.stringify(payload));
+  return 'presse-papiers';
+}
+
 export function genererScriptOdoo(
   devis: Devis,
   client: Client,

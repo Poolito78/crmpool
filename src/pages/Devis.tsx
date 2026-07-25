@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
-import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -331,6 +331,8 @@ export default function Devis() {
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
+  // Pont Odoo : devis déposé, en attente du clic sur le marque-page
+  const [odooInfo, setOdooInfo] = useState<{ numero: string; transport: string; script: string } | null>(null);
   const [moFiches, setMoFiches] = useState<MoFiche[]>([]);
   const [moFolderName, setMoFolderName] = useState<string | null>(null);
   const [moSearching, setMoSearching] = useState(false);
@@ -2083,11 +2085,17 @@ export default function Devis() {
                             systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
                             surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
                           };
-                          const script = genererScriptOdoo(current, selectedClient, produits, { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom });
-                          await navigator.clipboard.writeText(script);
-                          toast.success('Script Odoo copié !', { description: 'Ouvre Odoo → F12 → Console → Ctrl+V → Ctrl+Entrée', duration: 6000 });
+                          const opts = { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
+                          // Pont navigateur : on dépose le devis (serveur local du
+                          // Chiffrage s'il tourne, sinon presse-papiers) — plus de console.
+                          const transport = await envoyerVersOdoo(buildOdooPayload(current, selectedClient, produits, opts));
+                          setOdooInfo({
+                            numero: current.numero,
+                            transport,
+                            script: genererScriptOdoo(current, selectedClient, produits, opts),
+                          });
                         } catch (err) {
-                          toast.error('Erreur lors de la génération du script Odoo');
+                          toast.error('Erreur lors de la préparation du devis Odoo');
                           console.error(err);
                         }
                       }}>
@@ -3546,6 +3554,50 @@ export default function Devis() {
       </Dialog>
 
       {/* Agrandissement d'une image collée (lightbox) */}
+      {/* ── Pont Odoo : devis déposé, il ne reste qu'à cliquer le marque-page ── */}
+      <Dialog open={!!odooInfo} onOpenChange={(o) => { if (!o) setOdooInfo(null); }}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader><DialogTitle>Devis {odooInfo?.numero} prêt pour Odoo</DialogTitle></DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-muted-foreground">
+              Transmis via {odooInfo?.transport === 'serveur' ? 'le serveur local du Chiffrage' : 'le presse-papiers'}.
+            </p>
+            <ol className="list-decimal pl-5 space-y-1.5">
+              <li>Ouvrez Odoo dans un onglet et connectez-vous.</li>
+              <li>Cliquez sur le marque-page <b>Devis → Odoo</b> : le devis se remplit tout seul (choix du client, contrôle des articles, création en brouillon).</li>
+            </ol>
+            <a
+              href="https://www.odoo-sign.fr/web#cids=13&menu_id=178&action=302"
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-primary hover:underline"
+            ><ExternalLink className="w-3.5 h-3.5" /> Ouvrir Odoo</a>
+
+            <div className="border-t border-border pt-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Première utilisation</p>
+              <p className="text-xs text-muted-foreground mb-2">
+                Glissez ce lien dans votre barre de favoris (une seule fois) :
+              </p>
+              {/* href javascript: — React bloque ce schéma en JSX, d'où l'insertion HTML directe */}
+              <div dangerouslySetInnerHTML={{ __html:
+                '<a href="javascript:(function(){var s=document.createElement(\'script\');s.src=\'https://crmpool.vercel.app/odoo-bridge.js?\'+Date.now();document.body.appendChild(s);})()"'
+                + ' style="display:inline-block;padding:6px 12px;border-radius:8px;background:#7c3aed;color:#fff;font-weight:600;text-decoration:none;cursor:grab">Devis → Odoo</a>' }} />
+            </div>
+
+            <div className="border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!odooInfo) return;
+                  await navigator.clipboard.writeText(odooInfo.script);
+                  toast.success('Script console copié', { description: 'Odoo → F12 → Console → Ctrl+V → Entrée' });
+                }}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+              >Méthode de secours : copier le script pour la console</button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {zoomImage && (
         <div
           className="fixed inset-0 z-[200] bg-black/80 flex items-center justify-center p-4 cursor-zoom-out"
