@@ -35,8 +35,13 @@ export function promptOdooPartnerName(clientId: string, defaultName: string): st
 }
 
 const ODOO_COMPANY_ID = 13;
-// Produit de fallback pour les lignes sans code Odoo (ex: pigment, surcharge, port)
-const ODOO_FALLBACK_PRODUCT_ID = 362577; // FRAIS DE PORT — service générique
+// Frais de port : produit service dédié (ligne de transport, pas un négoce).
+const ODOO_PORT_PRODUCT_ID = 362577; // FRAIS DE PORT — service générique
+// Repli négoce (même méthode que le Chiffrage ISOSIGN) : article générique dont
+// la désignation réelle va dans le libellé de ligne et le prix dans le P.U.
+// C'est l'EXCEPTION : on ne doit y tomber que si la référence n'existe pas dans Odoo.
+const ODOO_NEGOCE_CODE = 'NEG.ISO';
+const ODOO_NEGOCE_ID = 575933; // « GE NEGOCE ISO » — repli si la recherche par code échoue
 
 interface LigneScript {
   type: 'section' | 'note' | 'product';
@@ -45,6 +50,7 @@ interface LigneScript {
   qty?: number;
   pu?: number;    // prix unitaire HT AVANT remise
   rem?: number;   // remise % (sera calculée en net, remise=0 dans Odoo)
+  port?: boolean; // ligne de frais de port (produit service dédié)
 }
 
 function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
@@ -59,10 +65,11 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
       result.push({ type: 'note', desc: l.description });
     } else {
       const produit = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      const ref = (produit?.reference || '').trim();
       result.push({
         type: 'product',
         desc: l.description,
-        ref: produit?.reference || undefined,
+        ref: ref || undefined,
         qty: l.quantite,
         pu: l.prixUnitaireHT,
         rem: l.remise ?? 0,
@@ -79,6 +86,7 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
       qty: 1,
       pu: devis.fraisPortHT,
       rem: 0,
+      port: true,
     });
   }
 
@@ -137,11 +145,42 @@ const contactId=ctList.length?ctList[0].id:null;
 console.log('Contact:',contactId,ctList[0]?.name);
 ` : 'const contactId=null;'}
 
-// 3. Produits par référence
+// 3. Produits par référence — même méthode que le Chiffrage ISOSIGN :
+//    on résout un maximum d'articles RÉELS ; NEG.ISO n'est que le repli.
 const refs=${JSON.stringify(refs)};
-const prodList=refs.length?await rpc('product.product','search_read',[[['default_code','in',refs]]],{fields:['id','default_code'],limit:200}):[];
-const prodMap=Object.fromEntries(prodList.map(p=>[p.default_code,p.id]));
-console.log('Produits trouvés:',Object.keys(prodMap).length+'/'+refs.length,prodMap);
+const prodMap={};
+const orDom=(conds)=>{const d=[];for(let i=0;i<conds.length-1;i++)d.push('|');return d.concat(conds);};
+if(refs.length){
+  // Passe 1 — code exact
+  const p1=await rpc('product.product','search_read',[[['default_code','in',refs]]],{fields:['id','default_code'],limit:500});
+  p1.forEach(p=>{prodMap[p.default_code]=p.id;});
+  // Passe 2 — code insensible à la casse / aux espaces (=ilike)
+  let todo=refs.filter(r=>!prodMap[r]);
+  if(todo.length){
+    const p2=await rpc('product.product','search_read',[orDom(todo.map(r=>['default_code','=ilike',r]))],{fields:['id','default_code'],limit:500});
+    todo.forEach(r=>{const hit=p2.find(p=>(p.default_code||'').trim().toLowerCase()===r.toLowerCase());if(hit)prodMap[r]=hit.id;});
+  }
+  // Passe 3 — le code est contenu dans la référence Odoo (préfixes/suffixes catalogue).
+  //   Prudence : uniquement pour les codes assez longs ET si UN SEUL produit
+  //   correspond — un mauvais article serait pire qu'une ligne négoce.
+  todo=refs.filter(r=>!prodMap[r]&&r.length>=5);
+  if(todo.length){
+    const p3=await rpc('product.product','search_read',[orDom(todo.map(r=>['default_code','ilike',r]))],{fields:['id','default_code'],limit:500});
+    todo.forEach(r=>{
+      const hits=p3.filter(p=>(p.default_code||'').toLowerCase().includes(r.toLowerCase()));
+      if(hits.length===1)prodMap[r]=hits[0].id;
+      else if(hits.length>1)console.warn('Référence ambiguë, laissée en négoce:',r,hits.map(h=>h.default_code));
+    });
+  }
+}
+const missing=refs.filter(r=>!prodMap[r]);
+console.log('Produits résolus:',Object.keys(prodMap).length+'/'+refs.length,prodMap);
+if(missing.length)console.warn('Références introuvables (→ '+${JSON.stringify(ODOO_NEGOCE_CODE)}+'):',missing);
+
+// 3a. Article négoce (repli) — recherché par code, id de secours si absent
+const negList=await rpc('product.product','search_read',[[['default_code','=',${JSON.stringify(ODOO_NEGOCE_CODE)}]]],{fields:['id'],limit:1});
+const negId=negList.length?negList[0].id:${ODOO_NEGOCE_ID};
+console.log('Article négoce:',negId);
 
 // 3b. TVA 20%
 const taxes=await rpc('account.tax','search_read',[[['name','ilike','20'],['type_tax_use','=','sale'],['active','=',true],['company_id','=',${ODOO_COMPANY_ID}]]],{fields:['id','name'],limit:5});
@@ -170,7 +209,7 @@ ${noteText ? `await rpc('sale.order.line','create',[{order_id:orderId,display_ty
 
 // 7. Lignes
 const lignes=${JSON.stringify(lignes)};
-let seq=10,ok=0,errs=[];
+let seq=10,ok=0,nArt=0,nNeg=0,errs=[],negLabels=[];
 for(const l of lignes){
   seq+=10;
   try{
@@ -181,10 +220,13 @@ for(const l of lignes){
       Object.assign(vals,{display_type:'line_note',name:l.desc});
     } else {
       const pid=l.ref?prodMap[l.ref]:null;
+      // Article réel si résolu ; sinon frais de port dédié ; sinon repli négoce.
+      const finalId=pid||(l.port?${ODOO_PORT_PRODUCT_ID}:negId);
+      if(pid)nArt++; else if(!l.port){nNeg++;negLabels.push((l.ref?l.ref+' — ':'')+l.desc);}
       // Arrondi supérieur à 2 décimales
       const netPrice=Math.ceil((l.pu||0)*(1-((l.rem||0)/100))*100)/100;
       Object.assign(vals,{
-        product_id:pid||${ODOO_FALLBACK_PRODUCT_ID},
+        product_id:finalId,
         name:l.desc,
         product_uom_qty:l.qty||1,
         price_unit:netPrice,
@@ -194,14 +236,16 @@ for(const l of lignes){
     }
     await rpc('sale.order.line','create',[vals]);
     ok++;
-    console.log('Ligne OK:',l.desc);
+    console.log('Ligne OK:',(l.type==='product'?(l.ref&&prodMap[l.ref]?'✅ ':'📦 '):''),l.desc);
   }catch(e){
     console.error('ERR:',l.desc,e.message);
     errs.push(l.desc+': '+(e.message||'').substring(0,80));
   }
 }
 
-alert('✅ ${devis.numero} → Odoo\\n'+ok+'/'+lignes.length+' lignes créées'+(errs.length?'\\n\\nErreurs:\\n'+errs.join('\\n'):'  ✓'));
+alert('✅ ${devis.numero} → Odoo\\n'+ok+'/'+lignes.length+' lignes créées'
+  +'\\n✅ '+nArt+' article(s) catalogue'+(nNeg?'\\n📦 '+nNeg+' en négoce ('+${JSON.stringify(ODOO_NEGOCE_CODE)}+') :\\n  - '+negLabels.join('\\n  - '):'')
+  +(errs.length?'\\n\\nErreurs:\\n'+errs.join('\\n'):''));
 window.location.href='/web#model=sale.order&id='+orderId+'&view_type=form&cids=${ODOO_COMPANY_ID}&menu_id=178&action=302';
 })();`;
 }
