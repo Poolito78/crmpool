@@ -70,6 +70,7 @@
   function fail(msg) { html(hdr('<b style="color:#b91c1c">' + esc(msg) + "</b>")); wireClose(); }
 
   var payload = null, partner = null, resolved = {}, fromServer = false;
+  var match = {}, descOf = {}, partsCache = [];
 
   /* ---------- 0. session Odoo ouverte ? ---------- */
   function checkSession() {
@@ -147,24 +148,73 @@
     return resolveCodes().then(searchPartner).catch(function (e) { fail(e.message); });
   }
 
-  /* ---------- 2. résolution des références (3 passes) ---------- */
+  /* ---------- 2. résolution des références ---------- */
   function orDom(conds) {
     var d = [];
     for (var i = 0; i < conds.length - 1; i++) d.push("|");
     return d.concat(conds);
   }
+
+  // Comparaison « à la lettre près » : on ignore casse, accents et ponctuation.
+  // GRANITEGRIS051 (crmpool) vs GRANITGRIS0,5/1 (Odoo) -> granitegris051 / granitgris051
+  function norm(s) {
+    return String(s == null ? "" : s).toLowerCase().normalize("NFD")
+      .replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]/g, "");
+  }
+  function lev(a, b) {
+    if (a === b) return 0;
+    if (!a.length) return b.length;
+    if (!b.length) return a.length;
+    var prev = [], cur = [], i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur[0] = i;
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur.slice();
+    }
+    return prev[b.length];
+  }
+  function sim(a, b) {
+    if (!a || !b) return 0;
+    var m = Math.max(a.length, b.length);
+    return m ? 1 - lev(a, b) / m : 0;
+  }
+
+  // Correspondances confirmées à la main (mémorisées sur l'origine Odoo) :
+  // une fois GRANITEGRIS051 -> GRANITGRIS0,5/1 validé, c'est automatique ensuite.
+  var MAPKEY = "crmpool_odoo_map";
+  function loadMap() {
+    try { return JSON.parse(localStorage.getItem(MAPKEY) || "{}") || {}; } catch (e) { return {}; }
+  }
+  function saveMap(m) {
+    try { localStorage.setItem(MAPKEY, JSON.stringify(m)); } catch (e) { /* ignore */ }
+  }
   function resolveCodes() {
     var refs = [];
+    descOf = {};
     payload.lines.forEach(function (l) {
-      if (l.type === "product" && l.ref && refs.indexOf(l.ref) < 0) refs.push(l.ref);
+      if (l.type !== "product" || !l.ref) return;
+      if (refs.indexOf(l.ref) < 0) refs.push(l.ref);
+      if (!descOf[l.ref]) descOf[l.ref] = l.desc || "";
     });
-    resolved = {};
+    resolved = {}; match = {};
     if (!refs.length) return Promise.resolve();
+
+    // Passe 0 — correspondances déjà confirmées à la main
+    var map = loadMap();
+    refs.forEach(function (r) {
+      if (map[r] && map[r].id) { resolved[r] = map[r].id; match[r] = { kind: "map", code: map[r].code }; }
+    });
 
     // Passe 1 — code exact
     return rpc("product.product", "search_read", [[["default_code", "in", refs]], ["id", "default_code"]], { limit: 500 })
       .then(function (res) {
-        res.forEach(function (p) { resolved[p.default_code] = p.id; });
+        res.forEach(function (p) {
+          resolved[p.default_code] = p.id;
+          match[p.default_code] = { kind: "exact", code: p.default_code };
+        });
         // Passe 2 — casse / espaces (=ilike)
         var todo = refs.filter(function (r) { return !resolved[r]; });
         if (!todo.length) return null;
@@ -175,7 +225,7 @@
               var hit = r2.filter(function (p) {
                 return String(p.default_code || "").trim().toLowerCase() === r.toLowerCase();
               })[0];
-              if (hit) resolved[r] = hit.id;
+              if (hit) { resolved[r] = hit.id; match[r] = { kind: "exact", code: hit.default_code }; }
             });
           });
       })
@@ -190,9 +240,43 @@
               var hits = r3.filter(function (p) {
                 return String(p.default_code || "").toLowerCase().indexOf(r.toLowerCase()) >= 0;
               });
-              if (hits.length === 1) resolved[r] = hits[0].id;
+              if (hits.length === 1) { resolved[r] = hits[0].id; match[r] = { kind: "exact", code: hits[0].default_code }; }
             });
           });
+      })
+      .then(function () {
+        // Passe 4 — RAPPROCHEMENT : le code Odoo diffère par la ponctuation ou
+        // une lettre (GRANITEGRIS051 vs GRANITGRIS0,5/1). On ramène des candidats
+        // par début de code ET par mot de la désignation, puis on note la
+        // ressemblance. Retenu seulement si nettement au-dessus du 2e.
+        var todo = refs.filter(function (r) { return !resolved[r]; });
+        if (!todo.length) return null;
+        var conds = [];
+        todo.forEach(function (r) {
+          var pre = r.replace(/[^A-Za-z0-9]/g, "").slice(0, 6);
+          if (pre.length >= 4) conds.push(["default_code", "ilike", pre]);
+          var word = String(descOf[r] || "").split(/[^A-Za-zÀ-ÿ0-9]+/)
+            .sort(function (a, b) { return b.length - a.length; })[0] || "";
+          if (word.length >= 5) conds.push(["name", "ilike", word]);
+        });
+        if (!conds.length) return null;
+        return rpc("product.product", "search_read",
+          [orDom(conds), ["id", "default_code", "name"]], { limit: 400 })
+          .then(function (cands) {
+            todo.forEach(function (r) {
+              var nr = norm(r), nd = norm(descOf[r] || "");
+              var scored = cands.map(function (p) {
+                var s = Math.max(sim(nr, norm(p.default_code)), nd ? sim(nd, norm(p.name)) : 0);
+                return { p: p, s: s };
+              }).sort(function (a, b) { return b.s - a.s; });
+              var best = scored[0], second = scored[1];
+              if (best && best.s >= 0.82 && (!second || best.s - second.s >= 0.04)) {
+                resolved[r] = best.p.id;
+                match[r] = { kind: "fuzzy", code: best.p.default_code, name: best.p.name, score: best.s };
+              }
+            });
+          })
+          .catch(function () { return null; });
       })
       .then(function () {
         // Article négoce (repli) : cherché par code, id de secours sinon
@@ -213,7 +297,8 @@
   }
 
   function render(parts) {
-    var nArt = 0, nNeg = 0, rows = "";
+    if (parts) partsCache = parts; else parts = partsCache;
+    var nArt = 0, nNeg = 0, nFuz = 0, rows = "";
     payload.lines.forEach(function (l) {
       if (l.type === "section" || l.type === "note") {
         rows += '<tr><td style="padding:2px 4px">' + (l.type === "section" ? "▪" : "✎") + "</td>"
@@ -221,13 +306,28 @@
         return;
       }
       var pid = l.ref && resolved[l.ref];
-      if (pid) nArt++; else if (!l.port) nNeg++;
-      var icon = pid ? "✅" : (l.port ? "🚚" : "📦");
-      rows += '<tr><td style="padding:2px 4px">' + icon + "</td>"
+      var m = (l.ref && match[l.ref]) || null;
+      if (pid) { nArt++; if (m && m.kind === "fuzzy") nFuz++; } else if (!l.port) nNeg++;
+
+      var icon = pid ? (m && m.kind === "fuzzy" ? "🔎" : (m && m.kind === "map" ? "📌" : "✅"))
+                     : (l.port ? "🚚" : "📦");
+      // Colonne code : ce qui sera VRAIMENT utilisé dans Odoo
+      var codeCell;
+      if (l.port) codeCell = '<span style="color:#666">frais de port</span>';
+      else if (!l.ref) codeCell = '<span style="color:#b45309">' + esc(payload.negoce_code || "NEG.ISO") + "</span>";
+      else if (!pid) codeCell = '<span style="color:#b45309">' + esc(l.ref) + " → " + esc(payload.negoce_code || "NEG.ISO") + "</span>";
+      else if (m && (m.kind === "fuzzy" || m.kind === "map"))
+        codeCell = '<span style="color:#666">' + esc(l.ref) + "</span> → <b style=\"color:#7c3aed\">" + esc(m.code) + "</b>"
+          + (m.kind === "fuzzy" ? ' <span style="color:#999">' + Math.round(m.score * 100) + "%</span>" : "");
+      else codeCell = '<span style="color:#666">' + esc(m ? m.code : l.ref) + "</span>";
+
+      var btn = (!l.port && l.ref)
+        ? ' <button class="cbFind" data-ref="' + esc(l.ref) + '" style="border:0;background:none;color:#7c3aed;cursor:pointer;font-size:11px;text-decoration:underline;padding:0">chercher…</button>'
+        : "";
+      rows += '<tr><td style="padding:2px 4px;vertical-align:top">' + icon + "</td>"
         + '<td style="padding:2px 4px">' + esc(l.desc) + "</td>"
-        + '<td style="padding:2px 4px;font:11px monospace;color:' + (pid ? "#666" : "#b45309") + '">'
-        + esc(l.ref || (l.port ? "frais de port" : "sans référence")) + (l.ref && !pid ? " (introuvable)" : "") + "</td>"
-        + '<td style="padding:2px 4px;text-align:right">' + (l.qty == null ? "" : l.qty) + "</td></tr>";
+        + '<td style="padding:2px 4px;font:11px monospace">' + codeCell + btn + "</td>"
+        + '<td style="padding:2px 4px;text-align:right;vertical-align:top">' + (l.qty == null ? "" : l.qty) + "</td></tr>";
     });
 
     var plist = parts.length
@@ -247,6 +347,7 @@
       + '<div style="margin-bottom:8px"><b>Chantier</b> : ' + esc(payload.ref || "—") + "</div>"
       + '<div style="max-height:230px;overflow:auto;border:1px solid #eee;border-radius:6px"><table style="width:100%;border-collapse:collapse">' + rows + "</table></div>"
       + '<div id="cbInfo" style="margin:8px 0;color:#666">✅ <b>' + nArt + "</b> article(s) catalogue"
+      + (nFuz ? ' <span style="color:#7c3aed">(dont 🔎 ' + nFuz + " par rapprochement — vérifiez)</span>" : "")
       + (nNeg ? ' · 📦 <b style="color:#b45309">' + nNeg + "</b> en négoce" : "")
       + " · P.U. du devis imposés</div>"
       + '<button id="cbGo" style="width:100%;padding:9px;border:0;border-radius:7px;background:#7c3aed;color:#fff;font-weight:600;cursor:pointer">Créer le devis</button>');
@@ -266,7 +367,58 @@
       var f = box.querySelector(".cbP");
       if (f) f.style.outline = "2px solid #7c3aed";
     }
+    // Choix manuel de l'article Odoo (et mémorisation pour les fois suivantes)
+    Array.prototype.forEach.call(box.querySelectorAll(".cbFind"), function (el) {
+      el.onclick = function () { pickArticle(el.dataset.ref); };
+    });
     document.getElementById("cbGo").onclick = create;
+  }
+
+  /* ---------- 3bis. choix manuel d'un article ---------- */
+  function pickArticle(ref) {
+    var q0 = descOf[ref] || ref;
+    html(hdr("Article Odoo pour <b>" + esc(ref) + "</b> — la correspondance sera mémorisée.")
+      + '<div style="display:flex;gap:6px;margin-bottom:8px">'
+      + '<input id="cbQ" value="' + esc(q0) + '" style="flex:1;padding:6px;border:1px solid #ddd;border-radius:6px">'
+      + '<button id="cbSearch" style="padding:6px 12px;border:0;border-radius:6px;background:#7c3aed;color:#fff;font-weight:600;cursor:pointer">Chercher</button></div>'
+      + '<div id="cbRes" style="max-height:300px;overflow:auto;border:1px solid #eee;border-radius:6px;padding:3px">Tapez un mot puis « Chercher ».</div>'
+      + '<button id="cbBack" style="width:100%;margin-top:8px;padding:8px;border:1px solid #ddd;border-radius:7px;background:#fff;cursor:pointer">← Retour</button>');
+    wireClose();
+    document.getElementById("cbBack").onclick = function () { render(null); };
+
+    function run() {
+      var q = document.getElementById("cbQ").value.trim();
+      if (!q) return;
+      var res = document.getElementById("cbRes");
+      res.textContent = "Recherche…";
+      rpc("product.product", "search_read",
+        [["|", ["default_code", "ilike", q], ["name", "ilike", q]], ["id", "default_code", "name"]], { limit: 25 })
+        .then(function (list) {
+          if (!list.length) { res.innerHTML = '<b style="color:#b91c1c">Aucun article. Essayez un autre mot.</b>'; return; }
+          res.innerHTML = list.map(function (p, i) {
+            return '<div class="cbR" data-i="' + i + '" style="cursor:pointer;padding:4px 5px;border-radius:4px">'
+              + '<span style="font:11px monospace;color:#7c3aed">' + esc(p.default_code || "—") + "</span> "
+              + esc(p.name) + "</div>";
+          }).join("");
+          Array.prototype.forEach.call(res.querySelectorAll(".cbR"), function (el) {
+            el.onmouseenter = function () { el.style.background = "#f1f1f6"; };
+            el.onmouseleave = function () { el.style.background = ""; };
+            el.onclick = function () {
+              var p = list[+el.dataset.i];
+              resolved[ref] = p.id;
+              match[ref] = { kind: "map", code: p.default_code || String(p.id) };
+              var m = loadMap();
+              m[ref] = { id: p.id, code: p.default_code || String(p.id) };
+              saveMap(m);
+              render(null);
+            };
+          });
+        })
+        .catch(function (e) { res.innerHTML = '<b style="color:#b91c1c">' + esc(e.message) + "</b>"; });
+    }
+    document.getElementById("cbSearch").onclick = run;
+    document.getElementById("cbQ").onkeydown = function (e) { if (e.key === "Enter") run(); };
+    run();
   }
 
   /* ---------- 4. création ---------- */
