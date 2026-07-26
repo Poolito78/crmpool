@@ -429,7 +429,7 @@
 
     var cid = payload.company_id || null;
     var ctx = cid ? { allowed_company_ids: [cid] } : {};
-    var oid = null, tvaId = null, chantierField = null, contactField = null, contactId = null;
+    var oid = null, tvaId = null, chantierField = null, contactField = null, contactId = null, made = [];
 
     // TVA 20 % vente
     rpc("account.tax", "search_read",
@@ -496,11 +496,27 @@
               if (tvaId) vals.tax_id = [[6, 0, [tvaId]]];
             }
             return rpc("sale.order.line", "create", [vals], { context: ctx })
-              .then(function () { ok++; })
+              .then(function (id) { ok++; if (l.type === "product") made.push({ id: id, src: l }); })
               .catch(function (e) { errs.push(l.desc + " : " + (e.message || "").slice(0, 80)); });
           });
         });
         return chain.then(function () { return { ok: ok, errs: errs }; });
+      })
+      // Prix : Odoo RECALCULE price_unit à la création d'une ligne (liste de prix,
+      // ou list_price qui vaut 0 ou 1 € sur tout le catalogue) et écrase la valeur
+      // envoyée. On réimpose donc les P.U. « Net HT » du devis APRÈS coup.
+      .then(function (res) {
+        var chain = Promise.resolve();
+        made.forEach(function (m) {
+          chain = chain.then(function () {
+            return rpc("sale.order.line", "write",
+              [[m.id], { price_unit: m.src.pu || 0, discount: 0, name: m.src.desc }], { context: ctx })
+              .catch(function (e) {
+                res.errs.push("P.U. « " + m.src.desc + " » : " + (e.message || "").slice(0, 60));
+              });
+          });
+        });
+        return chain.then(function () { return res; });
       })
       .then(function (res) {
         return rpc("sale.order", "read", [[oid], ["name", "amount_untaxed"]], { context: ctx })
