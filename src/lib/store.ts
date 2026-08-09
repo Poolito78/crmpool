@@ -170,6 +170,10 @@ export interface Produit {
   lignesKit?: LigneKit[];
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
+  /** Catalogue commercial : ISOFLOOR, ISOMARK ou ISOSIGN. */
+  catalogue?: string;
+  /** Référence du même article dans Odoo, quand elle diffère. */
+  referenceOdoo?: string;
   dateCreation: string;
   paliersPrix?: PrixPalier[];       // prix évolutifs par palier de quantité/poids
   variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
@@ -602,6 +606,8 @@ function dbToProduit(r: any): Produit {
     lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
+    catalogue: r.catalogue || undefined,
+    referenceOdoo: r.reference_odoo || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
     paliersPrix: r.paliers_prix ? (Array.isArray(r.paliers_prix) ? r.paliers_prix : JSON.parse(r.paliers_prix)) : undefined,
     variantes: r.variantes ? (Array.isArray(r.variantes) ? r.variantes : JSON.parse(r.variantes)) : undefined,
@@ -638,6 +644,8 @@ function produitToDb(p: Produit, userId: string) {
     lignes_kit: p.lignesKit && p.lignesKit.length > 0 ? p.lignesKit : null,
     fiche_url: p.ficheUrl || null,
     fiche_link_label: p.ficheLinkLabel || null,
+    catalogue: p.catalogue || null,
+    reference_odoo: p.referenceOdoo || null,
     date_creation: p.dateCreation,
     paliers_prix: p.paliersPrix && p.paliersPrix.length > 0 ? p.paliersPrix : null,
     variantes: p.variantes && p.variantes.length > 0 ? p.variantes : null,
@@ -1072,6 +1080,34 @@ function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
   return { added, removed, updated };
 }
 
+/**
+ * Lit une table entière, par tranches.
+ *
+ * Supabase plafonne toute requête à 1 000 lignes. Tant que la base ne comptait
+ * que 180 produits, personne ne s'en apercevait ; avec le catalogue Odoo
+ * importé — plus de 22 000 références — l'application n'en voyait plus qu'un
+ * vingtième, et une recherche « J11 » ne renvoyait rien.
+ */
+const TRANCHE = 1000;
+
+async function lireTout(table: string) {
+  const tout: any[] = [];
+  for (let debut = 0; ; debut += TRANCHE) {
+    const { data, error } = await supabase
+      .from(table as any)
+      .select('*')
+      .range(debut, debut + TRANCHE - 1);
+    if (error) {
+      console.error(`Lecture de ${table} interrompue :`, error.message);
+      break;
+    }
+    if (!data?.length) break;
+    tout.push(...data);
+    if (data.length < TRANCHE) break;
+  }
+  return tout;
+}
+
 export function useStore() {
   const [clients, setClients] = useState<Client[]>([]);
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
@@ -1092,36 +1128,34 @@ export function useStore() {
       userIdRef.current = session.user.id;
 
       const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes, fcRes, ffRes] = await Promise.all([
-        supabase.from('clients').select('*'),
-        supabase.from('fournisseurs').select('*'),
-        supabase.from('produits').select('*'),
-        supabase.from('devis').select('*'),
-        supabase.from('produit_fournisseurs').select('*'),
-        supabase.from('commandes_fournisseur').select('*'),
-        supabase.from('commandes_client').select('*'),
-        supabase.from('factures_client').select('*'),
-        supabase.from('factures_fournisseur').select('*'),
+        lireTout('clients'),
+        lireTout('fournisseurs'),
+        lireTout('produits'),
+        lireTout('devis'),
+        lireTout('produit_fournisseurs'),
+        lireTout('commandes_fournisseur'),
+        lireTout('commandes_client'),
+        lireTout('factures_client'),
+        lireTout('factures_fournisseur'),
       ]);
 
-      if (cRes.data) setClients(cRes.data.map(dbToClient));
-      if (fRes.data) setFournisseurs(fRes.data.map(dbToFournisseur));
-      if (pRes.data) setProduits(pRes.data.map(dbToProduit));
+      setClients(cRes.map(dbToClient));
+      setFournisseurs(fRes.map(dbToFournisseur));
+      setProduits(pRes.map(dbToProduit));
       // Migration one-shot : renomme DV-YYYY-NNN → DEV-YYYY-NNN en base
-      if (dRes.data) {
-        const dvRows = dRes.data.filter(d => d.numero?.startsWith('DV-'));
-        if (dvRows.length > 0) {
-          await Promise.all(dvRows.map(d =>
-            supabase.from('devis').update({ numero: (d.numero as string).replace(/^DV-/, 'DEV-') }).eq('id', d.id)
-          ));
-          dvRows.forEach(d => { d.numero = (d.numero as string).replace(/^DV-/, 'DEV-'); });
-        }
-        setDevis(dRes.data.map(dbToDevis));
+      const dvRows = dRes.filter(d => d.numero?.startsWith('DV-'));
+      if (dvRows.length > 0) {
+        await Promise.all(dvRows.map(d =>
+          supabase.from('devis').update({ numero: (d.numero as string).replace(/^DV-/, 'DEV-') }).eq('id', d.id)
+        ));
+        dvRows.forEach(d => { d.numero = (d.numero as string).replace(/^DV-/, 'DEV-'); });
       }
-      if (pfRes.data) setProduitFournisseurs(pfRes.data.map(dbToProduitFournisseur));
-      if (cfRes.data) setCommandesFournisseur(cfRes.data.map(dbToCommandeFournisseur));
-      if (ccRes.data) setCommandesClient(ccRes.data.map(dbToCommandeClient));
-      if (fcRes.data) setFacturesClient(fcRes.data.map(dbToFactureClient));
-      if (ffRes.data) setFacturesFournisseur(ffRes.data.map(dbToFactureFournisseur));
+      setDevis(dRes.map(dbToDevis));
+      setProduitFournisseurs(pfRes.map(dbToProduitFournisseur));
+      setCommandesFournisseur(cfRes.map(dbToCommandeFournisseur));
+      setCommandesClient(ccRes.map(dbToCommandeClient));
+      setFacturesClient(fcRes.map(dbToFactureClient));
+      setFacturesFournisseur(ffRes.map(dbToFactureFournisseur));
       setLoading(false);
     }
 

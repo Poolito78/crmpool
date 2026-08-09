@@ -366,7 +366,10 @@ RÈGLES IMPORTANTES :
     }
 
     // ── Mode analyse devis ──────────────────────────────────────────────────
-    const { emailText, clients, produits } = body;
+    // `indices` vient de l'analyse déterministe faite côté application
+    // (adresses, agence citée, référence d'affaire). Facultatif : la fonction
+    // reste compatible avec un appelant qui ne l'envoie pas.
+    const { emailText, clients, produits, indices } = body;
 
     const emailLower = String(emailText).toLowerCase();
     const emailMots = emailLower.split(/[\s,;.!?()]+/).filter((w: string) => w.length >= 3);
@@ -402,7 +405,19 @@ LISTE DES CLIENTS :
 ${clientsList}
 
 LISTE DES PRODUITS :
-${produitsList}`;
+${produitsList}${
+      indices
+        ? `
+
+INDICES RELEVÉS DANS LE MESSAGE (extraction automatique, fiables) :
+${indices.emails?.length ? `- Adresses e-mail de l'expéditeur : ${indices.emails.join(', ')}` : ''}
+${indices.villes?.length ? `- Agence ou lieu de livraison cité : ${indices.villes.join(', ')}` : ''}
+${indices.reference ? `- Référence d'affaire : ${indices.reference}` : ''}
+Ces indices priment sur ta propre lecture : une adresse e-mail qui correspond à
+un client de la liste désigne ce client, et l'agence citée permet de choisir le
+bon établissement chez un client qui en compte plusieurs.`
+        : ''
+    }`;
 
     const tool = {
       name: "extract_devis_data",

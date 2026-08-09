@@ -1,4 +1,8 @@
-project_id = "rjlxzaflxhippfrdkoul"
+# Base « CRMsignalise », la même que celle déployée sur Vercel.
+project_id = "qkjxcfosutclnahvxflf"
 
 [functions.analyze-email]
+verify_jwt = false
+
+[functions.odoo-prix]
 verify_jwt = false
