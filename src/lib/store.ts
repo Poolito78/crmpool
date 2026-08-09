@@ -581,6 +581,9 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
   };
 }
 
+/** Même conversion, exposée pour la lecture à la demande du catalogue. */
+export function dbToProduitPublic(r: any): Produit { return dbToProduit(r); }
+
 function dbToProduit(r: any): Produit {
   return {
     id: r.id,
@@ -1143,6 +1146,10 @@ export function useStore() {
   const [facturesClient, setFacturesClient] = useState<FactureClient[]>([]);
   const [facturesFournisseur, setFacturesFournisseur] = useState<FactureFournisseur[]>([]);
   const [loading, setLoading] = useState(true);
+  /* Le catalogue arrive après tout le reste : il pèse 22 634 articles, contre
+     quelques centaines de lignes pour les autres tables. Les pages qui en
+     dépendent peuvent afficher « chargement… » plutôt qu'une liste vide. */
+  const [produitsCharges, setProduitsCharges] = useState(false);
   const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1151,10 +1158,9 @@ export function useStore() {
       if (!session) return;
       userIdRef.current = session.user.id;
 
-      const [cRes, fRes, pRes, dRes, pfRes, cfRes, ccRes, fcRes, ffRes] = await Promise.all([
+      const [cRes, fRes, dRes, pfRes, cfRes, ccRes, fcRes, ffRes] = await Promise.all([
         lireTout('clients'),
         lireTout('fournisseurs'),
-        lireTout('produits'),
         lireTout('devis'),
         lireTout('produit_fournisseurs'),
         lireTout('commandes_fournisseur'),
@@ -1165,7 +1171,6 @@ export function useStore() {
 
       setClients(cRes.map(dbToClient));
       setFournisseurs(fRes.map(dbToFournisseur));
-      setProduits(pRes.map(dbToProduit));
       // Migration one-shot : renomme DV-YYYY-NNN → DEV-YYYY-NNN en base
       const dvRows = dRes.filter(d => d.numero?.startsWith('DV-'));
       if (dvRows.length > 0) {
@@ -1180,7 +1185,14 @@ export function useStore() {
       setCommandesClient(ccRes.map(dbToCommandeClient));
       setFacturesClient(fcRes.map(dbToFactureClient));
       setFacturesFournisseur(ffRes.map(dbToFactureFournisseur));
+      // L'application est utilisable ici : on ne fait plus attendre personne.
       setLoading(false);
+
+      // Le catalogue continue d'arriver en arrière-plan.
+      lireTout('produits').then(pRes => {
+        setProduits(pRes.map(dbToProduit));
+        setProduitsCharges(true);
+      });
     }
 
     // ── Synchro temps réel (Supabase Realtime) ───────────────────────────────
@@ -1189,7 +1201,9 @@ export function useStore() {
     const refetchers: Record<string, () => Promise<void>> = {
       clients: async () => { const { data } = await supabase.from('clients').select('*'); if (data) setClients(data.map(dbToClient)); },
       fournisseurs: async () => { const { data } = await supabase.from('fournisseurs').select('*'); if (data) setFournisseurs(data.map(dbToFournisseur)); },
-      produits: async () => { const { data } = await supabase.from('produits').select('*'); if (data) setProduits(data.map(dbToProduit)); },
+      // select('*') seul s'arrête à 1 000 lignes : un simple changement de
+      // produit aurait amputé le catalogue de 21 000 articles.
+      produits: async () => { const data = await lireTout('produits'); setProduits(data.map(dbToProduit)); },
       devis: async () => { const { data } = await supabase.from('devis').select('*'); if (data) setDevis(data.map(dbToDevis)); },
       produit_fournisseurs: async () => { const { data } = await supabase.from('produit_fournisseurs').select('*'); if (data) setProduitFournisseurs(data.map(dbToProduitFournisseur)); },
       commandes_fournisseur: async () => { const { data } = await supabase.from('commandes_fournisseur').select('*'); if (data) setCommandesFournisseur(data.map(dbToCommandeFournisseur)); },
@@ -1385,7 +1399,7 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────

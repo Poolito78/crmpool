@@ -22,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
+import { useCatalogueServeur, COLONNES_BASE, COLONNES_TEXTE } from '@/hooks/useCatalogueServeur';
 import { getRalInfo } from '@/lib/ralColors';
 
 const COLUMNS = [
@@ -77,7 +78,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { produits, produitsCharges, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
   const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -109,6 +110,23 @@ export default function Produits() {
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Produit | null>(null);
+
+  /**
+   * Applique une modification à l'article en cours d'édition.
+   *
+   * En mode base, un article affiché peut ne pas encore figurer dans la liste
+   * en mémoire, qui arrive en arrière-plan. Un simple map() ne trouverait rien
+   * et perdrait la modification sans rien dire : on l'ajoute alors à la liste.
+   */
+  const majProduitEdite = useCallback((f: (p: Produit) => Produit) => {
+    setEditing(cur => {
+      if (!cur) return cur;
+      updateProduits(prev => prev.some(x => x.id === cur.id)
+        ? prev.map(x => (x.id === cur.id ? f(x) : x))
+        : [...prev, f(cur)]);
+      return cur;
+    });
+  }, [updateProduits]);
   const [form, setForm] = useState(emptyProduit);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -473,11 +491,36 @@ export default function Produits() {
      totalité : on pagine l'affichage, pas la recherche. */
   const PAR_PAGE = 50;
   const [page, setPage] = useState(1);
-  const nbPages = Math.max(1, Math.ceil(sortedFiltered.length / PAR_PAGE));
+
+  /* Mode « base de données », comme Odoo : la recherche, le tri et la
+     pagination sont faits par Supabase, qui ne renvoie que 50 lignes.
+     On y renonce dès qu'un filtre ou un tri porte sur une colonne que la base
+     ne connaît pas — quantité vendue, valeur de stock, fournisseur, ou un
+     montant, PostgREST ne sachant pas chercher dans un nombre. Dans ce cas on
+     retombe sur la liste en mémoire, exacte mais plus lente. */
+  const filtresActifs = Object.entries(columnFilters).filter(([, v]) => v);
+  const filtreHorsBase = filtresActifs.some(([k]) => !COLONNES_TEXTE[k]);
+  const triHorsBase = !!sortCol && !COLONNES_BASE[sortCol];
+  const modeServeur = !filtreHorsBase && !triHorsBase;
+
+  const serveur = useCatalogueServeur({
+    page,
+    parPage: PAR_PAGE,
+    recherche: search,
+    triCol: sortCol,
+    triSens: sortDir,
+    filtres: columnFilters as Record<string, string>,
+    actif: modeServeur,
+  });
+
+  const totalLignes = modeServeur ? serveur.total : sortedFiltered.length;
+  const nbPages = Math.max(1, Math.ceil(totalLignes / PAR_PAGE));
   const pageCourante = Math.min(page, nbPages);
   const affiches = useMemo(
-    () => sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE),
-    [sortedFiltered, pageCourante],
+    () => modeServeur
+      ? serveur.lignes
+      : sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE),
+    [modeServeur, serveur.lignes, sortedFiltered, pageCourante],
   );
 
   // Un nouveau filtre ou un nouveau tri renvoie au début : rester page 12
@@ -637,10 +680,7 @@ export default function Produits() {
     if (!editing) return;
     // Sauvegarde immédiate avant navigation
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-    updateProduits(prev => prev.map(p => p.id === editing.id
-      ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined }
-      : p
-    ));
+    majProduitEdite(p => ({ ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined }));
     setEditingStack(prev => [...prev, editing]);
     openEdit(compProd);
   }
@@ -702,7 +742,7 @@ export default function Produits() {
     const achatsToSaveOrNull = achatsToSave.length > 0 ? achatsToSave : null;
     if (editing) {
       const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
-      updateProduits(prev => prev.map(p => p.id === editing.id ? updatedProd : p));
+      majProduitEdite(() => updatedProd);
       // Écriture directe Supabase pour garantir la persistance
       supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
@@ -745,7 +785,7 @@ export default function Produits() {
     autoSaveProdRef.current = setTimeout(() => {
       if (form.reference.trim() && form.description.trim()) {
         const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined } : p));
+        majProduitEdite(p => ({ ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined }));
       }
     }, 500);
     return () => clearTimeout(autoSaveProdRef.current);
@@ -1240,11 +1280,22 @@ export default function Produits() {
             </tbody>
           </table>
         </div>
+        {(serveur.chargement || serveur.erreur || !modeServeur) && (
+          <div className="flex-none px-3 py-1.5 border-t border-border text-xs text-muted-foreground">
+            {serveur.erreur
+              ? <span className="text-warning">Lecture en base impossible ({serveur.erreur}) — liste en mémoire.</span>
+              : serveur.chargement
+                ? 'Lecture en base…'
+                : !produitsCharges
+                  ? 'Ce filtre demande le catalogue entier — chargement en cours…'
+                  : 'Filtre ou tri sur une colonne calculée : liste en mémoire.'}
+          </div>
+        )}
         {nbPages > 1 && (
           <div className="flex-none flex items-center justify-between gap-2 px-3 py-2 border-t border-border text-xs">
             <span className="text-muted-foreground">
-              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, sortedFiltered.length)}
-              {' sur '}{sortedFiltered.length} article{sortedFiltered.length > 1 ? 's' : ''}
+              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, totalLignes)}
+              {' sur '}{totalLignes} article{totalLignes > 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -1271,17 +1322,17 @@ export default function Produits() {
             </div>
           </div>
         )}
-        {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun produit</p>}
+        {affiches.length === 0 && !serveur.chargement && <p className="text-center py-8 text-muted-foreground">Aucun produit</p>}
       </div>
 
       {/* Vue cartes — mobile (toujours) + desktop si vue liste */}
       <div className={produitsView === 'liste' ? 'flex-1 min-h-0 overflow-y-auto space-y-2' : 'md:hidden space-y-2'}>
-        {sortedFiltered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucun produit</p>}
+        {affiches.length === 0 && !serveur.chargement && <p className="text-center py-8 text-muted-foreground text-sm">Aucun produit</p>}
         {nbPages > 1 && (
           <div className="flex items-center justify-between gap-2 py-2 text-xs">
             <span className="text-muted-foreground">
-              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, sortedFiltered.length)}
-              {' sur '}{sortedFiltered.length}
+              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, totalLignes)}
+              {' sur '}{totalLignes}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -2554,7 +2605,7 @@ export default function Produits() {
                                         await upsertStockEntrepot(editing.id, e.id, v);
                                         const newTotal = stockEntrepots.filter(s => s.produitId === editing.id && s.entrepotId !== e.id).reduce((a, s) => a + s.stock, 0) + v;
                                         setForm(p => ({ ...p, stock: newTotal }));
-                                        updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, stock: newTotal } : p));
+                                        majProduitEdite(p => ({ ...p, stock: newTotal }));
                                         toast.success('Stock mis à jour');
                                       }
                                       setEntrepotStockEdit(null);
@@ -2571,7 +2622,7 @@ export default function Produits() {
                                       await upsertStockEntrepot(editing.id, e.id, v);
                                       const newTotal = stockEntrepots.filter(s => s.produitId === editing.id && s.entrepotId !== e.id).reduce((a, s) => a + s.stock, 0) + v;
                                       setForm(p => ({ ...p, stock: newTotal }));
-                                      updateProduits(prev => prev.map(p => p.id === editing.id ? { ...p, stock: newTotal } : p));
+                                      majProduitEdite(p => ({ ...p, stock: newTotal }));
                                       toast.success('Stock mis à jour');
                                     }
                                     setEntrepotStockEdit(null);
