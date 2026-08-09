@@ -10,6 +10,7 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
+import { coupeSignature } from '@/lib/chiffrage';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -283,6 +284,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         return;
       }
     }
+    /* Même traitement que le Chiffrage : la signature est retirée avant
+       l'analyse. Elle est pleine de nombres — téléphone, code postal, numéro
+       de TVA — que l'IA prend volontiers pour des quantités. Le corps du
+       message conserve, lui, l'agence de livraison quand elle y est citée. */
+    if (emailTexte) emailTexte = coupeSignature(emailTexte);
+
     if (allPdfBuffers.length > 0) {
       if (emailTexte) setTexte(emailTexte);
       setEmlPdfs(allPdfBuffers);

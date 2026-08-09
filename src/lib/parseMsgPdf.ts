@@ -131,10 +131,10 @@ const TECH_PATTERNS: RegExp[] = [
   // MAPI property tag (exactement 8 chiffres hex)
   /^[0-9A-F]{8}$/,
   // Headers X- Exchange/Microsoft
-  /^X-MS-|^X-ms-|^X-Exchange|^X-Microsoft|^X-Originating|^X-Forefront/,
+  /^x-ms-|^x-exchange|^x-microsoft|^x-originating|^x-forefront|^x-google|^x-mailer/i,
   // Headers MIME / email standards
-  /^ARC-|^DKIM-|^DMARC|^SPF |^Authentication-Results:|^Received:/,
-  /^Return-Path:|^Message-ID:|^MIME-Version:|^Content-Type:|^Content-Transfer-|^Content-Disposition:/,
+  /^arc-|^dkim-|^dmarc|^spf |^authentication-results:|^received:|^delivered-to:|^thread-index:/i,
+  /^return-path:|^message-id:|^mime-version:|^content-type:|^content-transfer-|^content-disposition:|^in-reply-to:|^references:/i,
   // Mots-clés techniques Exchange
   /EntityExtraction|ItemProcessor|SafeLinks|ATPSafeLinks|substg1/i,
   // Chaînes base64 longues (>40 chars sans espace)
@@ -152,10 +152,27 @@ function isTechLine(line: string): boolean {
 }
 
 /**
- * Tente d'extraire le corps texte utile d'un .msg (heuristique UTF-16-LE).
- * Filtre agressivement toutes les métadonnées CFBF et routing Exchange.
+ * Texte utile d'un message Outlook.
+ *
+ * On lit d'abord la structure du fichier (voir lireMsg) : objet, expéditeur et
+ * corps sont alors exacts. L'ancienne heuristique — balayage des octets puis
+ * liste noire — ne sert plus que de secours pour un fichier abîmé ou d'un
+ * format inattendu : elle laissait passer les en-têtes de transport Exchange,
+ * que l'analyse prenait pour le corps du message.
  */
 export async function extraireTexteDeMsg(file: File): Promise<string> {
+  try {
+    const { lireMsg } = await import('@/lib/lireMsg');
+    const msg = await lireMsg(file);
+    if (msg.corps || msg.sujet) return msg.texte;
+  } catch (err) {
+    console.warn('[msg] lecture structurée impossible, repli heuristique :', err);
+  }
+  return extraireTexteDeMsgHeuristique(file);
+}
+
+/** Ancienne méthode, conservée en secours. */
+async function extraireTexteDeMsgHeuristique(file: File): Promise<string> {
   const buffer = await file.arrayBuffer();
   const bytes  = new Uint8Array(buffer);
   const chunks: string[] = [];
