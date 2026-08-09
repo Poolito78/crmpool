@@ -80,6 +80,8 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
      les deux divergent, c'est un arbitrage commercial — l'application ne
      tranche pas en silence. */
   const [contrat, setContrat] = useState<string | null>(null);
+  /** Société qui porte ce contrat : c'est elle qui a négocié, pas le contact. */
+  const [societeContrat, setSocieteContrat] = useState<string | null>(null);
   const [lectureTarifs, setLectureTarifs] = useState(false);
 
   /* Catalogue de travail. Avec près de 9 000 références réparties entre
@@ -178,6 +180,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       if (data?.error) throw new Error(data.error);
 
       setContrat(data?.contrat || null);
+      setSocieteContrat(data?.societe || data?.partenaire || null);
       const px = data?.prix || {};
 
       return lignes.map(l => {
@@ -269,6 +272,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       const ajoutees = lignes.filter(l => l.auto).length;
 
       setContrat(null);
+      setSocieteContrat(null);
       // Les tarifs se lisent APRÈS l'identification du client et APRÈS les
       // accompagnements : la galette et l'enduit ajoutés par une règle doivent
       // être tarifés eux aussi.
@@ -298,6 +302,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
     setResult({ ...result, clientId });
     // Changer de client change le contrat cadre, donc tous les prix.
     setContrat(null);
+    setSocieteContrat(null);
     const lignes = await lireTarifsClient(
       result.lignes.map(l => ({ ...l, prixOdoo: undefined, choixPrix: undefined })),
       clientId,
@@ -526,6 +531,9 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
                   <span>
                     Contrat cadre appliqué :{' '}
                     <strong className="text-foreground">{contrat}</strong>
+                    {societeContrat && (
+                      <> chez <strong className="text-foreground">{societeContrat}</strong></>
+                    )}
                     {' — '}
                     {result.lignes.filter(l => l.prixOdoo != null).length} ligne(s)
                     tarifée(s) sur {result.lignes.filter(l => l.produitId).length}.

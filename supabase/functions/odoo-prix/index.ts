@@ -388,9 +388,28 @@ serve(async (req) => {
       });
     }
 
-    const pl = partenaire.property_product_pricelist;
+    /* Le tarif se négocie avec la SOCIÉTÉ, pas avec la personne. Trouver
+       « Guillaume Brugel » ne dit rien de l'accord commercial : c'est
+       « AGILIS » qui porte le contrat cadre. On remonte donc au parent, et
+       c'est son nom qu'on affiche à côté du contrat. */
+    let porteur = partenaire;
+    if (partenaire.parent_id) {
+      const [mere] = (await od.kw(
+        "res.partner", "read",
+        [[partenaire.parent_id[0]], ["name", "property_product_pricelist", "parent_id"]],
+      )) as any[];
+      // La liste de prix du contact prime si elle lui est propre ; sinon
+      // celle de la société s'applique.
+      if (mere && (!partenaire.property_product_pricelist || mere.property_product_pricelist)) {
+        porteur = { ...mere, id: partenaire.parent_id[0] };
+      }
+    }
+
+    const pl = partenaire.property_product_pricelist
+      || porteur.property_product_pricelist;
     const contratId: number | null = pl ? pl[0] : null;
     const contrat: string | null = pl ? pl[1] : null;
+    const societe: string = (partenaire.parent_id ? partenaire.parent_id[1] : partenaire.name) || '';
 
     // La quantité compte : les listes comportent des paliers dégressifs.
     const quantites = new Map<string, number>();
@@ -449,6 +468,8 @@ serve(async (req) => {
     return repondre({
       partenaire: partenaire.name,
       partenaireId: partenaire.id,
+      /** Société qui porte le contrat cadre — souvent le parent du contact. */
+      societe,
       contrat,
       contratId,
       prix,

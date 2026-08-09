@@ -19,7 +19,7 @@ import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
-  generateId, calculerDateEcheance, formatDateISO,
+  generateId, calculerDateEcheance, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -83,6 +83,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /** Article du catalogue retenu pour chaque ligne, par indice de ligne. */
   const [choixProduit, setChoixProduit] = useState<Record<number, string>>({});
   const { regles } = useReglesAccompagnement();
+  /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
+  const [contratOdoo, setContratOdoo] = useState<
+    { contrat: string; societe: string; prix: Record<string, number> } | null
+  >(null);
   const [creerDevisClientId, setCreerDevisClientId] = useState('');
   const [creerDevisNumero, setCreerDevisNumero] = useState('');
   const [creerDevisDate, setCreerDevisDate] = useState('');
@@ -478,6 +482,57 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       .filter(l => l.auto);
   }, [result, regles, produits, produitsCharges, produitDeLigne]);
 
+  /* Prix du contrat cadre, pour toutes les lignes — accompagnements compris.
+     Le tarif se négocie avec la société, pas avec la personne : « Guillaume
+     Brugel » ne dit rien de l'accord, c'est « AGILIS » qui le porte. Et la
+     galette suit le même contrat que la balise : la facturer au tarif public
+     ferait un devis faux. */
+  const referencesDuDevis = useMemo(() => {
+    const refs = new Set<string>();
+    (result?.lignes ?? []).forEach((l, i) => {
+      const p = produitDeLigne(i, l);
+      if (p) refs.add(p.referenceOdoo || p.reference);
+    });
+    for (const a of accompagnements) {
+      const p = produits.find(x => x.id === a.produitId);
+      if (p) refs.add(p.referenceOdoo || p.reference);
+    }
+    return [...refs];
+  }, [result, accompagnements, produits, produitDeLigne]);
+
+  useEffect(() => {
+    const cli = clients.find(c => c.id === creerDevisClientId);
+    if (!cli || !referencesDuDevis.length) { setContratOdoo(null); return; }
+    let annule = false;
+    (async () => {
+      try {
+        const { data } = await supabase.functions.invoke('odoo-prix', {
+          body: {
+            client: { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville },
+            lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
+          },
+        });
+        if (annule) return;
+        if (data?.contrat) {
+          const prix: Record<string, number> = {};
+          for (const [ref, v] of Object.entries((data.prix || {}) as Record<string, any>)) {
+            if (v?.contrat != null) prix[ref] = v.contrat;
+          }
+          setContratOdoo({ contrat: data.contrat, societe: data.societe || data.partenaire || '', prix });
+        } else setContratOdoo(null);
+      } catch { if (!annule) setContratOdoo(null); }
+    })();
+    return () => { annule = true; };
+  }, [creerDevisClientId, clients, referencesDuDevis]);
+
+  /** Prix unitaire retenu : règle, puis contrat cadre, puis catalogue. */
+  const prixDe = useCallback((p: typeof produits[number] | undefined, prixImpose?: number | null) => {
+    if (prixImpose !== undefined && prixImpose !== null) return prixImpose;
+    if (!p) return 0;
+    const ref = p.referenceOdoo || p.reference;
+    return contratOdoo?.prix[ref] ?? p.prixHT ?? 0;
+  }, [contratOdoo]);
+
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
@@ -490,7 +545,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         description: l.description || p?.description || '',
         quantite: l.quantite,
         unite: p?.unite || 'u',
-        prixUnitaireHT: l.prixUnitaireHT ?? p?.prixHT ?? 0,
+        prixUnitaireHT: l.prixUnitaireHT ?? prixDe(p),
         tva: l.tva ?? 20,
         remise: 0,
       };
@@ -504,7 +559,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         description: p?.description || a.produitMatch,
         quantite: a.quantite,
         unite: p?.unite || 'u',
-        prixUnitaireHT: a.prixImpose ?? p?.prixHT ?? 0,
+        prixUnitaireHT: prixDe(p, a.prixImpose),
         tva: p?.tva ?? 20,
         remise: 0,
       });
@@ -986,6 +1041,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerDevisNotes} onChange={e => setCreerDevisNotes(e.target.value)} /></div>
                         </div>
 
+                        {contratOdoo && (
+                          <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px]">
+                            Contrat cadre <strong>{contratOdoo.contrat}</strong>
+                            {contratOdoo.societe && <> chez <strong>{contratOdoo.societe}</strong></>}
+                          </div>
+                        )}
+
                         {/* Lignes demandées : quantité et choix de l'article.
                             Un client écrit « J11 » ; le catalogue en compte
                             plusieurs déclinaisons — c'est à vous de trancher. */}
@@ -998,16 +1060,33 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                               return (
                                 <div key={i} className="rounded-lg border border-border p-2 space-y-1.5">
                                   <div className="flex items-center gap-2 text-xs">
-                                    <span className="font-medium">{l.description || l.reference}</span>
-                                    <span className="text-muted-foreground">
-                                      × {l.quantite || 1}
+                                    <span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-[10px]">
+                                      demandé
                                     </span>
+                                    <span className="font-medium">{l.description || l.reference}</span>
+                                    <span className="text-muted-foreground">× {l.quantite || 1}</span>
                                     {candidats.length > 1 && !choixProduit[i] && (
                                       <span className="ml-auto text-[11px] text-warning">
                                         {candidats.length} déclinaisons — vérifiez
                                       </span>
                                     )}
                                   </div>
+                                  {retenu && (
+                                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                      <span>
+                                        P.U. <strong className="text-foreground">
+                                          {formatMontant(prixDe(retenu))}
+                                        </strong>
+                                        {' × '}{l.quantite || 1}{' = '}
+                                        <strong className="text-foreground">
+                                          {formatMontant(prixDe(retenu) * (l.quantite || 1))}
+                                        </strong>
+                                      </span>
+                                      {contratOdoo && (
+                                        <span className="ml-auto">contrat {contratOdoo.contrat}</span>
+                                      )}
+                                    </div>
+                                  )}
                                   <ProduitCombobox
                                     produits={candidats.length ? candidats : produits}
                                     value={retenu?.id ?? ''}
@@ -1030,24 +1109,56 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                 {accompagnements.map((a, k) => {
                                   const p = produits.find(x => x.id === a.produitId);
                                   return (
-                                    <div key={k} className="flex items-center gap-2 text-xs">
-                                      <span>{p?.description || a.produitMatch}</span>
-                                      <span className="text-muted-foreground">× {a.quantite}</span>
-                                      {a.prixImpose === 0 && (
-                                        <span className="text-[11px] text-muted-foreground">
-                                          compris — 0 €
+                                    <div key={k} className="space-y-0.5">
+                                      <div className="flex items-center gap-2 text-xs">
+                                        <span className="bg-primary/15 text-primary px-1.5 py-0.5 rounded text-[10px]">
+                                          accompagnement
                                         </span>
-                                      )}
-                                      {a.detail && (
-                                        <span className="ml-auto text-[11px] text-muted-foreground">
-                                          {a.detail}
-                                        </span>
-                                      )}
+                                        <span>{p?.description || a.produitMatch}</span>
+                                        <span className="text-muted-foreground">× {a.quantite}</span>
+                                        {a.detail && (
+                                          <span className="ml-auto text-[11px] text-muted-foreground">
+                                            {a.detail}
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-muted-foreground">
+                                        P.U. <strong className="text-foreground">
+                                          {formatMontant(prixDe(p, a.prixImpose))}
+                                        </strong>
+                                        {' × '}{a.quantite}{' = '}
+                                        <strong className="text-foreground">
+                                          {formatMontant(prixDe(p, a.prixImpose) * a.quantite)}
+                                        </strong>
+                                        {a.prixImpose === 0 && (
+                                          <span className="ml-1 text-warning">
+                                            règle — compris dans l'enduit
+                                          </span>
+                                        )}
+                                      </div>
                                     </div>
                                   );
                                 })}
                               </div>
                             )}
+
+                            {(() => {
+                              const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
+                                const p = produitDeLigne(i, l);
+                                return t + (p ? prixDe(p) * (l.quantite || 1) : 0);
+                              }, 0);
+                              const totalAcc = accompagnements.reduce((t, a) => {
+                                const p = produits.find(x => x.id === a.produitId);
+                                return t + prixDe(p, a.prixImpose) * a.quantite;
+                              }, 0);
+                              const total = totalDemande + totalAcc;
+                              return total > 0 ? (
+                                <div className="flex items-center justify-between rounded-lg bg-muted px-2 py-1.5 text-xs font-semibold">
+                                  <span>TOTAL H.T.</span>
+                                  <span className="text-primary">{formatMontant(total)}</span>
+                                </div>
+                              ) : null;
+                            })()}
                           </div>
                         )}
                       </div>
