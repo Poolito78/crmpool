@@ -12,6 +12,8 @@ export type TypeDocument =
   | 'commande_client'
   | 'facture_fournisseur'
   | 'facture_client'
+  /** Un client demande un prix : ni numéro, ni total, ni référence. */
+  | 'demande_devis'
   | 'autre';
 
 export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
@@ -21,6 +23,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   commande_client:      { label: 'Commande client',       color: 'bg-success/10 text-success' },
   facture_fournisseur:  { label: 'Facture fournisseur',   color: 'bg-warning/10 text-warning' },
   facture_client:       { label: 'Facture client',        color: 'bg-warning/10 text-warning' },
+  demande_devis:        { label: 'Demande de devis',      color: 'bg-primary/10 text-primary' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
 };
 
@@ -51,7 +54,7 @@ const PROMPT = `Tu es un assistant spécialisé dans l'extraction de données de
 Identifie le type de document et extrait les informations. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 
 {
-  "typeDocument": "commande_fournisseur | bon_livraison | devis_client | commande_client | facture_fournisseur | facture_client | autre",
+  "typeDocument": "demande_devis | commande_fournisseur | bon_livraison | devis_client | commande_client | facture_fournisseur | facture_client | autre",
   "numeroDocument": "numéro du document ou null",
   "nomPartenaire": "nom du fournisseur OU du client selon le type, ou null",
   "referencePartenaire": "référence interne du partenaire (leur propre n° de commande/devis) ou null",
@@ -79,6 +82,20 @@ Règles de classification :
 - commande_client : bon de commande reçu d'un client
 - facture_fournisseur : facture reçue d'un fournisseur
 - facture_client : facture envoyée à un client
+- demande_devis : un CLIENT demande un prix ou un devis, le plus souvent par
+  courriel. Pas de numéro, pas de prix, pas de total : c'est une demande, pas
+  un document comptable. Exemple : « Pouvez-vous nous faire un devis pour 14u
+  de J11 avec la galette à coller + colle ? »
+
+Extraction des lignes d'une demande de devis :
+- Chaque article cité devient une ligne, même sans référence ni prix.
+- La quantité se lit dans le texte : « 14u », « 14 u », « 14 unités », « 14x »,
+  « x14 » et « 14 pièces » valent tous 14. Sans quantité indiquée, mets 1.
+- « description » reprend les mots du client tels quels — « J11 », « galette à
+  coller », « colle » — sans les traduire ni les compléter : le rapprochement
+  avec le catalogue est fait ensuite par l'application.
+- « reference » reste null quand le client n'en donne pas.
+- « prixUnitaireHT » reste null : c'est le tarif du client qui décidera.
 
 Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
 

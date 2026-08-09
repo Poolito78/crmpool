@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import { coupeSignature } from '@/lib/chiffrage';
+import ProduitCombobox from '@/components/ProduitCombobox';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -77,6 +78,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   /* ── état devis ── */
   const [showCreerDevis, setShowCreerDevis] = useState(false);
+  /** Article du catalogue retenu pour chaque ligne, par indice de ligne. */
+  const [choixProduit, setChoixProduit] = useState<Record<number, string>>({});
   const [creerDevisClientId, setCreerDevisClientId] = useState('');
   const [creerDevisNumero, setCreerDevisNumero] = useState('');
   const [creerDevisDate, setCreerDevisDate] = useState('');
@@ -92,7 +95,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const isFournisseurDoc = (t?: TypeDocument) =>
     t === 'commande_fournisseur' || t === 'bon_livraison' || t === 'facture_fournisseur';
   const isClientDoc = (t?: TypeDocument) =>
-    t === 'commande_client' || t === 'devis_client' || t === 'facture_client';
+    t === 'commande_client' || t === 'devis_client' || t === 'facture_client'
+    // Une demande de devis reçue par courriel mène au même endroit : un devis.
+    || t === 'demande_devis';
 
   /* ── pré-remplissage formulaire CF ── */
   useEffect(() => {
@@ -123,7 +128,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           result.nomPartenaire!.toLowerCase().includes(c.societe?.toLowerCase() ?? ''))
       : undefined;
 
-    if (result.typeDocument === 'devis_client') {
+    if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
       setCreerDevisClientId(foundClient?.id ?? '');
       setCreerDevisNumero(result.numeroDocument || `DEV-${year}-${nextNum}`);
@@ -409,20 +414,49 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   }
 
   /* ── créer devis depuis analyse ── */
+  /**
+   * Articles du catalogue susceptibles de correspondre à une ligne demandée.
+   *
+   * Un client écrit « J11 » ; le catalogue Odoo, lui, contient J11C2,
+   * J11C2DOUILLE80, J11C2SANSDOUILLE et J11C2DROUGE. Prendre le premier venu
+   * revient à choisir la variante à sa place — et une balise avec douille n'est
+   * pas la même chose qu'une balise sans. On remonte donc tous les candidats,
+   * du plus court au plus long : le plus court est le modèle de base.
+   */
+  const candidatsPour = useCallback((l: { reference?: string; description?: string }) => {
+    const terme = (l.reference || l.description || '').trim().toLowerCase();
+    if (!terme) return [];
+    const mot = terme.split(/[\s,;]+/)[0];
+    if (mot.length < 2) return [];
+    const parReference = produits.filter(p => p.reference?.toLowerCase().startsWith(mot));
+    if (parReference.length) {
+      return [...parReference].sort((a, b) => a.reference.length - b.reference.length);
+    }
+    return produits
+      .filter(p => p.description?.toLowerCase().includes(terme.slice(0, 20)))
+      .slice(0, 20);
+  }, [produits]);
+
+  /** Article retenu pour une ligne : le choix de l'utilisateur, sinon le meilleur candidat. */
+  const produitDeLigne = useCallback((i: number, l: { reference?: string; description?: string }) => {
+    const choisi = choixProduit[i];
+    if (choisi) return produits.find(p => p.id === choisi);
+    return candidatsPour(l)[0];
+  }, [choixProduit, produits, candidatsPour]);
+
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
     if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
-    const lignes: LigneDevis[] = (result?.lignes ?? []).map(l => {
-      const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase()
-        || p.description?.toLowerCase().includes((l.description || '').toLowerCase().slice(0, 20)));
+    const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
+      const p = produitDeLigne(i, l);
       return {
         id: generateId(),
         produitId: p?.id,
         description: l.description || p?.description || '',
         quantite: l.quantite,
         unite: p?.unite || 'u',
-        prixUnitaireHT: l.prixUnitaireHT ?? p?.prixVente ?? 0,
+        prixUnitaireHT: l.prixUnitaireHT ?? p?.prixHT ?? 0,
         tva: l.tva ?? 20,
         remise: 0,
       };
@@ -464,7 +498,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   const fournisseurMatch = matchedCF ? fournisseurs.find(f => f.id === matchedCF.fournisseurId) : undefined;
   const noMatchCF = result && isFournisseurDoc(result.typeDocument) && !matchedCF;
-  const isDevisClient = result && result.typeDocument === 'devis_client';
+  const isDevisClient = result &&
+    (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis');
   const isCC = result && result.typeDocument === 'commande_client';
   const isFact = result && (result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client');
   const isAutre = result && result.typeDocument === 'autre';
@@ -901,6 +936,44 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <div className="space-y-1"><Label className="text-xs">Réf. affaire</Label><Input className="h-8 text-xs" value={creerDevisRefAffaire} onChange={e => setCreerDevisRefAffaire(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerDevisNotes} onChange={e => setCreerDevisNotes(e.target.value)} /></div>
                         </div>
+
+                        {/* Lignes demandées : quantité et choix de l'article.
+                            Un client écrit « J11 » ; le catalogue en compte
+                            plusieurs déclinaisons — c'est à vous de trancher. */}
+                        {(result?.lignes ?? []).length > 0 && (
+                          <div className="space-y-2 pt-1">
+                            <Label className="text-xs">Articles demandés</Label>
+                            {(result?.lignes ?? []).map((l, i) => {
+                              const candidats = candidatsPour(l);
+                              const retenu = produitDeLigne(i, l);
+                              return (
+                                <div key={i} className="rounded-lg border border-border p-2 space-y-1.5">
+                                  <div className="flex items-center gap-2 text-xs">
+                                    <span className="font-medium">{l.description || l.reference}</span>
+                                    <span className="text-muted-foreground">
+                                      × {l.quantite || 1}
+                                    </span>
+                                    {candidats.length > 1 && !choixProduit[i] && (
+                                      <span className="ml-auto text-[11px] text-warning">
+                                        {candidats.length} déclinaisons — vérifiez
+                                      </span>
+                                    )}
+                                  </div>
+                                  <ProduitCombobox
+                                    produits={candidats.length ? candidats : produits}
+                                    value={retenu?.id ?? ''}
+                                    onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
+                                  />
+                                  {!retenu && (
+                                    <p className="text-[11px] text-warning">
+                                      Aucun article trouvé — choisissez-en un ci-dessus.
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                     <Button onClick={() => showCreerDevis ? handleCreerDevis() : setShowCreerDevis(true)} className="w-full" size="sm">
