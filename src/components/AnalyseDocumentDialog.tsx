@@ -119,10 +119,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!result || matchedCF || !isFournisseurDoc(result.typeDocument)) return;
     const year = new Date().getFullYear();
     const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
-    const foundFourn = result.nomPartenaire
+    // Même précaution que côté client : une raison sociale vide ne doit pas
+    // se retrouver rapprochée de n'importe quel document.
+    const assezLongF = (v?: string) => !!v && v.trim().length >= 4;
+    const foundFourn = result.nomPartenaire && assezLongF(result.nomPartenaire)
       ? fournisseurs.find(f =>
-          f.societe?.toLowerCase().includes(result.nomPartenaire!.toLowerCase()) ||
-          result.nomPartenaire!.toLowerCase().includes(f.societe?.toLowerCase() ?? ''))
+          (assezLongF(f.societe) && f.societe!.toLowerCase().includes(result.nomPartenaire!.toLowerCase())) ||
+          (assezLongF(f.societe) && result.nomPartenaire!.toLowerCase().includes(f.societe!.toLowerCase())))
       : undefined;
     setCreerCFFournisseurId(foundFourn?.id ?? '');
     setCreerCFNumero(result.numeroDocument || `CF-${year}-${nextNum}`);
@@ -135,13 +138,30 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   useEffect(() => {
     if (!result || !isClientDoc(result.typeDocument)) return;
     const year = new Date().getFullYear();
-    const foundClient = result.nomPartenaire
-      ? clients.find(c =>
-          c.nom?.toLowerCase().includes(result.nomPartenaire!.toLowerCase()) ||
-          c.societe?.toLowerCase().includes(result.nomPartenaire!.toLowerCase()) ||
-          result.nomPartenaire!.toLowerCase().includes(c.nom?.toLowerCase() ?? '') ||
-          result.nomPartenaire!.toLowerCase().includes(c.societe?.toLowerCase() ?? ''))
-      : undefined;
+    /* Rapprochement du client.
+     *
+     * L'adresse de l'expéditeur d'abord : elle désigne une personne et une
+     * agence, sans ambiguïté. Le nom ensuite, mais seulement s'il est
+     * suffisamment long — « contient » sur une chaîne vide est TOUJOURS vrai,
+     * et un client dont le champ « nom » est vide raflait toutes les analyses.
+     * C'est ainsi que REFLEX SIGNALISATION s'est retrouvé sur un devis AGILIS,
+     * avec son contrat cadre et ses prix.
+     */
+    const indicesTexte = extraireIndices(analyseTexteRef.current || '');
+    const assezLong = (v?: string) => !!v && v.trim().length >= 4;
+    const contient = (a?: string, b?: string) =>
+      assezLong(a) && assezLong(b) && a!.toLowerCase().includes(b!.toLowerCase());
+
+    const foundClient =
+      clients.find(c => assezLong(c.email)
+        && indicesTexte.emails.includes(c.email!.toLowerCase()))
+      || (result.nomPartenaire
+        ? clients.find(c =>
+            contient(c.nom, result.nomPartenaire) ||
+            contient(c.societe, result.nomPartenaire) ||
+            contient(result.nomPartenaire, c.nom) ||
+            contient(result.nomPartenaire, c.societe))
+        : undefined);
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
