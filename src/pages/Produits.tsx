@@ -462,6 +462,24 @@ export default function Produits() {
     });
   }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
 
+  /* Pagination — même principe qu'Odoo : 50 articles par page.
+     Le catalogue compte plus de 22 000 références depuis l'import Odoo ; les
+     poser toutes dans le DOM d'un coup demandait plusieurs secondes à
+     l'ouverture, et autant à chaque tri. Le filtrage, lui, reste fait sur la
+     totalité : on pagine l'affichage, pas la recherche. */
+  const PAR_PAGE = 50;
+  const [page, setPage] = useState(1);
+  const nbPages = Math.max(1, Math.ceil(sortedFiltered.length / PAR_PAGE));
+  const pageCourante = Math.min(page, nbPages);
+  const affiches = useMemo(
+    () => sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE),
+    [sortedFiltered, pageCourante],
+  );
+
+  // Un nouveau filtre ou un nouveau tri renvoie au début : rester page 12
+  // après avoir tapé une recherche donnerait une liste vide sans raison visible.
+  useEffect(() => { setPage(1); }, [search, columnFilters, sortCol, sortDir]);
+
   // Stock par dépôt (entrepôt) par produit — pour l'affichage détaillé quand plusieurs dépôts
   const depotStocksParProduit = useMemo(() => {
     const m = new Map<string, { nom: string; stock: number }[]>();
@@ -539,7 +557,8 @@ export default function Produits() {
   });
 
   const toggleAll = () => {
-    setSelected(prev => prev.size === sortedFiltered.length ? new Set() : new Set(sortedFiltered.map(p => p.id)));
+    // porte sur la page affichée, comme dans Odoo
+    setSelected(prev => prev.size === affiches.length ? new Set() : new Set(affiches.map(p => p.id)));
   };
   
   function confirmDelete(id?: string) {
@@ -1047,7 +1066,7 @@ export default function Produits() {
             <thead>
               <tr className="border-b border-border bg-muted/50">
                 <th className="px-2 py-2.5 w-8 sticky top-0 z-10 bg-muted">
-                  <input type="checkbox" checked={sortedFiltered.length > 0 && selected.size === sortedFiltered.length} onChange={toggleAll} className="rounded border-input" />
+                  <input type="checkbox" checked={affiches.length > 0 && selected.size === affiches.length} onChange={toggleAll} className="rounded border-input" />
                 </th>
                 {orderedVisibleCols.map(col => {
                   const isSorted = sortCol === col.key;
@@ -1144,7 +1163,7 @@ export default function Produits() {
               </tr>
             </thead>
             <tbody>
-              {sortedFiltered.map(p => {
+              {affiches.map(p => {
                 const pfs = produitFournisseurs.filter(pf => pf.produitId === p.id);
                 const prioFourn = calculerFournisseurPrioritaire(p.id, Math.max(1, p.stockMin - p.stock), produitFournisseurs, fournisseurs);
                 const prioFournName = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId)?.societe : null;
@@ -1217,13 +1236,65 @@ export default function Produits() {
             </tbody>
           </table>
         </div>
+        {nbPages > 1 && (
+          <div className="flex-none flex items-center justify-between gap-2 px-3 py-2 border-t border-border text-xs">
+            <span className="text-muted-foreground">
+              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, sortedFiltered.length)}
+              {' sur '}{sortedFiltered.length} article{sortedFiltered.length > 1 ? 's' : ''}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(1)}
+                disabled={pageCourante === 1}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >««</button>
+              <button
+                onClick={() => setPage(pageCourante - 1)}
+                disabled={pageCourante === 1}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >Précédent</button>
+              <span className="px-2">page {pageCourante} / {nbPages}</span>
+              <button
+                onClick={() => setPage(pageCourante + 1)}
+                disabled={pageCourante === nbPages}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >Suivant</button>
+              <button
+                onClick={() => setPage(nbPages)}
+                disabled={pageCourante === nbPages}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >»»</button>
+            </div>
+          </div>
+        )}
         {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun produit</p>}
       </div>
 
       {/* Vue cartes — mobile (toujours) + desktop si vue liste */}
       <div className={produitsView === 'liste' ? 'flex-1 min-h-0 overflow-y-auto space-y-2' : 'md:hidden space-y-2'}>
         {sortedFiltered.length === 0 && <p className="text-center py-8 text-muted-foreground text-sm">Aucun produit</p>}
-        {sortedFiltered.map(p => {
+        {nbPages > 1 && (
+          <div className="flex items-center justify-between gap-2 py-2 text-xs">
+            <span className="text-muted-foreground">
+              {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, sortedFiltered.length)}
+              {' sur '}{sortedFiltered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage(pageCourante - 1)}
+                disabled={pageCourante === 1}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >Précédent</button>
+              <span className="px-1">{pageCourante} / {nbPages}</span>
+              <button
+                onClick={() => setPage(pageCourante + 1)}
+                disabled={pageCourante === nbPages}
+                className="px-2 py-1 rounded border border-border disabled:opacity-40"
+              >Suivant</button>
+            </div>
+          </div>
+        )}
+        {affiches.map(p => {
           const isCompose = !!(p.composants && p.composants.length > 0);
           const margeRevend = calcMargeBrute(p.prixRevendeur, p.prixAchat);
           const tauxMarque = calcTauxMarque(p.prixRevendeur, p.prixAchat);
