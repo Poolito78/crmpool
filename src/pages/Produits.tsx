@@ -398,7 +398,10 @@ export default function Produits() {
     return map;
   }, [produits, pmpParProduit]);
 
-  const filtered = safeProduits.filter(p => {
+  /* Mémorisé : sans cela le filtrage repassait sur les 22 634 articles à
+     chaque rendu — donc à chaque frappe dans la recherche, à chaque case
+     cochée, à chaque changement de page. */
+  const filtered = useMemo(() => safeProduits.filter(p => {
     // Global search
     if (search) {
       const q = search.toLowerCase();
@@ -433,7 +436,8 @@ export default function Produits() {
       }
     }
     return true;
-  });
+  }), [safeProduits, search, columnFilters, produitFournisseurs, fournisseurs,
+       qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortCol) return filtered;

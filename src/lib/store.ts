@@ -1091,20 +1091,44 @@ function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
 const TRANCHE = 1000;
 
 async function lireTout(table: string) {
-  const tout: any[] = [];
-  for (let debut = 0; ; debut += TRANCHE) {
+  /* Une première tranche, qui rapporte aussi le nombre total de lignes.
+     Les suivantes partent alors TOUTES EN MÊME TEMPS : enchaînées une par une,
+     les 23 tranches du catalogue produits coûtaient une vingtaine d'allers-
+     retours en série, soit plusieurs secondes avant le premier affichage. */
+  /* Le tri sur « id » n'est pas cosmétique : sans ordre explicite, PostgREST
+     ne garantit pas la même séquence d'une requête à l'autre, et deux tranches
+     lues en parallèle pourraient se recouvrir ou laisser un trou. */
+  const premiere = await supabase
+    .from(table as any)
+    .select('*', { count: 'exact' })
+    .order('id')
+    .range(0, TRANCHE - 1);
+
+  if (premiere.error) {
+    console.error(`Lecture de ${table} interrompue :`, premiere.error.message);
+    return [];
+  }
+  const tout: any[] = premiere.data || [];
+  const total = premiere.count ?? tout.length;
+  if (total <= TRANCHE) return tout;
+
+  const departs: number[] = [];
+  for (let d = TRANCHE; d < total; d += TRANCHE) departs.push(d);
+
+  const suites = await Promise.all(departs.map(async d => {
     const { data, error } = await supabase
       .from(table as any)
       .select('*')
-      .range(debut, debut + TRANCHE - 1);
+      .order('id')
+      .range(d, d + TRANCHE - 1);
     if (error) {
-      console.error(`Lecture de ${table} interrompue :`, error.message);
-      break;
+      console.error(`Lecture de ${table} (${d}) interrompue :`, error.message);
+      return [];
     }
-    if (!data?.length) break;
-    tout.push(...data);
-    if (data.length < TRANCHE) break;
-  }
+    return data || [];
+  }));
+
+  for (const lot of suites) tout.push(...lot);
   return tout;
 }
 
