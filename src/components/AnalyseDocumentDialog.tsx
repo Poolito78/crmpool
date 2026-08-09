@@ -10,7 +10,7 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
-import { coupeSignature } from '@/lib/chiffrage';
+import { coupeSignature, extraireIndices } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
@@ -87,6 +87,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [contratOdoo, setContratOdoo] = useState<
     { contrat: string; societe: string; prix: Record<string, number> } | null
   >(null);
+  /* Client trouvé dans Odoo alors qu'il n'existe pas encore dans MonCRM.
+     Le Chiffrage crée la fiche à la volée : ressaisir des coordonnées qu'Odoo
+     détient déjà est une perte de temps, et une source d'écarts entre les deux
+     bases. */
+  const [clientOdoo, setClientOdoo] = useState<{
+    nom: string; email: string; telephone: string;
+    adresse: string; codePostal: string; ville: string; societe: string;
+  } | null>(null);
   const [creerDevisClientId, setCreerDevisClientId] = useState('');
   const [creerDevisNumero, setCreerDevisNumero] = useState('');
   const [creerDevisDate, setCreerDevisDate] = useState('');
@@ -502,17 +510,38 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   useEffect(() => {
     const cli = clients.find(c => c.id === creerDevisClientId);
-    if (!cli || !referencesDuDevis.length) { setContratOdoo(null); return; }
+    /* Sans client MonCRM, on interroge quand même Odoo avec ce que le message
+       a livré : l'adresse de l'expéditeur suffit à retrouver la société et son
+       contrat. C'est ainsi que procède le Chiffrage. */
+    /* L'adresse de l'expéditeur désigne une agence précise ; la raison sociale
+       peut en désigner plusieurs. On la lit donc dans le message analysé. */
+    const indices = extraireIndices(analyseTexteRef.current || '');
+    const critere = cli
+      ? { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville }
+      : (indices.emails[0] || result?.nomPartenaire)
+        ? {
+            email: indices.emails[0],
+            societe: result?.nomPartenaire,
+            nom: result?.nomPartenaire,
+            ville: indices.villes[0] || emlContactRef.current?.ville,
+          }
+        : null;
+
+    if (!critere || !referencesDuDevis.length) { setContratOdoo(null); return; }
     let annule = false;
     (async () => {
       try {
         const { data } = await supabase.functions.invoke('odoo-prix', {
           body: {
-            client: { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville },
+            client: critere,
             lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
           },
         });
         if (annule) return;
+        // Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
+        if (!cli && data?.coordonnees?.nom) {
+          setClientOdoo({ ...data.coordonnees, societe: data.societe || data.coordonnees.nom });
+        } else setClientOdoo(null);
         if (data?.contrat) {
           const prix: Record<string, number> = {};
           for (const [ref, v] of Object.entries((data.prix || {}) as Record<string, any>)) {
@@ -523,7 +552,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       } catch { if (!annule) setContratOdoo(null); }
     })();
     return () => { annule = true; };
-  }, [creerDevisClientId, clients, referencesDuDevis]);
+  }, [creerDevisClientId, clients, referencesDuDevis, result]);
 
   /** Prix unitaire retenu : règle, puis contrat cadre, puis catalogue. */
   const prixDe = useCallback((p: typeof produits[number] | undefined, prixImpose?: number | null) => {
@@ -941,7 +970,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                         </thead>
                         <tbody className="divide-y divide-border">
                           {result.lignes.map((l, i) => {
-                            const total = l.prixUnitaireHT != null ? l.prixUnitaireHT * l.quantite : null;
+                            /* Une demande de devis n'annonce aucun prix : c'est
+                               le contrat du client qui le donne. Afficher un
+                               tiret revenait à cacher le seul chiffre utile. */
+                            const pu = l.prixUnitaireHT ?? (
+                              isDevisClient ? prixDe(produitDeLigne(i, l)) : null
+                            );
+                            const total = pu != null ? pu * l.quantite : null;
                             return (
                               <tr key={i} className="hover:bg-muted/20 transition-colors">
                                 <td className="px-3 py-2 max-w-[180px] sm:max-w-[240px]">
@@ -949,7 +984,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                   {l.description || '—'}
                                 </td>
                                 <td className="px-2 py-2 text-center font-bold text-sm">{l.quantite}</td>
-                                <td className="hidden sm:table-cell px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{l.prixUnitaireHT != null ? l.prixUnitaireHT.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
+                                <td className="hidden sm:table-cell px-3 py-2 text-right whitespace-nowrap text-muted-foreground">{pu != null ? pu.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
                                 <td className="px-3 py-2 text-right whitespace-nowrap font-semibold">{total != null ? total.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' }) : '—'}</td>
                               </tr>
                             );
@@ -1040,6 +1075,45 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <div className="space-y-1"><Label className="text-xs">Réf. affaire</Label><Input className="h-8 text-xs" value={creerDevisRefAffaire} onChange={e => setCreerDevisRefAffaire(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerDevisNotes} onChange={e => setCreerDevisNotes(e.target.value)} /></div>
                         </div>
+
+                        {clientOdoo && !creerDevisClientId && (
+                          <div className="rounded-lg border border-warning/40 bg-warning/5 p-2 space-y-1.5">
+                            <p className="text-[11px]">
+                              <strong>{clientOdoo.societe}</strong> existe dans Odoo mais pas
+                              encore dans MonCRM.
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              {[clientOdoo.email, clientOdoo.telephone,
+                                [clientOdoo.codePostal, clientOdoo.ville].filter(Boolean).join(' ')]
+                                .filter(Boolean).join(' · ')}
+                            </p>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                const id = generateId();
+                                updateClients(prev => [...prev, {
+                                  id,
+                                  nom: clientOdoo.nom,
+                                  societe: clientOdoo.societe,
+                                  email: clientOdoo.email,
+                                  telephone: clientOdoo.telephone,
+                                  adresse: clientOdoo.adresse,
+                                  ville: clientOdoo.ville,
+                                  codePostal: clientOdoo.codePostal,
+                                  dateCreation: today(),
+                                  adressesLivraison: [],
+                                } as any]);
+                                setCreerDevisClientId(id);
+                                setClientOdoo(null);
+                                toast.success(`${clientOdoo.societe} créé depuis Odoo`);
+                              }}
+                            >
+                              Créer ce client depuis Odoo
+                            </Button>
+                          </div>
+                        )}
 
                         {contratOdoo && (
                           <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px]">

@@ -301,7 +301,10 @@ async function trouverPartenaire(
   od: Odoo,
   c: { email?: string; societe?: string; nom?: string; ville?: string },
 ) {
-  const champs = ["name", "email", "city", "property_product_pricelist", "parent_id"];
+  /* Les coordonnées viennent avec : quand le client n'existe pas encore dans
+     MonCRM, Odoo fait foi et on peut le créer sans ressaisie. */
+  const champs = ["name", "email", "city", "property_product_pricelist", "parent_id",
+                  "phone", "mobile", "street", "street2", "zip", "vat"];
   const lire = async (domaine: Domaine, limite = 8) =>
     (await od.kw("res.partner", "search_read", [domaine, champs], {
       limit: limite,
@@ -468,6 +471,16 @@ serve(async (req) => {
     return repondre({
       partenaire: partenaire.name,
       partenaireId: partenaire.id,
+      /** Coordonnées, pour créer la fiche dans MonCRM sans ressaisie. */
+      coordonnees: {
+        nom: partenaire.name || '',
+        email: partenaire.email || '',
+        telephone: partenaire.phone || partenaire.mobile || '',
+        adresse: [partenaire.street, partenaire.street2].filter(Boolean).join(' '),
+        codePostal: partenaire.zip || '',
+        ville: partenaire.city || '',
+        tvaIntra: partenaire.vat || '',
+      },
       /** Société qui porte le contrat cadre — souvent le parent du contact. */
       societe,
       contrat,
