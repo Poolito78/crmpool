@@ -60,6 +60,10 @@ export interface OptionsCatalogue {
   filtres: Record<string, string>;
   /** false = le hook ne requête rien (la page utilise la liste en mémoire) */
   actif: boolean;
+  /** N'afficher que les modèles, sans leurs déclinaisons. Comme Odoo. */
+  seulementModeles: boolean;
+  /** Renseigné : on liste les variantes de ce modèle, et rien d'autre. */
+  modeleCle: string | null;
 }
 
 /** Échappe les caractères qui ont un sens dans un motif PostgREST. */
@@ -111,6 +115,12 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
           .from('produits')
           .select('*', { count: 'exact' });
 
+        /* Odoo ne propose pas les déclinaisons dans la liste de vente : il
+           montre le modèle, et n'ouvre ses variantes qu'une fois celui-ci
+           choisi. Le catalogue passe ainsi de 22 634 lignes à 7 782. */
+        if (o.modeleCle) q = q.eq('modele_cle', o.modeleCle);
+        else if (o.seulementModeles) q = q.eq('est_modele', true);
+
         const r = motif(rechercheDifferee);
         if (r) {
           q = q.or(
@@ -151,7 +161,8 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
     })();
 
     return () => { annule = true; };
-  }, [o.actif, o.page, o.parPage, rechercheDifferee, o.triCol, o.triSens, filtresDifferes]);
+  }, [o.actif, o.page, o.parPage, rechercheDifferee, o.triCol, o.triSens, filtresDifferes,
+      o.seulementModeles, o.modeleCle]);
 
   return useMemo(
     () => ({ lignes, total, chargement: chargement || enAttente, erreur }),

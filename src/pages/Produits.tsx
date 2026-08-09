@@ -503,6 +503,12 @@ export default function Produits() {
   const triHorsBase = !!sortCol && !COLONNES_BASE[sortCol];
   const modeServeur = !filtreHorsBase && !triHorsBase;
 
+  /* Vue « modèles », comme Odoo : la liste de vente ne propose pas les
+     déclinaisons. J11C2, J11C2DOUILLE80, J11C2SANSDOUILLE et J11C2DROUGE
+     n'apparaissent que sous le modèle J11, une fois celui-ci ouvert.
+     22 634 lignes deviennent ainsi 7 782. */
+  const [modeleOuvert, setModeleOuvert] = useState<string | null>(null);
+
   const serveur = useCatalogueServeur({
     page,
     parPage: PAR_PAGE,
@@ -511,7 +517,12 @@ export default function Produits() {
     triSens: sortDir,
     filtres: columnFilters as Record<string, string>,
     actif: modeServeur,
+    seulementModeles: !modeleOuvert,
+    modeleCle: modeleOuvert,
   });
+
+  // Ouvrir ou refermer un modèle remet au début : la pagination change d'objet.
+  useEffect(() => { setPage(1); }, [modeleOuvert]);
 
   const totalLignes = modeServeur ? serveur.total : sortedFiltered.length;
   const nbPages = Math.max(1, Math.ceil(totalLignes / PAR_PAGE));
@@ -1215,7 +1226,18 @@ export default function Produits() {
                 const prioFournObj = prioFourn ? fournisseurs.find(f => f.id === prioFourn.fournisseurId) : null;
                 const renderCell = (key: ColKey) => {
                   switch (key) {
-                    case 'reference':    return <td className="px-2 py-2.5 font-mono text-xs" title={p.reference}>{p.reference}{isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}</td>;
+                    case 'reference':    return <td className="px-2 py-2.5 font-mono text-xs" title={p.reference}>
+                      {p.reference}
+                      {isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}
+                      {/* Un modèle à déclinaisons s'ouvre, comme dans Odoo. */}
+                      {!modeleOuvert && (p.nbVariantes ?? 1) > 1 && p.modeleCle && (
+                        <button
+                          onClick={e => { e.stopPropagation(); setModeleOuvert(p.modeleCle!); }}
+                          className="ml-1 text-xs bg-accent/15 text-accent px-1.5 py-0.5 rounded-full font-sans hover:bg-accent/25"
+                          title={`Voir les ${p.nbVariantes} déclinaisons de ${p.modeleCle}`}
+                        >{p.nbVariantes} décl.</button>
+                      )}
+                    </td>;
                     case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${p.description}`}>{p.description}</td>;
                     case 'categorie':    return <td className="px-2 py-2.5 text-muted-foreground max-w-[110px] truncate" title={p.categorie || ''}>{p.categorie || '—'}</td>;
                     case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
@@ -1280,6 +1302,17 @@ export default function Produits() {
             </tbody>
           </table>
         </div>
+        {modeServeur && modeleOuvert && (
+          <div className="flex-none flex items-center gap-2 px-3 py-2 border-b border-border text-xs bg-primary/5">
+            <span>
+              Déclinaisons de <strong className="text-foreground">{modeleOuvert}</strong>
+            </span>
+            <button
+              onClick={() => setModeleOuvert(null)}
+              className="ml-auto text-primary hover:underline"
+            >Revenir aux modèles</button>
+          </div>
+        )}
         {(serveur.chargement || serveur.erreur || !modeServeur) && (
           <div className="flex-none px-3 py-1.5 border-t border-border text-xs text-muted-foreground">
             {serveur.erreur

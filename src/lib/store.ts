@@ -180,6 +180,12 @@ export interface Produit {
   proprietaire?: 'isosign' | 'fournisseur'; // propriétaire de la marchandise
   proprietaireFournisseurId?: string;        // si proprietaire = 'fournisseur'
   disponibleVente?: boolean;                 // produit proposé à la vente
+  /** Désignation du modèle Odoo ; les articles qui la partagent en sont les variantes. */
+  modeleCle?: string;
+  /** Vrai pour l'article qui représente son modèle au premier rang de la liste. */
+  estModele?: boolean;
+  /** Nombre d'articles partageant ce modèle ; 1 = pas de déclinaison. */
+  nbVariantes?: number;
   achatsHistorique?: AchatDate[];            // historique manuel des achats datés (valorisation)
 }
 
@@ -617,6 +623,9 @@ function dbToProduit(r: any): Produit {
     proprietaire: (r.proprietaire as 'isosign' | 'fournisseur') || 'isosign',
     proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
     disponibleVente: r.disponible_vente ?? true,
+    modeleCle: r.modele_cle || undefined,
+    estModele: r.est_modele !== false,
+    nbVariantes: Number(r.nb_variantes) || 1,
     achatsHistorique: r.achats_historique ? (Array.isArray(r.achats_historique) ? r.achats_historique : JSON.parse(r.achats_historique)) : undefined,
   };
 }
