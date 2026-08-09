@@ -67,6 +67,9 @@ function motif(v: string) {
   return v.replace(/[%,()]/g, ' ').trim();
 }
 
+/** Attente avant d'interroger la base, en millisecondes. */
+const DELAI_FRAPPE = 250;
+
 export function useCatalogueServeur(o: OptionsCatalogue) {
   const [lignes, setLignes] = useState<Produit[]>([]);
   const [total, setTotal] = useState(0);
@@ -75,6 +78,26 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
 
   // Sérialisé : évite de relancer la requête à chaque rendu sur un objet égal.
   const cleFiltres = JSON.stringify(o.filtres);
+
+  /* La saisie est différée : sans cela, taper « J11C2 » lançait cinq requêtes,
+     dont quatre pour des résultats que personne n'aura vus. On attend un quart
+     de seconde de silence au clavier — c'est en dessous du seuil où l'on
+     perçoit une attente, et cela divise le trafic par cinq. */
+  const [rechercheDifferee, setRechercheDifferee] = useState(o.recherche);
+  const [filtresDifferes, setFiltresDifferes] = useState(cleFiltres);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setRechercheDifferee(o.recherche);
+      setFiltresDifferes(cleFiltres);
+    }, DELAI_FRAPPE);
+    return () => clearTimeout(t);
+  }, [o.recherche, cleFiltres]);
+
+  // Une frappe en attente compte comme un chargement : le bandeau ne clignote
+  // pas entre la frappe et le départ de la requête.
+  const enAttente = o.actif
+    && (rechercheDifferee !== o.recherche || filtresDifferes !== cleFiltres);
 
   useEffect(() => {
     if (!o.actif) return;
@@ -88,14 +111,14 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
           .from('produits')
           .select('*', { count: 'exact' });
 
-        const r = motif(o.recherche);
+        const r = motif(rechercheDifferee);
         if (r) {
           q = q.or(
             `reference.ilike.%${r}%,description.ilike.%${r}%,categorie.ilike.%${r}%`,
           );
         }
 
-        for (const [cle, val] of Object.entries(JSON.parse(cleFiltres) as Record<string, string>)) {
+        for (const [cle, val] of Object.entries(JSON.parse(filtresDifferes) as Record<string, string>)) {
           const colonne = COLONNES_TEXTE[cle];
           if (!colonne || !val) continue;
           if (val === '!empty') {
@@ -128,10 +151,10 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
     })();
 
     return () => { annule = true; };
-  }, [o.actif, o.page, o.parPage, o.recherche, o.triCol, o.triSens, cleFiltres]);
+  }, [o.actif, o.page, o.parPage, rechercheDifferee, o.triCol, o.triSens, filtresDifferes]);
 
   return useMemo(
-    () => ({ lignes, total, chargement, erreur }),
-    [lignes, total, chargement, erreur],
+    () => ({ lignes, total, chargement: chargement || enAttente, erreur }),
+    [lignes, total, chargement, enAttente, erreur],
   );
 }
