@@ -208,13 +208,25 @@ export function produitsPourDeclencheur(
   });
   if (out.size) return [...out];
 
+  /* 2 bis. début de référence — « J11 » contre J11C2, J11C2DOUILLE80,
+     J11600C2… Odoo décline une balise en plusieurs variantes, et le
+     déclencheur d'une règle désigne la famille, pas une déclinaison. */
+  if (t.length >= 2) {
+    produits.forEach((p) => {
+      if (normalise(p.reference).startsWith(t)) out.add(p.id);
+    });
+    if (out.size) return [...out];
+  }
+
   // 3. libellé, mot à mot — « enduit à froid » contre « ENDUIT ARAVIS 7.85KG »
   const mots = String(terme)
     .toLowerCase()
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 4);
+    // Trois lettres suffisent : « K5D » et « J11 » sont des désignations
+    // complètes, pas des fragments.
+    .filter((w) => w.length >= 3);
   if (mots.length) {
     produits.forEach((p) => {
       const cible = normalise(p.description) + ' ' + normalise(p.reference);
@@ -258,6 +270,19 @@ export function appliquerAccompagnements(
       const base = out
         .filter((l) => l.regleId !== r.id && cibles.includes(l.produitId))
         .reduce((s, l) => s + (Number(l.quantite) || 0), 0);
+
+      /* Le client a demandé cet article lui-même : sa quantité fait foi et la
+         règle ne s'applique pas. Sans cela, un courriel demandant « 14 J11
+         avec la galette » recevrait quatorze galettes en double — celles du
+         client et celles de la règle. */
+      const demandeExplicitement = out.some(
+        (l) => !l.auto && l.produitId === r.produit_id,
+      );
+      if (demandeExplicitement) {
+        const doublon = out.find((l) => l.auto && l.regleId === r.id);
+        if (doublon) { out = out.filter((l) => l !== doublon); change = true; }
+        continue;
+      }
 
       const parLot = Number(r.par_lot) || 1;
       const pour = Number(r.pour) || 1;

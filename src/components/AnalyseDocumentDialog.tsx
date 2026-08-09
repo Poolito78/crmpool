@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,6 +12,8 @@ import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import { coupeSignature } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
+import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -37,7 +39,7 @@ const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T'
 
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
-    commandesFournisseur, fournisseurs, produits, clients, devis,
+    commandesFournisseur, fournisseurs, produits, produitsCharges, clients, devis,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
   } = useCRM();
 
@@ -80,6 +82,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [showCreerDevis, setShowCreerDevis] = useState(false);
   /** Article du catalogue retenu pour chaque ligne, par indice de ligne. */
   const [choixProduit, setChoixProduit] = useState<Record<number, string>>({});
+  const { regles } = useReglesAccompagnement();
   const [creerDevisClientId, setCreerDevisClientId] = useState('');
   const [creerDevisNumero, setCreerDevisNumero] = useState('');
   const [creerDevisDate, setCreerDevisDate] = useState('');
@@ -444,6 +447,37 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     return candidatsPour(l)[0];
   }, [choixProduit, produits, candidatsPour]);
 
+  /**
+   * Articles ajoutés d'office par les règles d'accompagnement.
+   *
+   * Le client demande quatorze balises J11 ; il lui faut aussi quatorze
+   * galettes de scellement, un seau d'enduit ARAVIS par vingtaine de balises,
+   * et le durcisseur qui va avec ce seau — à 0 €, il est compris dans l'enduit.
+   * Ces règles sont celles de MonCRM, les mêmes que celles du Chiffrage : elles
+   * vivent en base parce que ce sont des décisions commerciales, qui changent
+   * sans qu'on redéploie l'application.
+   *
+   * Le calcul part des articles RETENUS, pas du texte du client : c'est la
+   * variante choisie qui déclenche la règle.
+   */
+  const accompagnements = useMemo(() => {
+    if (!result?.lignes?.length || !regles.length || !produitsCharges) return [];
+    const demandees: LigneChiffrage[] = result.lignes
+      .map((l, i) => {
+        const p = produitDeLigne(i, l);
+        return p ? { produitId: p.id, produitMatch: p.description,
+                     quantite: l.quantite || 1, confidence: 'high' as const } : null;
+      })
+      .filter(Boolean) as LigneChiffrage[];
+    if (!demandees.length) return [];
+
+    const referentiel = produits.map(p => ({
+      id: p.id, reference: p.reference, description: p.description,
+    }));
+    return appliquerAccompagnements(demandees, regles, referentiel)
+      .filter(l => l.auto);
+  }, [result, regles, produits, produitsCharges, produitDeLigne]);
+
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
@@ -461,6 +495,21 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
         remise: 0,
       };
     });
+    // Les articles ajoutés par les règles suivent les articles demandés.
+    for (const a of accompagnements) {
+      const p = produits.find(x => x.id === a.produitId);
+      lignes.push({
+        id: generateId(),
+        produitId: a.produitId,
+        description: p?.description || a.produitMatch,
+        quantite: a.quantite,
+        unite: p?.unite || 'u',
+        prixUnitaireHT: a.prixImpose ?? p?.prixHT ?? 0,
+        tva: p?.tva ?? 20,
+        remise: 0,
+      });
+    }
+
     const validite = creerDevisValidite || (() => {
       const d = new Date(creerDevisDate);
       d.setDate(d.getDate() + 30);
@@ -972,6 +1021,33 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                 </div>
                               );
                             })}
+
+                            {accompagnements.length > 0 && (
+                              <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1">
+                                <p className="text-[11px] font-medium text-primary">
+                                  Ajoutés par les règles
+                                </p>
+                                {accompagnements.map((a, k) => {
+                                  const p = produits.find(x => x.id === a.produitId);
+                                  return (
+                                    <div key={k} className="flex items-center gap-2 text-xs">
+                                      <span>{p?.description || a.produitMatch}</span>
+                                      <span className="text-muted-foreground">× {a.quantite}</span>
+                                      {a.prixImpose === 0 && (
+                                        <span className="text-[11px] text-muted-foreground">
+                                          compris — 0 €
+                                        </span>
+                                      )}
+                                      {a.detail && (
+                                        <span className="ml-auto text-[11px] text-muted-foreground">
+                                          {a.detail}
+                                        </span>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
