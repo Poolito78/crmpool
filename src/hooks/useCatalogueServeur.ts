@@ -132,7 +132,13 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
           const colonne = COLONNES_TEXTE[cle];
           if (!colonne || !val) continue;
           if (val === '!empty') {
-            q = q.not(colonne, 'is', null).neq(colonne, '');
+            /* `filter` plutôt que `not(...).neq(...)` : sur un schéma de cette
+               taille, la signature surchargée de `neq` fait renoncer TypeScript
+               à l'inférence (TS2589) et le typage de toute la requête tombe.
+               `filter` prend l'opérateur en texte, donc reste plat. Le nom de
+               colonne vient de COLONNES_TEXTE, il est validé au-dessus. */
+            q = q.filter(colonne, 'not.is', null);
+            q = q.filter(colonne, 'neq', '');
             continue;
           }
           const m = motif(val);

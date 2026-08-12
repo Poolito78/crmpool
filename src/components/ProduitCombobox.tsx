@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Produit } from '@/lib/store';
+import { chercherProduits, produitParId } from '@/lib/indexProduits';
 import TruncTooltip from '@/components/TruncTooltip';
 
 interface ProduitComboboxProps {
@@ -11,6 +12,17 @@ interface ProduitComboboxProps {
   autoFocus?: boolean;
 }
 
+/**
+ * Nombre de lignes réellement mises dans le DOM.
+ *
+ * Sans plafond, ouvrir ce sélecteur créait 22 634 boutons — le navigateur
+ * mettait plusieurs secondes à les disposer, et autant à les jeter à la
+ * fermeture. Personne ne fait défiler vingt-deux mille lignes : on affine sa
+ * recherche. Le compteur sous la liste indique combien de résultats existent
+ * au-delà, pour qu'on sache qu'il faut préciser.
+ */
+const MAX_AFFICHE = 60;
+
 export default function ProduitCombobox({ produits, value, onSelect, autoFocus }: ProduitComboboxProps) {
   const [open, setOpen] = useState(!!autoFocus);
   const [query, setQuery] = useState('');
@@ -19,17 +31,15 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  const selected = produits.find(p => p.id === value);
+  const selected = produitParId(produits, value);
 
-  const filtered = useMemo(() => {
-    if (!query) return produits;
-    const q = query.toLowerCase();
-    return produits.filter(p =>
-      p.description.toLowerCase().includes(q) ||
-      p.reference.toLowerCase().includes(q) ||
-      p.categorie?.toLowerCase().includes(q)
-    );
-  }, [produits, query]);
+  // La liste fermée ne cherche rien : un devis de trente lignes ne doit pas
+  // balayer trente fois le catalogue à chaque rendu du formulaire.
+  const { resultats: filtered, total } = useMemo(
+    () => (open ? chercherProduits(produits, query, MAX_AFFICHE)
+                : { resultats: [] as Produit[], total: 0 }),
+    [produits, query, open],
+  );
 
   // Focus input when dropdown opens (needed on mobile where autoFocus is ignored)
   useEffect(() => {
@@ -185,6 +195,12 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
               <p className="py-3 text-center text-xs text-muted-foreground">Aucun produit trouvé</p>
             )}
           </div>
+
+          {total > filtered.length && (
+            <p className="border-t border-border px-2 py-1.5 text-center text-[11px] text-muted-foreground">
+              {filtered.length} sur {total.toLocaleString('fr-FR')} — précisez la recherche
+            </p>
+          )}
         </div>
       )}
     </div>

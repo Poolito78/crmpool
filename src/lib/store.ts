@@ -186,6 +186,12 @@ export interface Produit {
   estModele?: boolean;
   /** Nombre d'articles partageant ce modèle ; 1 = pas de déclinaison. */
   nbVariantes?: number;
+  /** Prix applicateur du catalogue métier, remises déjà comprises. */
+  prixTarif?: number;
+  /** Code de l'article dans ce catalogue. */
+  codeTarif?: string;
+  /** D'où vient prixTarif : ISOMARK ou ISOFLOOR. */
+  sourceTarif?: string;
   achatsHistorique?: AchatDate[];            // historique manuel des achats datés (valorisation)
 }
 
@@ -626,6 +632,9 @@ function dbToProduit(r: any): Produit {
     modeleCle: r.modele_cle || undefined,
     estModele: r.est_modele !== false,
     nbVariantes: Number(r.nb_variantes) || 1,
+    prixTarif: r.prix_tarif != null ? Number(r.prix_tarif) : undefined,
+    codeTarif: r.code_tarif || undefined,
+    sourceTarif: r.source_tarif || undefined,
     achatsHistorique: r.achats_historique ? (Array.isArray(r.achats_historique) ? r.achats_historique : JSON.parse(r.achats_historique)) : undefined,
   };
 }

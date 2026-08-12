@@ -126,8 +126,13 @@ export default function Dashboard() {
   const totalFournFDMEchu = encoursFournFDM.filter(e => e.dateEch < now).reduce((s, e) => s + e.cf.totalTTC, 0);
 
   // Clients : commandes non livrées/annulées (ce qu'on doit facturer/encaisser)
+  /* « en_cours » et « expedie » n'ont jamais existé dans StatutCommandeClient :
+     les deux comparaisons étaient mortes, et l'encours client ne comptait que
+     les commandes « à traiter ». Les commandes accusées ou déjà envoyées —
+     donc bien dues — en étaient absentes. Voici les trois statuts réels
+     antérieurs à la livraison. */
   const encoursClientFDM = commandesClient
-    .filter(cc => cc.statut === 'a_traiter' || cc.statut === 'en_cours' || cc.statut === 'expedie');
+    .filter(cc => cc.statut === 'a_traiter' || cc.statut === 'accuse_envoye' || cc.statut === 'commande_envoyee');
   const totalClientFDM = encoursClientFDM.reduce((s, cc) => s + cc.totalTTC, 0);
   // Parmi ceux dont la livraison prévue est ce mois-ci ou dépassée
   const clientFDMCeMois = encoursClientFDM.filter(cc => {
@@ -571,7 +576,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
 
   // Données du graphique : CA pondéré + marge pondérée par mois de réalisation
   const chartData = useMemo(() => {
-    const map = new Map<string, { pondere: number; margePondere: number }>();
+    const map = new Map<string, { pondere: number; coutPondere: number; margePondere: number }>();
     for (const r of rows) {
       const k = moisKey(r.d.dateRealisation);
       if (!k) continue; // ignore les devis sans date de réalisation dans le graphe

@@ -82,10 +82,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [showCreerDevis, setShowCreerDevis] = useState(false);
   /** Article du catalogue retenu pour chaque ligne, par indice de ligne. */
   const [choixProduit, setChoixProduit] = useState<Record<number, string>>({});
+  /* Corrections à la main. Clé : « d<indice> » pour une ligne demandée,
+     « a<id de règle> » pour un accompagnement — l'indice d'un accompagnement
+     change quand une quantité bouge, pas son identifiant de règle. */
+  const [quantiteManuelle, setQuantiteManuelle] = useState<Record<string, number>>({});
+  const [prixManuel, setPrixManuel] = useState<Record<string, number>>({});
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
   const [contratOdoo, setContratOdoo] = useState<
-    { contrat: string; societe: string; prix: Record<string, number> } | null
+    { contrat: string; societe: string; prix: Record<string, number>;
+      /** Tarif catalogue ISOMARK, quand la fonction sait le lire. */
+      isomark?: Record<string, number> } | null
   >(null);
   /* Client trouvé dans Odoo alors qu'il n'existe pas encore dans MonCRM.
      Le Chiffrage crée la fiche à la volée : ressaisir des coordonnées qu'Odoo
@@ -430,7 +437,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase());
       return {
         id: generateId(), produitId: p?.id, description: l.description || p?.description || '',
-        quantite: l.quantite, unite: 'u', prixUnitaireHT: l.prixUnitaireHT ?? p?.prixVente ?? 0,
+        // « prixVente » n'existe pas sur Produit : le champ s'appelle prixHT.
+        // La faute passait inaperçue — quand le document n'annonçait pas de
+        // prix, la ligne partait à 0,00 € au lieu du tarif catalogue.
+        quantite: l.quantite, unite: 'u', prixUnitaireHT: l.prixUnitaireHT ?? p?.prixHT ?? 0,
         tva: l.tva ?? 20, remise: 0,
       };
     });
@@ -498,7 +508,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       .map((l, i) => {
         const p = produitDeLigne(i, l);
         return p ? { produitId: p.id, produitMatch: p.description,
-                     quantite: l.quantite || 1, confidence: 'high' as const } : null;
+                     quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
+                     confidence: 'high' as const } : null;
       })
       .filter(Boolean) as LigneChiffrage[];
     if (!demandees.length) return [];
@@ -508,7 +519,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     }));
     return appliquerAccompagnements(demandees, regles, referentiel)
       .filter(l => l.auto);
-  }, [result, regles, produits, produitsCharges, produitDeLigne]);
+  }, [result, regles, produits, produitsCharges, produitDeLigne, quantiteManuelle]);
 
   /* Prix du contrat cadre, pour toutes les lignes — accompagnements compris.
      Le tarif se négocie avec la société, pas avec la personne : « Guillaume
@@ -567,20 +578,71 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           for (const [ref, v] of Object.entries((data.prix || {}) as Record<string, any>)) {
             if (v?.contrat != null) prix[ref] = v.contrat;
           }
-          setContratOdoo({ contrat: data.contrat, societe: data.societe || data.partenaire || '', prix });
+          const isomark: Record<string, number> = {};
+          for (const [ref, v] of Object.entries((data.prix || {}) as Record<string, any>)) {
+            if (v?.isomark != null) isomark[ref] = v.isomark;
+          }
+          setContratOdoo({ contrat: data.contrat, societe: data.societe || data.partenaire || '', prix, isomark });
         } else setContratOdoo(null);
       } catch { if (!annule) setContratOdoo(null); }
     })();
     return () => { annule = true; };
   }, [creerDevisClientId, clients, referencesDuDevis, result]);
 
-  /** Prix unitaire retenu : règle, puis contrat cadre, puis catalogue. */
-  const prixDe = useCallback((p: typeof produits[number] | undefined, prixImpose?: number | null) => {
-    if (prixImpose !== undefined && prixImpose !== null) return prixImpose;
-    if (!p) return 0;
+  /**
+   * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
+   *
+   * Le tarif ISOMARK l'emporte quand il diffère du contrat Odoo. Ce n'est pas
+   * un caprice : une remise oubliée dans Odoo y fait apparaître un prix plus
+   * élevé que le tarif applicateur, et c'est ce dernier qui a été annoncé au
+   * client. Les deux restent affichés — l'écart se voit, il ne se subit pas.
+   */
+  const prixDetail = useCallback((
+    p: typeof produits[number] | undefined,
+    prixImpose?: number | null,
+  ) => {
+    if (!p) return { retenu: prixImpose ?? 0, contrat: null as number | null, catalogue: 0, source: 'aucun' as const };
     const ref = p.referenceOdoo || p.reference;
-    return contratOdoo?.prix[ref] ?? p.prixHT ?? 0;
+    const contrat = contratOdoo?.prix[ref] ?? null;
+    const catalogue = p.prixHT ?? 0;
+
+    if (prixImpose !== undefined && prixImpose !== null) {
+      return { retenu: prixImpose, contrat, catalogue, source: 'règle' as const };
+    }
+    /* Le tarif ISOMARK doit primer sur le contrat quand il diffère — une remise
+       oubliée dans Odoo y fait apparaître un prix qui n'est pas celui annoncé
+       au client. Mais il faut le VRAI tarif ISOMARK, qui vit dans une liste de
+       prix Odoo dédiée. Le prix rangé dans MonCRM, lui, est le TARIF PUBLIC :
+       l'ARAVIS y vaut 90,86 € quand le tarif ISOMARK est à 63,60 €. S'en
+       servir gonflerait les devis. La bascule n'agit donc que lorsque la
+       fonction odoo-prix renvoie ce tarif — voir la note en fin de séance. */
+    /* Le tarif applicateur ISOMARK est désormais rangé sur l'article, issu du
+       catalogue PDF et rapproché à la main. Il est DÉJÀ remisé — H1 à 50 %,
+       H2 à 30 % — et prime sur le contrat Odoo quand il en diffère : une
+       remise oubliée dans Odoo y ferait apparaître un prix jamais annoncé. */
+    const tarifMetier = p.prixTarif ?? contratOdoo?.isomark?.[ref];
+    if (tarifMetier != null && contrat !== null
+        && Math.abs(contrat - tarifMetier) >= 0.01) {
+      return { retenu: tarifMetier, contrat, catalogue: tarifMetier,
+               source: (p.sourceTarif || 'catalogue métier') as any };
+    }
+    if (contrat !== null) return { retenu: contrat, contrat, catalogue, source: 'contrat' as const };
+    return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const };
   }, [contratOdoo]);
+
+  /** Prix effectivement appliqué, correction manuelle comprise. */
+  const prixDe = useCallback((
+    p: typeof produits[number] | undefined,
+    prixImpose?: number | null,
+    cle?: string,
+  ) => {
+    if (cle && prixManuel[cle] !== undefined) return prixManuel[cle];
+    return prixDetail(p, prixImpose).retenu;
+  }, [prixDetail, prixManuel]);
+
+  /** Quantité effectivement retenue pour une ligne. */
+  const quantiteDe = useCallback((cle: string, defaut: number) =>
+    quantiteManuelle[cle] ?? defaut, [quantiteManuelle]);
 
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
@@ -588,13 +650,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
     const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
       const p = produitDeLigne(i, l);
+      const cle = `d${i}`;
       return {
         id: generateId(),
         produitId: p?.id,
         description: l.description || p?.description || '',
-        quantite: l.quantite,
+        quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
-        prixUnitaireHT: l.prixUnitaireHT ?? prixDe(p),
+        prixUnitaireHT: prixDe(p, undefined, cle),
         tva: l.tva ?? 20,
         remise: 0,
       };
@@ -602,13 +665,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     // Les articles ajoutés par les règles suivent les articles demandés.
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
+      const cle = `a${a.regleId}`;
       lignes.push({
         id: generateId(),
         produitId: a.produitId,
         description: p?.description || a.produitMatch,
-        quantite: a.quantite,
+        quantite: quantiteDe(cle, a.quantite),
         unite: p?.unite || 'u',
-        prixUnitaireHT: prixDe(p, a.prixImpose),
+        prixUnitaireHT: prixDe(p, a.prixImpose, cle),
         tva: p?.tva ?? 20,
         remise: 0,
       });
@@ -1158,29 +1222,52 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                       demandé
                                     </span>
                                     <span className="font-medium">{l.description || l.reference}</span>
-                                    <span className="text-muted-foreground">× {l.quantite || 1}</span>
                                     {candidats.length > 1 && !choixProduit[i] && (
                                       <span className="ml-auto text-[11px] text-warning">
                                         {candidats.length} déclinaisons — vérifiez
                                       </span>
                                     )}
                                   </div>
-                                  {retenu && (
-                                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                                      <span>
-                                        P.U. <strong className="text-foreground">
-                                          {formatMontant(prixDe(retenu))}
-                                        </strong>
-                                        {' × '}{l.quantite || 1}{' = '}
-                                        <strong className="text-foreground">
-                                          {formatMontant(prixDe(retenu) * (l.quantite || 1))}
-                                        </strong>
-                                      </span>
-                                      {contratOdoo && (
-                                        <span className="ml-auto">contrat {contratOdoo.contrat}</span>
-                                      )}
-                                    </div>
-                                  )}
+                                  {retenu && (() => {
+                                    const cle = `d${i}`;
+                                    const d = prixDetail(retenu);
+                                    const qte = quantiteDe(cle, l.quantite || 1);
+                                    const pu = prixDe(retenu, undefined, cle);
+                                    return (
+                                      <>
+                                        <div className="flex items-center gap-1.5 text-[11px]">
+                                          <span className="text-muted-foreground">Qté</span>
+                                          <Input
+                                            type="number" min={0} step="1" value={qte}
+                                            onChange={e => setQuantiteManuelle(p => ({ ...p, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                            className="h-7 w-16 text-xs"
+                                          />
+                                          <span className="text-muted-foreground ml-1">P.U.</span>
+                                          <Input
+                                            type="number" min={0} step="0.01" value={pu}
+                                            onChange={e => setPrixManuel(p => ({ ...p, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                            className="h-7 w-24 text-xs"
+                                          />
+                                          <span className="text-muted-foreground">
+                                            € = <strong className="text-foreground">{formatMontant(pu * qte)}</strong>
+                                          </span>
+                                          {prixManuel[cle] !== undefined && (
+                                            <button
+                                              onClick={() => setPrixManuel(p => { const n = { ...p }; delete n[cle]; return n; })}
+                                              className="text-warning hover:underline"
+                                            >↺</button>
+                                          )}
+                                        </div>
+                                        <div className="text-[11px] text-muted-foreground">
+                                          {prixManuel[cle] !== undefined
+                                            ? 'prix saisi à la main'
+                                            : (d.source === 'ISOMARK' || d.source === 'ISOFLOOR')
+                                              ? <>tarif <strong className="text-foreground">{d.source} {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
+                                              : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
+                                        </div>
+                                      </>
+                                    );
+                                  })()}
                                   <ProduitCombobox
                                     produits={candidats.length ? candidats : produits}
                                     value={retenu?.id ?? ''}
@@ -1209,27 +1296,46 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                           accompagnement
                                         </span>
                                         <span>{p?.description || a.produitMatch}</span>
-                                        <span className="text-muted-foreground">× {a.quantite}</span>
                                         {a.detail && (
                                           <span className="ml-auto text-[11px] text-muted-foreground">
                                             {a.detail}
                                           </span>
                                         )}
                                       </div>
-                                      <div className="text-[11px] text-muted-foreground">
-                                        P.U. <strong className="text-foreground">
-                                          {formatMontant(prixDe(p, a.prixImpose))}
-                                        </strong>
-                                        {' × '}{a.quantite}{' = '}
-                                        <strong className="text-foreground">
-                                          {formatMontant(prixDe(p, a.prixImpose) * a.quantite)}
-                                        </strong>
-                                        {a.prixImpose === 0 && (
-                                          <span className="ml-1 text-warning">
-                                            règle — compris dans l'enduit
-                                          </span>
-                                        )}
-                                      </div>
+                                      {(() => {
+                                        const cle = `a${a.regleId}`;
+                                        const d = prixDetail(p, a.prixImpose);
+                                        const qte = quantiteDe(cle, a.quantite);
+                                        const pu = prixDe(p, a.prixImpose, cle);
+                                        return (
+                                          <>
+                                            <div className="flex items-center gap-1.5 text-[11px]">
+                                              <span className="text-muted-foreground">Qté</span>
+                                              <Input
+                                                type="number" min={0} step="1" value={qte}
+                                                onChange={e => setQuantiteManuelle(pr => ({ ...pr, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                                className="h-7 w-16 text-xs"
+                                              />
+                                              <span className="text-muted-foreground ml-1">P.U.</span>
+                                              <Input
+                                                type="number" min={0} step="0.01" value={pu}
+                                                onChange={e => setPrixManuel(pr => ({ ...pr, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                                className="h-7 w-24 text-xs"
+                                              />
+                                              <span className="text-muted-foreground">
+                                                € = <strong className="text-foreground">{formatMontant(pu * qte)}</strong>
+                                              </span>
+                                            </div>
+                                            <div className="text-[11px] text-muted-foreground">
+                                              {a.prixImpose === 0
+                                                ? <span className="text-warning">règle — compris dans l'enduit</span>
+                                                : d.source === 'ISOMARK'
+                                                  ? <>tarif <strong className="text-foreground">ISOMARK {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
+                                                  : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
+                                            </div>
+                                          </>
+                                        );
+                                      })()}
                                     </div>
                                   );
                                 })}
@@ -1239,11 +1345,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                             {(() => {
                               const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
                                 const p = produitDeLigne(i, l);
-                                return t + (p ? prixDe(p) * (l.quantite || 1) : 0);
+                                if (!p) return t;
+                                const cle = `d${i}`;
+                                return t + prixDe(p, undefined, cle) * quantiteDe(cle, l.quantite || 1);
                               }, 0);
                               const totalAcc = accompagnements.reduce((t, a) => {
                                 const p = produits.find(x => x.id === a.produitId);
-                                return t + prixDe(p, a.prixImpose) * a.quantite;
+                                const cle = `a${a.regleId}`;
+                                return t + prixDe(p, a.prixImpose, cle) * quantiteDe(cle, a.quantite);
                               }, 0);
                               const total = totalDemande + totalAcc;
                               return total > 0 ? (

@@ -421,6 +421,9 @@ export type Database = {
           informateur: string | null
           nom: string
           prix_ht: number | null
+          prix_unite: string | null
+          quantite: number | null
+          quantite_unite: string | null
           reference: string | null
           updated_at: string | null
         }
@@ -438,6 +441,9 @@ export type Database = {
           informateur?: string | null
           nom: string
           prix_ht?: number | null
+          prix_unite?: string | null
+          quantite?: number | null
+          quantite_unite?: string | null
           reference?: string | null
           updated_at?: string | null
         }
@@ -455,6 +461,9 @@ export type Database = {
           informateur?: string | null
           nom?: string
           prix_ht?: number | null
+          prix_unite?: string | null
+          quantite?: number | null
+          quantite_unite?: string | null
           reference?: string | null
           updated_at?: string | null
         }
@@ -707,6 +716,21 @@ export type Database = {
         }
         Relationships: []
       }
+      devis_numero_counter: {
+        Row: {
+          annee: number
+          dernier: number
+        }
+        Insert: {
+          annee: number
+          dernier?: number
+        }
+        Update: {
+          annee?: number
+          dernier?: number
+        }
+        Relationships: []
+      }
       devis_pieces_jointes: {
         Row: {
           confidentiel: boolean
@@ -718,6 +742,7 @@ export type Database = {
           fichier_taille: number | null
           fichier_url: string | null
           id: string
+          image_taille: string | null
           ligne_id: string | null
           type: string
           user_id: string
@@ -732,6 +757,7 @@ export type Database = {
           fichier_taille?: number | null
           fichier_url?: string | null
           id?: string
+          image_taille?: string | null
           ligne_id?: string | null
           type: string
           user_id: string
@@ -746,6 +772,7 @@ export type Database = {
           fichier_taille?: number | null
           fichier_url?: string | null
           id?: string
+          image_taille?: string | null
           ligne_id?: string | null
           type?: string
           user_id?: string
@@ -1169,7 +1196,10 @@ export type Database = {
       }
       produits: {
         Row: {
+          achats_historique: Json | null
+          catalogue: string | null
           categorie: string | null
+          code_tarif: string | null
           coeff_revendeur: number
           coefficient: number
           composants: Json | null
@@ -1179,20 +1209,26 @@ export type Database = {
           description: string
           description_detaillee: string | null
           disponible_vente: boolean
+          est_modele: boolean
           fiche_link_label: string | null
           fiche_url: string | null
           fournisseur_id: string | null
           id: string
           lignes_kit: Json | null
+          modele_cle: string | null
+          nb_variantes: number
           paliers_prix: Json | null
           poids: number | null
           prix_achat: number
           prix_ht: number
           prix_revendeur: number
+          prix_tarif: number | null
           proprietaire: string | null
           proprietaire_fournisseur_id: string | null
           reference: string
+          reference_odoo: string | null
           remise_revendeur: number
+          source_tarif: string | null
           stock: number
           stock_min: number
           tva: number
@@ -1202,7 +1238,10 @@ export type Database = {
           variantes: Json | null
         }
         Insert: {
+          achats_historique?: Json | null
+          catalogue?: string | null
           categorie?: string | null
+          code_tarif?: string | null
           coeff_revendeur?: number
           coefficient?: number
           composants?: Json | null
@@ -1212,20 +1251,26 @@ export type Database = {
           description?: string
           description_detaillee?: string | null
           disponible_vente?: boolean
+          est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
+          modele_cle?: string | null
+          nb_variantes?: number
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
           prix_ht?: number
           prix_revendeur?: number
+          prix_tarif?: number | null
           proprietaire?: string | null
           proprietaire_fournisseur_id?: string | null
           reference?: string
+          reference_odoo?: string | null
           remise_revendeur?: number
+          source_tarif?: string | null
           stock?: number
           stock_min?: number
           tva?: number
@@ -1235,7 +1280,10 @@ export type Database = {
           variantes?: Json | null
         }
         Update: {
+          achats_historique?: Json | null
+          catalogue?: string | null
           categorie?: string | null
+          code_tarif?: string | null
           coeff_revendeur?: number
           coefficient?: number
           composants?: Json | null
@@ -1245,20 +1293,26 @@ export type Database = {
           description?: string
           description_detaillee?: string | null
           disponible_vente?: boolean
+          est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
+          modele_cle?: string | null
+          nb_variantes?: number
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
           prix_ht?: number
           prix_revendeur?: number
+          prix_tarif?: number | null
           proprietaire?: string | null
           proprietaire_fournisseur_id?: string | null
           reference?: string
+          reference_odoo?: string | null
           remise_revendeur?: number
+          source_tarif?: string | null
           stock?: number
           stock_min?: number
           tva?: number
@@ -1273,6 +1327,74 @@ export type Database = {
             columns: ["fournisseur_id"]
             isOneToOne: false
             referencedRelation: "fournisseurs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      regles_accompagnement: {
+        Row: {
+          actif: boolean
+          catalogue: string | null
+          created_at: string
+          declencheurs: string[]
+          id: string
+          nom: string
+          note: string | null
+          ordre: number
+          par_lot: number
+          pour: number
+          prix_impose: number | null
+          produit_id: string | null
+          reference: string | null
+          source_id: string | null
+          unite: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          actif?: boolean
+          catalogue?: string | null
+          created_at?: string
+          declencheurs?: string[]
+          id?: string
+          nom: string
+          note?: string | null
+          ordre?: number
+          par_lot?: number
+          pour?: number
+          prix_impose?: number | null
+          produit_id?: string | null
+          reference?: string | null
+          source_id?: string | null
+          unite?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          actif?: boolean
+          catalogue?: string | null
+          created_at?: string
+          declencheurs?: string[]
+          id?: string
+          nom?: string
+          note?: string | null
+          ordre?: number
+          par_lot?: number
+          pour?: number
+          prix_impose?: number | null
+          produit_id?: string | null
+          reference?: string | null
+          source_id?: string | null
+          unite?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "regles_accompagnement_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
             referencedColumns: ["id"]
           },
         ]
@@ -1340,6 +1462,8 @@ export type Database = {
       veille_roles: {
         Row: {
           crm_access: boolean | null
+          crm_achat_access: boolean | null
+          crm_active: boolean | null
           display_name: string | null
           email: string | null
           invited_at: string | null
@@ -1348,6 +1472,8 @@ export type Database = {
         }
         Insert: {
           crm_access?: boolean | null
+          crm_achat_access?: boolean | null
+          crm_active?: boolean | null
           display_name?: string | null
           email?: string | null
           invited_at?: string | null
@@ -1356,6 +1482,8 @@ export type Database = {
         }
         Update: {
           crm_access?: boolean | null
+          crm_achat_access?: boolean | null
+          crm_active?: boolean | null
           display_name?: string | null
           email?: string | null
           invited_at?: string | null
@@ -1370,6 +1498,9 @@ export type Database = {
     }
     Functions: {
       get_my_veille_role: { Args: never; Returns: string }
+      next_devis_numero: { Args: never; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
     }
     Enums: {
       [_ in never]: never

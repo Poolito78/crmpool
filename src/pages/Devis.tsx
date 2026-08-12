@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, Fragment, type ReactNode } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { exportToExcel } from '@/lib/exportExcel';
 import { logHistorique } from '@/lib/historique';
+import { produitParId } from '@/lib/indexProduits';
 import DevisPreview, { parseImgPct } from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
@@ -91,6 +92,19 @@ export default function Devis() {
   const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
+
+  /* Ces deux listes dérivent du catalogue, pas de la saisie. Sans mémoire,
+     elles étaient reconstruites — 22 634 objets pour la première — à chaque
+     caractère tapé dans n'importe quel champ du devis, alors que le dialogue
+     CRM est le plus souvent fermé et la liste des kits repliée. */
+  const produitsPourCrm = useMemo(
+    () => produits.map(p => ({ id: p.id, reference: p.reference, description: p.description })),
+    [produits],
+  );
+  const kitsDisponibles = useMemo(
+    () => produits.filter(p => p.typeKit).sort((a, b) => a.reference.localeCompare(b.reference)),
+    [produits],
+  );
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -407,7 +421,7 @@ export default function Devis() {
       const fp = filterProduit.trim().toLowerCase();
       const inLignes = d.lignes.some(l => {
         if (l.description?.toLowerCase().includes(fp)) return true;
-        const p = l.produitId ? produits.find(pr => pr.id === l.produitId) : null;
+        const p = l.produitId ? produitParId(produits, l.produitId) : null;
         return p && (p.reference.toLowerCase().includes(fp) || p.description.toLowerCase().includes(fp));
       });
       if (!inLignes) return false;
@@ -521,7 +535,7 @@ export default function Devis() {
       // Recalculer le prix des lignes dont la variante choisie a un prixDiff
       // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
       if ((!l.type || l.type === 'ligne') && l.produitId && l.variantesChoisies) {
-        const prod = produits.find(p => p.id === l.produitId);
+        const prod = produitParId(produits, l.produitId);
         if (prod) {
           const diff = getVarianteDiff(prod, l.variantesChoisies);
           if (diff !== 0) {
@@ -685,7 +699,7 @@ export default function Devis() {
     // Lignes du modèle (nouveaux ids) + lignes dictées, quantités/prix recalculés selon la surface
     const applySurface = (l: LigneDevis): LigneDevis => {
       if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
-      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       const conso = l.consommation ?? prod?.consommation;
       if (prod && conso && prod.poids) {
         const quantite = calcQuantiteSurface(prod, surf, l.consommation);
@@ -802,7 +816,7 @@ export default function Devis() {
     for (const l of lignes) {
       if (l.type && l.type !== 'ligne') continue;
       if (!l.produitId) continue;
-      const prod = produits.find(p => p.id === l.produitId);
+      const prod = produitParId(produits, l.produitId);
       if (!prod) continue;
       const exclu = estExcluHausse(prod);
       const defaultPct = exclu ? 0 : pctHausseCategorie(prod);
@@ -883,7 +897,7 @@ export default function Devis() {
       const updated = { ...l, [field]: value };
       // Recalcule le prix si la quantité change et que le produit a des paliers
       if (field === 'quantite' && l.produitId) {
-        const p = produits.find(pr => pr.id === l.produitId);
+        const p = produitParId(produits, l.produitId);
         if (p && p.paliersPrix && p.paliersPrix.length > 0) {
           const client = clients.find(c => c.id === clientId);
           const palierPrix = getPrixPourQuantite(p, value as number);
@@ -995,7 +1009,7 @@ export default function Devis() {
   }
 
   function selectProduit(ligneId: string, produitId: string) {
-    const p = produits.find(pr => pr.id === produitId);
+    const p = produitParId(produits, produitId);
     if (!p) return;
     // Si c'est un kit : supprimer la ligne vide et insérer le groupe
     if (p.typeKit) {
@@ -1040,7 +1054,7 @@ export default function Devis() {
     const client = clients.find(c => c.id === clientId);
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
-      const p = produits.find(pr => pr.id === l.produitId);
+      const p = produitParId(produits, l.produitId);
       if (!p) return l;
       const palierPrix = getPrixPourQuantite(p, l.quantite);
       const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
@@ -1101,7 +1115,7 @@ export default function Devis() {
         // ignoré dans la MO
       } else {
         // ligne produit : description du produit puis note de ligne
-        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        const prod = l.produitId ? produitParId(produits, l.produitId) : null;
         const titre = prod?.description || l.description || prod?.reference || '';
         if (titre.trim()) parts.push(`<p><strong>${escapeHtml(titre)}</strong></p>`);
         if (l.note?.trim()) parts.push(`<p>${escapeHtml(l.note).replace(/\n/g, '<br>')}</p>`);
@@ -1275,7 +1289,7 @@ export default function Devis() {
     const client = clients.find(c => c.id === clientId);
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
-      const p = produits.find(pr => pr.id === l.produitId);
+      const p = produitParId(produits, l.produitId);
       if (!p || !p.poids) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const conso = l.consommation || p.consommation;
       if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
@@ -1289,7 +1303,7 @@ export default function Devis() {
   useEffect(() => {
     if (!fraisPortAuto || !dialogOpen) return;
     const poidsTotal = lignes.reduce((acc, l) => {
-      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       return acc + (prod?.poids || 0) * l.quantite;
     }, 0);
 
@@ -1306,7 +1320,7 @@ export default function Devis() {
         return;
       }
       const hasGranulat = lignes.some(l => {
-        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+        const prod = l.produitId ? produitParId(produits, l.produitId) : null;
         return prod?.categorie?.toLowerCase().includes('granulat');
       });
       const port = calculerFraisPort(poidsTotal, hasGranulat);
@@ -1698,7 +1712,7 @@ export default function Devis() {
                   const t = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
                   const totalAchat = d.lignes.reduce((acc, l) => {
                     if (l.type && l.type !== 'ligne') return acc;
-                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
                     return acc + puA * l.quantite;
                   }, 0);
@@ -1826,7 +1840,7 @@ export default function Devis() {
           const totalAchatD = d.lignes.reduce((acc, l) => {
             if (l.type && l.type !== 'ligne') return acc;
             // prixAchatLigne (override manuel / surcharge) prioritaire, sinon palier ; pas de remise sur l'achat
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
             return acc + puA * l.quantite;
           }, 0);
@@ -2415,7 +2429,10 @@ export default function Devis() {
                         </div>
                         <div className="max-h-56 overflow-y-auto">
                           {(() => {
-                            const kits = produits.filter(p => p.typeKit).filter(p => !kitSearch || `${p.reference} ${p.description}`.toLowerCase().includes(kitSearch.toLowerCase())).sort((a, b) => a.reference.localeCompare(b.reference));
+                            const recherche = kitSearch.toLowerCase();
+                            const kits = recherche
+                              ? kitsDisponibles.filter(p => `${p.reference} ${p.description}`.toLowerCase().includes(recherche))
+                              : kitsDisponibles;
                             if (kits.length === 0) return <p className="text-xs text-muted-foreground text-center py-4">Aucun kit trouvé — créez-en un dans la fiche produit</p>;
                             return kits.map(k => (
                               <button key={k.id} type="button"
@@ -2625,7 +2642,7 @@ export default function Devis() {
                     );
 
                     const t = calculerTotalLigne(l);
-                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
                     const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
                     // Coeff revendeur du produit (depuis la fiche), indépendant du prix public saisi dans le devis
@@ -2692,7 +2709,7 @@ export default function Devis() {
                                       <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
                                     </div>
                                     {l.produitId && (
-                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produits.find(p => p.id === l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produitParId(produits, l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
                                         <ExternalLink className="w-3 h-3" />
                                       </Button>
                                     )}
@@ -2891,7 +2908,7 @@ export default function Devis() {
               )}
               {fraisPortAuto && (() => {
                 const poidsTotal = lignes.reduce((acc, l) => {
-                  const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                  const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                   return acc + (prod?.poids || 0) * l.quantite;
                 }, 0);
 
@@ -2913,7 +2930,7 @@ export default function Devis() {
                 }
 
                 const hasGranulat = lignes.some(l => {
-                  const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                  const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                   return prod?.categorie?.toLowerCase().includes('granulat');
                 });
                 const port = calculerFraisPort(poidsTotal, hasGranulat);
@@ -2941,13 +2958,13 @@ export default function Devis() {
             {/* Totals */}
             {(() => {
               const poidsTotal = lignes.reduce((acc, l) => {
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                 return acc + (prod?.poids || 0) * l.quantite;
               }, 0);
               // Identique au comparatif : prixAchatLigne (override manuel) prioritaire, sinon palier ; pas de remise sur l'achat
               const totalAchat = lignes.reduce((acc, l) => {
                 if (l.type && l.type !== 'ligne') return acc;
-                const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                 const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
                 return acc + puAchat * l.quantite;
               }, 0);
@@ -2956,7 +2973,7 @@ export default function Devis() {
                 if (fraisPortHT <= 0) return 0;
                 if (transporteur !== 'standard' && BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>]) {
                   const poidsTot = lignes.reduce((acc, l) => {
-                    const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     return acc + (prod?.poids || 0) * l.quantite;
                   }, 0);
                   const { prix } = calculerFraisPortBareme(BAREMES_TRANSPORT[transporteur as Exclude<TransporteurType, 'standard'>].bareme, poidsTot);
@@ -2999,7 +3016,7 @@ export default function Devis() {
                     let sumCoutConso = 0;
                     for (const l of lignes) {
                       if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
-                      const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                       const conso = l.consommation || prod?.consommation || 0;
                       // surfaceM2 peut être 0 si saisie uniquement en global (preview stocke en local) → fallback sur surfaceGlobaleM2
                       const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
@@ -3114,11 +3131,11 @@ export default function Devis() {
             let totalAchat = 0, totalVente = 0;
             // ── Transport ──
             const poidsCompa = lignes.reduce((acc, l) => {
-              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              const prod = l.produitId ? produitParId(produits, l.produitId) : null;
               return acc + (prod?.poids || 0) * l.quantite;
             }, 0);
             const hasGranulatCompa = lignes.some(l => {
-              const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+              const prod = l.produitId ? produitParId(produits, l.produitId) : null;
               return prod?.categorie?.toLowerCase().includes('granulat');
             });
             let portAchatCalcule = 0;
@@ -3158,7 +3175,7 @@ export default function Devis() {
                     </thead>
                     <tbody>
                       {lignesCompa.map(l => {
-                        const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+                        const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                         const pfs = l.produitId ? produitFournisseurs.filter(pf => pf.produitId === l.produitId) : [];
                         const selFournId = selectedFournisseurPerLigne[l.id];
                         const selPf = pfs.find(pf => pf.fournisseurId === selFournId);
@@ -3826,7 +3843,7 @@ export default function Devis() {
         onOpenChange={setCrmActionDialogOpen}
         action={editingCrmAction}
         clients={clients}
-        produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
+        produits={produitsPourCrm}
         defaultDevisId={editingId || undefined}
         defaultClientId={clientId || undefined}
         onSave={async (a) => { const err = await addCrmAction(a); return err ?? null; }}
@@ -3840,7 +3857,7 @@ export default function Devis() {
           saveSnapshot();
           const cl = clients.find(c => c.id === clientId);
           const prepared = newLignes.map(l => {
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const isCatalyst = /catalyst|catalyseur/i.test(`${prod?.reference || ''} ${l.description || ''}`);
             // Ligne catalyst → Quantité = nombre d'unités de conditionnement (arrondi sup. du total kg / poids)
             if (isCatalyst && prod?.poids) {
@@ -3878,7 +3895,7 @@ export default function Devis() {
             if (l.type === 'texte') return `[Note] ${l.description}`;
             if (l.type === 'soustotal') return `[Sous-total]`;
             const t = calculerTotalLigne(l);
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const poidsKg = prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
             return `${i + 1}. ${l.description || 'sans nom'} | Réf: ${prod?.reference ?? (l.produitId || 'libre')} | Qté: ${l.quantite} ${l.unite || ''}${poidsKg != null ? ` | Poids résine: ${poidsKg} kg` : ''} | Prix HT: ${l.prixUnitaireHT} | Remise: ${l.remise}% | Total HT: ${formatMontant(t.totalHT)}`;
           }).join('\n');
@@ -3908,7 +3925,7 @@ export default function Devis() {
           const surf = parsed.surface != null && Number(parsed.surface) > 0 ? Number(parsed.surface) : 0;
           // Lignes dictées (en plus du modèle)
           const dictees: LigneDevis[] = (parsed.lignes || []).map(s => {
-            const prod = s.produitId ? produits.find(p => p.id === s.produitId) : null;
+            const prod = s.produitId ? produitParId(produits, s.produitId) : null;
             return {
               id: generateId(),
               produitId: s.produitId || undefined,
@@ -3943,7 +3960,7 @@ export default function Devis() {
           if (surf > 0) { setModeCalcul('surface'); setSurfaceGlobaleM2(surf); }
           const applySurface = (ls: LigneDevis[]): LigneDevis[] => surf > 0 ? ls.map(l => {
             if (l.type && l.type !== 'ligne') return l;
-            const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
+            const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const conso = l.consommation ?? prod?.consommation;
             if (prod && conso && prod.poids) {
               const quantite = calcQuantiteSurface(prod, surf, l.consommation);
