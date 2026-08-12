@@ -6,7 +6,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { fetchHistorique, type HistoriqueEntry } from '@/lib/historique';
 import {
   MessageSquare, Paperclip, Send, Trash2, Download, FileText,
-  FileImage, FileSpreadsheet, File, Clock, Pencil, Mail,
+  FileImage, FileSpreadsheet, File as FileIcon, Clock, Pencil, Mail,
   Plus, ArrowRightLeft, PackageCheck, Loader2, StickyNote, Eye, Lock, LockOpen, History,
   Link2, ExternalLink,
 } from 'lucide-react';
@@ -72,13 +72,13 @@ function formatTaille(bytes?: number) {
 }
 
 function IconFichier({ mime }: { mime?: string }) {
-  if (!mime) return <File className="w-5 h-5 text-muted-foreground" />;
+  if (!mime) return <FileIcon className="w-5 h-5 text-muted-foreground" />;
   if (mime === LINK_MIME) return <Link2 className="w-5 h-5 text-violet-500" />;
   if (mime.startsWith('image/')) return <FileImage className="w-5 h-5 text-blue-500" />;
   if (mime.includes('pdf')) return <FileText className="w-5 h-5 text-red-500" />;
   if (mime.includes('sheet') || mime.includes('excel') || mime.includes('csv'))
     return <FileSpreadsheet className="w-5 h-5 text-green-600" />;
-  return <File className="w-5 h-5 text-muted-foreground" />;
+  return <FileIcon className="w-5 h-5 text-muted-foreground" />;
 }
 
 const actionLabel: Record<string, { label: string; icon: typeof Clock; color: string }> = {
@@ -741,8 +741,8 @@ export default function DevisChatter({ open, onOpenChange, devisId, devisNumero,
                   <div className="flex-1 min-w-0">
                     <p className="text-xs">
                       <span className="font-medium text-foreground">{cfg.label}</span>
-                      {h.details?.nouveauStatut ? <span className="text-muted-foreground"> → {h.details.nouveauStatut}</span> : ''}
-                      {h.details?.destinataire ? <span className="text-muted-foreground"> à {h.details.destinataire}</span> : ''}
+                      {h.details?.nouveauStatut ? <span className="text-muted-foreground"> → {String(h.details.nouveauStatut)}</span> : ''}
+                      {h.details?.destinataire ? <span className="text-muted-foreground"> à {String(h.details.destinataire)}</span> : ''}
                     </p>
                     <p className="text-[10px] text-muted-foreground">{formatRelative(h.date)}</p>
                     {snap && (

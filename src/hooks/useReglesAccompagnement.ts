@@ -39,9 +39,14 @@ export function useReglesAccompagnement() {
 
   const enregistrer = useCallback(
     async (regle: Partial<RegleAccompagnement> & { id?: string }) => {
+      // Une création sans nom serait refusée par la base, mais bien plus loin
+      // et avec un message obscur : autant le dire ici.
+      if (!regle.id && !regle.nom?.trim()) {
+        throw new Error('Une règle d’accompagnement doit avoir un nom.');
+      }
       const { error } = regle.id
         ? await supabase.from('regles_accompagnement').update(regle).eq('id', regle.id)
-        : await supabase.from('regles_accompagnement').insert(regle);
+        : await supabase.from('regles_accompagnement').insert({ ...regle, nom: regle.nom! });
       if (error) throw error;
       await recharger();
     },

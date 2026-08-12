@@ -1021,7 +1021,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                       result.dateDocument    && ['Date',          new Date(result.dateDocument).toLocaleDateString('fr-FR')],
                       result.dateLivraisonPrevue && ['Livraison',  new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')],
                       result.dateEcheance    && ['Échéance',       new Date(result.dateEcheance).toLocaleDateString('fr-FR')],
-                    ] as ([string, string] | false)[]).filter(Boolean).map(([label, value], i) => (
+                      // `filter(Boolean)` ne restreint pas le type : TypeScript
+                      // continuait de croire qu'une case pouvait valoir `false`
+                      // et refusait de la déstructurer. Ce test-ci le dit.
+                    ] as ([string, string] | '' | false | undefined)[])
+                      .filter((e): e is [string, string] => Array.isArray(e))
+                      .map(([label, value], i) => (
                       <div key={i} className="bg-background px-4 py-2.5">
                         <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</p>
                         <p className="text-sm font-semibold truncate" title={value}>{value}</p>

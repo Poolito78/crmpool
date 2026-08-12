@@ -3,7 +3,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   generateId, formatMontant, calculerFournisseurPrioritaire,
   getPfPrixPourQuantite, getPfTransportPourMontant,
-  type ProduitFournisseur, type PrixPalier, type PalierPort, type Fournisseur,
+  type ProduitFournisseur, type PalierAchat, type PalierPort, type Fournisseur,
 } from '@/lib/store';
 import {
   Plus, Trash2, Star, Truck, Clock, Package,
@@ -128,13 +128,13 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
       if (pf.id !== pfId) return pf;
       const paliers = [...(pf.paliersFournisseur || [])];
       const maxQte = paliers.length > 0 ? Math.max(...paliers.map(p => p.qteMin)) : 0;
-      const newPalier: PrixPalier = { qteMin: maxQte + 10, prixAchat: pf.prixAchat };
+      const newPalier: PalierAchat = { qteMin: maxQte + 10, prixAchat: pf.prixAchat };
       return { ...pf, paliersFournisseur: [...paliers, newPalier] };
     }));
     setExpandedPrix(prev => { const n = new Set(prev); n.add(pfId); return n; });
   }
 
-  function updatePalierPrix(pfId: string, idx: number, field: keyof PrixPalier, value: number) {
+  function updatePalierPrix(pfId: string, idx: number, field: keyof PalierAchat, value: number) {
     updateProduitFournisseurs(prev => prev.map(pf => {
       if (pf.id !== pfId) return pf;
       const paliers = [...(pf.paliersFournisseur || [])];

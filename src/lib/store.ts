@@ -123,6 +123,19 @@ export interface PrixPalier {
   prixHT: number;        // prix public HT à ce palier
 }
 
+/**
+ * Palier de prix côté fournisseur.
+ *
+ * Distinct de PrixPalier : un tarif dégressif fournisseur n'a ni prix
+ * revendeur ni prix public — ces deux notions sont des prix de vente, et le
+ * fournisseur ne nous en communique pas. Les exiger obligeait à inventer des
+ * zéros dont personne ne se servait.
+ */
+export interface PalierAchat {
+  qteMin: number;
+  prixAchat: number;
+}
+
 // Achat daté : prix d'achat unitaire à une date + quantité achetée (valorisation stock)
 export interface AchatDate {
   date: string;      // YYYY-MM-DD
@@ -209,7 +222,7 @@ export interface ProduitFournisseur {
   delaiLivraison: number;
   conditionnementMin: number;
   estPrioritaire: boolean;
-  paliersFournisseur?: PrixPalier[];  // tarifs prix dégressifs propres à ce fournisseur
+  paliersFournisseur?: PalierAchat[]; // tarifs dégressifs propres à ce fournisseur
   paliersPort?: PalierPort[];         // frais de port dégressifs propres à ce fournisseur
 }
 

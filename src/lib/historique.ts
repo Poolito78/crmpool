@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import type { Json } from '@/integrations/supabase/types';
 
 export type EntiteType =
   | 'devis'
@@ -43,7 +44,9 @@ export function logHistorique(
       entite_id: entry.entiteId,
       entite_numero: entry.entiteNumero,
       action: entry.action,
-      details: entry.details ?? null,
+      // La colonne est un jsonb : tout objet sérialisable convient. Le typage
+      // généré ne sait pas qu'un Record<string, unknown> en est un.
+      details: (entry.details ?? null) as Json,
     }).then(({ error }) => {
       if (error) console.warn('[historique]', error.message);
     });
@@ -73,7 +76,11 @@ export async function fetchHistorique(opts?: {
     entiteId: r.entite_id,
     entiteNumero: r.entite_numero ?? '',
     action: r.action as ActionType,
-    details: r.details ?? undefined,
+    // jsonb peut contenir un nombre, une chaîne ou un tableau ; l'historique
+    // n'y écrit que des objets. On écarte le reste plutôt que de le forcer.
+    details: r.details && typeof r.details === 'object' && !Array.isArray(r.details)
+      ? (r.details as Record<string, unknown>)
+      : undefined,
     date: r.date,
   }));
 }

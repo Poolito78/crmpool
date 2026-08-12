@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File, FileImage, FileSpreadsheet, ExternalLink, Eye } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
@@ -26,11 +26,11 @@ function formatTaille(bytes?: number) {
 }
 
 function IconPj({ mime }: { mime?: string }) {
-  if (!mime) return <File className="w-4 h-4 text-muted-foreground" />;
+  if (!mime) return <FileIcon className="w-4 h-4 text-muted-foreground" />;
   if (mime.startsWith('image/')) return <FileImage className="w-4 h-4 text-blue-500" />;
   if (mime.includes('pdf')) return <FileText className="w-4 h-4 text-red-500" />;
   if (mime.includes('sheet') || mime.includes('excel') || mime.includes('csv')) return <FileSpreadsheet className="w-4 h-4 text-green-600" />;
-  return <File className="w-4 h-4 text-muted-foreground" />;
+  return <FileIcon className="w-4 h-4 text-muted-foreground" />;
 }
 
 async function fetchFileAsBase64(signedUrl: string): Promise<string> {

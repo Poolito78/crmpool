@@ -14,13 +14,9 @@ interface Props {
   iconOnly?: boolean;
 }
 
-// Typage minimal de la Web Speech API (non présent dans le tslib standard)
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-}
+// Le typage de la Web Speech API vit dans src/types/web-speech.d.ts : il
+// déclarait ici `Window` sans déclarer `SpeechRecognition`, si bien que le
+// type de retour restait inconnu et que `results` retombait sur `unknown`.
 
 /** Hook de dictée vocale réutilisable (Web Speech API). */
 export function useVoiceDictation(onTranscript: (text: string) => void, lang = 'fr-FR') {
