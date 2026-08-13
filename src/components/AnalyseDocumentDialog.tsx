@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles } from 'lucide-react';
+import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
@@ -50,6 +50,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
   const [dragging, setDragging] = useState(false);
   const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
+  /* ── aperçu du document PDF (pour vérifier pendant la correction) ── */
+  const [apercu, setApercu] = useState<{ name: string; url: string } | null>(null);
   /* ── état extraction contact inline ── */
   const [extractingContact, setExtractingContact] = useState(false);
   const emlContactRef = useRef<EmlContent['contact'] | undefined>(undefined);
@@ -385,6 +387,27 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setShowCreerDevis(false);
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisNotes('');
+    setApercu(null);
+  }
+
+  /* ── aperçu du PDF ─────────────────────────────────────────────────────────
+     Permet de relire le document pendant qu'on corrige le type / les champs. */
+  const estPdf = (f: File | null) =>
+    !!f && (f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
+
+  // Libère l'URL objet dès qu'elle change (et à la fermeture du dialog).
+  useEffect(() => () => { if (apercu) URL.revokeObjectURL(apercu.url); }, [apercu]);
+  // Un nouveau fichier importé ⇒ on ferme l'aperçu précédent (sinon il montrerait
+  // encore l'ancien document pendant la correction).
+  useEffect(() => { setApercu(null); }, [fichier]);
+
+  function ouvrirApercu(source: File | ArrayBuffer, name: string) {
+    const blob = source instanceof File ? source : new Blob([source], { type: 'application/pdf' });
+    setApercu({ name, url: URL.createObjectURL(blob) });
+  }
+  function basculerApercu(source: File | ArrayBuffer, name: string) {
+    if (apercu && apercu.name === name) setApercu(null);
+    else ouvrirApercu(source, name);
   }
 
   /* ── analyse manuelle (bouton) → délègue à lancerAnalyse avec le state courant ── */
@@ -800,6 +823,33 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setShowCreerCC(false);
   }
 
+  // Panneau d'aperçu (un seul rendu à la fois : sous la zone d'import avant
+  // l'analyse, sous l'en-tête de correction ensuite).
+  const panneauApercu = apercu ? (
+    <div className="rounded-xl border border-border overflow-hidden bg-muted/30">
+      <div className="flex items-center gap-2 px-2.5 py-1.5 border-b border-border bg-muted/50">
+        <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+        <span className="text-xs font-medium flex-1 truncate" title={apercu.name}>{apercu.name}</span>
+        <a
+          href={apercu.url} target="_blank" rel="noopener noreferrer"
+          title="Ouvrir dans un onglet"
+          className="text-muted-foreground hover:text-primary shrink-0"
+        ><ExternalLink className="w-3.5 h-3.5" /></a>
+        <button onClick={() => setApercu(null)} title="Fermer l'aperçu" className="text-muted-foreground hover:text-destructive shrink-0">
+          <X className="w-3.5 h-3.5" />
+        </button>
+      </div>
+      <iframe
+        src={apercu.url}
+        title={`Aperçu ${apercu.name}`}
+        className="w-full h-[300px] sm:h-[420px] bg-white"
+      />
+      <p className="px-2.5 py-1 text-[10px] text-muted-foreground">
+        Si l'aperçu reste vide (mobile notamment), ouvrez le document dans un onglet.
+      </p>
+    </div>
+  ) : null;
+
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
@@ -841,13 +891,25 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                     <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-primary/10 border border-primary/20">
                       <FileText className="w-4 h-4 text-primary shrink-0" />
                       <span className="text-xs font-medium text-primary flex-1 truncate">{fichier.name}</span>
-                      <button onClick={() => { setFichier(null); setEmlPdfs([]); }} className="text-primary/60 hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
+                      {estPdf(fichier) && (
+                        <button
+                          onClick={() => basculerApercu(fichier, fichier.name)}
+                          title={apercu?.name === fichier.name ? 'Masquer l\'aperçu' : 'Aperçu du document'}
+                          className="text-primary/70 hover:text-primary shrink-0"
+                        >{apercu?.name === fichier.name ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
+                      )}
+                      <button onClick={() => { setFichier(null); setEmlPdfs([]); setApercu(null); }} className="text-primary/60 hover:text-destructive shrink-0"><X className="w-3.5 h-3.5" /></button>
                     </div>
                     {/* PDF supplémentaires de l'email */}
                     {emlPdfs.length > 1 && emlPdfs.slice(1).map((p, i) => (
                       <div key={i} className="flex items-center gap-2 px-2 py-1 rounded-lg bg-muted/50 border border-border">
                         <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                         <span className="text-xs text-muted-foreground flex-1 truncate">{p.name}</span>
+                        <button
+                          onClick={() => basculerApercu(p.buffer, p.name)}
+                          title={apercu?.name === p.name ? 'Masquer l\'aperçu' : 'Aperçu de cette pièce jointe'}
+                          className="text-muted-foreground hover:text-primary shrink-0"
+                        >{apercu?.name === p.name ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}</button>
                         <span className="text-xs text-muted-foreground">pj {i + 2}</span>
                       </div>
                     ))}
@@ -908,6 +970,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                     }
                   }} />
               </div>
+
+              {/* Aperçu avant analyse (pendant la correction, il est affiché plus bas) */}
+              {!result && panneauApercu}
 
               <Button onClick={handleAnalyse} disabled={loading || (!fichier && !texte.trim())} className="w-full">
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyse en cours…</> : <><ScanText className="w-4 h-4 mr-2" />Analyser</>}
@@ -972,6 +1037,15 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                     </Select>
                   </div>
                 )}
+
+                {/* ── Aperçu du document pendant la correction ── */}
+                {estPdf(fichier) && !apercu && (
+                  <button
+                    onClick={() => ouvrirApercu(fichier as File, (fichier as File).name)}
+                    className="self-start inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+                  ><Eye className="w-3.5 h-3.5" /> Voir le document pour vérifier</button>
+                )}
+                {panneauApercu}
 
                 {/* ── Bandeaux match / no-match ── */}
                 {matchedCF && (
