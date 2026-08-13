@@ -14,6 +14,8 @@ import { toast } from 'sonner';
 import { exportToExcel } from '@/lib/exportExcel';
 import { logHistorique } from '@/lib/historique';
 import { produitParId } from '@/lib/indexProduits';
+import { useVeilleParProduit } from '@/lib/concurrents';
+import { comparerAuConcurrent } from '@/lib/veilleComparaison';
 import DevisPreview, { parseImgPct } from '@/components/DevisPreview';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
@@ -105,6 +107,11 @@ export default function Devis() {
     () => produits.filter(p => p.typeKit).sort((a, b) => a.reference.localeCompare(b.reference)),
     [produits],
   );
+
+  /* Ce que les concurrents pratiquent sur nos articles, quand on l'a relevé.
+     Affiché sous le prix de la ligne : le moment où l'on fixe un prix est
+     celui où l'information sert, pas trois clics plus loin dans la veille. */
+  const veilleParProduit = useVeilleParProduit();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
@@ -2736,7 +2743,33 @@ export default function Devis() {
                                 poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
                                 qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />,
                                 unite: <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />,
-                                prixht: <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />,
+                                prixht: (
+                                  <div>
+                                    <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
+                                    {(() => {
+                                      const releves = prod ? veilleParProduit.get(prod.id) : undefined;
+                                      const r = releves?.[0];
+                                      if (!prod || !r || r.prixHT == null) return null;
+                                      const c = comparerAuConcurrent(prod, r.prixHT, r.prixUnite);
+                                      return (
+                                        <p
+                                          className="text-[10px] leading-tight text-muted-foreground truncate"
+                                          title={`${r.concurrentNom} — ${r.nom} : ${c.leurTexte}`
+                                            + `\nNotre prix (${c.notreSource}) : ${c.notreTexte}`
+                                            + (c.ecartPct == null ? `\nÉcart non calculé : ${c.obstacle}` : '')
+                                            + (r.clientNom ? `\nRelevé chez ${r.clientNom}` : '')}
+                                        >
+                                          {r.concurrentNom} {c.leurTexte}
+                                          {c.ecartPct != null && (
+                                            <span className={c.ecartPct > 0 ? ' text-destructive' : ' text-emerald-600 dark:text-emerald-400'}>
+                                              {' '}{c.ecartPct > 0 ? '+' : ''}{c.ecartPct.toFixed(0)} %
+                                            </span>
+                                          )}
+                                        </p>
+                                      );
+                                    })()}
+                                  </div>
+                                ),
                                 remise: <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />,
                                 netht: <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />,
                                 marge: (

@@ -47,6 +47,10 @@ export interface ConcurrentProduit {
   prixHT?: number;
   prixUnite?: string;      // unité du prix de vente (€/m², €/kg, €/U…)
   description?: string;
+  /** Article ISOSIGN équivalent — permet de comparer notre prix au leur. */
+  produitId?: string;
+  /** Affaire sur laquelle ce prix a été rencontré. */
+  devisId?: string;
   clientId?: string;
   clientNom?: string;
   informateur?: string;
@@ -110,6 +114,8 @@ function dbToConcurrentProduit(r: any): ConcurrentProduit {
     prixHT: r.prix_ht != null ? Number(r.prix_ht) : undefined,
     prixUnite: r.prix_unite || undefined,
     description: r.description || undefined,
+    produitId: r.produit_id || undefined,
+    devisId: r.devis_id || undefined,
     clientId: r.client_id || undefined,
     clientNom: r.client_nom || undefined,
     informateur: r.informateur || undefined,
@@ -140,6 +146,8 @@ function concurrentProduitToDb(p: ConcurrentProduit) {
     ...(p.quantite !== undefined ? { quantite: p.quantite ?? null } : {}),
     ...(p.quantiteUnite !== undefined ? { quantite_unite: p.quantiteUnite || null } : {}),
     ...(p.prixUnite !== undefined ? { prix_unite: p.prixUnite || null } : {}),
+    ...(p.produitId !== undefined ? { produit_id: p.produitId || null } : {}),
+    ...(p.devisId !== undefined ? { devis_id: p.devisId || null } : {}),
   };
 }
 
@@ -298,4 +306,59 @@ export function useConcurrents() {
     addProduit, updateProduit, deleteProduit,
     addNote, updateNote, deleteNote,
   };
+}
+
+// ── Veille rattachée aux articles ──────────────────────────────────────────
+
+/** Un relevé concurrent, accompagné du nom du concurrent. */
+export interface ReleveVeille extends ConcurrentProduit {
+  concurrentNom: string;
+}
+
+/**
+ * Relevés de veille indexés par article ISOSIGN.
+ *
+ * Sert au chiffrage : quand on saisit une ligne de devis, on veut savoir sur
+ * le champ à combien le concurrent se positionne sur cet article. On ne charge
+ * que les relevés effectivement rattachés — les autres n'ont rien à dire sur
+ * un article précis — et une seule fois par session.
+ */
+export function useVeilleParProduit() {
+  const [parProduit, setParProduit] = useState<Map<string, ReleveVeille[]>>(new Map());
+
+  useEffect(() => {
+    let annule = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from('concurrent_produits')
+        .select('*, concurrents(nom)')
+        .not('produit_id', 'is', null);
+      if (annule) return;
+      if (error) {
+        // Colonne absente si la migration n'est pas passée : le devis doit
+        // continuer de fonctionner sans la veille.
+        console.warn('[veille par produit]', error.message);
+        return;
+      }
+      const map = new Map<string, ReleveVeille[]>();
+      for (const r of (data || []) as any[]) {
+        const releve: ReleveVeille = {
+          ...dbToConcurrentProduit(r),
+          concurrentNom: r.concurrents?.nom || '',
+        };
+        if (!releve.produitId) continue;
+        const lot = map.get(releve.produitId);
+        if (lot) lot.push(releve); else map.set(releve.produitId, [releve]);
+      }
+      // Le plus récent d'abord : c'est celui qui compte quand on chiffre.
+      for (const lot of map.values()) {
+        lot.sort((a, b) => (b.dateRenseignement || b.createdAt || '')
+          .localeCompare(a.dateRenseignement || a.createdAt || ''));
+      }
+      setParProduit(map);
+    })();
+    return () => { annule = true; };
+  }, []);
+
+  return parProduit;
 }

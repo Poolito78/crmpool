@@ -417,11 +417,13 @@ export type Database = {
           created_by_email: string | null
           date_renseignement: string | null
           description: string | null
+          devis_id: string | null
           id: string
           informateur: string | null
           nom: string
           prix_ht: number | null
           prix_unite: string | null
+          produit_id: string | null
           quantite: number | null
           quantite_unite: string | null
           reference: string | null
@@ -437,11 +439,13 @@ export type Database = {
           created_by_email?: string | null
           date_renseignement?: string | null
           description?: string | null
+          devis_id?: string | null
           id?: string
           informateur?: string | null
           nom: string
           prix_ht?: number | null
           prix_unite?: string | null
+          produit_id?: string | null
           quantite?: number | null
           quantite_unite?: string | null
           reference?: string | null
@@ -457,11 +461,13 @@ export type Database = {
           created_by_email?: string | null
           date_renseignement?: string | null
           description?: string | null
+          devis_id?: string | null
           id?: string
           informateur?: string | null
           nom?: string
           prix_ht?: number | null
           prix_unite?: string | null
+          produit_id?: string | null
           quantite?: number | null
           quantite_unite?: string | null
           reference?: string | null
@@ -473,6 +479,20 @@ export type Database = {
             columns: ["concurrent_id"]
             isOneToOne: false
             referencedRelation: "concurrents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "concurrent_produits_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "devis"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "concurrent_produits_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
             referencedColumns: ["id"]
           },
         ]

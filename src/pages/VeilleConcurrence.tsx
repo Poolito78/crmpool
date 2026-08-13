@@ -23,6 +23,9 @@ import * as XLSX from 'xlsx';
 import { useConcurrents, formatCreateur, type ConcurrentProduit } from '@/lib/concurrents';
 import { useCRM } from '@/lib/StoreContext';
 import { formatMontant } from '@/lib/store';
+import { produitParId } from '@/lib/indexProduits';
+import { comparerAuConcurrent } from '@/lib/veilleComparaison';
+import ProduitCombobox from '@/components/ProduitCombobox';
 import ConcurrentDialog from '@/components/ConcurrentDialog';
 import type { Concurrent } from '@/lib/concurrents';
 import { supabase } from '@/integrations/supabase/client';
@@ -303,7 +306,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     addNote, updateNote, deleteNote,
   } = useConcurrents();
 
-  const { produits: produitsCatalogue, clients } = useCRM();
+  const { produits: produitsCatalogue, clients, devis } = useCRM();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingConcurrent, setEditingConcurrent] = useState<Concurrent | undefined>(undefined);
@@ -372,13 +375,23 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
     document.addEventListener('mousedown', h);
     return () => document.removeEventListener('mousedown', h);
   }, [prodGearOpen]);
+  /* Les affaires proposées au rattachement : les 200 plus récentes. Au-delà,
+     la liste devient inutilisable, et un relevé de veille se rattache à une
+     affaire en cours, pas à un devis d'il y a trois ans. */
+  const devisRecents = useMemo(
+    () => [...devis]
+      .sort((a, b) => (b.dateCreation || '').localeCompare(a.dateCreation || ''))
+      .slice(0, 200),
+    [devis],
+  );
+
   // Panneau admin de renommage global (catégories / informateurs)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [pivotMode, setPivotMode] = useState<'categorie' | 'concurrent'>('categorie');
   const [addProdOpen, setAddProdOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
   const [editingProdId, setEditingProdId] = useState<string | null>(null);
-  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', quantiteUnite: '', prixHT: '', prixUnite: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '' });
+  const [addProdForm, setAddProdForm] = useState({ concurrentId: '', nom: '', reference: '', categorie: '', quantite: '', quantiteUnite: '', prixHT: '', prixUnite: '', description: '', clientId: '', clientNom: '', informateur: '', dateRenseignement: '', produitId: '', devisId: '' });
   const [addProdSaving, setAddProdSaving] = useState(false);
   // Si un concurrent est créé depuis le dialog produit, l'auto-sélectionner.
   const prevConcIdsRef = useRef<Set<string>>(new Set());
@@ -534,6 +547,7 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       concurrentId: concurrents[0]?.id || '',
       nom: '', reference: '', categorie: '', quantite: '', quantiteUnite: '', prixHT: '', prixUnite: '', description: '',
       clientId: '', clientNom: '', informateur: formatCreateur(myEmail), dateRenseignement: new Date().toISOString().split('T')[0],
+      produitId: '', devisId: '',
     });
     setAddProdOpen(true);
   }
@@ -554,6 +568,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       clientNom: p.clientNom || '',
       informateur: p.informateur || '',
       dateRenseignement: p.dateRenseignement || '',
+      produitId: p.produitId || '',
+      devisId: p.devisId || '',
     });
     setAddProdOpen(true);
   }
@@ -581,6 +597,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
           clientNom: addProdForm.clientNom || undefined,
           informateur: addProdForm.informateur || undefined,
           dateRenseignement: addProdForm.dateRenseignement || undefined,
+          produitId: addProdForm.produitId || undefined,
+          devisId: addProdForm.devisId || undefined,
         });
       }
       setAddProdSaving(false);
@@ -601,6 +619,8 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
       clientNom: addProdForm.clientNom || undefined,
       informateur: addProdForm.informateur || undefined,
       dateRenseignement: addProdForm.dateRenseignement || undefined,
+      produitId: addProdForm.produitId || undefined,
+      devisId: addProdForm.devisId || undefined,
     });
     setAddProdSaving(false);
     setAddProdOpen(false);
@@ -1386,6 +1406,60 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
               <Label>Description</Label>
               <Input value={addProdForm.description} onChange={e => setAddProdForm(f => ({ ...f, description: e.target.value }))} />
             </div>
+
+            {/* ── Notre équivalent ─────────────────────────────────────────
+                Sans ce rattachement, la veille reste une liste de prix
+                flottants : on sait que Morphée vaut 2,75 €, sans savoir à quoi
+                le comparer. */}
+            <div className="border-t pt-3 space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Notre équivalent</p>
+              <div className="space-y-1.5">
+                <Label>Article ISOSIGN comparable</Label>
+                <ProduitCombobox
+                  produits={produitsCatalogue}
+                  value={addProdForm.produitId}
+                  onSelect={id => setAddProdForm(f => ({ ...f, produitId: id }))}
+                />
+                {(() => {
+                  const notre = produitParId(produitsCatalogue, addProdForm.produitId);
+                  const leur = addProdForm.prixHT ? parseFloat(addProdForm.prixHT.replace(',', '.')) : NaN;
+                  if (!notre || !Number.isFinite(leur) || leur <= 0) return null;
+                  const c = comparerAuConcurrent(notre, leur, addProdForm.prixUnite);
+                  return (
+                    <p className="text-xs text-muted-foreground pt-0.5">
+                      Notre prix <span className="opacity-70">({c.notreSource})</span> : <span className="font-medium text-foreground">{c.notreTexte}</span>
+                      {' · '}eux : <span className="font-medium text-foreground">{c.leurTexte}</span>
+                      {c.ecartPct != null ? (
+                        <span className={c.ecartPct > 0 ? ' text-destructive' : ' text-emerald-600 dark:text-emerald-400'}>
+                          {' — nous sommes '}{c.ecartPct > 0 ? 'plus chers' : 'moins chers'} de {Math.abs(c.ecartPct).toFixed(0)} %
+                        </span>
+                      ) : (
+                        <span className="italic"> — écart non calculé : {c.obstacle}</span>
+                      )}
+                    </p>
+                  );
+                })()}
+              </div>
+              <div className="space-y-1.5">
+                <Label>Affaire concernée</Label>
+                <Select
+                  value={addProdForm.devisId || '__aucune__'}
+                  onValueChange={v => setAddProdForm(f => ({ ...f, devisId: v === '__aucune__' ? '' : v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Aucune" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__aucune__">Aucune</SelectItem>
+                    {devisRecents.map(d => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.numero} — {clients.find(c => c.id === d.clientId)?.societe
+                          || clients.find(c => c.id === d.clientId)?.nom || 'sans client'}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div className="border-t pt-3 space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Source du prix</p>
               <div className="space-y-1.5">
@@ -1471,6 +1545,10 @@ export function VeilleContent({ embedded = false }: { embedded?: boolean } = {})
             clientNom: cl ? (cl.societe || cl.nom) : (v.client || ''),
             informateur: v.informateur || '',
             dateRenseignement: new Date().toISOString().split('T')[0],
+            // La dictée ne désigne pas l'article ISOSIGN comparable : c'est un
+            // choix à faire à l'écran, pas à deviner à la voix.
+            produitId: '',
+            devisId: '',
           });
           setAddProdOpen(true);
         }}
