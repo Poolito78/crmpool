@@ -10,10 +10,12 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
-import { coupeSignature, extraireIndices } from '@/lib/chiffrage';
+import { coupeSignature, extraireIndices, societeDepuisEmail } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
+import { produitParId } from '@/lib/indexProduits';
+import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -161,9 +163,25 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     const contient = (a?: string, b?: string) =>
       assezLong(a) && assezLong(b) && a!.toLowerCase().includes(b!.toLowerCase());
 
+    /* Le domaine de l'expéditeur désigne la société bien plus sûrement que ce
+       que le modèle retient du corps du message : sur une demande signée
+       « Manue », c'est ce prénom qui ressortait comme nom de client. On essaie
+       donc, dans l'ordre : l'adresse exacte, puis le domaine, et seulement
+       ensuite le nom deviné. */
+    const societeMail = societeDepuisEmail(indicesTexte.emails[0]);
+    const domainesTexte = indicesTexte.emails
+      .map(e => e.split('@')[1])
+      .filter(Boolean);
+
     const foundClient =
       clients.find(c => assezLong(c.email)
         && indicesTexte.emails.includes(c.email!.toLowerCase()))
+      || clients.find(c => assezLong(c.email)
+        && domainesTexte.includes(c.email!.toLowerCase().split('@')[1]))
+      || (societeMail
+        ? clients.find(c => contient(c.societe, societeMail)
+                         || contient(c.nom, societeMail))
+        : undefined)
       || (result.nomPartenaire
         ? clients.find(c =>
             contient(c.nom, result.nomPartenaire) ||
@@ -491,26 +509,42 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * pas la même chose qu'une balise sans. On remonte donc tous les candidats,
    * du plus court au plus long : le plus court est le modèle de base.
    */
-  const candidatsPour = useCallback((l: { reference?: string; description?: string }) => {
-    const terme = (l.reference || l.description || '').trim().toLowerCase();
-    if (!terme) return [];
-    const mot = terme.split(/[\s,;]+/)[0];
-    if (mot.length < 2) return [];
-    const parReference = produits.filter(p => p.reference?.toLowerCase().startsWith(mot));
-    if (parReference.length) {
-      return [...parReference].sort((a, b) => a.reference.length - b.reference.length);
-    }
-    return produits
-      .filter(p => p.description?.toLowerCase().includes(terme.slice(0, 20)))
-      .slice(0, 20);
-  }, [produits]);
+  /**
+   * Rapprochement de chaque ligne demandée avec le catalogue.
+   *
+   * Calculé une fois par analyse : `rapprocherArticle` balaie les 22 634
+   * articles, on ne le refait pas à chaque rendu ni à chaque ligne affichée.
+   *
+   * L'ancienne version ne lisait que le premier mot de la demande. « Support
+   * Ø 60 mm long 3.50 m » se réduisait à « support », et la référence la plus
+   * courte commençant par ce mot l'emportait — SUPPORTGB, un support de
+   * glissière béton pour tube 40×40, chiffré au prix contrat de ce mauvais
+   * article. Le 3,50 m et le 4,00 m recevaient le même.
+   */
+  const rapprochements = useMemo(() => {
+    const m = new Map<number, ReturnType<typeof rapprocherArticle>>();
+    (result?.lignes || []).forEach((l, i) => {
+      const texte = [l.reference, l.description].filter(Boolean).join(' ').trim();
+      m.set(i, rapprocherArticle(texte, produits));
+    });
+    return m;
+  }, [result, produits]);
 
-  /** Article retenu pour une ligne : le choix de l'utilisateur, sinon le meilleur candidat. */
-  const produitDeLigne = useCallback((i: number, l: { reference?: string; description?: string }) => {
+  const candidatsPour = useCallback(
+    (i: number) => rapprochements.get(i)?.candidats ?? [],
+    [rapprochements],
+  );
+
+  /**
+   * Article retenu pour une ligne : le choix de l'utilisateur, sinon celui que
+   * le rapprochement juge sûr. Quand il ne l'est pas, on ne retient rien : une
+   * ligne vide se remarque, un mauvais article chiffré avec assurance non.
+   */
+  const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
-    if (choisi) return produits.find(p => p.id === choisi);
-    return candidatsPour(l)[0];
-  }, [choixProduit, produits, candidatsPour]);
+    if (choisi) return produitParId(produits, choisi);
+    return rapprochements.get(i)?.meilleur;
+  }, [choixProduit, produits, rapprochements]);
 
   /**
    * Articles ajoutés d'office par les règles d'accompagnement.
@@ -529,7 +563,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!result?.lignes?.length || !regles.length || !produitsCharges) return [];
     const demandees: LigneChiffrage[] = result.lignes
       .map((l, i) => {
-        const p = produitDeLigne(i, l);
+        const p = produitDeLigne(i);
         return p ? { produitId: p.id, produitMatch: p.description,
                      quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
                      confidence: 'high' as const } : null;
@@ -552,7 +586,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const referencesDuDevis = useMemo(() => {
     const refs = new Set<string>();
     (result?.lignes ?? []).forEach((l, i) => {
-      const p = produitDeLigne(i, l);
+      const p = produitDeLigne(i);
       if (p) refs.add(p.referenceOdoo || p.reference);
     });
     for (const a of accompagnements) {
@@ -575,7 +609,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       : (indices.emails[0] || result?.nomPartenaire)
         ? {
             email: indices.emails[0],
-            societe: result?.nomPartenaire,
+            /* Le domaine avant le nom deviné : « thierry@reflex-signalisation.fr »
+               dit REFLEX SIGNALISATION, quand le modèle proposait « Manue »,
+               le prénom de la personne à qui le message était adressé. Passer
+               ce prénom à Odoo l'envoyait chercher un partenaire qui n'existe
+               pas — ou pire, un homonyme. */
+            societe: societeDepuisEmail(indices.emails[0]) || result?.nomPartenaire,
             nom: result?.nomPartenaire,
             ville: indices.villes[0] || emlContactRef.current?.ville,
           }
@@ -672,7 +711,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
     if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
     const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
-      const p = produitDeLigne(i, l);
+      const p = produitDeLigne(i);
       const cle = `d${i}`;
       return {
         id: generateId(),
@@ -1090,7 +1129,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-border">
                     {([
                       result.numeroDocument  && ['N° document',   result.numeroDocument],
-                      result.nomPartenaire   && [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client', result.nomPartenaire],
+                      /* On montre la société retrouvée, pas le nom deviné : le
+                         modèle avait retenu « Manue » sur un message signé de
+                         ce prénom, quand l'expéditeur était REFLEX
+                         SIGNALISATION. Le nom deviné reste affiché à côté
+                         quand il apporte autre chose. */
+                      (contratOdoo?.societe || result.nomPartenaire)
+                        && [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client',
+                            contratOdoo?.societe || result.nomPartenaire!],
+                      contratOdoo?.societe && result.nomPartenaire
+                        && result.nomPartenaire.toLowerCase() !== contratOdoo.societe.toLowerCase()
+                        && ['Nom lu dans le message', result.nomPartenaire],
                       result.referencePartenaire && ['Réf. partenaire', result.referencePartenaire],
                       result.dateDocument    && ['Date',          new Date(result.dateDocument).toLocaleDateString('fr-FR')],
                       result.dateLivraisonPrevue && ['Livraison',  new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')],
@@ -1137,7 +1186,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                le contrat du client qui le donne. Afficher un
                                tiret revenait à cacher le seul chiffre utile. */
                             const pu = l.prixUnitaireHT ?? (
-                              isDevisClient ? prixDe(produitDeLigne(i, l)) : null
+                              isDevisClient ? prixDe(produitDeLigne(i)) : null
                             );
                             const total = pu != null ? pu * l.quantite : null;
                             return (
@@ -1292,8 +1341,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <div className="space-y-2 pt-1">
                             <Label className="text-xs">Articles demandés</Label>
                             {(result?.lignes ?? []).map((l, i) => {
-                              const candidats = candidatsPour(l);
-                              const retenu = produitDeLigne(i, l);
+                              const candidats = candidatsPour(i);
+                              const retenu = produitDeLigne(i);
+                              const rap = rapprochements.get(i);
                               return (
                                 <div key={i} className="rounded-lg border border-border p-2 space-y-1.5">
                                   <div className="flex items-center gap-2 text-xs">
@@ -1301,9 +1351,18 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                       demandé
                                     </span>
                                     <span className="font-medium">{l.description || l.reference}</span>
-                                    {candidats.length > 1 && !choixProduit[i] && (
+                                    {/* Dire ce qui a été compris de la demande, et
+                                        ce qui n'a pas été trouvé. Un « à choisir »
+                                        explicite vaut mieux qu'un article retenu
+                                        au hasard et chiffré avec assurance. */}
+                                    {!choixProduit[i] && rap && rap.confiance !== 'sure' && (
+                                      <span className="ml-auto text-[11px] text-destructive">
+                                        à choisir — {rap.pourquoi}
+                                      </span>
+                                    )}
+                                    {!choixProduit[i] && rap?.confiance === 'sure' && candidats.length > 1 && (
                                       <span className="ml-auto text-[11px] text-warning">
-                                        {candidats.length} déclinaisons — vérifiez
+                                        {rap.pourquoi} · {candidats.length} candidats
                                       </span>
                                     )}
                                   </div>
@@ -1354,7 +1413,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                   />
                                   {!retenu && (
                                     <p className="text-[11px] text-warning">
-                                      Aucun article trouvé — choisissez-en un ci-dessus.
+                                      {candidats.length
+                                        ? `Aucun candidat ne correspond assez pour être retenu d’office — ${candidats.length} proposition(s) ci-dessus.`
+                                        : 'Aucun article trouvé — choisissez-en un ci-dessus.'}
                                     </p>
                                   )}
                                 </div>
@@ -1423,7 +1484,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                             {(() => {
                               const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
-                                const p = produitDeLigne(i, l);
+                                const p = produitDeLigne(i);
                                 if (!p) return t;
                                 const cle = `d${i}`;
                                 return t + prixDe(p, undefined, cle) * quantiteDe(cle, l.quantite || 1);

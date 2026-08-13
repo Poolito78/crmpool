@@ -44,6 +44,39 @@ export interface IndicesClient {
 /** Nos propres domaines : l'expéditeur interne n'est jamais le client. */
 const DOMAINES_INTERNES = /@(isofloor|isosign|so-signal|sti-fr)\./i;
 
+/** Messageries grand public : leur domaine ne dit rien de la société. */
+const DOMAINES_GENERIQUES = new Set([
+  'gmail', 'googlemail', 'orange', 'wanadoo', 'free', 'sfr', 'neuf', 'bbox',
+  'laposte', 'hotmail', 'outlook', 'live', 'msn', 'yahoo', 'ymail', 'aol',
+  'icloud', 'me', 'protonmail', 'proton', 'gmx', 'numericable', 'club-internet',
+]);
+
+/**
+ * Raison sociale déduite de l'adresse de l'expéditeur.
+ *
+ * « thierry@reflex-signalisation.fr » désigne REFLEX SIGNALISATION avec bien
+ * plus de certitude que ce qu'un modèle de langage retiendra du corps du
+ * message : sur une demande signée « Manue », c'est ce prénom qui ressortait
+ * comme nom de client. Le domaine, lui, ne se trompe pas de personne.
+ *
+ * Renvoie une chaîne vide pour les messageries grand public, où le domaine
+ * n'apprend rien, et pour nos propres domaines.
+ */
+export function societeDepuisEmail(email?: string): string {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e.includes('@') || DOMAINES_INTERNES.test(e)) return '';
+  const domaine = e.split('@')[1] || '';
+  const parties = domaine.split('.');
+  if (parties.length < 2) return '';
+
+  // On garde le libellé qui précède le TLD, et l'éventuel sous-domaine
+  // porteur : « agence.reflex-signalisation.fr » → « reflex signalisation ».
+  const cle = parties[parties.length - 2];
+  if (!cle || DOMAINES_GENERIQUES.has(cle)) return '';
+
+  return cle.replace(/[-_]+/g, ' ').trim();
+}
+
 const BRUIT =
   /^(cordialement|bien (?:à|a) vous|salutations|sinc[èe]rement|merci|bonjour|bonsoir|madame|monsieur|objet|envoy[ée]|[àa]\s*:|cc\s*:|tel|t[ée]l|mobile|portable|fax|www\.|http)/i;
 

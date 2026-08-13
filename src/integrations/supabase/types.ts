@@ -1452,6 +1452,120 @@ export type Database = {
           },
         ]
       }
+      systeme_composants: {
+        Row: {
+          condition: string | null
+          consommation: number | null
+          created_at: string
+          dosage_temperature: Json | null
+          id: string
+          libelle: string
+          obligatoire: boolean
+          ordre: number
+          phrase_source: string | null
+          pourcentage: number | null
+          produit_id: string | null
+          ratio_base: number | null
+          role: string
+          systeme_id: string
+        }
+        Insert: {
+          condition?: string | null
+          consommation?: number | null
+          created_at?: string
+          dosage_temperature?: Json | null
+          id?: string
+          libelle: string
+          obligatoire?: boolean
+          ordre?: number
+          phrase_source?: string | null
+          pourcentage?: number | null
+          produit_id?: string | null
+          ratio_base?: number | null
+          role?: string
+          systeme_id: string
+        }
+        Update: {
+          condition?: string | null
+          consommation?: number | null
+          created_at?: string
+          dosage_temperature?: Json | null
+          id?: string
+          libelle?: string
+          obligatoire?: boolean
+          ordre?: number
+          phrase_source?: string | null
+          pourcentage?: number | null
+          produit_id?: string | null
+          ratio_base?: number | null
+          role?: string
+          systeme_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "systeme_composants_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "systeme_composants_systeme_id_fkey"
+            columns: ["systeme_id"]
+            isOneToOne: false
+            referencedRelation: "systemes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      systemes: {
+        Row: {
+          actif: boolean
+          created_at: string
+          description: string | null
+          famille: string | null
+          id: string
+          nom: string
+          source_drive: string | null
+          source_fiche: string | null
+          support: string
+          updated_at: string
+          usage: string | null
+          user_id: string
+          variante: string | null
+        }
+        Insert: {
+          actif?: boolean
+          created_at?: string
+          description?: string | null
+          famille?: string | null
+          id?: string
+          nom: string
+          source_drive?: string | null
+          source_fiche?: string | null
+          support?: string
+          updated_at?: string
+          usage?: string | null
+          user_id?: string
+          variante?: string | null
+        }
+        Update: {
+          actif?: boolean
+          created_at?: string
+          description?: string | null
+          famille?: string | null
+          id?: string
+          nom?: string
+          source_drive?: string | null
+          source_fiche?: string | null
+          support?: string
+          updated_at?: string
+          usage?: string | null
+          user_id?: string
+          variante?: string | null
+        }
+        Relationships: []
+      }
       transport_baremes: {
         Row: {
           created_at: string | null
