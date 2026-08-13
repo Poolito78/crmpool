@@ -15,6 +15,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId } from '@/lib/indexProduits';
+import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
@@ -26,6 +27,17 @@ import {
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { type ExtractedContact } from '@/components/EmailToContactDialog';
+
+/**
+ * En dessous, le prix catalogue n'est pas un prix.
+ *
+ * Chez ISOSIGN le prix de vente ne vit pas sur la fiche Odoo mais dans les
+ * listes de prix : la fiche affiche 1 €. L'import a recopié cette valeur, d'où
+ * les 1,00 €, 1,43 € et 1,44 € qui parsèment le catalogue — 7 670 articles
+ * vendables sous 2 €, et 4 657 à zéro. Un article réellement vendu moins de
+ * deux euros existe, mais il est bien plus rare qu'une fiche non tarifée.
+ */
+const SEUIL_PRIX_FACTICE = 2;
 
 interface Props {
   open: boolean;
@@ -57,6 +69,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* ── état extraction contact inline ── */
   const [extractingContact, setExtractingContact] = useState(false);
   const emlContactRef = useRef<EmlContent['contact'] | undefined>(undefined);
+  /* Coordonnées lues dans l'image de signature, quand il y en a une.
+     En état et non en ref : la lecture de l'image est plus lente que
+     l'analyse du texte, et arrive donc après. Un ref serait lu avant d'être
+     rempli, et la signature ne servirait à rien une fois sur deux. */
+  const [signature, setSignature] = useState<ContactSignature | null>(null);
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
@@ -168,9 +185,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
        « Manue », c'est ce prénom qui ressortait comme nom de client. On essaie
        donc, dans l'ordre : l'adresse exacte, puis le domaine, et seulement
        ensuite le nom deviné. */
-    const societeMail = societeDepuisEmail(indicesTexte.emails[0]);
-    const domainesTexte = indicesTexte.emails
-      .map(e => e.split('@')[1])
+    const sig = signature;
+    // La signature en image, quand elle a été lue, prime sur tout : elle porte
+    // la raison sociale écrite par le client lui-même.
+    const societeMail = sig?.societe
+      || societeDepuisEmail(sig?.email || indicesTexte.emails[0]);
+    const domainesTexte = [sig?.email, ...indicesTexte.emails]
+      .filter(Boolean)
+      .map(e => e!.toLowerCase().split('@')[1])
       .filter(Boolean);
 
     const foundClient =
@@ -206,7 +228,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
       setCreerCCNotes(result.notes || result.referencePartenaire || '');
     }
-  }, [result]);
+    // `signature` en dépendance : la lecture de l'image arrive après l'analyse
+    // du texte, et doit pouvoir corriger le client déjà choisi.
+  }, [result, signature]);
 
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
@@ -289,6 +313,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
     const allPdfBuffers: { name: string; buffer: ArrayBuffer }[] = [];
     let emailTexte = '';
+
+    /* Beaucoup de signatures professionnelles sont une image : le nom, la
+       fonction et les téléphones n'existent nulle part dans le texte. Sur la
+       demande de REFLEX SIGNALISATION, tout le bloc de Thierry BARAILLER était
+       dans un PNG, et l'analyse retenait « Manue », le prénom de la
+       destinataire lu dans le corps du message. On fait donc lire les images
+       du message, en parallèle du reste. */
+    setSignature(null);
+    void (async () => {
+      for (const f of [...emlFiles, ...msgFiles]) {
+        try {
+          const images = await extraireImages(f);
+          const c = await lireSignature(images, geminiKey);
+          if (c) { setSignature(c); break; }
+        } catch { /* la signature reste facultative */ }
+      }
+    })();
 
     for (const f of emlFiles) {
       try {
@@ -604,19 +645,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     /* L'adresse de l'expéditeur désigne une agence précise ; la raison sociale
        peut en désigner plusieurs. On la lit donc dans le message analysé. */
     const indices = extraireIndices(analyseTexteRef.current || '');
+    const sigOdoo = signature;
     const critere = cli
       ? { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville }
-      : (indices.emails[0] || result?.nomPartenaire)
+      : (sigOdoo?.email || indices.emails[0] || sigOdoo?.societe || result?.nomPartenaire)
         ? {
-            email: indices.emails[0],
+            email: sigOdoo?.email || indices.emails[0],
             /* Le domaine avant le nom deviné : « thierry@reflex-signalisation.fr »
                dit REFLEX SIGNALISATION, quand le modèle proposait « Manue »,
                le prénom de la personne à qui le message était adressé. Passer
                ce prénom à Odoo l'envoyait chercher un partenaire qui n'existe
                pas — ou pire, un homonyme. */
-            societe: societeDepuisEmail(indices.emails[0]) || result?.nomPartenaire,
-            nom: result?.nomPartenaire,
-            ville: indices.villes[0] || emlContactRef.current?.ville,
+            societe: sigOdoo?.societe
+              || societeDepuisEmail(sigOdoo?.email || indices.emails[0])
+              || result?.nomPartenaire,
+            nom: sigOdoo?.nom || result?.nomPartenaire,
+            ville: sigOdoo?.ville || indices.villes[0] || emlContactRef.current?.ville,
           }
         : null;
 
@@ -649,7 +693,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       } catch { if (!annule) setContratOdoo(null); }
     })();
     return () => { annule = true; };
-  }, [creerDevisClientId, clients, referencesDuDevis, result]);
+  }, [creerDevisClientId, clients, referencesDuDevis, result, signature]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -689,6 +733,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                source: (p.sourceTarif || 'catalogue métier') as any };
     }
     if (contrat !== null) return { retenu: contrat, contrat, catalogue, source: 'contrat' as const };
+
+    /* Sur 22 635 articles vendables, 7 670 portent un prix inférieur à 2 € et
+       4 657 un prix nul : chez ISOSIGN le prix de vente n'est pas sur la fiche
+       Odoo, il vit dans les listes de prix. L'import a recopié la fiche, à 1 €,
+       parfois multipliée par un coefficient — d'où les 1,43 € et 1,44 € qu'on
+       retrouve partout. Ces valeurs ne sont pas des prix ; les afficher comme
+       tels a mis un support Ø60 à 1,00 € sur une demande où Odoo facture
+       39,852 €. Faute de prix contrat, on ne propose plus rien. */
+    if (catalogue <= SEUIL_PRIX_FACTICE) {
+      return { retenu: 0, contrat, catalogue, source: 'absent' as const };
+    }
     return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const };
   }, [contratOdoo]);
 
@@ -1140,6 +1195,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                       contratOdoo?.societe && result.nomPartenaire
                         && result.nomPartenaire.toLowerCase() !== contratOdoo.societe.toLowerCase()
                         && ['Nom lu dans le message', result.nomPartenaire],
+                      /* Ce que l'image de signature a livré : sur cette
+                         demande, tout le bloc de Thierry BARAILLER était dans
+                         un PNG, invisible au texte. */
+                      signature?.nom && ['Contact (signature)',
+                        signature.fonction ? `${signature.nom} — ${signature.fonction}` : signature.nom],
+                      signature?.mobile && ['Mobile (signature)', signature.mobile],
+                      signature?.telephone && ['Téléphone (signature)', signature.telephone],
+                      signature?.email && ['Courriel (signature)', signature.email],
                       result.referencePartenaire && ['Réf. partenaire', result.referencePartenaire],
                       result.dateDocument    && ['Date',          new Date(result.dateDocument).toLocaleDateString('fr-FR')],
                       result.dateLivraisonPrevue && ['Livraison',  new Date(result.dateLivraisonPrevue).toLocaleDateString('fr-FR')],
@@ -1401,7 +1464,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                             ? 'prix saisi à la main'
                                             : (d.source === 'ISOMARK' || d.source === 'ISOFLOOR')
                                               ? <>tarif <strong className="text-foreground">{d.source} {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
-                                              : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
+                                              : d.source === 'absent'
+                                                  ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
+                                                  : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
                                         </div>
                                       </>
                                     );
@@ -1471,6 +1536,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                                 ? <span className="text-warning">règle — compris dans l'enduit</span>
                                                 : d.source === 'ISOMARK'
                                                   ? <>tarif <strong className="text-foreground">ISOMARK {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
+                                                  : d.source === 'absent'
+                                                  ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
                                                   : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
                                             </div>
                                           </>
