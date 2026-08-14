@@ -377,6 +377,73 @@ async function trouverPartenaire(
 
 // ------------------------------------------------------------- fonction
 
+/**
+ * Mots retenus d'une demande en clair, pour interroger Odoo.
+ *
+ * Une demande arrive en phrase — « Support Ø 60 mm long 3.50 m » — quand le
+ * catalogue nomme l'article « SUPPORT ACIER GALVA Ø60 LG 3500 + BOUCHON
+ * BRUT ». Chercher la phrase entière ne ramène rien : aucun libellé Odoo ne la
+ * contient. Il faut la réduire à ce qui distingue l'article, et croiser.
+ *
+ * Les longueurs sont ramenées au millimètre, parce que le catalogue les écrit
+ * ainsi : « 3.50 m » devient « 3500 ». Les mots vides et les unités sont
+ * écartés — les garder n'aurait fait qu'exclure des articles corrects.
+ */
+const MOTS_IGNORES = new Set([
+  "de", "du", "la", "le", "les", "des", "au", "aux", "en", "pour", "avec", "et",
+  "sur", "par", "un", "une", "mm", "cm", "ml", "long", "longueur", "lg", "dia",
+  "diam", "diametre", "ref", "reference", "unite", "piece", "pieces", "type",
+]);
+
+export function motsDeRecherche(texte: string): string[] {
+  const t = String(texte || "")
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/ø/g, " ");
+
+  const mots: string[] = [];
+  /* Longueurs en mètres → millimètres, AVANT tout découpage, et le motif est
+     retiré du texte dans la foulée. Sans cela, « 3.50 m » laissait derrière lui
+     un « 50 » orphelin qui devenait un critère : on aurait exigé que le libellé
+     contienne « 50 », et écarté le bon article. */
+  const reste = t.replace(/(\d{1,2})[.,](\d{1,2})\s*m\b/g, (_, a, b) => {
+    mots.push(String(Math.round(parseFloat(`${a}.${b}`) * 1000)));
+    return " ";
+  });
+
+  for (const brut of reste.split(/[^a-z0-9]+/)) {
+    if (!brut || MOTS_IGNORES.has(brut)) continue;
+    if (/^\d+$/.test(brut)) {
+      // Un nombre seul suivi de « m » a déjà été converti ; on garde les autres
+      // (diamètres, longueurs déjà en mm) tels quels.
+      if (brut.length >= 2 && !mots.includes(brut)) mots.push(brut);
+      continue;
+    }
+    if (brut.length >= 3 && !mots.includes(brut)) mots.push(brut);
+  }
+  // Au-delà de cinq critères, on n'exclut plus que des articles corrects.
+  return mots.slice(0, 5);
+}
+
+/** Domaine Odoo : vendable ET chacun des mots, dans le code ou la désignation. */
+export function domaineRecherche(texte: string): unknown[] {
+  const mots = motsDeRecherche(texte);
+  if (!mots.length) return [["sale_ok", "=", true]];
+
+  // Notation préfixée d'Odoo : n conditions liées par ET demandent n-1 « & ».
+  const sous = mots.map((m) => [
+    "|", ["name", "ilike", m], ["default_code", "ilike", m],
+  ]);
+  const conditions: unknown[] = [];
+  for (const s of sous) conditions.push(...s);
+
+  return [
+    ...Array(mots.length).fill("&"),
+    ["sale_ok", "=", true],
+    ...conditions,
+  ];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -532,10 +599,7 @@ serve(async (req) => {
     for (const r of aChercher) {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
-      const dom: unknown[] = [
-        "&", ["sale_ok", "=", true],
-        "|", ["default_code", "ilike", q], ["name", "ilike", q],
-      ];
+      const dom = domaineRecherche(q);
       const res = (await od.kw(
         "product.product", "search_read",
         [dom, ["id", "default_code", "name", "lst_price", "standard_price",
