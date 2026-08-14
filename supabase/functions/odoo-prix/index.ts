@@ -17,11 +17,21 @@
  * Secrets attendus (Supabase > Edge Functions > Secrets) :
  *   ODOO_URL, ODOO_DB, ODOO_LOGIN, ODOO_APIKEY
  *
+ * Elle sait aussi CHERCHER dans le catalogue d'Odoo. MonCRM n'interrogeait que
+ * sa copie locale, incomplète — le support acier galva Ø60 en 3500, facturé
+ * 39,852 €, n'y figure pas — et à moitié non tarifée : 7 670 articles
+ * vendables sur 22 635 y portent un prix inférieur à 2 €, recopié d'une fiche
+ * Odoo qui n'est pas le prix de vente. Chercher chez Odoo lève les deux
+ * obstacles d'un coup : l'article existe, et son prix est celui du bordereau
+ * du client.
+ *
  * Entrée :
  *   { client: { email?, societe?, nom?, ville? },
- *     lignes: [{ reference, quantite }] }
+ *     lignes:     [{ reference, quantite }],
+ *     recherches: [{ texte, quantite }] }
  * Sortie :
  *   { partenaire, contrat, prix: { REF: { contrat, fiche, cout, quantite } },
+ *     trouvailles: { texte: [{ reference, designation, contrat, fiche, cout }] },
  *     introuvables: [REF] }
  */
 
@@ -304,7 +314,10 @@ async function trouverPartenaire(
   /* Les coordonnées viennent avec : quand le client n'existe pas encore dans
      MonCRM, Odoo fait foi et on peut le créer sans ressaisie. */
   const champs = ["name", "email", "city", "property_product_pricelist", "parent_id",
-                  "phone", "mobile", "street", "street2", "zip", "vat"];
+                  "phone", "mobile", "street", "street2", "zip", "vat",
+                  // Distingue une société d'une personne : sans lui, on ne sait
+                  // pas où chercher les contacts rattachés.
+                  "is_company"];
   const lire = async (domaine: Domaine, limite = 8) =>
     (await od.kw("res.partner", "search_read", [domaine, champs], {
       limit: limite,
@@ -374,9 +387,10 @@ serve(async (req) => {
     });
 
   try {
-    const { client, lignes } = await req.json();
+    const { client, lignes, recherches } = await req.json();
     const demandees = (lignes || []).filter((l: any) => l?.reference);
-    if (!client || !demandees.length) {
+    const aChercher = (recherches || []).filter((r: any) => (r?.texte || '').trim().length >= 2);
+    if (!client || (!demandees.length && !aChercher.length)) {
       return repondre({ prix: {}, contrat: null, partenaire: null });
     }
 
@@ -413,6 +427,37 @@ serve(async (req) => {
     const contratId: number | null = pl ? pl[0] : null;
     const contrat: string | null = pl ? pl[1] : null;
     const societe: string = (partenaire.parent_id ? partenaire.parent_id[1] : partenaire.name) || '';
+
+    /* Les contacts de la société.
+     *
+     * Une demande n'est pas toujours écrite par l'interlocuteur de l'affaire :
+     * une assistante transmet, et c'est le responsable d'exploitation qui
+     * suit le dossier. Retrouver « Manue » dans le corps du message ne dit
+     * rien de qui il faut mettre sur le devis. On rapatrie donc les contacts
+     * rattachés à la société, à charge pour l'utilisateur de désigner le bon.
+     */
+    const societeId: number | null = partenaire.parent_id
+      ? partenaire.parent_id[0]
+      : (partenaire.is_company ? partenaire.id : null);
+    let contacts: unknown[] = [];
+    if (societeId) {
+      contacts = ((await od.kw(
+        "res.partner", "search_read",
+        [[["parent_id", "=", societeId], ["active", "=", true]],
+         ["id", "name", "function", "email", "phone", "mobile", "type"]],
+        { limit: 40, order: "name" },
+      )) as any[]).map((c) => ({
+        id: c.id,
+        nom: c.name || '',
+        fonction: c.function || '',
+        email: c.email || '',
+        telephone: c.phone || '',
+        mobile: c.mobile || '',
+        // « contact » désigne une personne ; « delivery » ou « invoice » sont
+        // des adresses, qu'on ne propose pas comme interlocuteur.
+        estPersonne: !c.type || c.type === 'contact',
+      })).filter((c: any) => c.estPersonne && c.nom);
+    }
 
     // La quantité compte : les listes comportent des paliers dégressifs.
     const quantites = new Map<string, number>();
@@ -468,9 +513,84 @@ serve(async (req) => {
       };
     }
 
+    /* ── Recherche libre dans le catalogue d'Odoo ──────────────────────────
+     *
+     * MonCRM ne cherchait que dans sa copie locale du catalogue. Or cette
+     * copie est incomplète — le support acier galva Ø60 en 3500, qu'Odoo
+     * facture 39,852 €, n'y figure pas — et mal tarifée : sur 22 635 articles
+     * vendables, 7 670 portent un prix inférieur à 2 €, parce que le prix de
+     * vente ISOSIGN ne vit pas sur la fiche mais dans les listes de prix.
+     *
+     * Le Chiffrage local avait résolu cela en cherchant directement chez Odoo.
+     * On fait pareil : l'article existe toujours, et son prix est celui de la
+     * liste du client. Le classement est celui du Chiffrage — code exact,
+     * puis désignation exacte, puis débuts, puis contenus — parce que le tri
+     * alphabétique d'Odoo reléguait les déclinaisons cherchées derrière des
+     * articles sans rapport.
+     */
+    const trouvailles: Record<string, unknown> = {};
+    for (const r of aChercher) {
+      const q = String(r.texte).trim();
+      const qte = Number(r.quantite) || 1;
+      const dom: unknown[] = [
+        "&", ["sale_ok", "=", true],
+        "|", ["default_code", "ilike", q], ["name", "ilike", q],
+      ];
+      const res = (await od.kw(
+        "product.product", "search_read",
+        [dom, ["id", "default_code", "name", "lst_price", "standard_price",
+               "categ_id", "product_tmpl_id", "uom_id"]],
+        { limit: 40, order: "default_code, name" },
+      )) as any[];
+
+      const ql = q.toLowerCase();
+      const rang = (x: any) => {
+        const code = (x.default_code || "").toLowerCase();
+        const nom = (x.name || "").toLowerCase();
+        if (code === ql) return 0;
+        if (nom === ql) return 1;
+        if (code.startsWith(ql)) return 2;
+        if (nom.startsWith(ql)) return 3;
+        if (code.includes(ql)) return 4;
+        return 5;
+      };
+      res.sort((a, b) => rang(a) - rang(b)
+        || (a.default_code || "").localeCompare(b.default_code || ""));
+      const retenus = res.slice(0, 8);
+
+      const arts: Article[] = retenus.map((x) => ({
+        id: x.id,
+        tmpl_id: x.product_tmpl_id ? x.product_tmpl_id[0] : null,
+        categ_id: x.categ_id ? x.categ_id[0] : null,
+        name: x.name,
+        lst_price: x.lst_price || 0,
+        standard_price: x.standard_price || 0,
+      }));
+      if (arts.length) await tarif.preparer(arts);
+
+      trouvailles[q] = await Promise.all(retenus.map(async (x, i) => {
+        let p: number | null = null;
+        try {
+          const v = await tarif.prix(contratId, arts[i], qte);
+          if (v !== null) p = Math.round(v * 100) / 100;
+        } catch { /* article hors barème : on n'invente pas de prix */ }
+        return {
+          reference: x.default_code || "",
+          designation: x.name,
+          categorie: x.categ_id ? x.categ_id[1] : "",
+          unite: x.uom_id ? x.uom_id[1] : "",
+          contrat: p,
+          fiche: x.lst_price || 0,
+          cout: x.standard_price || 0,
+        };
+      }));
+    }
+
     return repondre({
       partenaire: partenaire.name,
       partenaireId: partenaire.id,
+      /** Résultats de la recherche libre, par texte demandé. */
+      trouvailles,
       /** Coordonnées, pour créer la fiche dans MonCRM sans ressaisie. */
       coordonnees: {
         nom: partenaire.name || '',
@@ -483,6 +603,9 @@ serve(async (req) => {
       },
       /** Société qui porte le contrat cadre — souvent le parent du contact. */
       societe,
+      societeId,
+      /** Interlocuteurs rattachés à la société, pour désigner le bon. */
+      contacts,
       contrat,
       contratId,
       prix,

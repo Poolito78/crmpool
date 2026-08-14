@@ -16,6 +16,10 @@ import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId } from '@/lib/indexProduits';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
+import {
+  codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
+  formeDeCode, FORME_PANONCEAU, type Taille,
+} from '@/lib/tarifPanneaux';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
@@ -38,6 +42,28 @@ import { type ExtractedContact } from '@/components/EmailToContactDialog';
  * deux euros existe, mais il est bien plus rare qu'une fiche non tarifée.
  */
 const SEUIL_PRIX_FACTICE = 2;
+
+/** Un interlocuteur rattaché à la société cliente, chez Odoo. */
+interface ContactOdoo {
+  id: number;
+  nom: string;
+  fonction: string;
+  email: string;
+  telephone: string;
+  mobile: string;
+}
+
+/** Un article du catalogue Odoo, tarifé pour le client de l'affaire. */
+interface TrouvailleOdoo {
+  reference: string;
+  designation: string;
+  categorie: string;
+  unite: string;
+  /** Prix de la liste du client. `null` = article hors barème. */
+  contrat: number | null;
+  fiche: number;
+  cout: number;
+}
 
 interface Props {
   open: boolean;
@@ -74,6 +100,18 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      l'analyse du texte, et arrive donc après. Un ref serait lu avant d'être
      rempli, et la signature ne servirait à rien une fois sur deux. */
   const [signature, setSignature] = useState<ContactSignature | null>(null);
+  /* Ce qu'Odoo propose pour les demandes qu'aucun article MonCRM ne satisfait,
+     indexé par le texte cherché. */
+  const [trouvaillesOdoo, setTrouvaillesOdoo] = useState<Record<string, TrouvailleOdoo[]>>({});
+  /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
+     Une demande transmise par une assistante ne désigne pas le contact du
+     dossier : c'est un choix, pas une déduction. */
+  const [contactsOdoo, setContactsOdoo] = useState<ContactOdoo[]>([]);
+  const [contactRetenu, setContactRetenu] = useState<string>('');
+  /* Gamme et classe demandées, communes à l'analyse : un client commande
+     rarement du B14 en petite et du C18 en normale sur la même affaire. */
+  const [gammePanneau, setGammePanneau] = useState<Taille>('P');
+  const [classePanneau, setClassePanneau] = useState<number>(2);
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
@@ -664,7 +702,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           }
         : null;
 
-    if (!critere || !referencesDuDevis.length) { setContratOdoo(null); return; }
+    /* Les demandes qu'aucun article MonCRM ne satisfait : on les fait chercher
+       directement dans le catalogue d'Odoo. La copie locale est incomplète —
+       le support acier galva Ø60 en 3500 n'y figure pas alors qu'Odoo le
+       facture 39,852 € — et à moitié non tarifée. C'est la voie qu'avait prise
+       le Chiffrage local, et c'est elle qui trouve les prix. */
+    const aChercher = (result?.lignes || [])
+      .map((l, i) => ({ i, l }))
+      .filter(({ i }) => !produitDeLigne(i))
+      .map(({ i, l }) => ({
+        texte: [l.reference, l.description].filter(Boolean).join(' ').trim(),
+        quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
+      }))
+      .filter(r => r.texte.length >= 2)
+      .slice(0, 12);   // au-delà, l'appel s'éternise pour un gain nul
+
+    if (!critere || (!referencesDuDevis.length && !aChercher.length)) {
+      setContratOdoo(null); setTrouvaillesOdoo({}); return;
+    }
     let annule = false;
     (async () => {
       try {
@@ -672,9 +727,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           body: {
             client: critere,
             lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
+            recherches: aChercher,
           },
         });
         if (annule) return;
+        setTrouvaillesOdoo((data?.trouvailles || {}) as Record<string, TrouvailleOdoo[]>);
+
+        /* Les interlocuteurs de la société. On présélectionne celui dont
+           l'adresse est celle de l'expéditeur — pas celui dont le prénom
+           traîne dans le corps du message. */
+        const cts = (data?.contacts || []) as ContactOdoo[];
+        setContactsOdoo(cts);
+        const mailExpediteur = (sigOdoo?.email || indices.emails[0] || '').toLowerCase();
+        const parMail = cts.find(c => c.email && c.email.toLowerCase() === mailExpediteur);
+        const parNom = sigOdoo?.nom
+          ? cts.find(c => c.nom.toLowerCase().includes(sigOdoo.nom!.toLowerCase())
+                       || sigOdoo.nom!.toLowerCase().includes(c.nom.toLowerCase()))
+          : undefined;
+        setContactRetenu(String((parMail || parNom)?.id ?? ''));
         // Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
         if (!cli && data?.coordonnees?.nom) {
           setClientOdoo({ ...data.coordonnees, societe: data.societe || data.coordonnees.nom });
@@ -690,9 +760,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           }
           setContratOdoo({ contrat: data.contrat, societe: data.societe || data.partenaire || '', prix, isomark });
         } else setContratOdoo(null);
-      } catch { if (!annule) setContratOdoo(null); }
+      } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); } }
     })();
     return () => { annule = true; };
+    // `produitDeLigne` et `quantiteManuelle` volontairement hors dépendances :
+    // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature]);
 
   /**
@@ -1397,6 +1470,73 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           </div>
                         )}
 
+                        {/* Interlocuteur de l'affaire. La demande peut être
+                            transmise par une assistante ; le contact du dossier
+                            est une autre personne, et c'est un choix. */}
+                        {contactsOdoo.length > 0 && (
+                          <div className="space-y-1 pt-1">
+                            <Label className="text-xs">Contact de l’affaire</Label>
+                            <Select value={contactRetenu || '__aucun__'}
+                              onValueChange={v => setContactRetenu(v === '__aucun__' ? '' : v)}>
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="À désigner" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__aucun__">À désigner</SelectItem>
+                                {contactsOdoo.map(c => (
+                                  <SelectItem key={c.id} value={String(c.id)}>
+                                    {c.nom}{c.fonction ? ` — ${c.fonction}` : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {(() => {
+                              const c = contactsOdoo.find(x => String(x.id) === contactRetenu);
+                              if (!c) return null;
+                              const bouts = [c.email, c.mobile || c.telephone].filter(Boolean);
+                              return bouts.length
+                                ? <p className="text-[11px] text-muted-foreground">{bouts.join(' · ')}</p>
+                                : null;
+                            })()}
+                          </div>
+                        )}
+
+                        {/* Gamme et classe : elles décident du prix bien plus
+                            que le code du panneau. Un B14 en petite classe 2
+                            vaut 46,62 € ; le même en normale, 67,06 €. */}
+                        {(result?.lignes ?? []).some(l =>
+                          codeDansTexte([l.reference, l.description].filter(Boolean).join(' '))) && (
+                          <div className="flex items-end gap-2 pt-1">
+                            <div className="space-y-1">
+                              <Label className="text-xs">Gamme</Label>
+                              <Select value={gammePanneau} onValueChange={v => setGammePanneau(v as Taille)}>
+                                <SelectTrigger className="h-8 w-32 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="M">Mini</SelectItem>
+                                  <SelectItem value="P">Petite</SelectItem>
+                                  <SelectItem value="N">Normale</SelectItem>
+                                  <SelectItem value="G">Grande</SelectItem>
+                                  <SelectItem value="TG">Très grande</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-xs">Classe</Label>
+                              <Select value={String(classePanneau)} onValueChange={v => setClassePanneau(Number(v))}>
+                                <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">Classe 1</SelectItem>
+                                  <SelectItem value="2">Classe 2</SelectItem>
+                                  <SelectItem value="3">Classe 3</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground pb-1.5">
+                              tarif R4 — grille ISOSIGN 2026
+                            </p>
+                          </div>
+                        )}
+
                         {/* Lignes demandées : quantité et choix de l'article.
                             Un client écrit « J11 » ; le catalogue en compte
                             plusieurs déclinaisons — c'est à vous de trancher. */}
@@ -1483,6 +1623,112 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                         : 'Aucun article trouvé — choisissez-en un ci-dessus.'}
                                     </p>
                                   )}
+
+                                  {/* Chiffrage à la grille R4 quand la demande
+                                      cite un code IISR. C'est le cas de « B14
+                                      « 30 » » : aucune référence, mais une
+                                      forme, une gamme et une classe suffisent
+                                      à donner le prix — et à savoir ce qui
+                                      l'accompagne. */}
+                                  {(() => {
+                                    const texte = [l.reference, l.description].filter(Boolean).join(' ');
+                                    const trouve = codeDansTexte(texte);
+                                    if (!trouve) return null;
+                                    const forme = formeDeCode(trouve.code);
+                                    if (!forme || forme === FORME_PANONCEAU) return null;
+
+                                    const opts = { taille: gammePanneau, classe: classePanneau };
+                                    const pan = prixPanneau(trouve.code, opts);
+                                    if (!pan) {
+                                      return (
+                                        <p className="text-[11px] text-destructive">
+                                          {trouve.code} en gamme {gammePanneau} classe {classePanneau} :
+                                          cette taille n’existe pas au tarif.
+                                        </p>
+                                      );
+                                    }
+                                    // Le panonceau que le client demande presque
+                                    // toujours avec son panneau. M9z par défaut :
+                                    // la mention en toutes lettres, la plus courante.
+                                    const pano = panonceauPour('M9z', trouve.code, opts);
+                                    const hauteurs = [hauteurDeDimension(pan.dimension)];
+                                    if (pano) hauteurs.push(hauteurDeDimension(pano.dimension));
+                                    const sup = supportPour(hauteurs);
+                                    const qte = quantiteDe(`d${i}`, l.quantite || 1);
+                                    const total = (pan.prix + (pano?.prix || 0)
+                                      + (sup?.prix || 0) + (sup?.prixColliers || 0)) * qte;
+
+                                    return (
+                                      <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5 text-[11px]">
+                                        <p className="font-medium text-primary">
+                                          Tarif R4 — {trouve.code}{trouve.valeur ? ` « ${trouve.valeur} »` : ''}
+                                        </p>
+                                        <div className="flex gap-2">
+                                          <span className="flex-1 truncate">Panneau {pan.dimension}</span>
+                                          <span className="font-semibold">{formatMontant(pan.prix)}</span>
+                                        </div>
+                                        {pano && (
+                                          <div className="flex gap-2">
+                                            <span className="flex-1 truncate">Panonceau {pano.dimension}</span>
+                                            <span className="font-semibold">{formatMontant(pano.prix)}</span>
+                                          </div>
+                                        )}
+                                        {sup && (
+                                          <div className="flex gap-2">
+                                            <span className="flex-1 truncate" title={sup.explication}>
+                                              Mât Ø60 {sup.longueur} m + {sup.colliers} collier(s)
+                                            </span>
+                                            <span className="font-semibold">
+                                              {formatMontant(sup.prix + sup.prixColliers)}
+                                            </span>
+                                          </div>
+                                        )}
+                                        <div className="flex gap-2 border-t border-primary/20 pt-0.5">
+                                          <span className="flex-1">Ensemble × {qte}</span>
+                                          <span className="font-bold">{formatMontant(total)}</span>
+                                        </div>
+                                        {sup && (
+                                          <p className="text-[10px] text-muted-foreground">{sup.explication}</p>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* Ce qu'Odoo propose quand le catalogue de
+                                      MonCRM ne suffit pas. C'est là que se
+                                      trouvent les articles absents de la copie
+                                      locale, et surtout leurs vrais prix : le
+                                      bordereau du client. */}
+                                  {(() => {
+                                    const cle = [l.reference, l.description]
+                                      .filter(Boolean).join(' ').trim();
+                                    const props = trouvaillesOdoo[cle];
+                                    if (retenu || !props?.length) return null;
+                                    return (
+                                      <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1">
+                                        <p className="text-[10px] font-medium text-primary">
+                                          Trouvé dans Odoo — tarifé au bordereau du client
+                                        </p>
+                                        {props.slice(0, 5).map(t => (
+                                          <div key={t.reference} className="flex items-baseline gap-2 text-[11px]">
+                                            <span className="font-mono text-[10px]">{t.reference}</span>
+                                            <span className="truncate flex-1" title={t.designation}>
+                                              {t.designation}
+                                            </span>
+                                            <span className="font-semibold shrink-0">
+                                              {t.contrat != null
+                                                ? formatMontant(t.contrat)
+                                                : <span className="text-warning">hors barème</span>}
+                                            </span>
+                                          </div>
+                                        ))}
+                                        <p className="text-[10px] text-muted-foreground">
+                                          Ces articles ne sont pas dans MonCRM. Importez-les depuis
+                                          le catalogue Odoo pour les chiffrer directement.
+                                        </p>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                               );
                             })}
