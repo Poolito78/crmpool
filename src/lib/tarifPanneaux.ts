@@ -21,6 +21,28 @@ export type { NiveauTarif, Gamme, Taille };
  * réglementaire et de l'ancrage.
  */
 
+/**
+ * Niveau de tarif nommé par le contrat cadre Odoo.
+ *
+ * REFLEX SIGNALISATION porte « CCI10019 TARIF R4 - 35% REMISE
+ * POLICE-DIREC-MAT-SUP-BRID-COLL-SIL ISOSIGN 2026 ». Le niveau y est écrit :
+ * autant le lire plutôt que de supposer.
+ *
+ * ⚠ Les « 35 % » du libellé ne sont PAS une remise à appliquer : ils décrivent
+ * comment R4 se déduit du tarif public. Vérifié sur la grille — le B14 gamme
+ * petite classe 2 vaut 71,72 € en R0 et 46,62 € en R4, soit exactement −35 %.
+ * Retrancher ces 35 % une seconde fois donnerait 30,30 €, un prix que personne
+ * n'a jamais consenti.
+ */
+export function niveauDepuisContrat(contrat?: string | null): NiveauTarif | null {
+  const t = String(contrat || '').toUpperCase();
+  // « TARIF R4 » d'abord : un « R4 » isolé pourrait venir d'une référence.
+  const explicite = t.match(/\bTARIFS?\s*[-–]?\s*R([0-4])\b/);
+  if (explicite) return `R${explicite[1]}` as NiveauTarif;
+  const seul = t.match(/\bR([0-4])\b/);
+  return seul ? (`R${seul[1]}` as NiveauTarif) : null;
+}
+
 export const FORME_CERCLE = 'Cercle Ø (B - interdiction/obligation)';
 export const FORME_TRIANGLE = 'Triangle (A - danger)';
 export const FORME_OCTOGONE = 'Octogone STOP / triangle inversé (AB)';

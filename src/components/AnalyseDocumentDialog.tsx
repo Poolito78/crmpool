@@ -20,7 +20,7 @@ import { produitParId } from '@/lib/indexProduits';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
   codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
-  formeDeCode, FORME_PANONCEAU, type Taille,
+  formeDeCode, niveauDepuisContrat, FORME_PANONCEAU, type Taille,
 } from '@/lib/tarifPanneaux';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
@@ -1589,7 +1589,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                               </Select>
                             </div>
                             <p className="text-[11px] text-muted-foreground pb-1.5">
-                              tarif R4 — grille ISOSIGN 2026
+                              grille ISOSIGN 2026, tarif{' '}
+                              <strong className="text-foreground">
+                                {niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4'}
+                              </strong>
+                              {niveauDepuisContrat(contratOdoo?.contrat) && ' lu dans le contrat cadre'}
                             </p>
                           </div>
                         )}
@@ -1694,7 +1698,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                     const forme = formeDeCode(trouve.code);
                                     if (!forme || forme === FORME_PANONCEAU) return null;
 
-                                    const opts = { taille: gammePanneau, classe: classePanneau };
+                                    /* Le niveau vient du contrat cadre Odoo :
+                                       « TARIF R4 » y est écrit noir sur blanc.
+                                       R4 à défaut, c'est le cas courant. */
+                                    const opts = {
+                                      taille: gammePanneau, classe: classePanneau,
+                                      niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4' as const,
+                                    };
                                     const pan = prixPanneau(trouve.code, opts);
                                     if (!pan) {
                                       return (
@@ -1718,7 +1728,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                     return (
                                       <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5 text-[11px]">
                                         <p className="font-medium text-primary">
-                                          Tarif R4 — {trouve.code}{trouve.valeur ? ` « ${trouve.valeur} »` : ''}
+                                          Tarif {opts.niveau} — {trouve.code}{trouve.valeur ? ` « ${trouve.valeur} »` : ''}
+                                          {niveauDepuisContrat(contratOdoo?.contrat)
+                                            ? <span className="font-normal opacity-70"> (contrat cadre)</span>
+                                            : <span className="font-normal opacity-70"> (défaut — le contrat ne le précise pas)</span>}
                                         </p>
                                         <div className="flex gap-2">
                                           <span className="flex-1 truncate">Panneau {pan.dimension}</span>

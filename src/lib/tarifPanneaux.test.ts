@@ -1,8 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import {
   prixPanneau, panonceauPour, supportPour, formeDeCode, codeDansTexte,
-  hauteurDeDimension, groupePanonceau,
+  hauteurDeDimension, groupePanonceau, niveauDepuisContrat,
 } from './tarifPanneaux';
+
+describe('niveau de tarif lu dans le contrat cadre', () => {
+  it('lit le niveau du contrat de REFLEX', () => {
+    expect(niveauDepuisContrat(
+      'CCI10019 TARIF R4 - 35% REMISE POLICE-DIREC-MAT-SUP-BRID-COLL-SIL ISOSIGN 2026',
+    )).toBe('R4');
+  });
+
+  it('les 35 % du libellé sont R4, pas une remise à appliquer en plus', () => {
+    // R0 → R4 vaut exactement −35 % : le libellé décrit la construction du
+    // tarif, il ne demande pas de retrancher encore 35 %.
+    const r0 = prixPanneau('B14-30', { taille: 'P', classe: 2, niveau: 'R0' })!.prix;
+    const r4 = prixPanneau('B14-30', { taille: 'P', classe: 2, niveau: 'R4' })!.prix;
+    expect(r4 / r0).toBeCloseTo(0.65, 4);
+    expect(r4).toBeCloseTo(46.62);
+    // Ce qu'on obtiendrait en appliquant la remise deux fois — à ne pas faire.
+    expect(r4 * 0.65).toBeCloseTo(30.30, 1);
+  });
+
+  it('reconnaît les autres niveaux', () => {
+    expect(niveauDepuisContrat('TARIF R0 PUBLIC 2026')).toBe('R0');
+    expect(niveauDepuisContrat('CCI99 TARIF-R2 ISOSIGN')).toBe('R2');
+  });
+
+  it('ne dit rien quand le contrat ne précise pas', () => {
+    expect(niveauDepuisContrat('REFLEX SIGNALISATION (ISO-STI) (EUR)')).toBeNull();
+    expect(niveauDepuisContrat(null)).toBeNull();
+    expect(niveauDepuisContrat('')).toBeNull();
+  });
+});
 
 describe('forme tarifaire d’un code IISR', () => {
   it('reconnaît les grandes familles', () => {
