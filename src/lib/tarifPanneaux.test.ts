@@ -132,6 +132,22 @@ describe('lecture d’une demande en clair', () => {
     expect(codeDansTexte('panneau AB4 stop')?.code).toBe('AB4');
   });
 
+  it('lit une variante suivie d’un chiffre', () => {
+    // B21a2, B21a1, AB3a, CE15a n'étaient reconnus par AUCUNE règle : le motif
+    // s'arrêtait à la lettre et exigeait ensuite une fin de mot, que le chiffre
+    // empêchait. Ces panneaux n'avaient donc ni tarif ni recherche Odoo.
+    expect(codeDansTexte('B21a2')?.code).toBe('B21A2');
+    expect(codeDansTexte('B21a1')?.code).toBe('B21A1');
+    expect(codeDansTexte('AB3a')?.code).toBe('AB3A');
+    expect(codeDansTexte('CE15a')?.code).toBe('CE15A');
+  });
+
+  it('donne au B21a2 sa forme de cercle et son prix', () => {
+    expect(formeDeCode('B21A2')).toContain('Cercle');
+    expect(prixPanneau('B21A2', { taille: 'P', classe: 2 })?.prix).toBeCloseTo(46.62);
+    expect(prixPanneau('B21A2', { taille: 'P', classe: 2 })?.dimension).toBe('650 (P)');
+  });
+
   it('ne voit pas de code là où il n’y en a pas', () => {
     expect(codeDansTexte('Support Ø 60 mm long 3.50 m')).toBeNull();
   });

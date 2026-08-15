@@ -239,7 +239,11 @@ export function hauteurDeDimension(dimension: string): number {
  */
 export function codeDansTexte(texte: string): { code: string; valeur?: string } | null {
   const t = String(texte || '').toUpperCase();
-  const m = t.match(/\b(AB\d{1,2}|A\d{1,3}[A-Z]?|B\d{1,3}[A-Z]?|CE\d{1,3}|C\d{1,3}[A-Z]?|M\d{1,2}[A-Z]?\d?|E\d{1,3})\b/);
+  /* La lettre de variante peut être suivie d'un chiffre : B21a2, B21a1, M9z1,
+     AB3a. Le motif s'arrêtait à la lettre, puis exigeait une fin de mot — qui
+     n'arrivait pas, le chiffre étant un caractère de mot. Le B21a2 n'était donc
+     reconnu ni comme panneau, ni comme rien : ni tarif, ni recherche Odoo. */
+  const m = t.match(/\b(AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
   if (!m) return null;
   const code = m[1];
   // Une valeur entre guillemets ou juste après : « B14 « 30 » ».
