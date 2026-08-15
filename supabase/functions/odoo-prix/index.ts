@@ -439,7 +439,12 @@ export function motsDeRecherche(texte: string): string[] {
       if (brut.length >= 2 && !mots.includes(brut)) mots.push(brut);
       continue;
     }
-    if (brut.length >= 3 && !mots.includes(brut)) mots.push(brut);
+    /* Les codes courts mêlant lettre et chiffre sont discriminants, pas du
+       bruit : « C2 » est la classe de rétroréflexion, et sans elle une demande
+       de B14 ramène indifféremment les C1, C2 et C3. Le seuil de trois
+       caractères les écartait tous. */
+    const codeCourt = /^[a-z]\d{1,2}$/.test(brut);
+    if ((brut.length >= 3 || codeCourt) && !mots.includes(brut)) mots.push(brut);
   }
   // Au-delà de cinq critères, on n'exclut plus que des articles corrects.
   return mots.slice(0, 5);

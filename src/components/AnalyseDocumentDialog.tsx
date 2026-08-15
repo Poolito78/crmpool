@@ -643,6 +643,33 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * le rapprochement juge sûr. Quand il ne l'est pas, on ne retient rien : une
    * ligne vide se remarque, un mauvais article chiffré avec assurance non.
    */
+  /**
+   * Texte envoyé à Odoo pour une ligne, et clé des résultats reçus.
+   *
+   * Un panneau se décline en centaines de variantes : Odoo nomme la nôtre
+   * « B14#30km/h.650.C2.BTR.IS.BRUT ». Chercher « B14 30 » ramène les premières
+   * par ordre alphabétique — des 450, des 850 — et jamais celle qu'on veut. La
+   * dimension et la classe figurent dans la référence : on les y ajoute, tirées
+   * de la gamme et de la classe choisies à l'écran. C'est ce qui relie la
+   * grille tarifaire au catalogue Odoo.
+   *
+   * Une seule fonction pour l'envoi et pour la lecture : deux calculs séparés
+   * finiraient par diverger, et les résultats deviendraient introuvables.
+   */
+  const texteRechercheOdoo = useCallback((l: { reference?: string; description?: string }) => {
+    const brut = [l.reference, l.description].filter(Boolean).join(' ').trim();
+    const trouve = codeDansTexte(brut);
+    const forme = trouve && formeDeCode(trouve.code);
+    if (!trouve || !forme || forme === FORME_PANONCEAU) return brut;
+
+    const pan = prixPanneau(trouve.code, {
+      taille: gammePanneau, classe: classePanneau,
+      niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+    });
+    const mm = pan?.dimension.match(/(\d+)/)?.[1];
+    return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
+  }, [gammePanneau, classePanneau, contratOdoo]);
+
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
     if (choisi) return produitParId(produits, choisi);
@@ -741,7 +768,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
        demander à la source. */
     const aChercher = (result?.lignes || [])
       .map((l, i) => ({
-        texte: [l.reference, l.description].filter(Boolean).join(' ').trim(),
+        texte: texteRechercheOdoo(l),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
@@ -1810,9 +1837,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                       locale, et surtout leurs vrais prix : le
                                       bordereau du client. */}
                                   {(() => {
-                                    const cle = [l.reference, l.description]
-                                      .filter(Boolean).join(' ').trim();
-                                    const props = trouvaillesOdoo[cle];
+                                    const props = trouvaillesOdoo[texteRechercheOdoo(l)];
                                     if (!props?.length) return null;
                                     // Odoo est la source : ses propositions
                                     // s'affichent même quand un article local a
