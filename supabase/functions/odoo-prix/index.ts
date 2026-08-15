@@ -168,14 +168,34 @@ class Tarificateur {
       .sort() as number[];
   }
 
-  /** À appeler une fois, avant tout calcul : la remontée des catégories est asynchrone. */
+  /**
+   * À appeler avant tout calcul : la remontée des catégories est asynchrone.
+   *
+   * Peut être rappelée pour un nouveau lot d'articles — c'est le cas de la
+   * recherche libre, qui ramène des articles inconnus au premier appel. Les
+   * identifiants et le cache de règles sont alors élargis puis vidés : les
+   * règles déjà chargées avaient été filtrées côté serveur sur les SEULS
+   * articles du premier lot, et ne contenaient rien pour les nouveaux. Les
+   * réutiliser telles quelles faisait retomber le calcul sur le prix de fiche,
+   * à 1 €, au lieu du prix contrat.
+   */
   async preparer(articles: Article[]) {
-    const vues = new Set<number>();
+    const vues = new Set<number>(this.categs);
     for (const a of articles) {
       if (!a.categ_id) continue;
       for (const c of await this.categories(a.categ_id)) vues.add(c);
     }
+    const avant = `${this.ids.length}/${this.tmpls.length}/${this.categs.length}`;
+
+    this.ids = [...new Set([...this.ids, ...articles.map((a) => a.id)])]
+      .filter(Boolean).sort();
+    this.tmpls = [...new Set([...this.tmpls, ...articles.map((a) => a.tmpl_id)])]
+      .filter(Boolean).sort() as number[];
     this.categs = [...vues].sort();
+
+    if (avant !== `${this.ids.length}/${this.tmpls.length}/${this.categs.length}`) {
+      this.regles.clear();
+    }
   }
 
   /**
@@ -609,6 +629,7 @@ serve(async (req) => {
        l'essentiel. Une requête mal formée ici ne doit pas priver MonCRM du
        contrat cadre qu'il vient d'obtenir. */
     try {
+    console.log(`[recherche] ${aChercher.length} ligne(s) à chercher`);
     for (const r of aChercher) {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
@@ -619,6 +640,13 @@ serve(async (req) => {
                "categ_id", "product_tmpl_id", "uom_id"]],
         { limit: 40, order: "default_code, name" },
       )) as any[];
+
+      /* Trace volontairement bavarde : sans elle, une recherche qui ne ramène
+         rien est indiscernable d'une recherche qui n'a pas eu lieu. Les mots
+         retenus et le nombre de réponses suffisent à trancher. */
+      console.log(`[recherche] « ${q} » → mots ${JSON.stringify(motsDeRecherche(q))}`
+        + ` → ${res.length} article(s)`
+        + (res.length ? ` : ${res.slice(0, 3).map((x) => x.default_code || x.name).join(", ")}` : ""));
 
       const ql = q.toLowerCase();
       const rang = (x: any) => {
