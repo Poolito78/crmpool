@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
@@ -1278,9 +1278,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   </div>
                 )}
 
-                {/* ── Métadonnées ── */}
-                <div className="rounded-lg border border-border overflow-hidden">
-                  <div className="bg-muted/40 px-4 py-2 border-b border-border">
+                {/* ── Ce que l'analyse a lu, brut ──────────────────────────
+                    Replié par défaut. C'est l'état AVANT correction : les
+                    articles n'y sont pas rapprochés, les prix y valent 1 €
+                    faute de tarif, et le nom lu dans le message peut être
+                    celui d'une assistante. Le panneau de devis, plus bas,
+                    porte la version corrigée — c'est elle qui compte. Ce
+                    détail reste consultable pour vérifier ce qui a été
+                    compris, pas pour être lu à chaque fois. */}
+                <details className="rounded-lg border border-border overflow-hidden group">
+                  <summary className="bg-muted/40 px-4 py-2 cursor-pointer select-none list-none flex items-center gap-2">
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground transition-transform group-open:rotate-90" />
+                    <span className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
+                      Détail de l’analyse
+                    </span>
+                  </summary>
+                <div className="overflow-hidden">
+                  <div className="bg-muted/40 px-4 py-2 border-y border-border">
                     <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Informations extraites</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-px bg-border">
@@ -1304,7 +1318,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           ? [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client', societe]
                           : false;
                       })(),
-                      result.nomPartenaire && ['Nom lu dans le message', result.nomPartenaire],
+                      /* Le nom lu dans le message n'est plus affiché : dès lors
+                         que la société est identifiée et le contact désigné,
+                         il n'apprend rien et sème le doute — « Manue » est la
+                         personne à qui l'on écrit, pas celle avec qui l'on
+                         traite. Il reste dans le détail de l'analyse, replié,
+                         pour qui veut vérifier ce que le modèle a compris. */
                       /* Ce que l'image de signature a livré : sur cette
                          demande, tout le bloc de Thierry BARAILLER était dans
                          un PNG, invisible au texte. */
@@ -1339,9 +1358,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
                 {/* ── Lignes ── */}
                 {result.lignes.length > 0 && (
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div className="bg-muted/40 px-4 py-2 border-b border-border flex items-center justify-between">
-                      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Lignes ({result.lignes.length})</p>
+                  <div className="overflow-hidden">
+                    <div className="bg-muted/40 px-4 py-2 border-y border-border flex items-center justify-between">
+                      <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Lignes lues ({result.lignes.length})</p>
                     </div>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs">
@@ -1379,6 +1398,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                     </div>
                   </div>
                 )}
+                </details>
 
                 {/* ═══ ACTION : commande fournisseur existante ═══ */}
                 {matchedCF && (
