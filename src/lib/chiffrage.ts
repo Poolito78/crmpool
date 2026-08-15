@@ -62,6 +62,50 @@ const DOMAINES_GENERIQUES = new Set([
  * Renvoie une chaîne vide pour les messageries grand public, où le domaine
  * n'apprend rien, et pour nos propres domaines.
  */
+/**
+ * Boîtes partagées : elles désignent une entreprise, jamais une personne.
+ *
+ * Le bloc de signature de REFLEX porte « contact@reflex-signalisation.fr » sous
+ * le nom de Thierry BARAILLER. S'en servir pour identifier l'interlocuteur
+ * ramenait la personne qui tient cette boîte — l'assistante — plutôt que le
+ * signataire.
+ */
+const BOITES_PARTAGEES = new Set([
+  'contact', 'info', 'infos', 'accueil', 'commande', 'commandes', 'devis',
+  'achat', 'achats', 'compta', 'comptabilite', 'facture', 'factures', 'sav',
+  'service', 'agence', 'secretariat', 'admin', 'administration', 'direction',
+  'commercial', 'bureau', 'atelier', 'exploitation', 'travaux', 'no-reply',
+  'noreply', 'ne-pas-repondre',
+]);
+
+export function adresseGenerique(email?: string): boolean {
+  const e = String(email || '').trim().toLowerCase();
+  const local = e.split('@')[0] || '';
+  return !!local && BOITES_PARTAGEES.has(local.replace(/[._]/g, '-'));
+}
+
+/**
+ * Deux libellés désignent-ils la même personne ?
+ *
+ * Les annuaires écrivent tantôt « Thierry BARAILLER », tantôt « BARAILLER
+ * Thierry ». On compare les mots plutôt que la chaîne, et on exige que les
+ * deux noms partagent au moins un mot d'au moins quatre lettres — le prénom
+ * seul ne suffit pas à trancher entre deux Thierry.
+ */
+export function memePersonne(a?: string, b?: string): boolean {
+  const mots = (v?: string) =>
+    new Set(
+      String(v || '')
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .toLowerCase().split(/[^a-z]+/).filter((m) => m.length >= 4),
+    );
+  const ma = mots(a);
+  const mb = mots(b);
+  if (!ma.size || !mb.size) return false;
+  for (const m of ma) if (mb.has(m)) return true;
+  return false;
+}
+
 export function societeDepuisEmail(email?: string): string {
   const e = String(email || '').trim().toLowerCase();
   if (!e.includes('@') || DOMAINES_INTERNES.test(e)) return '';

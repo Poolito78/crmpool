@@ -10,7 +10,9 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
-import { coupeSignature, extraireIndices, societeDepuisEmail } from '@/lib/chiffrage';
+import {
+  coupeSignature, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
+} from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
@@ -753,19 +755,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
            traîne dans le corps du message. */
         const cts = (data?.contacts || []) as ContactOdoo[];
         setContactsOdoo(cts);
-        const mailExpediteur = (sigOdoo?.email || indices.emails[0] || '').toLowerCase();
-        const parMail = cts.find(c => c.email && c.email.toLowerCase() === mailExpediteur);
-        const parNom = sigOdoo?.nom
-          ? cts.find(c => c.nom.toLowerCase().includes(sigOdoo.nom!.toLowerCase())
-                       || sigOdoo.nom!.toLowerCase().includes(c.nom.toLowerCase()))
-          : undefined;
+        /* Le NOM du signataire prime sur l'adresse.
+           Le bloc de signature de REFLEX porte « Thierry BARAILLER » au-dessus
+           de « contact@reflex-signalisation.fr » — une boîte partagée. Chercher
+           d'abord par l'adresse ramenait la personne qui tient cette boîte,
+           l'assistante, et non le signataire. Les adresses génériques sont donc
+           écartées de l'identification : elles désignent l'entreprise. */
+        const parNom = cts.find(c => memePersonne(c.nom, sigOdoo?.nom));
+        const adresses = [sigOdoo?.email, ...indices.emails]
+          .filter((e): e is string => !!e && !adresseGenerique(e))
+          .map(e => e.toLowerCase());
+        const parMail = cts.find(c => c.email && adresses.includes(c.email.toLowerCase()));
         /* Ne jamais écraser un choix déjà fait. Cet effet se rejoue dès qu'une
            référence du devis change — donc au moindre article rectifié — et il
            remettait alors la présélection, effaçant le contact désigné à la
            main. C'est ce qui faisait « revenir en arrière ». */
         setContactRetenu(prev => {
           if (prev && cts.some(c => String(c.id) === prev)) return prev;
-          return String((parMail || parNom)?.id ?? '');
+          return String((parNom || parMail)?.id ?? '');
         });
         // Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
         if (!cli && data?.coordonnees?.nom) {
