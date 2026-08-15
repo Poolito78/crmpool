@@ -724,10 +724,16 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
        le support acier galva Ø60 en 3500 n'y figure pas alors qu'Odoo le
        facture 39,852 € — et à moitié non tarifée. C'est la voie qu'avait prise
        le Chiffrage local, et c'est elle qui trouve les prix. */
+    /* On interroge Odoo pour TOUTES les lignes, même celles qu'un article
+       MonCRM semble satisfaire.
+       Sur « Support Ø 60 mm long 3.50 m », le rapprochement local retenait
+       SA603500CUS — un tube alu anodisé — avec assurance : le diamètre et la
+       longueur concordent. La ligne n'était donc jamais envoyée à Odoo, et le
+       vrai support acier galva, SG60.3500.IS.BRUT, ne pouvait pas être
+       proposé. Un article local plausible n'est pas une raison de ne pas
+       demander à la source. */
     const aChercher = (result?.lignes || [])
-      .map((l, i) => ({ i, l }))
-      .filter(({ i }) => !produitDeLigne(i))
-      .map(({ i, l }) => ({
+      .map((l, i) => ({
         texte: [l.reference, l.description].filter(Boolean).join(' ').trim(),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
@@ -792,7 +798,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); } }
     })();
     return () => { annule = true; };
-    // `produitDeLigne` et `quantiteManuelle` volontairement hors dépendances :
+    // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature]);
@@ -1773,11 +1779,15 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                     const cle = [l.reference, l.description]
                                       .filter(Boolean).join(' ').trim();
                                     const props = trouvaillesOdoo[cle];
-                                    if (retenu || !props?.length) return null;
+                                    if (!props?.length) return null;
+                                    // Odoo est la source : ses propositions
+                                    // s'affichent même quand un article local a
+                                    // été retenu, pour qu'on puisse comparer.
                                     return (
                                       <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1">
                                         <p className="text-[10px] font-medium text-primary">
-                                          Trouvé dans Odoo — tarifé au bordereau du client
+                                          {retenu ? 'Aussi dans Odoo' : 'Trouvé dans Odoo'}
+                                          {' '}— tarifé au bordereau du client
                                         </p>
                                         {props.slice(0, 5).map(t => (
                                           <div key={t.reference} className="flex items-baseline gap-2 text-[11px]">
@@ -1793,8 +1803,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                           </div>
                                         ))}
                                         <p className="text-[10px] text-muted-foreground">
-                                          Ces articles ne sont pas dans MonCRM. Importez-les depuis
-                                          le catalogue Odoo pour les chiffrer directement.
+                                          {retenu
+                                            ? 'Le catalogue local a retenu un autre article : comparez avant de valider.'
+                                            : 'Ces articles ne sont pas dans MonCRM. Importez-les depuis le catalogue Odoo pour les chiffrer directement.'}
                                         </p>
                                       </div>
                                     );
