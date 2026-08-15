@@ -250,9 +250,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
             contient(result.nomPartenaire, c.societe))
         : undefined);
 
+    /* Une proposition ne doit jamais écraser une décision.
+     *
+     * Cet effet se rejoue quand la lecture de la signature arrive, plusieurs
+     * secondes après l'analyse du texte. Il remettait alors le client déduit,
+     * effaçant celui qu'on venait de désigner à la main. On ne renseigne donc
+     * que ce qui est encore vide. */
+    const garder = (actuel: string, propose?: string) => actuel || propose || '';
+
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
-      setCreerDevisClientId(foundClient?.id ?? '');
+      setCreerDevisClientId(prev => garder(prev, foundClient?.id));
       setCreerDevisNumero(result.numeroDocument || `DEV-${year}-${nextNum}`);
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
@@ -260,7 +268,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       setCreerDevisNotes(result.notes || '');
     } else {
       const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
-      setCreerCCClientId(foundClient?.id ?? '');
+      setCreerCCClientId(prev => garder(prev, foundClient?.id));
       setCreerCCNumero(result.numeroDocument || `CC-${year}-${nextNum}`);
       setCreerCCDate(result.dateDocument || today());
       setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
@@ -278,6 +286,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   ) => {
     if (!apiKey) { toast.error('Clé API Groq manquante (VITE_GROQ_API_KEY)'); return; }
     setLoading(true); setResult(null); setMatchedCF(null); setShowCreerCF(false); setShowCreerCC(false);
+    /* Une nouvelle analyse repart d'une page blanche. Nécessaire depuis que le
+       pré-remplissage ne réécrit plus ce qui est déjà renseigné : sans cela, le
+       client et le contact du document précédent resteraient en place. */
+    setCreerDevisClientId(''); setCreerCCClientId('');
+    setContactsOdoo([]); setContactRetenu('');
+    setChoixProduit({}); setQuantiteManuelle({}); setPrixManuel({});
+    setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({});
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -744,7 +759,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           ? cts.find(c => c.nom.toLowerCase().includes(sigOdoo.nom!.toLowerCase())
                        || sigOdoo.nom!.toLowerCase().includes(c.nom.toLowerCase()))
           : undefined;
-        setContactRetenu(String((parMail || parNom)?.id ?? ''));
+        /* Ne jamais écraser un choix déjà fait. Cet effet se rejoue dès qu'une
+           référence du devis change — donc au moindre article rectifié — et il
+           remettait alors la présélection, effaçant le contact désigné à la
+           main. C'est ce qui faisait « revenir en arrière ». */
+        setContactRetenu(prev => {
+          if (prev && cts.some(c => String(c.id) === prev)) return prev;
+          return String((parMail || parNom)?.id ?? '');
+        });
         // Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
         if (!cli && data?.coordonnees?.nom) {
           setClientOdoo({ ...data.coordonnees, societe: data.societe || data.coordonnees.nom });
