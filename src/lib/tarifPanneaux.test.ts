@@ -95,6 +95,29 @@ describe('panonceau associé', () => {
     expect(sousCercle?.dimension).toBe('350x150');
   });
 
+  it('donne 700x200 au M9z « RAPPEL » sous un A3a de 700', () => {
+    // Cas décrit sur le terrain : mention courte, une ligne, gamme P du
+    // triangle (700), classe 2.
+    const p = panonceauPour('M9z', 'A3a', { taille: 'P', classe: 2, mention: 'RAPPEL' });
+    expect(p?.dimension).toBe('700x200');
+    expect(p?.prix).toBeCloseTo(26.64);
+  });
+
+  it('grandit quand la mention ne tient plus sur une ligne', () => {
+    const p = panonceauPour('M9z', 'A3a', {
+      taille: 'P', classe: 2, mention: 'SAUF RIVERAINS ET LIVRAISONS',
+    });
+    expect(p?.dimension).toBe('700x350');
+  });
+
+  it('lit la classe sur le PANONCEAU, pas sur le panneau', () => {
+    // Le code lisait PANO_CLASS avec la référence du panneau, qui n'y figure
+    // jamais : tout retombait en classe 0 et un M4c à pictogramme sortait au
+    // format d'un M1 sur une ligne — 500x150 au lieu de 500x350.
+    expect(panonceauPour('M4c', 'B14-30', { taille: 'P' })?.dimension).toBe('500x350');
+    expect(panonceauPour('M1', 'B14-30', { taille: 'P' })?.dimension).toBe('500x150');
+  });
+
   it('tient compte de la classe du panonceau', () => {
     // M4c porte un pictogramme : deux lignes, donc plus haut que M1.
     expect(panonceauPour('M1', 'B14-30', { taille: 'P' })?.dimension).toBe('500x150');

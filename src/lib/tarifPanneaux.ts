@@ -76,10 +76,27 @@ export function groupePanonceau(codePanneau: string): 'A' | 'ABC' {
   return /^A\d/.test(String(codePanneau || '').toUpperCase()) ? 'A' : 'ABC';
 }
 
-/** Classe de panonceau : 0 étroit une ligne, 1 deux lignes ou picto, 2 carré. */
-export function classePanonceau(code: string): number {
+/** Au-delà, la mention ne tient plus sur une ligne et le panonceau grandit. */
+export const LETTRES_UNE_LIGNE = 12;
+
+/**
+ * Classe de panonceau : 0 étroit une ligne, 1 deux lignes ou picto, 2 carré.
+ *
+ * Les panonceaux à mention libre — M9z, M9z1, M4z — n'ont pas de classe fixe :
+ * elle dépend de ce qu'on y écrit. « RAPPEL » tient sur une ligne et donne un
+ * 700x200 sous un A3a de 700 ; une mention longue en réclame deux, et le
+ * panonceau passe au format haut.
+ */
+export function classePanonceau(code: string, mention?: string): number {
   const k = String(code || '').replace(/\s.*/, '');
-  return PANO_CLASS[k] ?? 0;
+  const fixe = PANO_CLASS[k];
+  if (fixe != null) return fixe;
+
+  if (/^M(9Z|4Z)/i.test(k)) {
+    const lettres = String(mention || '').replace(/[^A-Za-zÀ-ÿ0-9]/g, '').length;
+    if (lettres > LETTRES_UNE_LIGNE) return 1;
+  }
+  return 0;
 }
 
 function grille(niveau: NiveauTarif, gamme: Gamme, forme: string): GrilleForme | null {
@@ -141,15 +158,22 @@ export function prixPanneau(
 export function panonceauPour(
   codePanonceau: string,
   codePanneau: string,
-  { taille = 'P', classe = 2, niveau = 'R4', gamme = 'Magellan (dos ouvert)' }: {
+  { taille = 'P', classe = 2, niveau = 'R4', gamme = 'Magellan (dos ouvert)', mention }: {
     taille?: Taille; classe?: number; niveau?: NiveauTarif; gamme?: Gamme;
+    /** Texte porté par le panonceau — décide de sa hauteur sur les M9z. */
+    mention?: string;
   } = {},
 ): Chiffre | null {
   const g = grille(niveau, gamme, FORME_PANONCEAU);
   if (!g) return null;
 
+  /* Le GROUPE vient du panneau — un danger porte des panonceaux plus larges —
+     mais la CLASSE vient du panonceau lui-même : c'est lui qui a une ou deux
+     lignes. La classe était lue sur le code du panneau, qui ne figure jamais
+     dans PANO_CLASS : tout retombait donc en classe 0, et un M4c à
+     pictogramme sortait au format d'un M1 sur une ligne. */
   const groupe = groupePanonceau(codePanneau);
-  const dims = PANO_TABLE[groupe]?.[String(classePanonceau(codePanonceau))];
+  const dims = PANO_TABLE[groupe]?.[String(classePanonceau(codePanonceau, mention))];
   if (!dims) return null;
 
   const depart = Math.max(0, Math.min(4, TAILLES.indexOf(taille)));

@@ -1763,7 +1763,56 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                     const trouve = codeDansTexte(texte);
                                     if (!trouve) return null;
                                     const forme = formeDeCode(trouve.code);
-                                    if (!forme || forme === FORME_PANONCEAU) return null;
+                                    if (!forme) return null;
+
+                                    /* Une ligne QUI EST un panonceau se chiffre
+                                       d'après le panneau qui la précède : les
+                                       clients écrivent le panneau puis son
+                                       panonceau, et c'est la gamme du panneau
+                                       qui donne la largeur. Sans cette remontée,
+                                       ces lignes ne recevaient rien du tout. */
+                                    if (forme === FORME_PANONCEAU) {
+                                      let porteur: string | null = null;
+                                      for (let k = i - 1; k >= 0 && !porteur; k--) {
+                                        const lk = (result?.lignes ?? [])[k];
+                                        const ck = codeDansTexte(
+                                          [lk?.reference, lk?.description].filter(Boolean).join(' '));
+                                        const fk = ck && formeDeCode(ck.code);
+                                        if (fk && fk !== FORME_PANONCEAU) porteur = ck!.code;
+                                      }
+                                      if (!porteur) {
+                                        return (
+                                          <p className="text-[11px] text-warning">
+                                            {trouve.code} : aucun panneau au-dessus — sa taille
+                                            dépend de celui qu’il accompagne.
+                                          </p>
+                                        );
+                                      }
+                                      const p = panonceauPour(trouve.code, porteur, {
+                                        taille: gammePanneau, classe: classePanneau,
+                                        niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+                                        mention: l.description || '',
+                                      });
+                                      if (!p) return null;
+                                      const qte = quantiteDe(`d${i}`, l.quantite || 1);
+                                      return (
+                                        <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5 text-[11px]">
+                                          <p className="font-medium text-primary">
+                                            Panonceau {trouve.code} sous {porteur}
+                                          </p>
+                                          <div className="flex gap-2">
+                                            <span className="flex-1 truncate" title={p.explication}>
+                                              {p.dimension} · classe {classePanneau}
+                                            </span>
+                                            <span className="font-semibold">{formatMontant(p.prix)}</span>
+                                          </div>
+                                          <div className="flex gap-2 border-t border-primary/20 pt-0.5">
+                                            <span className="flex-1">× {qte}</span>
+                                            <span className="font-bold">{formatMontant(p.prix * qte)}</span>
+                                          </div>
+                                        </div>
+                                      );
+                                    }
 
                                     /* Le niveau vient du contrat cadre Odoo :
                                        « TARIF R4 » y est écrit noir sur blanc.
@@ -1784,7 +1833,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                     // Le panonceau que le client demande presque
                                     // toujours avec son panneau. M9z par défaut :
                                     // la mention en toutes lettres, la plus courante.
-                                    const pano = panonceauPour('M9z', trouve.code, opts);
+                                    /* Le panonceau proposé d'office n'a lieu
+                                       d'être que si le client n'en demande pas
+                                       un lui-même à la ligne suivante. */
+                                    const suivante = (result?.lignes ?? [])[i + 1];
+                                    const cSuiv = suivante && codeDansTexte(
+                                      [suivante.reference, suivante.description].filter(Boolean).join(' '));
+                                    const panonceauDemande = !!cSuiv
+                                      && formeDeCode(cSuiv.code) === FORME_PANONCEAU;
+                                    const pano = panonceauDemande
+                                      ? null
+                                      : panonceauPour('M9z', trouve.code, opts);
                                     const hauteurs = [hauteurDeDimension(pan.dimension)];
                                     if (pano) hauteurs.push(hauteurDeDimension(pano.dimension));
                                     const sup = supportPour(hauteurs);
