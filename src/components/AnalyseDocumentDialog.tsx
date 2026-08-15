@@ -5,7 +5,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight } from 'lucide-react';
+import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
@@ -105,6 +105,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Ce qu'Odoo propose pour les demandes qu'aucun article MonCRM ne satisfait,
      indexé par le texte cherché. */
   const [trouvaillesOdoo, setTrouvaillesOdoo] = useState<Record<string, TrouvailleOdoo[]>>({});
+  /* Article Odoo retenu pour une ligne, par indice de ligne.
+     Ces articles n'existent pas dans MonCRM — c'est précisément pourquoi on
+     est allé les chercher. Ils ne peuvent donc pas passer par `choixProduit`,
+     qui ne sait manipuler que des identifiants du catalogue local. La ligne
+     partira au devis comme ligne libre : référence et désignation dans le
+     libellé, prix du bordereau client. */
+  const [choixOdoo, setChoixOdoo] = useState<Record<number, TrouvailleOdoo>>({});
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
      Une demande transmise par une assistante ne désigne pas le contact du
      dossier : c'est un choix, pas une déduction. */
@@ -293,7 +300,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
        client et le contact du document précédent resteraient en place. */
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
-    setChoixProduit({}); setQuantiteManuelle({}); setPrixManuel({});
+    setChoixProduit({}); setChoixOdoo({}); setQuantiteManuelle({}); setPrixManuel({});
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({});
     try {
       let analysis: DocumentAnalysis;
@@ -874,8 +881,25 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
     if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
     const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
-      const p = produitDeLigne(i);
       const cle = `d${i}`;
+      /* Un article Odoo retenu l'emporte sur le rapprochement local : c'est un
+         choix explicite, et souvent la bonne marchandise là où le catalogue
+         local proposait un article approchant. Faute d'exister dans MonCRM, il
+         part en ligne libre — référence dans le libellé, prix du bordereau. */
+      const odoo = choixOdoo[i];
+      if (odoo) {
+        return {
+          id: generateId(),
+          produitId: undefined,
+          description: `${odoo.reference} — ${odoo.designation}`,
+          quantite: quantiteDe(cle, l.quantite),
+          unite: odoo.unite || 'u',
+          prixUnitaireHT: prixManuel[cle] ?? odoo.contrat ?? 0,
+          tva: l.tva ?? 20,
+          remise: 0,
+        };
+      }
+      const p = produitDeLigne(i);
       return {
         id: generateId(),
         produitId: p?.id,
@@ -1636,11 +1660,21 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                       </span>
                                     )}
                                   </div>
-                                  {retenu && (() => {
+                                  {/* La quantité et le prix restent modifiables
+                                      même quand l'article vient d'Odoo et non du
+                                      catalogue local : ce sont justement ces
+                                      lignes-là qu'on veut pouvoir ajuster. */}
+                                  {(retenu || choixOdoo[i]) && (() => {
                                     const cle = `d${i}`;
-                                    const d = prixDetail(retenu);
+                                    const odoo = choixOdoo[i];
+                                    const d = odoo
+                                      ? { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
+                                          catalogue: odoo.fiche, source: 'contrat' as const }
+                                      : prixDetail(retenu);
                                     const qte = quantiteDe(cle, l.quantite || 1);
-                                    const pu = prixDe(retenu, undefined, cle);
+                                    const pu = odoo
+                                      ? (prixManuel[cle] ?? odoo.contrat ?? 0)
+                                      : prixDe(retenu, undefined, cle);
                                     return (
                                       <>
                                         <div className="flex items-center gap-1.5 text-[11px]">
@@ -1789,23 +1823,42 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                                           {retenu ? 'Aussi dans Odoo' : 'Trouvé dans Odoo'}
                                           {' '}— tarifé au bordereau du client
                                         </p>
-                                        {props.slice(0, 5).map(t => (
-                                          <div key={t.reference} className="flex items-baseline gap-2 text-[11px]">
-                                            <span className="font-mono text-[10px]">{t.reference}</span>
-                                            <span className="truncate flex-1" title={t.designation}>
-                                              {t.designation}
-                                            </span>
-                                            <span className="font-semibold shrink-0">
-                                              {t.contrat != null
-                                                ? formatMontant(t.contrat)
-                                                : <span className="text-warning">hors barème</span>}
-                                            </span>
-                                          </div>
-                                        ))}
+                                        {props.slice(0, 5).map(t => {
+                                          const actif = choixOdoo[i]?.reference === t.reference;
+                                          return (
+                                            <button
+                                              key={t.reference}
+                                              type="button"
+                                              onClick={() => setChoixOdoo(prev => {
+                                                const n = { ...prev };
+                                                // Un second clic retire le choix.
+                                                if (n[i]?.reference === t.reference) delete n[i];
+                                                else n[i] = t;
+                                                return n;
+                                              })}
+                                              className={`flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left transition-colors ${
+                                                actif ? 'bg-primary/20 ring-1 ring-primary' : 'hover:bg-primary/10'}`}
+                                              title={actif ? 'Cliquez pour retirer ce choix' : 'Cliquez pour retenir cet article'}
+                                            >
+                                              <Check className={`w-3 h-3 shrink-0 ${actif ? 'opacity-100 text-primary' : 'opacity-0'}`} />
+                                              <span className="font-mono text-[10px]">{t.reference}</span>
+                                              <span className="truncate flex-1" title={t.designation}>
+                                                {t.designation}
+                                              </span>
+                                              <span className="font-semibold shrink-0">
+                                                {t.contrat != null
+                                                  ? formatMontant(t.contrat)
+                                                  : <span className="text-warning">hors barème</span>}
+                                              </span>
+                                            </button>
+                                          );
+                                        })}
                                         <p className="text-[10px] text-muted-foreground">
-                                          {retenu
-                                            ? 'Le catalogue local a retenu un autre article : comparez avant de valider.'
-                                            : 'Ces articles ne sont pas dans MonCRM. Importez-les depuis le catalogue Odoo pour les chiffrer directement.'}
+                                          {choixOdoo[i]
+                                            ? `Retenu : ${choixOdoo[i].reference} — la ligne partira au devis avec ce prix.`
+                                            : retenu
+                                              ? 'Le catalogue local a retenu un autre article : cliquez pour lui préférer celui-ci.'
+                                              : 'Cliquez pour retenir un article. Il n’est pas dans MonCRM : la ligne partira en libre.'}
                                         </p>
                                       </div>
                                     );
