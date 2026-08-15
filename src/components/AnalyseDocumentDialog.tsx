@@ -1284,12 +1284,20 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                          ce prénom, quand l'expéditeur était REFLEX
                          SIGNALISATION. Le nom deviné reste affiché à côté
                          quand il apporte autre chose. */
-                      (contratOdoo?.societe || result.nomPartenaire)
-                        && [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client',
-                            contratOdoo?.societe || result.nomPartenaire!],
-                      contratOdoo?.societe && result.nomPartenaire
-                        && result.nomPartenaire.toLowerCase() !== contratOdoo.societe.toLowerCase()
-                        && ['Nom lu dans le message', result.nomPartenaire],
+                      /* Une société identifiée porte l'étiquette « Client ».
+                         Un nom simplement lu dans le texte ne la porte jamais :
+                         « Manue » est la personne à qui le message est adressé,
+                         et l'afficher comme client donnait à croire qu'il avait
+                         été retrouvé. On ordonne : la société retenue dans
+                         MonCRM, sinon celle qu'Odoo a reconnue, sinon rien. */
+                      (() => {
+                        const cl = clients.find(c => c.id === (creerDevisClientId || creerCCClientId));
+                        const societe = cl?.societe || cl?.nom || contratOdoo?.societe;
+                        return societe
+                          ? [isFournisseurDoc(result.typeDocument) ? 'Fournisseur' : 'Client', societe]
+                          : false;
+                      })(),
+                      result.nomPartenaire && ['Nom lu dans le message', result.nomPartenaire],
                       /* Ce que l'image de signature a livré : sur cette
                          demande, tout le bloc de Thierry BARAILLER était dans
                          un PNG, invisible au texte. */

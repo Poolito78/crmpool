@@ -507,6 +507,11 @@ serve(async (req) => {
       ? partenaire.parent_id[0]
       : (partenaire.is_company ? partenaire.id : null);
     let contacts: unknown[] = [];
+    /* Enveloppé : cette lecture est un complément, elle ne doit pas pouvoir
+       emporter la tarification. Un champ absent d'une version d'Odoo, un droit
+       manquant, et toute la fonction tombait — le contrat cadre disparaissait
+       de MonCRM et l'affichage retombait sur le nom deviné dans le message. */
+    try {
     if (societeId) {
       contacts = ((await od.kw(
         "res.partner", "search_read",
@@ -524,6 +529,10 @@ serve(async (req) => {
         // des adresses, qu'on ne propose pas comme interlocuteur.
         estPersonne: !c.type || c.type === 'contact',
       })).filter((c: any) => c.estPersonne && c.nom);
+    }
+    } catch (e) {
+      console.warn("[contacts]", (e as Error).message);
+      contacts = [];
     }
 
     // La quantité compte : les listes comportent des paliers dégressifs.
@@ -596,6 +605,10 @@ serve(async (req) => {
      * articles sans rapport.
      */
     const trouvailles: Record<string, unknown> = {};
+    /* Même précaution : la recherche libre est un plus, la tarification est
+       l'essentiel. Une requête mal formée ici ne doit pas priver MonCRM du
+       contrat cadre qu'il vient d'obtenir. */
+    try {
     for (const r of aChercher) {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
@@ -648,6 +661,9 @@ serve(async (req) => {
           cout: x.standard_price || 0,
         };
       }));
+    }
+    } catch (e) {
+      console.warn("[recherche catalogue]", (e as Error).message);
     }
 
     return repondre({
