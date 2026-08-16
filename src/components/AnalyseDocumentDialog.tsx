@@ -858,7 +858,10 @@ const [contratOdoo, setContratOdoo] = useState<
           for (const [ref, v] of Object.entries((data.prix || {}) as Record<string, any>)) {
             if (v?.isomark != null) isomark[ref] = v.isomark;
           }
-          setContratOdoo({ contrat: data.contrat, societe: data.societe || data.partenaire || '', prix, isomark });
+          setContratOdoo({
+            contrat: data.contrat, societe: data.societe || data.partenaire || '', prix, isomark,
+            societeIncertaine: !!data.societeIncertaine,
+          });
         } else setContratOdoo(null);
       } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); } }
     })();
