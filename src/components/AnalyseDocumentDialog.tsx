@@ -159,10 +159,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [prixManuel, setPrixManuel] = useState<Record<string, number>>({});
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
-  const [contratOdoo, setContratOdoo] = useState<
+const [contratOdoo, setContratOdoo] = useState
     { contrat: string; societe: string; prix: Record<string, number>;
       /** Tarif catalogue ISOMARK, quand la fonction sait le lire. */
-      isomark?: Record<string, number> } | null
+      isomark?: Record<string, number>;
+      /** `societe` ci-dessus est en fait le nom d'un simple contact Odoo
+       *  (souvent une adresse de livraison mal rattachée) : à vérifier/corriger
+       *  dans Odoo plutôt qu'à prendre pour une vraie société cliente. */
+      societeIncertaine?: boolean } | null
   >(null);
   /* Client trouvé dans Odoo alors qu'il n'existe pas encore dans MonCRM.
      Le Chiffrage crée la fiche à la volée : ressaisir des coordonnées qu'Odoo
