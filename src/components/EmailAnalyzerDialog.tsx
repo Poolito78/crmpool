@@ -82,6 +82,9 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
   const [contrat, setContrat] = useState<string | null>(null);
   /** Société qui porte ce contrat : c'est elle qui a négocié, pas le contact. */
   const [societeContrat, setSocieteContrat] = useState<string | null>(null);
+  /** `societeContrat` ci-dessus est en fait le nom d'un simple contact Odoo
+   *  (souvent une adresse de livraison mal rattachée), pas d'une société. */
+  const [societeContratIncertaine, setSocieteContratIncertaine] = useState(false);
   const [lectureTarifs, setLectureTarifs] = useState(false);
 
   /* Catalogue de travail. Avec près de 9 000 références réparties entre
@@ -181,6 +184,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
 
       setContrat(data?.contrat || null);
       setSocieteContrat(data?.societe || data?.partenaire || null);
+      setSocieteContratIncertaine(!!data?.societeIncertaine);
       const px = data?.prix || {};
 
       return lignes.map(l => {
