@@ -3,9 +3,31 @@ import App from "./App.tsx";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 
-// Enregistre le service worker (mise à jour auto en arrière-plan).
-// Une nouvelle version s'applique au prochain chargement.
-registerSW({ immediate: true });
+/* Enregistre le service worker (mise à jour auto en arrière-plan).
+ *
+ * Sur un téléphone, l'application installée reste ouverte des heures : le
+ * navigateur ne va chercher une nouvelle version qu'au démarrage, si bien
+ * qu'un déploiement pouvait rester invisible toute la journée. D'où ces deux
+ * relances : au retour au premier plan — le geste le plus courant sur mobile —
+ * et toutes les cinq minutes. `registerType: "autoUpdate"` fait le reste :
+ * dès qu'une version est trouvée, elle prend la main et la page se recharge.
+ */
+registerSW({
+  immediate: true,
+  onRegisteredSW(_url, registration) {
+    if (!registration) return;
+    const verifier = () => { registration.update().catch(() => { /* hors ligne */ }); };
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') verifier();
+    });
+    setInterval(verifier, 5 * 60 * 1000);
+  },
+});
+
+// Repère de version, lisible dans Paramètres et dans la console : sans lui,
+// « ça ne marche pas sur mon téléphone » et « mon téléphone a une vieille
+// version » sont impossibles à distinguer.
+console.info('[MonCRM] version du', new Date(__BUILD__).toLocaleString('fr-FR'));
 
 // Filet de sécurité après un déploiement : si un chunk dynamique ne se charge pas
 // (hash changé / cache périmé), on recharge la page UNE fois pour récupérer les

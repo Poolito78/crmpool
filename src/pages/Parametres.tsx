@@ -141,6 +141,44 @@ export default function Parametres() {
 
   return (
     <div className="max-w-3xl mx-auto">
+      {/* Version installée, visible de tous — y compris depuis un téléphone.
+          Sans elle, « la fonction ne marche pas » et « cet appareil tourne
+          encore sur la version d'hier » sont indiscernables, et l'application
+          installée sur mobile peut garder une version en cache des heures. */}
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/20 px-4 py-2.5">
+        <p className="text-xs text-muted-foreground">
+          Version installée :{' '}
+          <strong className="text-foreground">
+            {new Date(__BUILD__).toLocaleString('fr-FR', {
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit',
+            })}
+          </strong>
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-xs"
+          onClick={async () => {
+            /* Purge complète puis rechargement : sur mobile le service worker
+               peut servir d'anciens fichiers longtemps après un déploiement. */
+            try {
+              if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister()));
+              }
+              if ('caches' in window) {
+                const cles = await caches.keys();
+                await Promise.all(cles.map(k => caches.delete(k)));
+              }
+            } catch { /* on recharge quand même */ }
+            window.location.reload();
+          }}
+        >
+          Forcer la mise à jour
+        </Button>
+      </div>
+
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto justify-start">
           {isAdmin && <TabsTrigger value="general">Général</TabsTrigger>}
