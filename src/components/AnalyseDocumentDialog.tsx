@@ -1614,7 +1614,16 @@ const [contratOdoo, setContratOdoo] = useState<
                         {contratOdoo && (
                           <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px]">
                             Contrat cadre <strong>{contratOdoo.contrat}</strong>
-                            {contratOdoo.societe && <> chez <strong>{contratOdoo.societe}</strong></>}
+                           {contratOdoo.societe && <> chez <strong>{contratOdoo.societe}</strong></>}
+                            {contratOdoo.societeIncertaine && (
+                              <span
+                                className="ml-1.5 inline-flex items-center gap-1 text-warning"
+                                title="Cette fiche Odoo n'a pas de société rattachée : « chez ... » affiche le nom d'un simple contact (souvent une adresse de livraison mal reliée à sa société). À vérifier/corriger dans Odoo."
+                              >
+                                <AlertTriangle className="w-3 h-3" />
+                                nom de contact, pas de société liée dans Odoo
+                              </span>
+                            )}
                           </div>
                         )}
 
