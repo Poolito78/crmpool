@@ -112,6 +112,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      partira au devis comme ligne libre : référence et désignation dans le
      libellé, prix du bordereau client. */
   const [choixOdoo, setChoixOdoo] = useState<Record<number, TrouvailleOdoo>>({});
+  /** Pourquoi Odoo n'a pas été interrogé, quand c'est le cas. */
+  const [odooMuet, setOdooMuet] = useState<'sans-client' | null>(null);
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
      Une demande transmise par une assistante ne désigne pas le contact du
      dossier : c'est un choix, pas une déduction. */
@@ -301,7 +303,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setQuantiteManuelle({}); setPrixManuel({});
-    setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({});
+    setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setOdooMuet(null);
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -735,9 +737,27 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
        peut en désigner plusieurs. On la lit donc dans le message analysé. */
     const indices = extraireIndices(analyseTexteRef.current || '');
     const sigOdoo = signature;
+    /* Raison sociale devinée du texte, faute d'adresse.
+     *
+     * Le glisser-déposer d'un .msg apporte les en-têtes et l'image de
+     * signature : l'adresse de l'expéditeur y est toujours. Un copier-coller,
+     * lui, ne donne souvent que le corps du message — Outlook ne met pas les
+     * en-têtes dans le presse-papiers, et la signature est une image qui ne se
+     * colle pas en texte. Sans adresse, aucun critère n'était formé, l'appel à
+     * Odoo n'avait pas lieu, et l'on perdait TOUT : contrat cadre, contacts,
+     * et jusqu'aux propositions d'articles, qui pourtant ne dépendent pas du
+     * client.
+     *
+     * `extraireIndices` sait repérer les raisons sociales dans le texte — les
+     * libellés suivis de SARL, SAS, SIGNALISATION, MARQUAGE… « REFLEX
+     * Signalisation » écrit dans une signature textuelle suffit. C'est moins
+     * sûr qu'une adresse, mais infiniment mieux que rien. */
+    const societeDuTexte = indices.noms.find(n => n.length >= 4 && !/@/.test(n));
+
     const critere = cli
       ? { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville }
-      : (sigOdoo?.email || indices.emails[0] || sigOdoo?.societe || result?.nomPartenaire)
+      : (sigOdoo?.email || indices.emails[0] || sigOdoo?.societe
+         || societeDuTexte || result?.nomPartenaire)
         ? {
             email: sigOdoo?.email || indices.emails[0],
             /* Le domaine avant le nom deviné : « thierry@reflex-signalisation.fr »
@@ -747,6 +767,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                pas — ou pire, un homonyme. */
             societe: sigOdoo?.societe
               || societeDepuisEmail(sigOdoo?.email || indices.emails[0])
+              || societeDuTexte
               || result?.nomPartenaire,
             nom: sigOdoo?.nom || result?.nomPartenaire,
             ville: sigOdoo?.ville || indices.villes[0] || emlContactRef.current?.ville,
@@ -774,6 +795,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       .filter(r => r.texte.length >= 2)
       .slice(0, 12);   // au-delà, l'appel s'éternise pour un gain nul
 
+    /* Sans critère, Odoo n'est pas interrogé du tout — et l'utilisateur n'en
+       savait rien. Un copier-coller sans adresse ni raison sociale donnait une
+       analyse muette, sans qu'on comprenne pourquoi le glisser-déposer du même
+       message marchait. On le dit maintenant, et désigner le client à la main
+       relance tout. */
+    setOdooMuet(!critere ? 'sans-client' : null);
     if (!critere || (!referencesDuDevis.length && !aChercher.length)) {
       setContratOdoo(null); setTrouvaillesOdoo({}); return;
     }
@@ -1581,6 +1608,24 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                           <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px]">
                             Contrat cadre <strong>{contratOdoo.contrat}</strong>
                             {contratOdoo.societe && <> chez <strong>{contratOdoo.societe}</strong></>}
+                          </div>
+                        )}
+
+                        {/* Odoo muet, et on dit pourquoi. Le cas typique est le
+                            copier-coller : Outlook ne met pas les en-têtes dans
+                            le presse-papiers, et la signature est une image qui
+                            ne se colle pas. */}
+                        {odooMuet === 'sans-client' && (
+                          <div className="rounded-lg border border-warning/40 bg-warning/5 px-3 py-2 text-[11px] space-y-0.5">
+                            <p className="font-medium text-warning">
+                              Odoo n’a pas été interrogé : aucun client identifié dans le texte.
+                            </p>
+                            <p className="text-muted-foreground">
+                              Ni adresse électronique, ni raison sociale. C’est fréquent sur un
+                              copier-coller — les en-têtes et la signature ne suivent pas.
+                              Choisissez le client ci-dessus : le contrat cadre, les contacts et
+                              les articles Odoo se chargeront aussitôt.
+                            </p>
                           </div>
                         )}
 
