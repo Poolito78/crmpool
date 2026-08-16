@@ -91,6 +91,10 @@ export default defineConfig(({ mode }) => ({
   // xlsx (SheetJS) référence process/Buffer de Node.js — les rendre disponibles dans le navigateur
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
+    // Horodatage de compilation. Affiché dans Paramètres : c'est ce qui permet
+    // de distinguer « la fonction ne marche pas » de « ce téléphone tourne
+    // encore sur une version d'hier ».
+    __BUILD__: JSON.stringify(new Date().toISOString()),
   },
   // BUGFIX: Vite 5 calcule isProduction via process.env.NODE_ENV (pas fiable sur Vercel).
   // On force jsxDev via le mode Vite (toujours 'production' pour vite build) pour éviter

@@ -29,3 +29,7 @@ dist-ssr
 *.sw?
 .vercel
 .vite-cache-v2
+
+# Fichiers temporaires laisses par Vitest lors du chargement de sa configuration
+vitest.config.ts.timestamp-*
+vitest.*.config.ts.timestamp-*
