@@ -277,6 +277,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
 
       setContrat(null);
       setSocieteContrat(null);
+      setSocieteContratIncertaine(false);
       // Les tarifs se lisent APRÈS l'identification du client et APRÈS les
       // accompagnements : la galette et l'enduit ajoutés par une règle doivent
       // être tarifés eux aussi.
