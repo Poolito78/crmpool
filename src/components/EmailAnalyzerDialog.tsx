@@ -306,8 +306,9 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
     if (!result) return;
     setResult({ ...result, clientId });
     // Changer de client change le contrat cadre, donc tous les prix.
-    setContrat(null);
+   setContrat(null);
     setSocieteContrat(null);
+    setSocieteContratIncertaine(false);
     const lignes = await lireTarifsClient(
       result.lignes.map(l => ({ ...l, prixOdoo: undefined, choixPrix: undefined })),
       clientId,
