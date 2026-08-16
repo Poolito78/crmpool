@@ -155,6 +155,19 @@ export default function Auth() {
           )}
         </CardContent>
       </Card>
+
+      {/* Version de la compilation, visible SANS être connecté.
+          Elle figurait déjà dans Paramètres, mais derrière l'authentification :
+          impossible de vérifier en navigation privée quelle version un
+          téléphone reçoit réellement, ce qui est justement le moment où on a
+          besoin de le savoir. */}
+      <p className="mt-4 text-[11px] text-muted-foreground">
+        Version du{' '}
+        {new Date(__BUILD__).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', year: 'numeric',
+          hour: '2-digit', minute: '2-digit',
+        })}
+      </p>
     </div>
   );
 }
