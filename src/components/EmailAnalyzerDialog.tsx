@@ -540,6 +540,15 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
                     {societeContrat && (
                       <> chez <strong className="text-foreground">{societeContrat}</strong></>
                     )}
+                    {societeContratIncertaine && (
+                      <span
+                        className="ml-1.5 inline-flex items-center gap-1 text-warning"
+                        title="Cette fiche Odoo n'a pas de société rattachée : « chez ... » affiche le nom d'un simple contact (souvent une adresse de livraison mal reliée à sa société). À vérifier/corriger dans Odoo."
+                      >
+                        <AlertTriangle className="w-3 h-3" />
+                        nom de contact, pas de société liée dans Odoo
+                      </span>
+                    )}
                     {' — '}
                     {result.lignes.filter(l => l.prixOdoo != null).length} ligne(s)
                     tarifée(s) sur {result.lignes.filter(l => l.produitId).length}.
