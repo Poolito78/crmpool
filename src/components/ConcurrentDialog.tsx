@@ -120,7 +120,7 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: 'llama-3.1-8b-instant', temperature: 0, max_tokens: 2048, messages }),
+        body: JSON.stringify({ model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 2048, messages }),
       });
       if (r.ok) {
         const data = await r.json();

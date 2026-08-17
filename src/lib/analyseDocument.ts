@@ -220,13 +220,14 @@ export async function analyserDocument(
     texte = tronquer(input.texte, 6000);
   }
 
-  // 1. Essayer Groq llama-3.1-8b-instant (500K TPD)
+  // 1. Essayer Groq openai/gpt-oss-20b (remplace llama-3.1-8b-instant, déprécié le
+  // 16/08/2026 — cf. https://console.groq.com/docs/deprecations)
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
+        model: 'openai/gpt-oss-20b',
         temperature: 0,
         max_tokens: 1024,
         messages: [
