@@ -99,6 +99,55 @@ Extraction des lignes d'une demande de devis :
 
 Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
 
+/**
+ * Isole le premier objet JSON complet d'une réponse d'IA.
+ *
+ * Une simple expression régulière « du premier { au dernier } » est gourmande :
+ * si le modèle ajoute le moindre mot après l'objet — ou en produit un second —
+ * elle ramène les deux d'un coup et JSON.parse échoue sur un message obscur
+ * (« Expected ',' or ']' after array element… »). On compte donc les accolades
+ * en ignorant celles qui se trouvent à l'intérieur d'une chaîne, et on s'arrête
+ * dès que l'objet est refermé.
+ */
+function extraireObjetJSON(texte: string): string {
+  const debut = texte.indexOf('{');
+  if (debut === -1) throw new Error('Réponse invalide : aucun JSON trouvé');
+
+  let profondeur = 0;
+  let dansChaine = false;
+  let echappe = false;
+
+  for (let i = debut; i < texte.length; i++) {
+    const c = texte[i];
+
+    if (dansChaine) {
+      if (echappe) echappe = false;
+      else if (c === '\\') echappe = true;
+      else if (c === '"') dansChaine = false;
+      continue;
+    }
+
+    if (c === '"') dansChaine = true;
+    else if (c === '{') profondeur++;
+    else if (c === '}') {
+      profondeur--;
+      if (profondeur === 0) return texte.slice(debut, i + 1);
+    }
+  }
+
+  throw new Error(
+    "La réponse de l'IA a été coupée avant la fin. Réessayez, ou raccourcissez le document."
+  );
+}
+
+/** Analyse la réponse d'un fournisseur et complète les champs obligatoires. */
+function lireAnalyse(texte: string): DocumentAnalysis {
+  const parsed = JSON.parse(extraireObjetJSON(texte)) as DocumentAnalysis;
+  if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
+  if (!parsed.typeDocument) parsed.typeDocument = 'autre';
+  return parsed;
+}
+
 async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
   const pages: string[] = [];
@@ -146,12 +195,7 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
       if (!response.ok) { console.warn(`OpenRouter ${model} erreur ${response.status}`); continue; }
       const data = await response.json();
       const text: string = data.choices?.[0]?.message?.content ?? '';
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) { console.warn(`OpenRouter ${model} : pas de JSON`); continue; }
-      const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-      if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-      if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-      return parsed;
+      return lireAnalyse(text);
     } catch { console.warn(`OpenRouter ${model} exception`); }
   }
   throw Object.assign(new Error('quota'), { quota: true });
@@ -191,12 +235,7 @@ async function analyserViaGemini(texte: string, geminiKey: string): Promise<Docu
 
     const data = await response.json();
     const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Réponse invalide (Gemini) : aucun JSON trouvé');
-    const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-    if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-    if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-    return parsed;
+    return lireAnalyse(text);
   }
 
   throw lastError ?? Object.assign(new Error('quota'), { quota: true });
@@ -221,7 +260,11 @@ export async function analyserDocument(
   }
 
   // 1. Essayer Groq openai/gpt-oss-20b (remplace llama-3.1-8b-instant, déprécié le
-  // 16/08/2026 — cf. https://console.groq.com/docs/deprecations)
+  // 16/08/2026 — cf. https://console.groq.com/docs/deprecations).
+  // ATTENTION : gpt-oss-20b raisonne avant de répondre, et ces jetons de
+  // réflexion sont pris sur max_tokens. Avec l'ancien budget de 1024 le JSON
+  // était coupé en plein milieu (« Expected ',' or ']' … »), d'où le budget
+  // large ci-dessous. response_format garantit en plus un JSON bien formé.
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -229,7 +272,8 @@ export async function analyserDocument(
       body: JSON.stringify({
         model: 'openai/gpt-oss-20b',
         temperature: 0,
-        max_tokens: 1024,
+        max_tokens: 8192,
+        response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: PROMPT },
           { role: 'user', content: `Document :\n${texte}` },
@@ -246,12 +290,7 @@ export async function analyserDocument(
 
     const data = await response.json();
     const text: string = data.choices?.[0]?.message?.content ?? '';
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('Réponse invalide : aucun JSON trouvé');
-    const parsed = JSON.parse(jsonMatch[0]) as DocumentAnalysis;
-    if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
-    if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-    return parsed;
+    return lireAnalyse(text);
   } catch (err: any) {
     if (!err.quota) throw err;
     console.warn('Groq quota dépassé — basculement sur Gemini');

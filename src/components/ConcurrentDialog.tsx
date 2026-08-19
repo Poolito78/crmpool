@@ -89,11 +89,47 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
   const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 
+  /**
+   * Isole le premier tableau JSON complet de la réponse.
+   *
+   * Une expression régulière « du premier [ au dernier ] » est gourmande : le
+   * moindre mot ajouté après le tableau la fait déborder et JSON.parse échoue.
+   * On compte donc les crochets en ignorant ceux situés dans une chaîne.
+   */
+  function extraireTableauJSON(texte: string): string | null {
+    const debut = texte.indexOf('[');
+    if (debut === -1) return null;
+
+    let profondeur = 0;
+    let dansChaine = false;
+    let echappe = false;
+
+    for (let i = debut; i < texte.length; i++) {
+      const c = texte[i];
+
+      if (dansChaine) {
+        if (echappe) echappe = false;
+        else if (c === '\\') echappe = true;
+        else if (c === '"') dansChaine = false;
+        continue;
+      }
+
+      if (c === '"') dansChaine = true;
+      else if (c === '[') profondeur++;
+      else if (c === ']') {
+        profondeur--;
+        if (profondeur === 0) return texte.slice(debut, i + 1);
+      }
+    }
+
+    return null; // tableau non refermé : réponse coupée
+  }
+
   function parseResponse(text: string): ExtractedProduit[] | null {
-    const match = text.match(/\[[\s\S]*\]/);
-    if (!match) return null;
+    const extrait = extraireTableauJSON(text);
+    if (!extrait) return null;
     try {
-      const arr = JSON.parse(match[0]);
+      const arr = JSON.parse(extrait);
       if (!Array.isArray(arr)) return null;
       return arr
         .filter((p: any) => p.nom)
@@ -120,7 +156,11 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-        body: JSON.stringify({ model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 2048, messages }),
+        // Budget large : gpt-oss-20b raisonne avant de répondre et ces jetons
+        // sont pris sur max_tokens, ce qui tronquait la liste JSON.
+        // Pas de response_format ici : la réponse attendue est un TABLEAU,
+        // que le mode json_object de Groq n'autorise pas.
+        body: JSON.stringify({ model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 8192, messages }),
       });
       if (r.ok) {
         const data = await r.json();

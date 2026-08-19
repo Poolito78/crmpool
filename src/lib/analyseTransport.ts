@@ -46,10 +46,45 @@ async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
   return pages.join('\n').slice(0, 6000);
 }
 
+/**
+ * Isole le premier objet JSON complet d'une réponse d'IA.
+ *
+ * Une simple expression régulière « du premier { au dernier } » est gourmande :
+ * si le modèle ajoute le moindre mot après l'objet — ou en produit un second —
+ * elle ramène les deux d'un coup et JSON.parse échoue. On compte donc les
+ * accolades en ignorant celles situées dans une chaîne.
+ */
+function extraireObjetJSON(texte: string): string {
+  const debut = texte.indexOf('{');
+  if (debut === -1) throw new Error('Pas de JSON dans la réponse');
+
+  let profondeur = 0;
+  let dansChaine = false;
+  let echappe = false;
+
+  for (let i = debut; i < texte.length; i++) {
+    const c = texte[i];
+
+    if (dansChaine) {
+      if (echappe) echappe = false;
+      else if (c === '\\') echappe = true;
+      else if (c === '"') dansChaine = false;
+      continue;
+    }
+
+    if (c === '"') dansChaine = true;
+    else if (c === '{') profondeur++;
+    else if (c === '}') {
+      profondeur--;
+      if (profondeur === 0) return texte.slice(debut, i + 1);
+    }
+  }
+
+  throw new Error("La réponse de l'IA a été coupée avant la fin.");
+}
+
 async function parseJSON(text: string): Promise<TransportExtrait> {
-  const m = text.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error('Pas de JSON dans la réponse');
-  return JSON.parse(m[0]) as TransportExtrait;
+  return JSON.parse(extraireObjetJSON(text)) as TransportExtrait;
 }
 
 async function callGroq(texte: string, apiKey: string): Promise<TransportExtrait> {
@@ -59,7 +94,10 @@ async function callGroq(texte: string, apiKey: string): Promise<TransportExtrait
     body: JSON.stringify({
       model: 'openai/gpt-oss-20b',
       temperature: 0,
-      max_tokens: 512,
+      // gpt-oss-20b raisonne avant de répondre et ces jetons sont pris sur
+      // max_tokens : un budget serré tronque le JSON en plein milieu.
+      max_tokens: 4096,
+      response_format: { type: 'json_object' },
       messages: [
         { role: 'system', content: PROMPT },
         { role: 'user', content: `Document :\n${texte}` },
