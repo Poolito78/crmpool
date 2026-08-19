@@ -95,6 +95,17 @@ describe('panonceau associé', () => {
     expect(sousCercle?.dimension).toBe('350x150');
   });
 
+  it('cote au millième, comme Odoo, et non au centime', () => {
+    /* La table stockait 26,64 pour ce panonceau alors que le devis Odoo
+       AF035681 le facture 26,644 — soit le tarif public 40,99 moins 35 %.
+       Sur les quatre unités du devis, l'écart faisait deux centimes. */
+    const p = panonceauPour('M9z', 'A3a', { taille: 'P', classe: 2, mention: 'RAPPEL' });
+    expect(p?.prix).toBeCloseTo(26.644, 3);
+    /* Les panneaux du même devis, au millième eux aussi. */
+    expect(prixPanneau('B14-30', { taille: 'P', classe: 2 })?.prix).toBeCloseTo(46.618, 3);
+    expect(prixPanneau('A3a', { taille: 'P', classe: 2 })?.prix).toBeCloseTo(36.010, 3);
+  });
+
   it('donne 700x200 au M9z « RAPPEL » sous un A3a de 700', () => {
     // Cas décrit sur le terrain : mention courte, une ligne, gamme P du
     // triangle (700), classe 2.

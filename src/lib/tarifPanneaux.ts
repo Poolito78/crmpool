@@ -99,8 +99,39 @@ export function classePanonceau(code: string, mention?: string): number {
   return 0;
 }
 
+/**
+ * Remise appliquée au tarif public pour chaque niveau négocié.
+ *
+ * Les niveaux R1 à R4 ne sont pas des grilles indépendantes : ce sont le
+ * tarif public R0 diminué d'un pourcentage fixe, ce qu'annonce d'ailleurs le
+ * libellé des contrats — « TARIF R4 — 35 % REMISE ». Vérifié sur 197 des 198
+ * valeurs de la table.
+ */
+const REMISE_NIVEAU: Record<string, number> = {
+  R1: 0.80, R2: 0.75, R3: 0.70, R4: 0.65,
+};
+
 function grille(niveau: NiveauTarif, gamme: Gamme, forme: string): GrilleForme | null {
-  return TARIFS[niveau]?.[gamme]?.[forme] ?? null;
+  const stockee = TARIFS[niveau]?.[gamme]?.[forme] ?? null;
+  const taux = REMISE_NIVEAU[niveau];
+  const publique = taux ? (TARIFS['R0']?.[gamme]?.[forme] ?? null) : null;
+  if (!stockee || !publique) return stockee;
+
+  /* La table stocke les niveaux négociés ARRONDIS AU CENTIME : le panonceau
+     700x200 classe 2 y vaut 26,64 alors qu'Odoo facture 26,644 — soit
+     40,99 × 0,65. L'écart ne se voit pas sur une unité mais atteint deux
+     centimes sur quatre, et grandit avec les quantités : de quoi faire
+     diverger un devis de sa contrepartie Odoo. On repart donc du tarif
+     public en gardant le millième.
+
+     Les classes absentes de R0 — le « Grand format » en R2 et R3 — gardent
+     leur valeur stockée : sans tarif public, il n'y a rien d'où dériver. */
+  const prix: Record<string, number[]> = { ...stockee.prix };
+  for (const [classe, valeurs] of Object.entries(publique.prix)) {
+    prix[classe] = valeurs.map((v) =>
+      v == null ? v : Math.round(v * taux * 1000) / 1000);
+  }
+  return { ...stockee, prix };
 }
 
 export interface Chiffre {
