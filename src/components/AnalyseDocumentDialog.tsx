@@ -662,11 +662,54 @@ const [contratOdoo, setContratOdoo] = useState<
    * Une seule fonction pour l'envoi et pour la lecture : deux calculs séparés
    * finiraient par diverger, et les résultats deviendraient introuvables.
    */
-  const texteRechercheOdoo = useCallback((l: { reference?: string; description?: string }) => {
+  /**
+   * Panneau sous lequel se pose le panonceau de la ligne i.
+   *
+   * Un panonceau n'a pas de taille propre : elle se déduit de la gamme du
+   * panneau qu'il accompagne. Les clients écrivent le panneau puis son
+   * panonceau, on remonte donc les lignes précédentes jusqu'au premier
+   * panneau véritable.
+   */
+  const porteurDeLigne = useCallback((i: number): string | null => {
+    for (let k = i - 1; k >= 0; k--) {
+      const lk = (result?.lignes ?? [])[k];
+      const ck = codeDansTexte(
+        [lk?.reference, lk?.description].filter(Boolean).join(' '));
+      const fk = ck && formeDeCode(ck.code);
+      if (fk && fk !== FORME_PANONCEAU) return ck!.code;
+    }
+    return null;
+  }, [result]);
+
+  const texteRechercheOdoo = useCallback((
+    l: { reference?: string; description?: string },
+    i: number,
+  ) => {
     const brut = [l.reference, l.description].filter(Boolean).join(' ').trim();
     const trouve = codeDansTexte(brut);
     const forme = trouve && formeDeCode(trouve.code);
-    if (!trouve || !forme || forme === FORME_PANONCEAU) return brut;
+    if (!trouve || !forme) return brut;
+
+    /* Un panonceau se dimensionne d'après le panneau qu'il accompagne : sous
+       un A de gamme P, un M9z d'une ligne fait 700x200. Sans cette dimension,
+       « M9z rappel » ramenait les M9Z de toutes les tailles — 350x150,
+       1200x400… — et jamais celui du devis. La règle est la même que celle
+       qui affiche le panonceau à l'écran : on la réutilise plutôt que de la
+       réinventer, pour que l'article proposé soit celui qui est chiffré. */
+    if (forme === FORME_PANONCEAU) {
+      const porteur = porteurDeLigne(i);
+      if (!porteur) return brut;
+      const p = panonceauPour(trouve.code, porteur, {
+        taille: gammePanneau, classe: classePanneau,
+        niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+        mention: l.description || '',
+      });
+      /* « 700x200 » → « 700 200 » : la recherche Odoo travaille par mots, et
+         la référence les porte comme deux segments distincts. */
+      const dims = p?.dimension.match(/\d+/g);
+      if (!dims?.length) return brut;
+      return `${brut} ${dims.join(' ')} C${classePanneau}`;
+    }
 
     const pan = prixPanneau(trouve.code, {
       taille: gammePanneau, classe: classePanneau,
@@ -674,7 +717,7 @@ const [contratOdoo, setContratOdoo] = useState<
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
     return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
-  }, [gammePanneau, classePanneau, contratOdoo]);
+  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
@@ -793,7 +836,7 @@ const [contratOdoo, setContratOdoo] = useState<
        demander à la source. */
     const aChercher = (result?.lignes || [])
       .map((l, i) => ({
-        texte: texteRechercheOdoo(l),
+        texte: texteRechercheOdoo(l, i),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
@@ -1833,14 +1876,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                        qui donne la largeur. Sans cette remontée,
                                        ces lignes ne recevaient rien du tout. */
                                     if (forme === FORME_PANONCEAU) {
-                                      let porteur: string | null = null;
-                                      for (let k = i - 1; k >= 0 && !porteur; k--) {
-                                        const lk = (result?.lignes ?? [])[k];
-                                        const ck = codeDansTexte(
-                                          [lk?.reference, lk?.description].filter(Boolean).join(' '));
-                                        const fk = ck && formeDeCode(ck.code);
-                                        if (fk && fk !== FORME_PANONCEAU) porteur = ck!.code;
-                                      }
+                                      const porteur = porteurDeLigne(i);
                                       if (!porteur) {
                                         return (
                                           <p className="text-[11px] text-warning">
@@ -1957,7 +1993,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       locale, et surtout leurs vrais prix : le
                                       bordereau du client. */}
                                   {(() => {
-                                    const props = trouvaillesOdoo[texteRechercheOdoo(l)];
+                                    const props = trouvaillesOdoo[texteRechercheOdoo(l, i)];
                                     if (!props?.length) return null;
                                     // Odoo est la source : ses propositions
                                     // s'affichent même quand un article local a
