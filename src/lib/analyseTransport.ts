@@ -95,7 +95,9 @@ async function callGroq(texte: string, apiKey: string): Promise<TransportExtrait
       model: 'openai/gpt-oss-20b',
       temperature: 0,
       // gpt-oss-20b raisonne avant de répondre et ces jetons sont pris sur
-      // max_tokens : un budget serré tronque le JSON en plein milieu.
+      // max_tokens : un budget serré tronque le JSON en plein milieu. Mais
+      // Groq compte aussi max_tokens dans sa limite de 8 000 jetons/minute
+      // (offre gratuite) : trop haut, la requête est refusée en 413.
       max_tokens: 4096,
       response_format: { type: 'json_object' },
       messages: [

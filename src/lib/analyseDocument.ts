@@ -263,8 +263,13 @@ export async function analyserDocument(
   // 16/08/2026 — cf. https://console.groq.com/docs/deprecations).
   // ATTENTION : gpt-oss-20b raisonne avant de répondre, et ces jetons de
   // réflexion sont pris sur max_tokens. Avec l'ancien budget de 1024 le JSON
-  // était coupé en plein milieu (« Expected ',' or ']' … »), d'où le budget
-  // large ci-dessous. response_format garantit en plus un JSON bien formé.
+  // était coupé en plein milieu (« Expected ',' or ']' … »).
+  // Mais max_tokens est AUSSI compté par Groq dans sa limite de 8 000 jetons
+  // par minute (offre gratuite) : réservation = texte envoyé + max_tokens.
+  // 8192 faisait donc échouer la requête en 413 avant même d'être traitée.
+  // 4096 laisse de la marge des deux côtés (~1 000 à 2 000 jetons de texte
+  // envoyé + 4 096 réservés restent bien sous les 8 000).
+  // response_format garantit en plus un JSON bien formé.
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -272,7 +277,7 @@ export async function analyserDocument(
       body: JSON.stringify({
         model: 'openai/gpt-oss-20b',
         temperature: 0,
-        max_tokens: 8192,
+        max_tokens: 4096,
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: PROMPT },

@@ -156,11 +156,13 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
       const r = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${groqKey}` },
-        // Budget large : gpt-oss-20b raisonne avant de répondre et ces jetons
-        // sont pris sur max_tokens, ce qui tronquait la liste JSON.
+        // gpt-oss-20b raisonne avant de répondre et ces jetons sont pris sur
+        // max_tokens, ce qui tronquait la liste JSON. Mais Groq compte aussi
+        // max_tokens dans sa limite de 8 000 jetons/minute (offre gratuite) :
+        // trop haut, la requête est refusée en 413. 4096 tient les deux.
         // Pas de response_format ici : la réponse attendue est un TABLEAU,
         // que le mode json_object de Groq n'autorise pas.
-        body: JSON.stringify({ model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 8192, messages }),
+        body: JSON.stringify({ model: 'openai/gpt-oss-20b', temperature: 0, max_tokens: 4096, messages }),
       });
       if (r.ok) {
         const data = await r.json();
