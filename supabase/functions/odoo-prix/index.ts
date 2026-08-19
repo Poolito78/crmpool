@@ -275,20 +275,48 @@ class Tarificateur {
     a: Article,
     qte: number,
     profondeur = 0,
+    etiquette = "",
   ): Promise<number | null> {
     if (!pricelist_id || profondeur > 5) return null;
 
     const items = await this.reglesDe(pricelist_id);
     const candidats: Regle[] = [];
     for (const r of items) if (await this.applicable(r, a, qte)) candidats.push(r);
-    if (!candidats.length) return a.lst_price || 0;
+    /* Aucune règle ne couvre cet article dans CETTE liste : son prix de
+       fiche ne veut rien dire (cf. l'en-tête du fichier — 1 € sur la
+       quasi-totalité du catalogue, parfois 0,30 € ailleurs), et le
+       renvoyer comme s'il s'agissait du tarif contractuel affichait un
+       prix trompeur (le B14#130km/h à 0,30 € au lieu de « hors barème »).
+       On ne l'invente pas : null, comme partout ailleurs dans ce fichier —
+       le front sait déjà afficher « hors barème » dans ce cas. */
+    if (!candidats.length) {
+      if (profondeur === 0) {
+        console.log(`[tarif] ${etiquette || a.name} (#${a.id}) → aucune règle dans la `
+          + `liste #${pricelist_id} : hors barème`);
+      }
+      return null;
+    }
 
     candidats.sort((x, y) =>
       x.applied_on === y.applied_on
         ? (y.min_quantity || 0) - (x.min_quantity || 0)
         : x.applied_on < y.applied_on ? -1 : 1
     );
-    const r = candidats[0];
+    const r = candidats[0] as Regle & { id?: number };
+
+    /* Trace de la règle retenue : à niveau 0 seulement (pas dans la
+       récursion « base=pricelist »), pour savoir SI le prix vient d'une
+       règle propre à cet article/sa catégorie, ou d'une règle générique
+       (« 3_global ») qui peut donner un montant très éloigné du tarif
+       réellement négocié pour cette référence précise — un article
+       nouvellement trouvé chez Odoo (jamais vu dans MonCRM) n'a pas
+       forcément de règle dédiée dans la liste du client. */
+    if (profondeur === 0) {
+      console.log(`[tarif] ${etiquette || a.name} (#${a.id}) categ=${a.categ_id} → `
+        + `règle #${r.id ?? "?"} applied_on=${r.applied_on} compute_price=${r.compute_price} `
+        + `base=${r.base ?? "fiche"} discount=${r.price_discount ?? 0} `
+        + `fixed=${r.fixed_price ?? ""} categ_regle=${JSON.stringify(r.categ_id ?? null)}`);
+    }
 
     if (r.compute_price === "fixed") return r.fixed_price || 0;
 
@@ -296,7 +324,7 @@ class Tarificateur {
     if (r.base === "standard_price") {
       base = a.standard_price || 0;
     } else if (r.base === "pricelist" && r.base_pricelist_id) {
-      const v = await this.prix(r.base_pricelist_id[0], a, qte, profondeur + 1);
+      const v = await this.prix(r.base_pricelist_id[0], a, qte, profondeur + 1, etiquette);
       base = v === null ? (a.lst_price || 0) : v;
     } else {
       base = a.lst_price || 0;
@@ -320,7 +348,288 @@ class Tarificateur {
   }
 }
 
+/**
+ * Tarification par CONTRAT-CADRE.
+ *
+ * Chez ce client, le prix négocié ne vient pas de la liste de prix Odoo
+ * (`property_product_pricelist`, exploitée par le Tarificateur ci-dessus)
+ * mais d'un objet Studio distinct, le « contrat-cadre » : une grille de
+ * plusieurs milliers de lignes accrochée à la fiche société. C'est elle qui
+ * fait foi — la liste de prix, appliquant une règle de catégorie à ~70 %,
+ * donnait des montants sans rapport avec les devis réellement émis.
+ *
+ * La grille ne cote pas les références une par une, elle raisonne par
+ * GABARIT :
+ *
+ *     article   A3A.700.C2.BTR.IS.BRUT
+ *     gabarit   A*  .700.C2        .BRUT    →  36,010 €
+ *
+ * Deux écarts avec le code article, tous deux vérifiés sur le devis Odoo
+ * AF035681 (le seul dont on sait les prix justes) :
+ *
+ *  1. L'ÉTOILE remplace le suffixe de famille. Ce n'est pas un joker SQL,
+ *     c'est un caractère stocké tel quel dans le champ : « A* » couvre A3A,
+ *     A14, A2B… Le devis le prouve — A3A.700, A14.700 et A2B.700 y sont
+ *     tous à 36,010 €, et B14#30km/h.650, B15.650, B21A2.650 tous à
+ *     46,618 €, au millième près. On ignore en revanche combien de
+ *     caractères l'étoile absorbe selon les familles (« M9Z* » ? « M* » ?),
+ *     d'où l'essai de toutes les longueurs de préfixe, du plus précis au
+ *     plus général : une famille qui aurait sa propre ligne l'emporte sur
+ *     le gabarit générique.
+ *  2. Les segments techniques BTR et IS ne figurent pas dans la grille.
+ *
+ * `x_studio_prix_unit` est le prix NET, remise déjà déduite : il n'y a rien
+ * à recalculer (`x_studio_remise_1` vaut 0 sur ces lignes, et 36,010 est
+ * bien le montant facturé, pas un tarif de base).
+ */
+class ContratCadre {
+  private od: Odoo;
+  private ids: number[] = [];
+  private modeleLignes = "";
+  /** Code article → prix net contractuel, ou null si l'article n'est pas couvert. */
+  private cache = new Map<string, number | null>();
+
+  constructor(od: Odoo) {
+    this.od = od;
+  }
+
+  /** Un contrat-cadre exploitable a-t-il été trouvé ? */
+  get actif(): boolean {
+    return this.ids.length > 0 && this.modeleLignes !== "";
+  }
+
+  /**
+   * Repère les contrats-cadres portés par la fiche client.
+   *
+   * Les noms techniques des champs Studio (`x_studio_many2many_field_G7Vp4`…)
+   * sont illisibles et peuvent changer si quelqu'un refait le champ dans
+   * Odoo Studio : on les retrouve par leur RELATION vers `x_contrat_cadre`
+   * plutôt qu'en les codant en dur.
+   *
+   * Ne lève jamais : sans contrat-cadre, la tarification retombe sur la
+   * liste de prix comme avant.
+   */
+  async charger(...partenaires: (number | null)[]): Promise<void> {
+    try {
+      const defsPartenaire = (await this.od.kw(
+        "res.partner", "fields_get", [[]], { attributes: ["type", "relation"] },
+      )) as Record<string, any>;
+      /* Plusieurs champs peuvent pointer vers x_contrat_cadre (Odoo Studio en
+         laisse volontiers traîner d'anciens) : n'en retenir qu'UN au hasard
+         de l'ordre alphabétique revient à lire le mauvais, vide, et à
+         conclure que le client n'a pas de contrat. On les lit donc tous et
+         on réunit ce qu'ils contiennent. */
+      const champs = Object.entries(defsPartenaire)
+        .filter(([, v]) => v?.relation === "x_contrat_cadre")
+        .map(([k]) => k);
+      if (!champs.length) {
+        console.warn("[contrat-cadre] aucun champ de res.partner ne pointe vers "
+          + "x_contrat_cadre : tarification par liste de prix conservée");
+        return;
+      }
+
+      const cibles = [...new Set(partenaires.filter((p): p is number => !!p))];
+      if (!cibles.length) return;
+      const lus = (await this.od.kw(
+        "res.partner", "read", [cibles, champs],
+      )) as any[];
+      const ids = new Set<number>();
+      for (const l of lus) {
+        for (const c of champs) {
+          const v = l[c];
+          if (Array.isArray(v)) {
+            for (const i of v) if (typeof i === "number") ids.add(i);
+          } else if (typeof v === "number") ids.add(v);
+        }
+      }
+      if (!ids.size) {
+        console.warn(`[contrat-cadre] champs [${champs.join(", ")}] vides sur les `
+          + `fiches #${cibles.join(",")} : aucun contrat-cadre rattaché`);
+        return;
+      }
+      this.ids = [...ids];
+
+      const defsCadre = (await this.od.kw(
+        "x_contrat_cadre", "fields_get", [[]], { attributes: ["type", "relation"] },
+      )) as Record<string, any>;
+      const rel = Object.entries(defsCadre)
+        .find(([k, v]) => v?.type === "one2many" && /line/i.test(k));
+      this.modeleLignes = (rel?.[1]?.relation as string) || "";
+      if (!this.modeleLignes) {
+        console.warn("[contrat-cadre] contrat(s) #" + this.ids.join(",")
+          + " trouvé(s) mais aucun modèle de lignes : "
+          + `one2many disponibles = ${JSON.stringify(Object.entries(defsCadre)
+            .filter(([, v]) => v?.type === "one2many").map(([k]) => k))}`);
+        return;
+      }
+
+      console.log(`[contrat-cadre] contrat(s) #${this.ids.join(",")} `
+        + `via [${champs.join(", ")}], lignes dans ${this.modeleLignes}`);
+    } catch (e) {
+      console.warn("[contrat-cadre] chargement impossible :", (e as Error).message);
+    }
+  }
+
+  /**
+   * Codifications de grille susceptibles de tarifer cet article, de la plus
+   * précise à la plus générale. L'ordre EST la règle de priorité.
+   */
+  static gabarits(code: string): string[] {
+    const seg = code.split(".");
+    const famille = seg[0] || "";
+    const reste = seg.slice(1);
+    const sansTech = reste.filter((s) => !/^(BTR|IS)$/i.test(s));
+    /* BTR et IS sont tantôt omis, tantôt conservés selon la famille : les
+       panneaux s'écrivent « A*.700.C2.BRUT » sans eux, mais les mâts et
+       supports gardent le IS — « MA.60.3500.PLAST.IS.BRUT »,
+       « B30*.500.650.C2.IS.BRUT ». Les retirer d'office faisait manquer
+       toute cette moitié de la grille : on essaie donc les deux formes. */
+    const suffixes = [...new Set([
+      sansTech.length ? "." + sansTech.join(".") : "",
+      reste.length ? "." + reste.join(".") : "",
+    ])];
+    const out: string[] = [];
+    for (const s of suffixes) out.push(famille + s);
+    for (let i = famille.length; i >= 1; i--) {
+      for (const s of suffixes) out.push(famille.slice(0, i) + "*" + s);
+    }
+    return [...new Set(out)];
+  }
+
+  /**
+   * Va chercher, en UNE requête, le tarif de tous les articles demandés.
+   *
+   * On envoie tous les gabarits possibles en OR et on trie côté serveur
+   * plutôt que de rapatrier la grille entière : elle dépasse les 5 000
+   * lignes, un dump complet est impraticable.
+   */
+  async precharger(codes: string[]): Promise<void> {
+    if (!this.actif) return;
+    const aChercher = [...new Set(codes.filter((c) => c && !this.cache.has(c)))];
+    if (!aChercher.length) return;
+
+    const gabarits = new Set<string>();
+    for (const c of aChercher) for (const g of ContratCadre.gabarits(c)) gabarits.add(g);
+    const liste = [...gabarits];
+    if (!liste.length) return;
+
+    try {
+      /* « =ilike » compare le motif TEL QUEL (contrairement à « ilike », qui
+         l'enveloppe de %) : l'étoile de « A*.700.C2.BRUT » reste donc un
+         caractère ordinaire, et la comparaison est une simple égalité
+         insensible à la casse. */
+      const lignes = (await this.od.kw(
+        this.modeleLignes,
+        "search_read",
+        [
+          [
+            ["x_contrat_cadre_id", "in", this.ids],
+            ...Array(Math.max(liste.length - 1, 0)).fill("|"),
+            ...liste.map((g) => ["x_studio_codification", "=ilike", g]),
+          ],
+          ["x_studio_codification", "x_studio_prix_unit", "x_studio_priorite"],
+        ],
+        { limit: 2000 },
+      )) as any[];
+
+      /* Une même codification peut revenir plusieurs fois dans la grille :
+         la priorité la plus haute tranche, puis, à égalité, le prix le plus
+         favorable au client. */
+      const parCode = new Map<string, { prix: number; prio: number }>();
+      for (const l of lignes) {
+        const k = String(l.x_studio_codification || "").toUpperCase();
+        const prix = Number(l.x_studio_prix_unit) || 0;
+        if (!k || prix <= 0) continue;
+        const prio = Number(l.x_studio_priorite) || 0;
+        const dejaVu = parCode.get(k);
+        if (!dejaVu || prio > dejaVu.prio
+          || (prio === dejaVu.prio && prix < dejaVu.prix)) {
+          parCode.set(k, { prix, prio });
+        }
+      }
+
+      const orphelins: string[] = [];
+      for (const c of aChercher) {
+        const g = ContratCadre.gabarits(c).find((x) => parCode.has(x.toUpperCase()));
+        const p = g ? parCode.get(g.toUpperCase())!.prix : null;
+        this.cache.set(c, p);
+        if (!g) orphelins.push(c);
+        console.log(`[contrat-cadre] ${c} → ${g ? `${g} = ${p} €` : "aucun gabarit"}`);
+      }
+      await this.tracerOrphelins(orphelins);
+    } catch (e) {
+      console.warn("[contrat-cadre] tarif indisponible :", (e as Error).message);
+    }
+  }
+
+  /**
+   * Pour les articles qu'aucun gabarit n'atteint, montre ce que la grille
+   * contient autour de leur dimension.
+   *
+   * Sans cela, un « aucun gabarit » est ambigu : l'article est-il hors
+   * contrat, ou sa famille suit-elle une convention d'écriture que l'on n'a
+   * pas prévue ? C'est le cas des supports SG60, dont le tarif figure au
+   * devis mais qu'aucun de nos gabarits ne retrouve. Strictement borné —
+   * deux articles, une requête, quarante lignes — pour rester négligeable
+   * en production.
+   */
+  private async tracerOrphelins(codes: string[]): Promise<void> {
+    if (!codes.length || !this.actif) return;
+    /* Cibler la PREMIÈRE LETTRE de la famille en plus de la dimension : une
+       recherche sur la seule dimension ramenait tout l'alphabet et se faisait
+       couper par la limite avant d'atteindre la famille cherchée. */
+    const motifs = [...new Set(
+      codes.slice(0, 2)
+        .map((c) => {
+          const s = c.split(".");
+          return s[1] && /^\d+$/.test(s[1])
+            ? `${(s[0] || "").charAt(0)}%.${s[1]}.%`
+            : "";
+        })
+        .filter(Boolean),
+    )];
+    if (!motifs.length) return;
+    try {
+      const lignes = (await this.od.kw(
+        this.modeleLignes,
+        "search_read",
+        [
+          [
+            ["x_contrat_cadre_id", "in", this.ids],
+            ...Array(Math.max(motifs.length - 1, 0)).fill("|"),
+            ...motifs.map((m) => ["x_studio_codification", "=ilike", m]),
+          ],
+          ["x_studio_codification", "x_studio_prix_unit"],
+        ],
+        { limit: 40, order: "x_studio_codification asc" },
+      )) as any[];
+      console.log(`[contrat-cadre] sans gabarit : ${codes.join(", ")} — la grille `
+        + `contient, pour ${motifs.join(" / ")} : `
+        + `${JSON.stringify(lignes.map((l) =>
+          `${l.x_studio_codification}=${l.x_studio_prix_unit}`))}`);
+    } catch { /* purement informatif : ne doit rien casser */ }
+  }
+
+  /** Prix net contractuel de l'article, ou null s'il n'est pas au contrat. */
+  prix(code: string): number | null {
+    return this.cache.get(code) ?? null;
+  }
+}
+
 // ------------------------------------------------------- identification
+
+/** Deux raisons sociales se ressemblent-elles, une fois accents et casse
+ *  effacés ? Sert à repérer une fiche Odoo mal rattachée (parent qui n'a
+ *  rien à voir avec la société attendue) sans être trop strict sur la forme
+ *  exacte (« REFLEX SIGNALISATION » doit matcher « Reflex Signalisation »). */
+function nomsProches(a: string, b: string): boolean {
+  const normalise = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  const na = normalise(a);
+  const nb = normalise(b);
+  if (!na || !nb) return false;
+  return na.includes(nb) || nb.includes(na);
+}
 
 /**
  * Retrouve le client dans Odoo. Trois passes, de la plus sûre à la plus floue :
@@ -337,7 +646,8 @@ async function trouverPartenaire(
                   "phone", "mobile", "street", "street2", "zip", "vat",
                   // Distingue une société d'une personne : sans lui, on ne sait
                   // pas où chercher les contacts rattachés.
-                  "is_company"];
+                  "is_company",
+                  "type"];
   const lire = async (domaine: Domaine, limite = 8) =>
     (await od.kw("res.partner", "search_read", [domaine, champs], {
       limit: limite,
@@ -361,7 +671,45 @@ async function trouverPartenaire(
     // gbrugel@agilis.net existe sur trois fiches AGILIS. Prendre la première
     // venue rattachait le devis à la mauvaise agence.
     const r = await lire([["email", "=ilike", c.email]]);
-    if (r.length) return departager(r);
+    if (r.length) {
+      const trouve = departager(r);
+      /* Une boîte générique (contact@…, accueil@…) peut n'exister que sur la
+         fiche d'un simple contact mal rattaché — sans société ni parent, ou
+         pire, rattaché au MAUVAIS parent. Chez REFLEX SIGNALISATION, la
+         fiche « REFLEX SIGNALISATION Thierry » a pour parent « THIERRY
+         BARAILLER » — une personne, pas la société — au lieu que ce soit
+         l'inverse. Le contrat cadre remontait donc chez Thierry, qui n'a
+         pas de liste de prix : prix à 0 partout. */
+      const incertaine = trouve && !trouve.is_company && !trouve.parent_id;
+      const societeTrouvee = trouve
+        ? ((trouve.parent_id ? trouve.parent_id[1] : trouve.name) || "")
+        : "";
+      const incoherente = !!(trouve && !incertaine && c.societe
+        && !nomsProches(societeTrouvee, c.societe));
+      console.log(`[partenaire] email=${c.email} → #${trouve?.id} "${trouve?.name}"`
+        + ` is_company=${trouve?.is_company} parent=${JSON.stringify(trouve?.parent_id)}`
+        + ` incertaine=${incertaine} incoherente=${incoherente}`
+        + (incoherente ? ` (société attendue "${c.societe}", trouvée "${societeTrouvee}")` : ""));
+      if (!incertaine && !incoherente) return trouve;
+      /* Une fiche incertaine ou incohérente ne suffit pas à retenir le
+         contrat. On cherche la société elle-même par son nom — SANS exiger
+         is_company=true (la fiche société elle-même peut avoir cette case
+         mal cochée) — en excluant la fiche déjà trouvée ET son parent
+         éventuel, puisque c'est justement ce couple qui est suspect. */
+      const exclus = new Set(
+        [trouve.id, trouve.parent_id ? trouve.parent_id[0] : null].filter(Boolean),
+      );
+      for (const nom of [c.societe, c.nom]) {
+        if (!nom) continue;
+        const parNom = (await lire([["name", "ilike", nom]]))
+          .filter((p) => !exclus.has(p.id));
+        console.log(`[partenaire] recherche société "${nom}" (hors #${[...exclus].join(",")}) → `
+          + `${parNom.length} résultat(s)`
+          + (parNom.length ? ` : ${parNom.map((p) => `#${p.id} "${p.name}"`).join(", ")}` : ""));
+        if (parNom.length === 1) return parNom[0];
+      }
+      return trouve;
+    }
     const domaine = c.email.split("@")[1];
     if (domaine) {
       const parDomaine = await lire([
@@ -450,23 +798,83 @@ export function motsDeRecherche(texte: string): string[] {
   return mots.slice(0, 5);
 }
 
+/**
+ * Combine des sous-domaines Odoo par un ET, en notation préfixée. Chaque
+ * élément de `sousDomaines` est déjà la SUITE DE JETONS à insérer telle
+ * quelle (un seul jeu — le tuple lui-même — pour une feuille simple comme
+ * `[["name", "=", x]]`, ou trois jetons pour un bloc « | » déjà déplié comme
+ * `["|", tupleA, tupleB]`). n sous-domaines demandent n-1 « & ».
+ */
+function combinerEt(sousDomaines: unknown[][]): unknown[] {
+  if (!sousDomaines.length) return [];
+  return [...Array(sousDomaines.length - 1).fill("&"), ...sousDomaines.flat()];
+}
+
+/**
+ * Coût de revient local (`produits.prix_achat`), pour les articles dont Odoo
+ * ne connaît pas le coût (`standard_price` = 0 — non renseigné, pas gratuit).
+ *
+ * Le B14#130km/h.650.C2.BTR.IS.BRUT en est l'exemple : `standard_price` vaut
+ * 0 chez Odoo, donc le filtre « prix de fiche sous le coût » ne voyait rien à
+ * comparer et laissait passer un article à 0,30 €. Sa fiche MonCRM
+ * (`produits`, colonne `reference_odoo`) porte elle un `prix_achat` de
+ * 13,365 € — c'est ce deuxième coût qu'il faut regarder quand le premier
+ * manque.
+ *
+ * Reste un complément, pas la tarification : une erreur ici (table absente,
+ * clé de service non configurée, réseau) rend juste ce filtre inopérant,
+ * elle ne doit jamais faire tomber la recherche.
+ */
+async function coutsLocaux(codes: string[]): Promise<Map<string, number>> {
+  const carte = new Map<string, number>();
+  const codesUtiles = [...new Set(codes.filter(Boolean))];
+  if (!codesUtiles.length) return carte;
+  const url = Deno.env.get("SUPABASE_URL");
+  const cle = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !cle) return carte;
+  try {
+    const filtre = `in.(${codesUtiles.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(",")})`;
+    const params = new URLSearchParams({
+      select: "reference_odoo,prix_achat",
+      reference_odoo: filtre,
+    });
+    const r = await fetch(`${url}/rest/v1/produits?${params.toString()}`, {
+      headers: { apikey: cle, Authorization: `Bearer ${cle}` },
+    });
+    if (!r.ok) return carte;
+    const lignes = (await r.json()) as { reference_odoo: string; prix_achat: number }[];
+    for (const l of lignes) {
+      const v = Number(l.prix_achat) || 0;
+      if (l.reference_odoo && v > 0) carte.set(l.reference_odoo, v);
+    }
+  } catch (e) {
+    console.warn("[coûts locaux]", (e as Error).message);
+  }
+  return carte;
+}
+
 /** Domaine Odoo : vendable ET chacun des mots, dans le code ou la désignation. */
 export function domaineRecherche(texte: string): unknown[] {
   const mots = motsDeRecherche(texte);
-  if (!mots.length) return [["sale_ok", "=", true]];
 
-  // Notation préfixée d'Odoo : n conditions liées par ET demandent n-1 « & ».
-  const sous = mots.map((m) => [
-    "|", ["name", "ilike", m], ["default_code", "ilike", m],
-  ]);
-  const conditions: unknown[] = [];
-  for (const s of sous) conditions.push(...s);
+  // Chaque terme est déjà la suite de jetons à insérer (cf. combinerEt).
+  const termes: unknown[][] = [[["sale_ok", "=", true]]];
+  /* Un « fardeau » est un lot groupé — par exemple 61 supports liés
+     ensemble et vendus comme UNE ligne — pas l'unité demandée. Une
+     recherche « Support Ø 60 mm long 3.50 m » ramenait « IS FARDEAU 61
+     SUPPORT ACIER D60 LONGUEUR 3,50m » en tête de liste, à cause des mêmes
+     mots-clés dans son libellé, alors qu'un support (l'unité) était
+     demandé : proposer un lot de 61 pour une quantité de 12 n'a pas de
+     sens. On l'exclut, sauf si la demande mentionne elle-même « fardeau ». */
+  if (!/\bfardeau\b/i.test(texte)) {
+    termes.push([["name", "not ilike", "fardeau"]]);
+  }
 
-  return [
-    ...Array(mots.length).fill("&"),
-    ["sale_ok", "=", true],
-    ...conditions,
-  ];
+  for (const m of mots) {
+    termes.push(["|", ["name", "ilike", m], ["default_code", "ilike", m]]);
+  }
+
+  return combinerEt(termes);
 }
 
 serve(async (req) => {
@@ -519,6 +927,30 @@ serve(async (req) => {
     const contratId: number | null = pl ? pl[0] : null;
     const contrat: string | null = pl ? pl[1] : null;
     const societe: string = (partenaire.parent_id ? partenaire.parent_id[1] : partenaire.name) || '';
+
+    /* Trace du contrat cadre retenu : la liste de prix Odoo (property_product_pricelist,
+       « Positionnement prix » / « Contrat cadre » sur la fiche client) est un champ
+       « company-dependent » — si Odoo la renseigne sur la fiche société mais que la
+       lecture RPC ne la voit pas (mauvais contexte société, fiche mal rattachée…),
+       la recherche retombe silencieusement sur le prix de fiche. Ce log permet de
+       vérifier, après une demande, quelle liste a réellement été trouvée pour quel
+       partenaire — sans lui, une absence de contrat est indiscernable d'un contrat
+       correctement absent. */
+    console.log(`[contrat] partenaire=#${partenaire.id} "${partenaire.name}"`
+      + ` pricelist_propre=${JSON.stringify(partenaire.property_product_pricelist)}`
+      + ` porteur=#${porteur.id} "${porteur.name}"`
+      + ` pricelist_porteur=${JSON.stringify(porteur.property_product_pricelist)}`
+      + ` → contratId=${contratId} contrat=${JSON.stringify(contrat)}`);
+
+    /* Le tarif qui fait foi chez ce client n'est PAS la liste de prix lue
+       ci-dessus mais le « contrat-cadre », un objet Studio séparé porté par
+       la fiche société (ex. « CCI10019 TARIF R4 »). La liste de prix, elle,
+       applique une règle de catégorie à ~70 % qui donnait des montants sans
+       rapport avec les devis réellement émis — 60,32 € au lieu de 46,62 €
+       sur le B14. On charge donc la grille du contrat : quand elle couvre un
+       article, son prix l'emporte sur tout calcul de liste de prix. */
+    const cadre = new ContratCadre(od);
+    await cadre.charger(porteur.id, partenaire.id);
 
     /* Les contacts de la société.
      *
@@ -595,21 +1027,57 @@ serve(async (req) => {
     const tarif = new Tarificateur(od, articles);
     await tarif.preparer(articles);
 
+    /* Coût de secours pour les références demandées, même raison que pour
+       la recherche libre plus bas : standard_price d'Odoo est souvent à 0
+       sur ce catalogue (non renseigné, pas gratuit). */
+    const coutsDirects = await coutsLocaux(references);
+
+    /* Le contrat-cadre prime : on va chercher d'un coup le tarif de toutes
+       les références demandées avant d'entrer dans la boucle. */
+    await cadre.precharger([...parReference.keys()]);
+
     const prix: Record<string, unknown> = {};
     for (const [ref, a] of parReference) {
       const qte = quantites.get(ref) || 1;
       let contratPrix: number | null = null;
-      try {
-        const v = await tarif.prix(contratId, a, qte);
-        if (v !== null) contratPrix = Math.round(v * 100) / 100;
-      } catch {
-        // article hors barème : on n'invente pas de prix
+      /* Prix négocié au contrat-cadre : c'est le montant réellement
+         facturé, il n'y a rien à recalculer ni à comparer au coût. */
+      const auCadre = cadre.prix(ref);
+      /* Au MILLIÈME : la grille cote 36,5105 et le devis Odoo affiche 36,511.
+         Arrondir au centime ferait dériver le total sur les grosses
+         quantités et ne collerait plus à la pièce de référence. */
+      if (auCadre !== null) contratPrix = Math.round(auCadre * 1000) / 1000;
+      else {
+        try {
+          const v = await tarif.prix(contratId, a, qte, 0, ref);
+          if (v !== null) contratPrix = Math.round(v * 100) / 100;
+        } catch {
+          // article hors barème : on n'invente pas de prix
+        }
+      }
+      const coutOdoo = a.standard_price || 0;
+      const coutLocal = coutsDirects.get(ref) || 0;
+      const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
+      /* Un prix — qu'il vienne d'une règle appliquée ou, à défaut, de la
+         fiche — sous le coût de revient, ou nul, n'est jamais un vrai prix
+         de vente sur ce catalogue (cf. l'en-tête : listes de prix qui
+         recalculent depuis une fiche à 1 € ou 0,30 €, parfois à 0). Une
+         RÈGLE peut très bien avoir matché et donner quand même ce résultat
+         absurde — ce n'est pas réservé au cas « hors barème ». On le
+         traite alors comme hors barème plutôt que de l'afficher tel quel. */
+      const prixEffectif = contratPrix !== null ? contratPrix : a.lst_price;
+      /* Le garde-fou « sous le coût » vise les prix reconstruits depuis une
+         fiche à 1 € ; un tarif négocié au contrat-cadre est un vrai prix de
+         vente, on ne le remet pas en cause même s'il passe sous un coût de
+         revient qui, lui, est souvent absent ou faux dans Odoo. */
+      if (auCadre === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
+        contratPrix = null;
       }
       prix[ref] = {
         designation: a.name,
         contrat: contratPrix,
         fiche: a.lst_price,
-        cout: a.standard_price,
+        cout: cout || a.standard_price,
         quantite: qte,
       };
     }
@@ -639,12 +1107,113 @@ serve(async (req) => {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
       const dom = domaineRecherche(q);
-      const res = (await od.kw(
+      let res = (await od.kw(
         "product.product", "search_read",
         [dom, ["id", "default_code", "name", "lst_price", "standard_price",
                "categ_id", "product_tmpl_id", "uom_id"]],
         { limit: 40, order: "default_code, name" },
       )) as any[];
+
+      const segments = (code: string) => String(code || "").split(".");
+
+      /* La classe de rétroréflexion (C1, C2, C3 — jamais liée à la forme du
+         panneau : un A14, un B14 ou un C27 la portent tous sous ce même
+         préfixe « C ») se cherchait par une simple sous-chaîne dans le code
+         complet. Or le CODE DE FAMILLE peut lui-même contenir cette
+         sous-chaîne : « C27 » commence par « C2 », « C18 » par « C1 ». Une
+         demande « C27 500 C2 » se satisfaisait donc du préfixe de famille et
+         ramenait indifféremment les classes C1, C2 et C3 de ce panneau — deux
+         tarifs différents pour ce qui semblait être une seule demande, sans
+         nuance visible entre les deux fiches. On exige que la classe
+         corresponde à un SEGMENT complet du code (entre points), pas à une
+         sous-chaîne — sauf si ça ne laisse plus aucun résultat. */
+      for (const m of motsDeRecherche(q)) {
+        if (!/^c[123]v?$/i.test(m)) continue;
+        const correspond = (x: any) =>
+          segments(x.default_code || "").some((s) => s.toLowerCase() === m.toLowerCase());
+        const filtres = res.filter(correspond);
+        if (filtres.length) res = filtres;
+      }
+
+      /* Le dernier segment du code désigne la finition : BRUT (acier nu),
+         ou tout ce qui commence par « L » (laqué) — un RAL numérique
+         (L1000, L2900S), un RAL avec variante (L9005MAT, « mat »), ou un
+         nom de teinte (LCHAMP). Une première version ne repérait que le
+         motif RAL numérique et laissait passer L9005MAT et LCHAMP. Une
+         demande de « B14 » sans précision ne veut pas d'une déclinaison
+         peinte au hasard parmi toutes celles-ci. On les écarte, sauf si la
+         demande mentionne elle-même une teinte — et seulement si ça laisse
+         au moins un résultat : un article qui n'existe QU'en peint doit
+         quand même pouvoir être proposé. */
+      const dernierSegment = (code: string) => {
+        const parts = String(code || "").split(".");
+        return parts[parts.length - 1] || "";
+      };
+      const estPeint = (code: string) => /^l./i.test(dernierSegment(code));
+      /* Le code lui-même (« L1000 », « L9005MAT ») commence par L SUIVI D'UN
+         CHIFFRE — contrairement à des mots ordinaires comme « long » ou
+         « livraison » qui commencent aussi par L mais jamais par L+chiffre.
+         Ce test évite de prendre un mot du texte pour une demande de teinte. */
+      const demandeTeinte = /\bral\b|\bcouleur\b|\bpeint|\bchamp\b/i.test(q)
+        || /\bl\d[a-z0-9]*\b/i.test(q);
+      if (!demandeTeinte) {
+        const nonPeints = res.filter((x) => !estPeint(x.default_code || ""));
+        if (nonPeints.length) res = nonPeints;
+      }
+
+      /* Le même code se retrouve, tel quel, dans des familles de produits
+         totalement différentes : « B21A2 » désigne le panneau rigide
+         (B21A2.650.C2.BTR.IS.BRUT, catégorie SIGNALISATION POLICE) mais
+         aussi des films souples collés dessus — BALIFLEX, G2FLEX, ISOFLEX,
+         ROTO — rangés chez Odoo sous PLASTIQUE / Balisage permanent ou
+         SEMI-FINIS. Une demande de « B21A2 » nue veut le panneau rigide,
+         pas une déclinaison film souple choisie au hasard parmi celles-ci.
+         La catégorie Odoo est un signal plus sûr que le code lui-même : un
+         code de panneau peut apparaître n'importe où dans le code d'un
+         produit film (ISOFB21A2450C2DF, ROTO450B21A2C2…). */
+      const estSouple = (categorie: string) =>
+        /^plastique\b|^semi-?finis?\b/i.test(categorie || "");
+      const demandeSouple = /\bisoflex\b|\bbaliflex\b|\bg2flex\b|\broto\b|\bflex\b|\bfilm\b|\bsouple\b|\bplastique\b|\bsemi-?finis?\b/i
+        .test(q);
+      if (!demandeSouple) {
+        const nonSouples = res.filter((x) =>
+          !estSouple(x.categ_id ? x.categ_id[1] : ""));
+        if (nonSouples.length) res = nonSouples;
+      }
+
+      /* Deux autres déclinaisons, ni peintes ni en film, mais tout aussi
+         absentes d'une demande nue « A3A 700 C2 » : le segment « F »
+         (une face ajoutée — double face) et la classe suffixée « V »
+         (C1V, C2V… — panneau à volets). Comme BRUT/L, ce sont des segments
+         ENTIERS séparés par des points, pas des sous-chaînes — sans quoi
+         « ST » ou « IS » se feraient aussi prendre pour un « F » ou un
+         « V » isolés. */
+      const estFace = (code: string) => segments(code).some((s) => /^f$/i.test(s));
+      const demandeFace = /\bface\b|\b2\s*faces?\b|\bdouble.?face\b|\brecto.?verso\b/i
+        .test(q);
+      if (!demandeFace) {
+        const nonFace = res.filter((x) => !estFace(x.default_code || ""));
+        if (nonFace.length) res = nonFace;
+      }
+      const estVolet = (code: string) => segments(code).some((s) => /^c\d+v$/i.test(s));
+      const demandeVolet = /\bvolets?\b/i.test(q);
+      if (!demandeVolet) {
+        const nonVolet = res.filter((x) => !estVolet(x.default_code || ""));
+        if (nonVolet.length) res = nonVolet;
+      }
+
+      /* Encore un segment isolé du même genre : « OV » (A14.700.C2.BTR.OV.IS.BRUT,
+         entre BTR et IS) désigne une déclinaison qui n'est pas la version de
+         base — une demande nue « A14 700 C2 » n'en veut pas, comme elle ne
+         veut ni la face ni le volet. Même garde-fou : uniquement si la
+         demande ne mentionne pas elle-même « OV », et seulement si ça laisse
+         au moins un résultat. */
+      const estOV = (code: string) => segments(code).some((s) => /^ov$/i.test(s));
+      const demandeOV = /\bov\b/i.test(q);
+      if (!demandeOV) {
+        const nonOV = res.filter((x) => !estOV(x.default_code || ""));
+        if (nonOV.length) res = nonOV;
+      }
 
       /* Trace volontairement bavarde : sans elle, une recherche qui ne ramène
          rien est indiscernable d'une recherche qui n'a pas eu lieu. Les mots
@@ -678,12 +1247,45 @@ serve(async (req) => {
       }));
       if (arts.length) await tarif.preparer(arts);
 
-      trouvailles[q] = await Promise.all(retenus.map(async (x, i) => {
+      /* Coût de secours : la moitié des fiches Odoo n'ont pas de
+         standard_price renseigné (0, pas « gratuit ») — c'est justement le
+         cas du B14 BRUT. On va chercher son coût dans la base article de
+         MonCRM avant de conclure qu'aucun coût n'est connu. */
+      const coutsBase = await coutsLocaux(retenus.map((x) => x.default_code || ""));
+
+      /* Même règle que pour les références explicites : le contrat-cadre
+         prime sur la liste de prix quand il couvre l'article. */
+      await cadre.precharger(retenus.map((x) => x.default_code || ""));
+
+      trouvailles[q] = (await Promise.all(retenus.map(async (x, i) => {
         let p: number | null = null;
-        try {
-          const v = await tarif.prix(contratId, arts[i], qte);
-          if (v !== null) p = Math.round(v * 100) / 100;
-        } catch { /* article hors barème : on n'invente pas de prix */ }
+        const auCadre = cadre.prix(x.default_code || "");
+        // Au millième, comme Odoo (cf. commentaire plus haut).
+        if (auCadre !== null) p = Math.round(auCadre * 1000) / 1000;
+        else {
+          try {
+            const v = await tarif.prix(contratId, arts[i], qte, 0, x.default_code || "");
+            if (v !== null) p = Math.round(v * 100) / 100;
+          } catch { /* article hors barème : on n'invente pas de prix */ }
+        }
+        const coutOdoo = x.standard_price || 0;
+        const coutLocal = coutsBase.get(x.default_code || "") || 0;
+        const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
+        /* En dessous du coût de revient (Odoo, ou à défaut la base article
+           MonCRM), ou nul : ce n'est pas un prix de vente. Ça arrive SANS
+           règle (fiche à 0,30 €, cf. B14 BRUT) mais aussi AVEC une règle
+           qui a bel et bien matché — une remise appliquée à une fiche déjà
+           cassée reste cassée. Le proposer serait pire que ne rien
+           proposer : on l'écarte de la liste plutôt que d'afficher
+           « hors barème » ou un prix à 0 €. Sans coût connu nulle part ET
+           un prix non nul, on ne peut rien comparer : l'article reste
+           affiché. */
+        const prixEffectif = p !== null ? p : x.lst_price;
+        /* Un tarif venu du contrat-cadre est un prix négocié : il échappe au
+           garde-fou « sous le coût », prévu pour les prix reconstruits. */
+        if (auCadre === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
+          return null;
+        }
         return {
           reference: x.default_code || "",
           designation: x.name,
@@ -691,9 +1293,9 @@ serve(async (req) => {
           unite: x.uom_id ? x.uom_id[1] : "",
           contrat: p,
           fiche: x.lst_price || 0,
-          cout: x.standard_price || 0,
+          cout: cout || 0,
         };
-      }));
+      }))).filter((v) => v !== null);
     }
     } catch (e) {
       console.warn("[recherche catalogue]", (e as Error).message);
@@ -723,6 +1325,13 @@ serve(async (req) => {
       contratId,
       prix,
       introuvables: references.filter((r) => !parReference.has(r)),
+      /* Incertaine soit faute de société/parent, soit parce que le parent
+         trouvé ne correspond pas à la société attendue (fiche mal
+         rattachée, cf. « REFLEX SIGNALISATION Thierry » rattachée à la
+         personne « THIERRY BARAILLER » au lieu de la société). */
+      societeIncertaine: (!partenaire.parent_id && !partenaire.is_company)
+        || !!(client?.societe && !nomsProches(societe, client.societe)),
+      partenaireType: partenaire.type || null,
     });
   } catch (e) {
     return repondre({ error: (e as Error).message }, 200);
