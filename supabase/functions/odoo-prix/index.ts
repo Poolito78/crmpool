@@ -478,19 +478,30 @@ class ContratCadre {
     const seg = code.split(".");
     const famille = seg[0] || "";
     const reste = seg.slice(1);
-    const sansTech = reste.filter((s) => !/^(BTR|IS)$/i.test(s));
-    /* BTR et IS sont tantôt omis, tantôt conservés selon la famille : les
-       panneaux s'écrivent « A*.700.C2.BRUT » sans eux, mais les mâts et
-       supports gardent le IS — « MA.60.3500.PLAST.IS.BRUT »,
-       « B30*.500.650.C2.IS.BRUT ». Les retirer d'office faisait manquer
-       toute cette moitié de la grille : on essaie donc les deux formes. */
+    /* BTR et IS sont retenus ou omis INDÉPENDAMMENT l'un de l'autre selon la
+       famille : les panneaux s'écrivent « A*.700.C2.BRUT » sans aucun des
+       deux, les supports gardent les deux (« SG60.3500.IS.BRUT »), et les
+       panonceaux gardent IS mais pas BTR (« M*.1200.400.C2.IS.BRUT »).
+       On essaie donc les quatre combinaisons, de la plus complète à la plus
+       dépouillée : à correspondance multiple, la plus détaillée gagne. */
+    const suffixe = (retirer: RegExp | null) => {
+      const gardes = retirer ? reste.filter((s) => !retirer.test(s)) : reste;
+      return gardes.length ? "." + gardes.join(".") : "";
+    };
     const suffixes = [...new Set([
-      sansTech.length ? "." + sansTech.join(".") : "",
-      reste.length ? "." + reste.join(".") : "",
+      suffixe(null),
+      suffixe(/^BTR$/i),
+      suffixe(/^IS$/i),
+      suffixe(/^(BTR|IS)$/i),
     ])];
+
     const out: string[] = [];
     for (const s of suffixes) out.push(famille + s);
-    for (let i = famille.length; i >= 1; i--) {
+    /* Au-delà de 4 caractères, un préfixe suivi d'étoile ne s'observe pas
+       dans la grille — les formes vues vont de « A* » à « B30* », les
+       familles plus longues (SG60, B214RAILS…) ayant leur ligne littérale.
+       Borner évite de gonfler inutilement le domaine envoyé à Odoo. */
+    for (let i = Math.min(famille.length, 4); i >= 1; i--) {
       for (const s of suffixes) out.push(famille.slice(0, i) + "*" + s);
     }
     return [...new Set(out)];
