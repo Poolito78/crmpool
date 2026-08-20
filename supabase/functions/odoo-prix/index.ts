@@ -833,6 +833,33 @@ const ALIAS_FAMILLES: [RegExp, string][] = [
   [/\bplas?t?o?s?\s*-?\s*blocs?\b/gi, "plastobloc"],
 ];
 
+/**
+ * Noms de CATÉGORIE, qui ne désignent aucun article en particulier.
+ *
+ * « panneaux AK5 en 1000 mm » : c'est AK5 et 1000 qui désignent l'article,
+ * « panneaux » ne fait que dire de quelle sorte de chose on parle. Odoo ne
+ * porte d'ailleurs ce mot ni dans le nom de l'article — « IS AK5 (1000, C1,
+ * ST, Sans, Sans) » — ni dans sa référence.
+ *
+ * Ces mots restent utiles à la première passe, qui exige tout : quand ils
+ * figurent vraiment au catalogue, ils affinent. Mais dès qu'il faut relâcher,
+ * ce sont EUX qu'il faut lâcher en premier — sinon on garde le mot qui ne
+ * distingue rien et on sacrifie ceux qui distinguent tout. C'est ce qui
+ * faisait répondre « Arceau pour panneaux Diam 450 » à une demande d'AK5 :
+ * seul « panneaux » avait survécu au relâchement, et l'arceau le portait.
+ */
+const MOTS_GENERIQUES = new Set([
+  "panneau", "panneaux", "support", "supports", "mat", "mats", "poteau",
+  "poteaux", "fourniture", "fournitures", "article", "articles", "piece",
+  "pieces", "lot", "lots", "ensemble", "ensembles", "unite", "unites",
+  "materiel", "produit", "produits", "accessoire", "accessoires",
+]);
+
+/** Ce mot ne sert-il qu'à nommer la catégorie ? */
+export function motGenerique(m: string): boolean {
+  return MOTS_GENERIQUES.has(m);
+}
+
 /** Réécrit les noms de famille mal orthographiés dans une demande. */
 export function normaliserFamilles(texte: string): string {
   let t = String(texte || "");
@@ -1278,15 +1305,38 @@ serve(async (req) => {
            là qu'un tri par longueur ou par nature aurait sacrifié le 24 avant
            le 80 et rendu les quatre PLASTOBLOC au lieu du bon. */
         const gardes = new Set(mots);
-        for (let i = mots.length - 1; i >= 1; i--) {
-          gardes.delete(mots[i]);
-          if (gardes.size === 0) break;
-          const domaine = domaineDepuisMots([...gardes], q);
-          res = await chercher(domaine);
-          if (res.length) {
-            console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
-              + ` ${res.length} article(s) en relâchant à ${JSON.stringify([...gardes])}`);
-            break;
+        const essayer = async (raison: string) => {
+          if (!gardes.size) return false;
+          res = await chercher(domaineDepuisMots([...gardes], q));
+          if (!res.length) return false;
+          console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+            + ` ${res.length} article(s) en relâchant à ${JSON.stringify([...gardes])}`
+            + ` (${raison})`);
+          return true;
+        };
+
+        /* D'ABORD les noms de catégorie. Ils ne désignent pas l'article, et
+           les garder revenait à sacrifier ceux qui le désignent : « panneaux
+           AK5 en 1000 mm » finissait sur le seul mot « panneaux », d'où un
+           arceau proposé pour un panneau AK5. On ne les retire qu'ici, au
+           relâchement : tant que la première passe trouve, ils affinent. */
+        const generiques = mots.filter(motGenerique);
+        let relache = false;
+        if (generiques.length && generiques.length < mots.length) {
+          for (const g of generiques) gardes.delete(g);
+          relache = await essayer("noms de catégorie écartés");
+        }
+
+        /* Ensuite seulement, on sacrifie EN PARTANT DE LA FIN. Une demande
+           française nomme l'article, le qualifie, puis finit par le contexte :
+           « plato bloc 24 kg pour mat 80 × 40 » — le bloc, son poids, puis ce
+           qu'il leste. Retirer les derniers d'abord retient « plastobloc 24 »,
+           là qu'un tri par longueur aurait sacrifié le 24 avant le 80. */
+        if (!relache) {
+          for (let i = mots.length - 1; i >= 0; i--) {
+            if (!gardes.has(mots[i]) || gardes.size <= 1) continue;
+            gardes.delete(mots[i]);
+            if (await essayer("mots de fin écartés")) break;
           }
         }
       }
@@ -1423,6 +1473,10 @@ serve(async (req) => {
        * moins bavarde. */
       const ql = q.toLowerCase();
       const motsQ = motsDeRecherche(q);
+      /* Le bonus du « premier mot » vise le premier mot qui DÉSIGNE quelque
+         chose : sur « panneaux AK5 … », l'appuyer sur « panneaux » aurait fait
+         remonter tout ce dont le libellé contient ce mot. */
+      const iPivot = Math.max(0, motsQ.findIndex((m) => !motGenerique(m)));
       const points = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
@@ -1430,7 +1484,7 @@ serve(async (req) => {
         if (code === ql) return 1000;
         let n = 0;
         for (let k = 0; k < motsQ.length; k++) {
-          const poids = k === 0 ? 4 : 2;
+          const poids = k === iPivot ? 4 : (motGenerique(motsQ[k]) ? 1 : 2);
           if (code.includes(motsQ[k])) n += poids + 1;
           else if (nom.includes(motsQ[k])) n += poids;
         }
@@ -1452,7 +1506,8 @@ serve(async (req) => {
 
       /* Ce que vaut le meilleur, rapporté au maximum atteignable : l'appli
          s'en sert pour décider si elle peut le retenir d'office. */
-      const maxPoints = motsQ.reduce((t, _, k) => t + (k === 0 ? 5 : 3), 0);
+      const maxPoints = motsQ.reduce(
+        (t, m, k) => t + (k === iPivot ? 5 : (motGenerique(m) ? 2 : 3)), 0);
       const certitude = res.length && maxPoints
         ? Math.min(1, points(res[0]) / maxPoints)
         : 0;
