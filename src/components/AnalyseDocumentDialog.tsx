@@ -69,7 +69,14 @@ interface TrouvailleOdoo {
   contrat: number | null;
   fiche: number;
   cout: number;
+  /** Part des mots de la demande que l'article porte (0 à 1). */
+  certitude?: number;
 }
+
+/* En dessous de ce seuil, l'article est bien retenu — la ligne ne reste
+   jamais vide — mais l'appli demande qu'on le vérifie plutôt que de laisser
+   croire qu'elle a tranché. */
+const CERTITUDE_ACQUISE = 0.6;
 
 interface Props {
   open: boolean;
@@ -132,6 +139,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      partira au devis comme ligne libre : référence et désignation dans le
      libellé, prix du bordereau client. */
   const [choixOdoo, setChoixOdoo] = useState<Record<number, TrouvailleOdoo>>({});
+  /* Lignes dont l'utilisateur a RETIRÉ la proposition Odoo retenue d'office.
+     Sans cette mémoire, l'effet de sélection automatique la remettrait au
+     rechargement suivant et le retrait paraîtrait « revenir en arrière ». */
+  const [refusOdoo, setRefusOdoo] = useState<Set<number>>(new Set());
   /** Pourquoi Odoo n'a pas été interrogé, quand c'est le cas. */
   const [odooMuet, setOdooMuet] = useState<'sans-client' | null>(null);
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
@@ -488,7 +499,8 @@ const [contratOdoo, setContratOdoo] = useState<
        client et le contact du document précédent resteraient en place. */
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
-    setChoixProduit({}); setChoixOdoo({}); setQuantiteManuelle({}); setPrixManuel({});
+    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
+    setQuantiteManuelle({}); setPrixManuel({});
     setNomAgglo({});
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setOdooMuet(null);
     try {
@@ -1115,6 +1127,38 @@ const [contratOdoo, setContratOdoo] = useState<
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature]);
+
+  /**
+   * Retient d'office la meilleure proposition Odoo.
+   *
+   * Odoo est la source : quand il trouve l'article et que le catalogue local
+   * ne l'a pas, laisser la ligne en « — Libre — » n'apporte rien. Elle
+   * obligeait à cliquer pour valider ce que l'appli savait déjà, et surtout
+   * elle partait au devis SANS PRIX si on oubliait de le faire.
+   *
+   * Trois garde-fous :
+   *  - un article déjà retenu, ici ou dans le catalogue local, n'est jamais
+   *    écrasé ;
+   *  - un retrait explicite est mémorisé et n'est pas défait au rechargement ;
+   *  - la certitude du rapprochement voyage avec la proposition, pour que
+   *    l'affichage distingue « acquis » de « à vérifier ». On retient dans
+   *    les deux cas — une ligne sans prix est le pire des états — mais on ne
+   *    fait pas passer une hypothèse pour une certitude.
+   */
+  useEffect(() => {
+    const lignes = result?.lignes;
+    if (!lignes?.length) return;
+    setChoixOdoo(prev => {
+      const n = { ...prev };
+      let change = false;
+      lignes.forEach((l, i) => {
+        if (n[i] || refusOdoo.has(i) || produitDeLigne(i)) return;
+        const props = trouvaillesOdoo[texteRechercheOdoo(l, i)];
+        if (props?.length) { n[i] = props[0]; change = true; }
+      });
+      return change ? n : prev;
+    });
+  }, [trouvaillesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -2051,7 +2095,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                     value={retenu?.id ?? ''}
                                     onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
                                   />
-                                  {!retenu && (
+                                  {/* Cet avertissement ne parle que du catalogue
+                                      LOCAL. Depuis qu'un article Odoo peut être
+                                      retenu d'office, l'afficher à côté de
+                                      « Retenu d'office : PLASTOBLOC24GM » se
+                                      contredisait : la ligne a bien un article
+                                      et un prix, ils viennent d'ailleurs. */}
+                                  {!retenu && !choixOdoo[i] && (
                                     <p className="text-[11px] text-warning">
                                       {candidats.length
                                         ? `Aucun candidat ne correspond assez pour être retenu d’office — ${candidats.length} proposition(s) ci-dessus.`
@@ -2311,13 +2361,22 @@ const [contratOdoo, setContratOdoo] = useState<
                                             <button
                                               key={t.reference}
                                               type="button"
-                                              onClick={() => setChoixOdoo(prev => {
-                                                const n = { ...prev };
-                                                // Un second clic retire le choix.
-                                                if (n[i]?.reference === t.reference) delete n[i];
-                                                else n[i] = t;
-                                                return n;
-                                              })}
+                                              onClick={() => {
+                                                const retire = choixOdoo[i]?.reference === t.reference;
+                                                setChoixOdoo(prev => {
+                                                  const n = { ...prev };
+                                                  // Un second clic retire le choix.
+                                                  if (retire) delete n[i]; else n[i] = t;
+                                                  return n;
+                                                });
+                                                /* Mémoriser le retrait, sinon la
+                                                   sélection d'office le rétablit. */
+                                                setRefusOdoo(prev => {
+                                                  const n = new Set(prev);
+                                                  if (retire) n.add(i); else n.delete(i);
+                                                  return n;
+                                                });
+                                              }}
                                               className={`flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left transition-colors ${
                                                 actif ? 'bg-primary/20 ring-1 ring-primary' : 'hover:bg-primary/10'}`}
                                               title={actif ? 'Cliquez pour retirer ce choix' : 'Cliquez pour retenir cet article'}
@@ -2335,13 +2394,34 @@ const [contratOdoo, setContratOdoo] = useState<
                                             </button>
                                           );
                                         })}
-                                        <p className="text-[10px] text-muted-foreground">
-                                          {choixOdoo[i]
-                                            ? `Retenu : ${choixOdoo[i].reference} — la ligne partira au devis avec ce prix.`
-                                            : retenu
-                                              ? 'Le catalogue local a retenu un autre article : cliquez pour lui préférer celui-ci.'
-                                              : 'Cliquez pour retenir un article. Il n’est pas dans MonCRM : la ligne partira en libre.'}
-                                        </p>
+                                        {(() => {
+                                          const ch = choixOdoo[i];
+                                          if (!ch) {
+                                            return (
+                                              <p className="text-[10px] text-muted-foreground">
+                                                {retenu
+                                                  ? 'Le catalogue local a retenu un autre article : cliquez pour lui préférer celui-ci.'
+                                                  : 'Cliquez pour retenir un article. Il n’est pas dans MonCRM : la ligne partira en libre.'}
+                                              </p>
+                                            );
+                                          }
+                                          /* Retenu d'office ou à la main ? L'utilisateur doit
+                                             pouvoir faire la différence : ce que l'appli a
+                                             décidé seule mérite un coup d'œil, ce qu'il a
+                                             choisi lui-même, non. */
+                                          const dOffice = !refusOdoo.has(i)
+                                            && ch.reference === props[0]?.reference;
+                                          const sur = (ch.certitude ?? 1) >= CERTITUDE_ACQUISE;
+                                          return (
+                                            <p className={`text-[10px] ${dOffice && !sur ? 'text-warning' : 'text-muted-foreground'}`}>
+                                              {dOffice
+                                                ? (sur
+                                                    ? `Retenu d’office : ${ch.reference} — la ligne partira au devis avec ce prix.`
+                                                    : `Retenu d’office : ${ch.reference}, mais la demande ne le désigne qu’en partie — vérifiez, ou cliquez-en un autre.`)
+                                                : `Retenu : ${ch.reference} — la ligne partira au devis avec ce prix.`}
+                                            </p>
+                                          );
+                                        })()}
                                       </div>
                                     );
                                   })()}

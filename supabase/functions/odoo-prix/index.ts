@@ -31,7 +31,8 @@
  *     recherches: [{ texte, quantite }] }
  * Sortie :
  *   { partenaire, contrat, prix: { REF: { contrat, fiche, cout, quantite } },
- *     trouvailles: { texte: [{ reference, designation, contrat, fiche, cout }] },
+ *     trouvailles: { texte: [{ reference, designation, contrat, fiche, cout,
+ *                              certitude }] },
  *     introuvables: [REF] }
  */
 
@@ -1406,7 +1407,35 @@ serve(async (req) => {
         + ` → ${res.length} article(s)`
         + (res.length ? ` : ${res.slice(0, 3).map((x) => x.default_code || x.name).join(", ")}` : ""));
 
+      /* CLASSEMENT.
+       *
+       * Le rang se calculait en comparant l'article à la demande ENTIÈRE.
+       * Or une demande est une phrase — « plato bloc 24 kg pour mat 80 × 40 »
+       * — qu'aucun code ni libellé ne contient jamais : tous les articles
+       * tombaient au même rang et le tri se faisait, en pratique, par ordre
+       * alphabétique de référence. Le bon article pouvait donc arriver
+       * huitième, et l'appli le présentait comme un candidat parmi d'autres.
+       *
+       * On compte désormais les MOTS de la demande retrouvés dans l'article.
+       * Le premier mot pèse double : c'est le nom de la famille, celui que le
+       * client écrit toujours en premier. Une correspondance dans la
+       * référence vaut un peu plus que dans le libellé, la référence étant
+       * moins bavarde. */
       const ql = q.toLowerCase();
+      const motsQ = motsDeRecherche(q);
+      const points = (x: any) => {
+        const code = (x.default_code || "").toLowerCase();
+        const nom = (x.name || "").toLowerCase();
+        /* Référence citée telle quelle : rien ne peut faire mieux. */
+        if (code === ql) return 1000;
+        let n = 0;
+        for (let k = 0; k < motsQ.length; k++) {
+          const poids = k === 0 ? 4 : 2;
+          if (code.includes(motsQ[k])) n += poids + 1;
+          else if (nom.includes(motsQ[k])) n += poids;
+        }
+        return n;
+      };
       const rang = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
@@ -1417,8 +1446,18 @@ serve(async (req) => {
         if (code.includes(ql)) return 4;
         return 5;
       };
-      res.sort((a, b) => rang(a) - rang(b)
+      res.sort((a, b) => points(b) - points(a)
+        || rang(a) - rang(b)
         || (a.default_code || "").localeCompare(b.default_code || ""));
+
+      /* Ce que vaut le meilleur, rapporté au maximum atteignable : l'appli
+         s'en sert pour décider si elle peut le retenir d'office. */
+      const maxPoints = motsQ.reduce((t, _, k) => t + (k === 0 ? 5 : 3), 0);
+      const certitude = res.length && maxPoints
+        ? Math.min(1, points(res[0]) / maxPoints)
+        : 0;
+      console.log(`[recherche] « ${q} » → meilleur ${res[0]?.default_code || "-"}`
+        + ` certitude ${(certitude * 100).toFixed(0)} %`);
       const retenus = res.slice(0, 8);
 
       const arts: Article[] = retenus.map((x) => ({
@@ -1478,6 +1517,12 @@ serve(async (req) => {
           contrat: p,
           fiche: x.lst_price || 0,
           cout: cout || 0,
+          /* Part des mots de la demande que cet article porte réellement.
+             C'est ce qui permet à l'appli de retenir le premier d'office
+             sans le faire à l'aveugle : au-dessus du seuil elle l'annonce
+             comme acquis, en dessous elle le retient quand même mais
+             demande à ce qu'on le vérifie. */
+          certitude: maxPoints ? Math.min(1, points(x) / maxPoints) : 0,
         };
       }))).filter((v) => v !== null);
     }
