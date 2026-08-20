@@ -4,6 +4,7 @@ import {
   dimensionnerPanneau, dimensionnerEnsemble, dimensionnerAgglomeration,
   typeAgglomeration, nomAgglomerationDansTexte,
   GAMMES_HC, LARGEURS_NORMALISEES,
+  couperEnDeuxLignes,
 } from './compositionPanneau';
 
 /**
@@ -212,30 +213,65 @@ describe('entrée et sortie d’agglomération', () => {
     expect(dimensionnerAgglomeration('MONTPELLIER')?.largeur).toBe(1600); // 11
   });
 
-  it('la sortie EB20 admet plus de signes — ses lettres sont plus petites', () => {
-    // 7 signes : 1000 en entrée (Hc 125), mais 800 suffit en sortie (Hc 100).
-    expect(dimensionnerAgglomeration('ORLEANS', 'EB10')?.largeur).toBe(1000);
-    expect(dimensionnerAgglomeration('ORLEANS', 'EB20')?.largeur).toBe(800);
-    expect(dimensionnerAgglomeration('MARSEILLE', 'EB20')?.largeur).toBe(1000);
+  it('lit la table du Hc, pas celle du type de panneau', () => {
+    /* Erreur corrigée : les deux tables du fabricant circulent sous les noms
+       « EB10 » et « EB20 », mais ce sont en fait la table du Hc 125 et celle
+       du Hc 100. À Hc égal, une entrée et une sortie ont le même format. */
+    const entree = dimensionnerAgglomeration('ORLEANS', { type: 'EB10', hc: 100 })!;
+    const sortie = dimensionnerAgglomeration('ORLEANS', { type: 'EB20', hc: 100 })!;
+    expect(entree.largeur).toBe(sortie.largeur);
+    expect(entree.hauteur).toBe(sortie.hauteur);
+
+    // 7 signes : 800 en Hc 100, mais 1000 en Hc 125.
+    expect(dimensionnerAgglomeration('ORLEANS', { hc: 100 })?.largeur).toBe(800);
+    expect(dimensionnerAgglomeration('ORLEANS', { hc: 125 })?.largeur).toBe(1000);
+    expect(dimensionnerAgglomeration('MARSEILLE', { hc: 100 })?.largeur).toBe(1000);
   });
 
-  it('impose la hauteur et le Hc propres à chaque type', () => {
-    const entree = dimensionnerAgglomeration('LYON', 'EB10')!;
-    expect(entree.hauteur).toBe(400);
-    expect(entree.hc).toBe(125);
-    const sortie = dimensionnerAgglomeration('LYON', 'EB20')!;
-    expect(sortie.hauteur).toBe(250);
-    expect(sortie.hc).toBe(100);
+  it('refuse un Hc absent des tables du fabricant', () => {
+    expect(dimensionnerAgglomeration('LYON', { hc: 160 })).toBeNull();
+  });
+
+  it('monte d’un cran de hauteur par ligne supplémentaire', () => {
+    /* Les quatre cas attestés : le Hc donne le cran de départ, chaque ligne
+       en plus — seconde ligne de nom ou mention de commune — en ajoute un. */
+    expect(dimensionnerAgglomeration('LYON', { hc: 100 })?.hauteur).toBe(250);
+    expect(dimensionnerAgglomeration('LYON', { hc: 100, mention: 'c°ne de X' })?.hauteur)
+      .toBe(400);
+    expect(dimensionnerAgglomeration('LYON', { hc: 125 })?.hauteur).toBe(400);
+    expect(dimensionnerAgglomeration(['SAINT-PIERRE', 'DU VAUVRAY'], { hc: 125 })?.hauteur)
+      .toBe(600);
+  });
+
+  it('refuse ce qui dépasserait le dernier cran de hauteur', () => {
+    expect(dimensionnerAgglomeration(
+      ['SAINT-PIERRE', 'DU VAUVRAY'], { hc: 125, mention: 'c°ne de X' },
+    )).toBeNull();
+  });
+
+  it('signale qu’une mention de commune peut imposer le format au-dessus', () => {
+    const sans = dimensionnerAgglomeration('MOULIGNON', { hc: 100 })!;
+    expect(sans.largeurAConfirmer).toBe(false);
+    expect(sans.largeur).toBe(1000);
+
+    /* La mention est composée plus petit mais elle est plus longue : sur le
+       plan AF035681 elle a fait passer le panneau de 1000 à 1300. Le comptage
+       de signes ne sait pas l'anticiper, donc on le dit au lieu de l'inventer. */
+    const avec = dimensionnerAgglomeration('MOULIGNON', {
+      hc: 100, mention: 'c°ne de QUINCY-VOISINS',
+    })!;
+    expect(avec.largeurAConfirmer).toBe(true);
+    expect(avec.hauteur).toBe(400);
   });
 
   it('compte les espaces et les traits d’union', () => {
-    /* « QUINCY-VOISI » fait 12 signes, tiret compris. En sortie, 12 est
-       justement la limite du 1300 ; en entrée, 12 dépasse les 11 du 1600 et
-       impose déjà un 1900. Sans compter le tiret on retomberait à 11, donc
-       sur un format trop court. */
-    expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB20')?.caracteres).toBe(12);
-    expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB20')?.largeur).toBe(1300);
-    expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB10')?.largeur).toBe(1900);
+    /* « QUINCY-VOISI » fait 12 signes, tiret compris — justement la limite du
+       1300 en Hc 100. Sans compter le tiret on retomberait à 11, donc sur un
+       format trop court. En Hc 125, 12 dépasse les 11 du 1600 et impose
+       déjà un 1900. */
+    expect(dimensionnerAgglomeration('QUINCY-VOISI', { hc: 100 })?.caracteres).toBe(12);
+    expect(dimensionnerAgglomeration('QUINCY-VOISI', { hc: 100 })?.largeur).toBe(1300);
+    expect(dimensionnerAgglomeration('QUINCY-VOISI', { hc: 125 })?.largeur).toBe(1900);
   });
 
   it('reconnaît un panneau d’agglomération, et lui seul', () => {
@@ -273,10 +309,65 @@ describe('entrée et sortie d’agglomération', () => {
   });
 
   it('refuse au-delà de la table — le nom passe alors sur deux lignes', () => {
-    expect(dimensionnerAgglomeration('A'.repeat(19), 'EB10')).not.toBeNull();
-    expect(dimensionnerAgglomeration('A'.repeat(20), 'EB10')).toBeNull();
-    expect(dimensionnerAgglomeration('A'.repeat(20), 'EB20')).not.toBeNull();
-    expect(dimensionnerAgglomeration('A'.repeat(21), 'EB20')).toBeNull();
+    expect(dimensionnerAgglomeration('A'.repeat(19), { hc: 125 })).not.toBeNull();
+    expect(dimensionnerAgglomeration('A'.repeat(20), { hc: 125 })).toBeNull();
+    expect(dimensionnerAgglomeration('A'.repeat(20), { hc: 100 })).not.toBeNull();
+    expect(dimensionnerAgglomeration('A'.repeat(21), { hc: 100 })).toBeNull();
     expect(dimensionnerAgglomeration('   ')).toBeNull();
+  });
+});
+
+describe("agglomération sur deux lignes", () => {
+  it("grandit en hauteur sans changer la table des largeurs", () => {
+    const une = dimensionnerAgglomeration('ORLEANS')!;
+    expect(une.hauteur).toBe(400);
+    expect(une.lignes).toBe(1);
+
+    /* Deux lignes de 7 et 6 signes : la plus longue vaut 7, donc 1000 mm
+       comme en une ligne, mais le panneau passe à 600 de haut. */
+    const deux = dimensionnerAgglomeration(['ORLEANS', 'LA SOURCE'])!;
+    expect(deux.lignes).toBe(2);
+    expect(deux.hauteur).toBe(600);
+    expect(deux.largeur).toBe(1300); // « LA SOURCE » fait 9 signes
+  });
+
+  it("retient la ligne la plus longue, pas le total", () => {
+    /* En une seule ligne, « SAINT-PIERRE DU VAUVRAY » ferait 23 signes et
+       dépasserait la table. Coupé, il tient. */
+    expect(dimensionnerAgglomeration('SAINT-PIERRE DU VAUVRAY')).toBeNull();
+    const p = dimensionnerAgglomeration(['SAINT-PIERRE', 'DU VAUVRAY'])!;
+    expect(p.caracteres).toBe(12);
+    expect(p.largeur).toBe(1900); // 12 signes → format 14
+    expect(p.hauteur).toBe(600);
+  });
+
+  it("ignore une seconde ligne vide", () => {
+    const p = dimensionnerAgglomeration(['LYON', '  '])!;
+    expect(p.lignes).toBe(1);
+    expect(p.hauteur).toBe(400);
+  });
+
+  it("suit la même règle en sortie qu'en entrée, à Hc égal", () => {
+    const a = dimensionnerAgglomeration(['ORLEANS', 'LA SOURCE'], { type: 'EB10', hc: 125 })!;
+    const b = dimensionnerAgglomeration(['ORLEANS', 'LA SOURCE'], { type: 'EB20', hc: 125 })!;
+    expect(b.largeur).toBe(a.largeur);
+    expect(b.hauteur).toBe(a.hauteur);
+    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB20', hc: 100 })?.hauteur).toBe(250);
+  });
+});
+
+describe('couperEnDeuxLignes', () => {
+  it("coupe au point le plus équilibré", () => {
+    expect(couperEnDeuxLignes('SAINT-PIERRE DU VAUVRAY')).toEqual([
+      'SAINT-PIERRE', 'DU VAUVRAY',
+    ]);
+  });
+
+  it("garde le trait d'union en fin de première ligne", () => {
+    expect(couperEnDeuxLignes('QUINCY-VOISINS')).toEqual(['QUINCY-', 'VOISINS']);
+  });
+
+  it("renvoie null quand le nom n'offre aucune coupe", () => {
+    expect(couperEnDeuxLignes('VILLENEUVE')).toBeNull();
   });
 });

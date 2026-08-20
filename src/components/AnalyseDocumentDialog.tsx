@@ -23,7 +23,8 @@ import {
   formeDeCode, niveauDepuisContrat, FORME_PANONCEAU, type Taille,
 } from '@/lib/tarifPanneaux';
 import {
-  typeAgglomeration, nomAgglomerationDansTexte, dimensionnerAgglomeration,
+  typeAgglomeration, nomAgglomerationDansTexte, dimensionnerAgglomerationAuto,
+  HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
@@ -164,6 +165,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      Sa longueur commande le format, or le client l'écrit rarement dans sa
      demande — « EB10 2 UNITES » sur le devis de référence. Clé « d<indice> ». */
   const [nomAgglo, setNomAgglo] = useState<Record<string, string>>({});
+  /* Hauteur de composition du panneau d'agglomération : 100 mm jusqu'à
+     70 km/h, 125 mm à 80. Le client ne donne jamais la vitesse, donc on part
+     du cas défavorable et on laisse corriger. Clé « d<indice> ». */
+  const [hcAgglo, setHcAgglo] = useState<Record<string, number>>({});
+  /* Mention de commune portée sous le nom, quand la commune diffère de
+     l'agglomération : « MOULIGNON » puis « c°ne de QUINCY-VOISINS ». */
+  const [mentionAgglo, setMentionAgglo] = useState<Record<string, string>>({});
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
 const [contratOdoo, setContratOdoo] = useState<
@@ -704,8 +712,13 @@ const [contratOdoo, setContratOdoo] = useState<
        rien dimensionner : on s'en tient au texte brut. */
     const typeEB = typeAgglomeration(trouve.code);
     if (typeEB) {
-      const nom = nomAgglo[`d${i}`] ?? nomAgglomerationDansTexte(brut, trouve.code) ?? '';
-      const p = nom.trim() ? dimensionnerAgglomeration(nom, typeEB) : null;
+      const cle = `d${i}`;
+      const nom = nomAgglo[cle] ?? nomAgglomerationDansTexte(brut, trouve.code) ?? '';
+      const p = nom.trim() ? dimensionnerAgglomerationAuto(nom, {
+        type: typeEB,
+        hc: hcAgglo[cle] ?? HC_AGGLO_DEFAUT,
+        mention: mentionAgglo[cle],
+      }) : null;
       return p ? `DR ${p.largeur} ${p.hauteur} C${classePanneau}` : brut;
     }
 
@@ -739,7 +752,7 @@ const [contratOdoo, setContratOdoo] = useState<
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
     return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
-  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne, nomAgglo]);
+  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
@@ -1902,8 +1915,12 @@ const [contratOdoo, setContratOdoo] = useState<
                                       const cle = `d${i}`;
                                       const lu = nomAgglomerationDansTexte(texte, trouve.code);
                                       const nom = nomAgglo[cle] ?? lu ?? '';
+                                      const hc = hcAgglo[cle] ?? HC_AGGLO_DEFAUT;
+                                      const mention = mentionAgglo[cle] ?? '';
                                       const p = nom.trim()
-                                        ? dimensionnerAgglomeration(nom, typeEB) : null;
+                                        ? dimensionnerAgglomerationAuto(nom, {
+                                          type: typeEB, hc, mention,
+                                        }) : null;
                                       const qte = quantiteDe(cle, l.quantite || 1);
                                       return (
                                         <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1 text-[11px]">
@@ -1921,22 +1938,55 @@ const [contratOdoo, setContratOdoo] = useState<
                                               }))}
                                             />
                                           </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="shrink-0">Hauteur de lettre :</span>
+                                            <select
+                                              className="rounded border px-1 py-0.5 text-[11px]"
+                                              value={hc}
+                                              onChange={e => setHcAgglo(pr => ({
+                                                ...pr, [cle]: Number(e.target.value),
+                                              }))}
+                                            >
+                                              <option value={100}>100 mm — jusqu’à 70 km/h</option>
+                                              <option value={125}>125 mm — 80 km/h</option>
+                                            </select>
+                                          </div>
+                                          <div className="flex items-center gap-2">
+                                            <span className="shrink-0">Mention commune :</span>
+                                            <input
+                                              className="flex-1 rounded border px-1 py-0.5 text-[11px]"
+                                              value={mention}
+                                              placeholder="facultatif — ex. c°ne de QUINCY-VOISINS"
+                                              onChange={e => setMentionAgglo(pr => ({
+                                                ...pr, [cle]: e.target.value,
+                                              }))}
+                                            />
+                                          </div>
                                           {!nom.trim() ? (
                                             <p className="text-warning">
                                               Saisissez le nom : c’est sa longueur qui donne le format.
                                             </p>
                                           ) : !p ? (
                                             <p className="text-destructive">
-                                              {[...nom.trim()].length} signes : trop long pour une ligne,
-                                              le nom doit être composé sur deux.
+                                              {[...nom.trim()].length} signes : trop long, même
+                                              composé sur deux lignes. À traiter à la main.
                                             </p>
                                           ) : (
                                             <>
                                               <div className="flex gap-2">
                                                 <span className="flex-1 truncate" title={p.explication}>
                                                   {p.largeur} × {p.hauteur} mm · {p.caracteres} signes
+                                                  {p.lignes > 1 ? ` · ${p.lignes} lignes` : ''}
+                                                  {p.mention ? ' · + mention' : ''}
                                                 </span>
                                               </div>
+                                              {p.largeurAConfirmer && (
+                                                <p className="text-warning">
+                                                  La mention est composée en 62,5 mm mais elle est
+                                                  souvent plus longue que le nom : elle peut imposer
+                                                  le format au-dessus. À vérifier sur le plan.
+                                                </p>
+                                              )}
                                               <div className="flex gap-2 border-t border-primary/20 pt-0.5">
                                                 <span className="flex-1">× {qte}</span>
                                                 <span className="text-muted-foreground">

@@ -300,8 +300,7 @@ export function dimensionnerEnsemble(
 // ----------------------------------- entrée et sortie d'agglomération
 
 /**
- * Panneaux d'agglomération EB10 (entrée) et EB20 (sortie), catégorie SD1,
- * nom porté sur UNE ligne.
+ * Panneaux d'agglomération EB10 (entrée) et EB20 (sortie), catégorie SD1.
  *
  * Ces panneaux échappent au calcul typographique : le fabricant les
  * dimensionne au simple COMPTAGE de caractères. La règle est volontairement
@@ -311,72 +310,128 @@ export function dimensionnerEnsemble(
  *
  * On s'y tient plutôt que d'appliquer notre propre mesure, et ce n'est pas
  * seulement par prudence commerciale : `longueurMention` DONNE UN RÉSULTAT
- * FAUX sur ces panneaux. Vérifié sur l'EB10 du dossier AF035681, qui porte
- * « MOULIGNON » — notre mesure annonce 738 mm quand Kadri en compose 899,
- * soit 18 % trop court. Les lettres d'un panneau d'agglomération sont bien
- * plus espacées que celles d'un directionnel : environ 22 % de la hauteur de
- * caractère entre deux signes, contre 3,15 % ailleurs. Ne jamais mesurer un
- * EB avec les fonctions du haut de ce fichier.
+ * FAUX sur ces panneaux. Le plan Kadri du dossier AF035681 le chiffre deux
+ * fois : « MOULIGNON » composé en L1 100 y occupe 899 mm à l'échelle 105 %,
+ * soit 856 mm de longueur de base, quand nous en calculons 703 ; la ligne de
+ * commune « c°ne de QUINCY-VOISINS » y occupe 1078 mm, soit 1027 de base,
+ * quand nous en calculons 830. Dans les deux cas nous sommes environ 20 %
+ * trop courts. Les lettres d'un panneau d'agglomération sont bien plus
+ * espacées que celles d'un directionnel : de l'ordre de 0,19 Hc entre deux
+ * signes, contre 0,0315 Hc ailleurs — ce serait le « coefficient d'espacement
+ * 70 % » que Kadri imprime au bas de chaque plan. Tant que ce coefficient
+ * n'est pas élucidé, ne jamais mesurer un EB avec les fonctions du haut de ce
+ * fichier.
  *
- * L'entrée et la sortie ne se composent pas pareil : l'EB10 s'écrit en 125 mm
- * sur un panneau de 400 de haut, l'EB20 en 100 mm sur 250 de haut. D'où deux
- * tables, celle de l'EB20 admettant plus de signes à largeur égale puisque
- * ses lettres sont plus petites.
+ * CE QUI COMMANDE LE FORMAT, C'EST LA HAUTEUR DE COMPOSITION, PAS L'ENTRÉE
+ * OU LA SORTIE. Le point a longtemps été masqué : les deux tables du
+ * fabricant, distribuées comme « table EB10 » et « table EB20 », sont en
+ * réalité la table du Hc 125 et celle du Hc 100. Le plan AF035681 le
+ * démontre : son EB10 et son EB20 portent le même nom, sont tous deux
+ * composés en Hc 100, et font tous deux 1300 × 400. S'ils relevaient de deux
+ * tables différentes, ils n'auraient pas la même largeur.
+ *
+ * Le Hc suit la vitesse de la voie : 100 mm jusqu'à 70 km/h, 125 mm à
+ * 80 km/h.
+ *
+ * DEUX LIGNES, ET LA MENTION DE COMMUNE. Il faut distinguer deux mises en
+ * page que le mot « deux lignes » confond :
+ *
+ *  - Le NOM sur deux lignes, chacune à pleine hauteur de composition.
+ *  - Le nom sur une ligne, suivi d'une MENTION DE COMMUNE composée à
+ *    62,5 mm en italique — l'alphabet L4 — quand la commune diffère de
+ *    l'agglomération : « MOULIGNON » puis « c°ne de QUINCY-VOISINS ».
+ *
+ * Dans les deux cas le panneau gagne un cran de hauteur, et c'est la même
+ * échelle qui sert : 250, puis 400, puis 600.
  */
-const AGGLOMERATION = {
-  EB10: {
-    hc: 125,
-    hauteur: 400,
-    formats: [
-      { largeur: 800, caracteres: 5 },
-      { largeur: 1000, caracteres: 7 },
-      { largeur: 1300, caracteres: 9 },
-      { largeur: 1600, caracteres: 11 },
-      { largeur: 1900, caracteres: 14 },
-      { largeur: 2200, caracteres: 17 },
-      { largeur: 2500, caracteres: 19 },
-    ],
-  },
-  EB20: {
-    hc: 100,
-    hauteur: 250,
-    formats: [
-      { largeur: 800, caracteres: 7 },
-      { largeur: 1000, caracteres: 9 },
-      { largeur: 1300, caracteres: 12 },
-      { largeur: 1600, caracteres: 15 },
-      { largeur: 1900, caracteres: 18 },
-      { largeur: 2200, caracteres: 20 },
-    ],
-  },
-} as const;
 
-export type TypeAgglomeration = keyof typeof AGGLOMERATION;
+/**
+ * Comptages de caractères par hauteur de composition.
+ *
+ * Une seule entrée par largeur normalisée : le nombre maximal de signes que
+ * la largeur admet. Les deux tables sont homothétiques à 1,25 près, ce qui
+ * est cohérent avec un simple changement d'échelle entre Hc 100 et Hc 125.
+ */
+const FORMATS_PAR_HC: Record<number, { largeur: number; caracteres: number }[]> = {
+  100: [
+    { largeur: 800, caracteres: 7 },
+    { largeur: 1000, caracteres: 9 },
+    { largeur: 1300, caracteres: 12 },
+    { largeur: 1600, caracteres: 15 },
+    { largeur: 1900, caracteres: 18 },
+    { largeur: 2200, caracteres: 20 },
+  ],
+  125: [
+    { largeur: 800, caracteres: 5 },
+    { largeur: 1000, caracteres: 7 },
+    { largeur: 1300, caracteres: 9 },
+    { largeur: 1600, caracteres: 11 },
+    { largeur: 1900, caracteres: 14 },
+    { largeur: 2200, caracteres: 17 },
+    { largeur: 2500, caracteres: 19 },
+  ],
+};
+
+/** Hauteurs de panneau admises, par crans successifs. */
+const ECHELLE_HAUTEURS = [250, 400, 600] as const;
+
+/**
+ * Hauteur du panneau : un cran de départ donné par le Hc, puis un cran de
+ * plus par ligne supplémentaire — seconde ligne de nom ou mention de commune.
+ *
+ * Les quatre cas attestés tombent tous sur cette règle :
+ *
+ *   Hc 100, 1 ligne, sans mention → 250   (table fabricant EB20 une ligne)
+ *   Hc 100, 1 ligne, avec mention → 400   (plan Kadri AF035681, EB10 et EB20)
+ *   Hc 125, 1 ligne, sans mention → 400   (table fabricant EB10 une ligne)
+ *   Hc 125, 2 lignes, sans mention → 600  (table fabricant EB10 deux lignes)
+ *
+ * Renvoie `null` au-delà du dernier cran : un Hc 125 sur deux lignes AVEC
+ * mention dépasserait 600 et n'est attesté nulle part.
+ */
+function hauteurAgglomeration(
+  hc: number,
+  lignesNom: number,
+  avecMention: boolean,
+): number | null {
+  const depart = hc >= 125 ? 1 : 0;
+  const cran = depart + (lignesNom - 1) + (avecMention ? 1 : 0);
+  return ECHELLE_HAUTEURS[cran] ?? null;
+}
+
+/** Hauteur de composition d'une mention de commune, en millimètres. */
+export const HC_MENTION_COMMUNE = 62.5;
+
+/** Hauteur de composition retenue par défaut, faute de vitesse connue. */
+export const HC_AGGLO_DEFAUT = 125;
+
+export type TypeAgglomeration = 'EB10' | 'EB20';
 
 export interface PanneauAgglomeration {
   type: TypeAgglomeration;
   largeur: number;
   hauteur: number;
   hc: number;
-  /** Nombre de signes décomptés, espaces et traits d'union compris. */
+  /** Nombre de lignes de nom composées sur le panneau. */
+  lignes: number;
+  /** Une mention de commune est-elle portée sous le nom ? */
+  mention: boolean;
+  /**
+   * Nombre de signes de la ligne de nom la plus longue, espaces et traits
+   * d'union compris — c'est elle qui impose la largeur.
+   */
   caracteres: number;
+  /**
+   * Vrai quand une mention de commune accompagne le nom : elle est composée
+   * plus petit, mais elle est souvent plus longue, et elle peut alors imposer
+   * le format au-dessus. Le comptage de caractères ne sait pas l'anticiper,
+   * puisque les deux lignes n'ont pas la même hauteur. Sur le plan AF035681,
+   * elle a fait passer le panneau de 1000 à 1300.
+   */
+  largeurAConfirmer: boolean;
   explication: string;
 }
 
-/**
- * Dimensionne un panneau d'entrée (EB10) ou de sortie (EB20)
- * d'agglomération portant le nom sur une seule ligne.
- *
- * Renvoie `null` quand le nom dépasse la table : il doit alors être composé
- * sur deux lignes, ce qui relève d'un autre format. C'est le cas de l'EB10 de
- * QUINCY du dossier AF035681, dont le plan Kadri porte bien deux lignes.
- */
-/**
- * Reconnaît un panneau d'agglomération dans un code IISR.
- *
- * Renvoie `null` pour tout le reste : c'est ce test qui aiguille vers
- * `dimensionnerAgglomeration` plutôt que vers le calcul des directionnels.
- */
 export function typeAgglomeration(code: string): TypeAgglomeration | null {
   const t = String(code || '').toUpperCase().replace(/\s+/g, '');
   if (/^EB10\b/.test(t)) return 'EB10';
@@ -429,28 +484,122 @@ export function nomAgglomerationDansTexte(
   return nom.length >= 3 ? nom : null;
 }
 
-export function dimensionnerAgglomeration(
-  nom: string,
-  type: TypeAgglomeration = 'EB10',
-): PanneauAgglomeration | null {
-  const texte = nom.trim();
-  if (!texte) return null;
+export interface OptionsAgglomeration {
+  type?: TypeAgglomeration;
+  /**
+   * Hauteur de composition, 100 ou 125 mm, selon la vitesse de la voie.
+   * Par défaut 125 : c'est le cas défavorable, donc le devis prudent.
+   */
+  hc?: number;
+  /** Mention de commune portée sous le nom, en 62,5 mm italique. */
+  mention?: string;
+}
 
-  const gamme = AGGLOMERATION[type];
+export function dimensionnerAgglomeration(
+  nom: string | string[],
+  options: OptionsAgglomeration | TypeAgglomeration = {},
+): PanneauAgglomeration | null {
+  /* Ancien appel positionnel `dimensionnerAgglomeration(nom, 'EB20')` : on
+     l'accepte encore pour ne pas casser les appelants existants. */
+  const opts: OptionsAgglomeration =
+    typeof options === 'string' ? { type: options } : options;
+  const type = opts.type ?? 'EB10';
+  const hc = opts.hc ?? HC_AGGLO_DEFAUT;
+  const mention = String(opts.mention ?? '').trim();
+
+  /* Une chaîne = une ligne ; un tableau = autant de lignes que d'entrées.
+     Les lignes vides sont écartées : « ["MOULIGNON", ""] » reste un panneau
+     une ligne. */
+  const lignesTexte = (Array.isArray(nom) ? nom : [nom])
+    .map((l) => String(l ?? '').trim())
+    .filter((l) => l.length > 0);
+  if (!lignesTexte.length) return null;
+
+  const formats = FORMATS_PAR_HC[hc];
+  /* Hc hors des deux tables du fabricant : on ne devine pas. */
+  if (!formats) return null;
+
+  const hauteur = hauteurAgglomeration(hc, lignesTexte.length, !!mention);
+  if (hauteur === null) return null;
+
   /* Tout signe compte, espaces et traits d'union compris : c'est
-     l'encombrement qui décide, pas le nombre de lettres. */
-  const caracteres = [...texte].length;
-  const format = gamme.formats.find((f) => caracteres <= f.caracteres);
+     l'encombrement qui décide, pas le nombre de lettres. La ligne la plus
+     longue impose la largeur, les autres s'y alignent. */
+  const caracteres = Math.max(...lignesTexte.map((l) => [...l].length));
+  const format = formats.find((f) => caracteres <= f.caracteres);
+  /* Trop long même pour le plus grand format : à composer sur une ligne de
+     plus, ce que l'appelant doit décider. */
   if (!format) return null;
 
+  const mise = lignesTexte.length === 1 ? 'une ligne' : `${lignesTexte.length} lignes`;
   return {
     type,
     largeur: format.largeur,
-    hauteur: gamme.hauteur,
-    hc: gamme.hc,
+    hauteur,
+    hc,
+    lignes: lignesTexte.length,
+    mention: !!mention,
     caracteres,
+    largeurAConfirmer: !!mention,
     explication:
-      `« ${texte} » : ${caracteres} signe(s) → ${type} de ${format.largeur} × `
-      + `${gamme.hauteur} mm (SD1, une ligne, Hc ${gamme.hc})`,
+      `« ${lignesTexte.join(' / ')} »${mention ? ` + « ${mention} »` : ''} : `
+      + `${caracteres} signe(s) sur la ligne de nom la plus longue → ${type} de `
+      + `${format.largeur} × ${hauteur} mm (SD1, ${mise}, Hc ${hc}`
+      + `${mention ? `, mention en ${HC_MENTION_COMMUNE} italique` : ''})`,
   };
+}
+
+/**
+ * Coupe un nom d'agglomération en deux lignes.
+ *
+ * On coupe sur un séparateur existant du nom — espace ou trait d'union — en
+ * cherchant l'équilibre entre les deux lignes, car c'est la plus longue qui
+ * décide de la largeur. Le trait d'union reste attaché à la fin de la
+ * première ligne, comme sur les plans.
+ *
+ * Renvoie `null` quand le nom n'offre aucun point de coupe : « VILLENEUVE »
+ * ne se coupe pas, il faut un plus grand format.
+ */
+export function couperEnDeuxLignes(nom: string): [string, string] | null {
+  const texte = String(nom ?? '').trim();
+  const points: number[] = [];
+  for (let i = 0; i < texte.length; i++) {
+    if (texte[i] === ' ' || texte[i] === '-') points.push(i);
+  }
+  if (!points.length) return null;
+
+  let meilleur: [string, string] | null = null;
+  let ecartMin = Infinity;
+  for (const i of points) {
+    /* L'espace disparaît à la coupe ; le trait d'union se garde. */
+    const haut = texte[i] === '-' ? texte.slice(0, i + 1) : texte.slice(0, i);
+    const bas = texte.slice(i + 1).trim();
+    if (!haut || !bas) continue;
+    const ecart = Math.abs(haut.length - bas.length);
+    if (ecart < ecartMin) {
+      ecartMin = ecart;
+      meilleur = [haut, bas];
+    }
+  }
+  return meilleur;
+}
+
+/**
+ * Dimensionne un panneau d'agglomération en choisissant seul le nombre de
+ * lignes.
+ *
+ * Une ligne d'abord, puisque c'est la mise en page normale. Si le nom est
+ * trop long pour le plus grand format, on le coupe en deux lignes équilibrées
+ * et on redimensionne. Renvoie `null` quand même la coupe ne suffit pas, ou
+ * quand le nom ne se coupe pas.
+ */
+export function dimensionnerAgglomerationAuto(
+  nom: string,
+  options: OptionsAgglomeration | TypeAgglomeration = {},
+): PanneauAgglomeration | null {
+  const uneLigne = dimensionnerAgglomeration(nom, options);
+  if (uneLigne) return uneLigne;
+
+  const coupe = couperEnDeuxLignes(nom);
+  return coupe ? dimensionnerAgglomeration(coupe, options) : null;
 }
