@@ -316,11 +316,18 @@ export function dimensionnerEnsemble(
  * commune « c°ne de QUINCY-VOISINS » y occupe 1078 mm, soit 1027 de base,
  * quand nous en calculons 830. Dans les deux cas nous sommes environ 20 %
  * trop courts. Les lettres d'un panneau d'agglomération sont bien plus
- * espacées que celles d'un directionnel : de l'ordre de 0,19 Hc entre deux
- * signes, contre 0,0315 Hc ailleurs — ce serait le « coefficient d'espacement
- * 70 % » que Kadri imprime au bas de chaque plan. Tant que ce coefficient
- * n'est pas élucidé, ne jamais mesurer un EB avec les fonctions du haut de ce
- * fichier.
+ * espacées que celles d'un directionnel : de l'ordre de 0,10 Hc entre deux
+ * signes sur les noms d'agglomération, contre 0,0315 Hc ailleurs.
+ *
+ * Le nombre que Kadri imprime au bas de chaque plan est un COEFFICIENT DE
+ * COMPRESSION, non un espacement : 70 % sur presque tous les plans, 50 % sur
+ * celui de Balvay, où le texte est comprimé pour tenir dans un panneau
+ * imposé. Cela dit ce qu'il fait, mais ne suffit pas encore à mesurer :
+ * rapporté aux seuls glyphes, l'unique plan à 50 % tombe au milieu des plans
+ * à 70 % (rapport 1,114 contre 1,099 à 1,133), là où il devrait s'en
+ * détacher nettement. Le coefficient ne porte donc pas sur ce que nous
+ * mesurons — il reste au moins un terme à identifier en amont. Ne jamais
+ * mesurer un EB avec les fonctions du haut de ce fichier.
  *
  * CE QUI COMMANDE LE FORMAT, C'EST LA HAUTEUR DE COMPOSITION, PAS L'ENTRÉE
  * OU LA SORTIE. Le point a longtemps été masqué : les deux tables du
