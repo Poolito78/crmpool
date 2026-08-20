@@ -497,11 +497,24 @@ class ContratCadre {
 
     const out: string[] = [];
     for (const s of suffixes) out.push(famille + s);
-    /* Au-delà de 4 caractères, un préfixe suivi d'étoile ne s'observe pas
-       dans la grille — les formes vues vont de « A* » à « B30* », les
-       familles plus longues (SG60, B214RAILS…) ayant leur ligne littérale.
-       Borner évite de gonfler inutilement le domaine envoyé à Odoo. */
-    for (let i = Math.min(famille.length, 4); i >= 1; i--) {
+    /* Préfixes étoilés, du plus long au plus court : la forme la plus
+       précise l'emporte.
+       
+       Ils ont d'abord été bornés à quatre caractères, parce que les formes
+       relevées dans la grille des panneaux allaient de « A* » à « B30* ».
+       C'était une généralisation abusive tirée d'une seule famille de
+       produits : les accessoires ne se codifient pas ainsi. Un
+       PLASTOBLOC24GM tarifé dans la grille sous « PLASTOBLOC* » ou
+       « PLASTOBLOC24* » n'était jamais rapproché de sa ligne — on ne
+       demandait que PLAS*, PLA*, PL* et P*. L'article ressortait « hors
+       barème » alors que son prix était là.
+       
+       On balaie donc toute la longueur. La comparaison reste une égalité
+       (« =ilike » n'enveloppe pas le motif de %), donc un préfixe long ne
+       peut pas ramener plus large qu'un court : il n'y a aucun risque de
+       faux rapprochement, seulement quelques motifs de plus dans le
+       domaine. */
+    for (let i = famille.length; i >= 1; i--) {
       for (const s of suffixes) out.push(famille.slice(0, i) + "*" + s);
     }
     return [...new Set(out)];
@@ -519,9 +532,30 @@ class ContratCadre {
     const aChercher = [...new Set(codes.filter((c) => c && !this.cache.has(c)))];
     if (!aChercher.length) return;
 
+    /* Les gabarits sont produits du plus précis au plus général, et c'est cet
+       ordre qui fait la règle de priorité. On entrelace donc les codes rang
+       par rang plutôt que de les concaténer : si le domaine doit être borné,
+       ce qui tombe est le plus général de tous, jamais le gabarit précis d'un
+       article qui se trouvait en fin de liste. */
+    const parCodeGabarits = aChercher.map((c) => ContratCadre.gabarits(c));
     const gabarits = new Set<string>();
-    for (const c of aChercher) for (const g of ContratCadre.gabarits(c)) gabarits.add(g);
-    const liste = [...gabarits];
+    const profondeur = Math.max(...parCodeGabarits.map((g) => g.length), 0);
+    for (let rang = 0; rang < profondeur; rang++) {
+      for (const g of parCodeGabarits) if (g[rang]) gabarits.add(g[rang]);
+    }
+
+    /* Depuis que les préfixes étoilés balaient toute la longueur de la
+       famille, un lot d'articles aux codes longs peut produire beaucoup de
+       motifs. Odoo les accepte, mais un domaine sans fin finit par coûter
+       cher. On borne — et on le DIT dans le journal : un plafond silencieux
+       se lirait plus tard comme « l'article n'est pas au contrat ». */
+    const PLAFOND_MOTIFS = 600;
+    let liste = [...gabarits];
+    if (liste.length > PLAFOND_MOTIFS) {
+      console.warn(`[contrat-cadre] ${liste.length} motifs pour ${aChercher.length} `
+        + `article(s) : borné à ${PLAFOND_MOTIFS}, les plus généraux sont écartés`);
+      liste = liste.slice(0, PLAFOND_MOTIFS);
+    }
     if (!liste.length) return;
 
     try {
@@ -593,9 +627,15 @@ class ContratCadre {
       codes.slice(0, 2)
         .map((c) => {
           const s = c.split(".");
-          return s[1] && /^\d+$/.test(s[1])
-            ? `${(s[0] || "").charAt(0)}%.${s[1]}.%`
-            : "";
+          if (s[1] && /^\d+$/.test(s[1])) {
+            return `${(s[0] || "").charAt(0)}%.${s[1]}.%`;
+          }
+          /* Un code SANS point — PLASTOBLOC24GM, FGBA8040 — ne rentrait dans
+             aucun motif : le diagnostic ne se déclenchait pas et l'article
+             restait « hors barème » sans la moindre trace de pourquoi. On
+             montre ce que la grille contient autour de son début. */
+          const debut = (s[0] || "").slice(0, 4);
+          return debut.length >= 2 ? `${debut}%` : "";
         })
         .filter(Boolean),
     )];
@@ -772,10 +812,35 @@ const MOTS_IGNORES = new Set([
   "de", "du", "la", "le", "les", "des", "au", "aux", "en", "pour", "avec", "et",
   "sur", "par", "un", "une", "mm", "cm", "ml", "long", "longueur", "lg", "dia",
   "diam", "diametre", "ref", "reference", "unite", "piece", "pieces", "type",
+  // « 24 kg » : le nombre est discriminant, l'unité non — comme mm ou ml.
+  // Sans cela « kg » consommait une des cinq places et évinçait un critère utile.
+  "kg", "kgs", "poids",
 ]);
 
+/**
+ * Familles d'articles que les clients n'écrivent jamais comme Odoo les nomme.
+ *
+ * Une demande dit « plato bloc 24 kg », Odoo porte « PLASTOBLOC24GM » : ni la
+ * même orthographe, ni le même découpage. Aucun assouplissement de la
+ * recherche ne rattrape ça — « plato » n'est pas une sous-chaîne de
+ * « plastobloc » — il faut le dire.
+ *
+ * Chaque entrée réécrit le texte de la demande AVANT tout découpage en mots.
+ */
+const ALIAS_FAMILLES: [RegExp, string][] = [
+  // plato bloc, plasto-bloc, plastot bloc… → plastobloc
+  [/\bplas?t?o?s?\s*-?\s*blocs?\b/gi, "plastobloc"],
+];
+
+/** Réécrit les noms de famille mal orthographiés dans une demande. */
+export function normaliserFamilles(texte: string): string {
+  let t = String(texte || "");
+  for (const [motif, vers] of ALIAS_FAMILLES) t = t.replace(motif, vers);
+  return t;
+}
+
 export function motsDeRecherche(texte: string): string[] {
-  const t = String(texte || "")
+  const t = normaliserFamilles(String(texte || ""))
     .normalize("NFD").replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/ø/g, " ");
@@ -866,8 +931,14 @@ async function coutsLocaux(codes: string[]): Promise<Map<string, number>> {
 
 /** Domaine Odoo : vendable ET chacun des mots, dans le code ou la désignation. */
 export function domaineRecherche(texte: string): unknown[] {
-  const mots = motsDeRecherche(texte);
+  return domaineDepuisMots(motsDeRecherche(texte), texte);
+}
 
+/**
+ * Même domaine, mais à partir d'une liste de mots déjà arrêtée — ce qui
+ * permet d'en retirer au fur et à mesure quand rien ne sort.
+ */
+export function domaineDepuisMots(mots: string[], texte: string): unknown[] {
   // Chaque terme est déjà la suite de jetons à insérer (cf. combinerEt).
   const termes: unknown[][] = [[["sale_ok", "=", true]]];
   /* Un « fardeau » est un lot groupé — par exemple 61 supports liés
@@ -1172,13 +1243,52 @@ serve(async (req) => {
     for (const r of aChercher) {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
-      const dom = domaineRecherche(q);
-      let res = (await od.kw(
-        "product.product", "search_read",
-        [dom, ["id", "default_code", "name", "lst_price", "standard_price",
-               "categ_id", "product_tmpl_id", "uom_id"]],
+      const CHAMPS_ART = ["id", "default_code", "name", "lst_price", "standard_price",
+                          "categ_id", "product_tmpl_id", "uom_id"];
+      const chercher = (domaine: unknown[]) => od.kw(
+        "product.product", "search_read", [domaine, CHAMPS_ART],
         { limit: 40, order: "default_code, name" },
-      )) as any[];
+      ) as Promise<any[]>;
+
+      let res = await chercher(domaineRecherche(q));
+
+      /* RELÂCHEMENT PROGRESSIF.
+       *
+       * Le domaine exige TOUS les mots à la fois. Une demande un peu bavarde
+       * devient alors impossible à satisfaire : « plato bloc 24 kg pour mat
+       * 80 × 40 » réclamait « mat », « 80 » et « 40 » dans le libellé ou le
+       * code de l'article, or le PLASTOBLOC24GM ne porte aucun des trois —
+       * ce sont les dimensions du MÂT qu'il leste, pas les siennes. Résultat :
+       * zéro article, et l'utilisateur devant une liste vide sans savoir si
+       * l'article n'existe pas ou si la question était mal posée.
+       *
+       * On retire donc les critères en commençant par les moins
+       * discriminants — les nombres nus d'abord, puis les mots les plus
+       * courts — et on s'arrête dès qu'une passe ramène quelque chose. Le
+       * premier mot n'est jamais retiré : c'est celui que le client a écrit
+       * en premier, et c'est presque toujours le nom de l'article. */
+      if (!res.length) {
+        const mots = motsDeRecherche(q);
+        /* On sacrifie EN PARTANT DE LA FIN. Une demande française nomme
+           l'article d'abord, le qualifie ensuite, et finit par le contexte :
+           « plato bloc 24 kg pour mat 80 × 40 » — le bloc, son poids, puis ce
+           qu'il leste. Retirer les derniers mots d'abord retient donc
+           « plastobloc 24 », c'est-à-dire précisément la référence cherchée,
+           là qu'un tri par longueur ou par nature aurait sacrifié le 24 avant
+           le 80 et rendu les quatre PLASTOBLOC au lieu du bon. */
+        const gardes = new Set(mots);
+        for (let i = mots.length - 1; i >= 1; i--) {
+          gardes.delete(mots[i]);
+          if (gardes.size === 0) break;
+          const domaine = domaineDepuisMots([...gardes], q);
+          res = await chercher(domaine);
+          if (res.length) {
+            console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+              + ` ${res.length} article(s) en relâchant à ${JSON.stringify([...gardes])}`);
+            break;
+          }
+        }
+      }
 
       const segments = (code: string) => String(code || "").split(".");
 
@@ -1239,8 +1349,16 @@ serve(async (req) => {
          produit film (ISOFB21A2450C2DF, ROTO450B21A2C2…). */
       const estSouple = (categorie: string) =>
         /^plastique\b|^semi-?finis?\b/i.test(categorie || "");
+      /* Ce filtre écarte les FILMS SOUPLES, mais il le fait par la catégorie
+         Odoo — or « PLASTIQUE » ne contient pas que des films : les
+         PLASTOBLOC, blocs de lest en plastique rangés sous PLASTIQUE /
+         Balisage temporaire, sont des accessoires de support bien physiques.
+         Une demande qui les nomme explicitement se faisait donc vider de ses
+         résultats juste après les avoir trouvés. On tient à jour la liste des
+         familles de PLASTIQUE qui ne sont pas des films. */
       const demandeSouple = /\bisoflex\b|\bbaliflex\b|\bg2flex\b|\broto\b|\bflex\b|\bfilm\b|\bsouple\b|\bplastique\b|\bsemi-?finis?\b/i
-        .test(q);
+        .test(q)
+        || /\bplastobloc\b/i.test(normaliserFamilles(q));
       if (!demandeSouple) {
         const nonSouples = res.filter((x) =>
           !estSouple(x.categ_id ? x.categ_id[1] : ""));
