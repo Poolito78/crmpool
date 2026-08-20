@@ -898,7 +898,62 @@ serve(async (req) => {
     });
 
   try {
-    const { client, lignes, recherches } = await req.json();
+    const corps = await req.json();
+    const { client, lignes, recherches } = corps;
+
+    /* ── Recherche libre dans le fichier client d'Odoo ──────────────────────
+     *
+     * MonCRM ne connaît que les clients qu'on y a saisis, alors qu'Odoo porte
+     * le fichier complet. Sans cette recherche, un client qui n'a jamais été
+     * ressaisi bloque la création d'un devis : il n'apparaît dans aucune
+     * liste déroulante. On rend donc la main sur le fichier Odoo, à charge
+     * pour MonCRM d'y recopier la fiche retenue.
+     *
+     * Ce mode répond seul et n'exécute aucune tarification : il n'a ni ligne
+     * ni article à chiffrer. */
+    const terme = String(corps?.rechercheClient ?? "").trim();
+    if (terme) {
+      /* Deux caractères ne discriminent rien et rapporteraient la moitié du
+         fichier : on refuse plutôt que de faire travailler Odoo pour rien. */
+      if (terme.length < 3) return repondre({ partenaires: [] });
+
+      const od = new Odoo();
+      const motif = `%${terme}%`;
+      const champs = ["name", "email", "city", "zip", "street", "phone", "mobile",
+                      "vat", "is_company", "parent_id",
+                      "property_product_pricelist"];
+      const trouves = (await od.kw(
+        "res.partner", "search_read",
+        [[["active", "=", true],
+          "|", "|", "|",
+          ["name", "ilike", motif],
+          ["email", "ilike", motif],
+          ["vat", "ilike", motif],
+          ["city", "ilike", motif]],
+         champs],
+        { limit: 25, order: "is_company desc, name" },
+      )) as any[];
+
+      return repondre({
+        partenaires: trouves.map((p) => ({
+          id: p.id,
+          nom: p.name || "",
+          email: p.email || "",
+          ville: p.city || "",
+          codePostal: p.zip || "",
+          adresse: p.street || "",
+          telephone: p.phone || "",
+          mobile: p.mobile || "",
+          tva: p.vat || "",
+          estSociete: !!p.is_company,
+          /* Une personne rattachée : on affiche sa société pour que deux
+             homonymes de groupes différents restent distinguables. */
+          societeMere: p.parent_id ? p.parent_id[1] : "",
+          contrat: p.property_product_pricelist ? p.property_product_pricelist[1] : "",
+        })),
+      });
+    }
+
     const demandees = (lignes || []).filter((l: any) => l?.reference);
     const aChercher = (recherches || []).filter((r: any) => (r?.texte || '').trim().length >= 2);
     if (!client || (!demandees.length && !aChercher.length)) {

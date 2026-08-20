@@ -31,7 +31,7 @@ import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
-  type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
+  type Client, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   generateId, calculerDateEcheance, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
@@ -82,6 +82,22 @@ interface Props {
 
 const today = () => new Date().toISOString().split('T')[0];
 const nextYear = () => new Date(Date.now() + 30 * 864e5).toISOString().split('T')[0];
+
+/** Une fiche du fichier client d'Odoo, telle que la renvoie `odoo-prix`. */
+interface PartenaireOdoo {
+  id: number;
+  nom: string;
+  email: string;
+  ville: string;
+  codePostal: string;
+  adresse: string;
+  telephone: string;
+  mobile: string;
+  tva: string;
+  estSociete: boolean;
+  societeMere: string;
+  contrat: string;
+}
 
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
@@ -164,6 +180,157 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Nom porté par un panneau d'agglomération, saisi ou corrigé à la main.
      Sa longueur commande le format, or le client l'écrit rarement dans sa
      demande — « EB10 2 UNITES » sur le devis de référence. Clé « d<indice> ». */
+  /* ── Recherche d'un client dans le fichier Odoo ──────────────────────────
+     MonCRM ne connaît que les clients qu'on y a saisis. Quand la demande
+     vient d'un client jamais ressaisi, aucune liste déroulante ne le propose
+     et le devis ne peut pas être créé. On ouvre donc une recherche sur le
+     fichier Odoo, et la fiche retenue est recopiée dans MonCRM.
+     `odooCible` retient LEQUEL des deux formulaires a demandé la recherche —
+     le devis ou la commande client — pour y reporter le client créé. */
+  const [odooCible, setOdooCible] = useState<'devis' | 'commande' | null>(null);
+  const [odooTerme, setOdooTerme] = useState('');
+  const [odooEnCours, setOdooEnCours] = useState(false);
+  const [odooResultats, setOdooResultats] = useState<PartenaireOdoo[] | null>(null);
+
+  /** Interroge le fichier client d'Odoo sur la raison sociale, la ville, le
+      courriel ou le numéro de TVA. */
+  const chercherClientOdoo = useCallback(async () => {
+    const terme = odooTerme.trim();
+    if (terme.length < 3) {
+      toast.error('Trois caractères au minimum pour chercher.');
+      return;
+    }
+    setOdooEnCours(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('odoo-prix', {
+        body: { rechercheClient: terme },
+      });
+      if (error) throw error;
+      const trouves: PartenaireOdoo[] = data?.partenaires ?? [];
+      setOdooResultats(trouves);
+      if (!trouves.length) toast.info(`Aucune fiche Odoo pour « ${terme} ».`);
+    } catch (e) {
+      /* Odoo injoignable ou identifiants expirés : on le dit, plutôt que de
+         laisser une liste vide faire croire à une absence de client. */
+      setOdooResultats(null);
+      toast.error(`Recherche Odoo impossible : ${(e as Error).message}`);
+    } finally {
+      setOdooEnCours(false);
+    }
+  }, [odooTerme]);
+
+  /** Recopie une fiche Odoo dans MonCRM et la désigne sur le formulaire. */
+  const importerClientOdoo = useCallback((p: PartenaireOdoo) => {
+    /* Déjà présent ? On le réutilise au lieu d'en créer un doublon : le
+       rapprochement se fait sur le courriel, seul identifiant fiable, sinon
+       sur la raison sociale exacte. */
+    const existant = clients.find(c =>
+      (p.email && c.email && c.email.toLowerCase() === p.email.toLowerCase())
+      || (c.societe || c.nom || '').toLowerCase() === p.nom.toLowerCase());
+
+    /* Un contact rattaché porte le nom de la personne ; c'est sa société qui
+       doit figurer sur le devis. */
+    const societe = p.estSociete ? p.nom : (p.societeMere || p.nom);
+    const client: Client = existant ?? {
+      id: generateId(),
+      nom: p.nom,
+      societe,
+      email: p.email,
+      telephone: p.telephone || p.mobile,
+      telephoneMobile: p.mobile,
+      adresse: p.adresse,
+      ville: p.ville,
+      codePostal: p.codePostal,
+      tvaIntra: p.tva,
+      notes: `Fiche reprise du fichier Odoo (partenaire #${p.id}).`,
+      dateCreation: new Date().toISOString().split('T')[0],
+      adressesLivraison: [],
+    };
+    if (!existant) updateClients(prev => [...prev, client]);
+
+    if (odooCible === 'commande') setCreerCCClientId(client.id);
+    else setCreerDevisClientId(client.id);
+
+    setOdooCible(null);
+    setOdooResultats(null);
+    setOdooTerme('');
+    toast.success(existant
+      ? `${societe} était déjà dans MonCRM : client rattaché.`
+      : `${societe} repris d'Odoo et ajouté à MonCRM.`);
+  }, [clients, updateClients, odooCible]);
+
+  /** Le bloc de recherche, partagé par les deux formulaires. */
+  const rechercheOdoo = (cible: 'devis' | 'commande') => (
+    <div className="col-span-2 space-y-1">
+      {odooCible !== cible ? (
+        <button
+          type="button"
+          className="text-[11px] text-primary underline underline-offset-2"
+          onClick={() => { setOdooCible(cible); setOdooResultats(null); }}
+        >
+          Le client n’est pas dans la liste ? Chercher dans Odoo
+        </button>
+      ) : (
+        <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5">
+          <div className="flex items-center gap-1.5">
+            <Input
+              autoFocus
+              className="h-7 flex-1 text-[11px]"
+              placeholder="Raison sociale, ville, courriel ou n° TVA…"
+              value={odooTerme}
+              onChange={e => setOdooTerme(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); chercherClientOdoo(); } }}
+            />
+            <Button
+              type="button" size="sm" className="h-7 text-[11px]"
+              disabled={odooEnCours} onClick={chercherClientOdoo}
+            >
+              {odooEnCours ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Chercher'}
+            </Button>
+            <Button
+              type="button" size="sm" variant="ghost" className="h-7 text-[11px]"
+              onClick={() => { setOdooCible(null); setOdooResultats(null); }}
+            >
+              Annuler
+            </Button>
+          </div>
+
+          {odooResultats?.length ? (
+            <div className="max-h-48 space-y-0.5 overflow-y-auto">
+              {odooResultats.map(p => (
+                <button
+                  type="button"
+                  key={p.id}
+                  className="flex w-full flex-col items-start rounded px-1.5 py-1 text-left text-[11px] hover:bg-primary/10"
+                  onClick={() => importerClientOdoo(p)}
+                >
+                  <span className="font-medium">
+                    {p.nom}
+                    {!p.estSociete && p.societeMere && (
+                      <span className="font-normal text-muted-foreground"> — {p.societeMere}</span>
+                    )}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {[p.codePostal, p.ville, p.email].filter(Boolean).join(' · ') || 'aucune coordonnée'}
+                  </span>
+                  {p.contrat && (
+                    <span className="text-primary">Contrat cadre : {p.contrat}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          ) : odooResultats ? (
+            <p className="text-[11px] text-muted-foreground">Aucune fiche trouvée.</p>
+          ) : (
+            <p className="text-[11px] text-muted-foreground">
+              La fiche retenue sera recopiée dans MonCRM.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
   const [nomAgglo, setNomAgglo] = useState<Record<string, string>>({});
   /* Hauteur de composition du panneau d'agglomération : 100 mm jusqu'à
      70 km/h, 125 mm à 80. Le client ne donne jamais la vitesse, donc on part
@@ -1643,6 +1810,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
+                          {rechercheOdoo('devis')}
                           <div className="space-y-1"><Label className="text-xs">N° devis *</Label><Input className="h-8 text-xs" value={creerDevisNumero} onChange={e => setCreerDevisNumero(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerDevisDate} onChange={e => setCreerDevisDate(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Validité</Label><Input className="h-8 text-xs" type="date" value={creerDevisValidite} onChange={e => setCreerDevisValidite(e.target.value)} /></div>
@@ -1982,9 +2150,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                               </div>
                                               {p.largeurAConfirmer && (
                                                 <p className="text-warning">
-                                                  La mention est composée en 62,5 mm mais elle est
-                                                  souvent plus longue que le nom : elle peut imposer
-                                                  le format au-dessus. À vérifier sur le plan.
+                                                  C’est la mention, plus longue que le nom, qui
+                                                  impose ce format. Son équivalence en signes n’est
+                                                  calée que sur deux plans : à vérifier.
                                                 </p>
                                               )}
                                               <div className="flex gap-2 border-t border-primary/20 pt-0.5">
@@ -2297,6 +2465,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
+                          {rechercheOdoo('commande')}
                           <div className="space-y-1"><Label className="text-xs">N° commande *</Label><Input className="h-8 text-xs" value={creerCCNumero} onChange={e => setCreerCCNumero(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerCCDate} onChange={e => setCreerCCDate(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Livraison prévue</Label><Input className="h-8 text-xs" type="date" value={creerCCDateLivraison} onChange={e => setCreerCCDateLivraison(e.target.value)} /></div>
