@@ -71,6 +71,10 @@ interface TrouvailleOdoo {
   cout: number;
   /** Part des mots de la demande que l'article porte (0 à 1). */
   certitude?: number;
+  /** Classe de film portée par la référence — C1, C2, C3, C3FJ, 3430. */
+  classe?: string;
+  /** Classe que la demande réclamait, quand elle en nomme une. */
+  classeDemandee?: string;
 }
 
 /* En dessous de ce seuil, l'article est bien retenu — la ligne ne reste
@@ -2467,6 +2471,23 @@ const [contratOdoo, setContratOdoo] = useState<
                                           const dOffice = !refusOdoo.has(i)
                                             && ch.reference === props[0]?.reference;
                                           const sur = (ch.certitude ?? 1) >= CERTITUDE_ACQUISE;
+                                          /* Une classe de film différente de celle
+                                             demandée n'est pas une nuance : c'est un
+                                             autre produit, à un autre prix. On le dit
+                                             en toutes lettres plutôt que de laisser
+                                             lire un avertissement générique. */
+                                          if (ch.classeDemandee && ch.classe
+                                              && ch.classe !== ch.classeDemandee) {
+                                            return (
+                                              <p className="text-[10px] text-destructive">
+                                                Retenu : {ch.reference} — mais c’est du{' '}
+                                                <strong>{ch.classe}</strong>, or la demande
+                                                porte du <strong>{ch.classeDemandee}</strong>.
+                                                Cette variante n’est pas au catalogue Odoo :
+                                                vérifiez avant de chiffrer.
+                                              </p>
+                                            );
+                                          }
                                           return (
                                             <p className={`text-[10px] ${dOffice && !sur ? 'text-warning' : 'text-muted-foreground'}`}>
                                               {dOffice

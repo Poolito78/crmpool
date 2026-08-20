@@ -1477,11 +1477,33 @@ serve(async (req) => {
          chose : sur « panneaux AK5 … », l'appuyer sur « panneaux » aurait fait
          remonter tout ce dont le libellé contient ce mot. */
       const iPivot = Math.max(0, motsQ.findIndex((m) => !motGenerique(m)));
+
+      /* CLASSE DE FILM.
+       *
+       * Quand la demande la nomme — C1, C2, C3, C3FJ, 3430 — ce n'est pas un
+       * qualificatif parmi d'autres : elle change le produit et son prix. Or
+       * le relâchement finit par la lâcher comme n'importe quel mot, et un
+       * article d'une AUTRE classe remontait alors en tête sans que rien ne
+       * le signale : sur une demande de C2, l'AK5 en C1 arrivait premier.
+       *
+       * On ne peut pas fabriquer une variante qui n'existe pas au catalogue.
+       * Ce qu'on peut, c'est ne jamais la faire passer pour celle qui a été
+       * demandée : un article dont le code porte une classe DIFFÉRENTE est
+       * relégué derrière tous les autres, et la classe qu'il porte remonte
+       * jusqu'à l'affichage. */
+      const CLASSE = /^(c\d(?:fj)?|3430)$/i;
+      const classeDemandee = motsQ.find((m) => CLASSE.test(m))?.toUpperCase() || "";
+      const classeDe = (code: string) =>
+        (code.split(".").find((seg) => CLASSE.test(seg)) || "").toUpperCase();
       const points = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
         /* Référence citée telle quelle : rien ne peut faire mieux. */
         if (code === ql) return 1000;
+        /* Classe explicitement demandée, classe explicitement différente :
+           l'article existe, mais ce n'est pas celui-là. */
+        const cl = classeDe(x.default_code || "");
+        if (classeDemandee && cl && cl !== classeDemandee) return -100;
         let n = 0;
         for (let k = 0; k < motsQ.length; k++) {
           const poids = k === iPivot ? 4 : (motGenerique(motsQ[k]) ? 1 : 2);
@@ -1572,6 +1594,10 @@ serve(async (req) => {
           contrat: p,
           fiche: x.lst_price || 0,
           cout: cout || 0,
+          /* Classe de film portée par la référence, et celle qui avait été
+             demandée : l'écart doit se lire à l'écran, pas se deviner. */
+          classe: classeDe(x.default_code || ""),
+          classeDemandee,
           /* Part des mots de la demande que cet article porte réellement.
              C'est ce qui permet à l'appli de retenir le premier d'office
              sans le faire à l'aveugle : au-dessus du seuil elle l'annonce
