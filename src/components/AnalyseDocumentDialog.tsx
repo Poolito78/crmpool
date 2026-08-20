@@ -132,6 +132,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Ce qu'Odoo propose pour les demandes qu'aucun article MonCRM ne satisfait,
      indexé par le texte cherché. */
   const [trouvaillesOdoo, setTrouvaillesOdoo] = useState<Record<string, TrouvailleOdoo[]>>({});
+  /* Fiche Odoo des références EXPLICITEMENT demandées, par référence.
+     Ces articles-là ne sont pas « cherchés » : ils sont lus par leur code,
+     donc trouvés à coup sûr. Ils n'apparaissaient pourtant nulle part dans
+     le panneau Odoo, qui ne montrait que le résultat de la recherche par
+     mots — d'où un AK5.1000.C2.BTR.IS.BRUT tarifé mais invisible, à côté
+     d'un ARCEAU sorti d'une recherche approximative. */
+  const [fichesOdoo, setFichesOdoo] = useState<Record<string, TrouvailleOdoo>>({});
   /* Article Odoo retenu pour une ligne, par indice de ligne.
      Ces articles n'existent pas dans MonCRM — c'est précisément pourquoi on
      est allé les chercher. Ils ne peuvent donc pas passer par `choixProduit`,
@@ -502,7 +509,8 @@ const [contratOdoo, setContratOdoo] = useState<
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     setQuantiteManuelle({}); setPrixManuel({});
     setNomAgglo({});
-    setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setOdooMuet(null);
+    setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
+    setOdooMuet(null);
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -981,6 +989,14 @@ const [contratOdoo, setContratOdoo] = useState<
     (result?.lignes ?? []).forEach((l, i) => {
       const p = produitDeLigne(i);
       if (p) refs.add(p.referenceOdoo || p.reference);
+      /* La référence ÉCRITE PAR LE CLIENT, même quand MonCRM ne la connaît
+         pas. C'est une lecture par code, la plus sûre qui soit, et elle ne
+         coûte rien quand le code n'existe pas chez Odoo : il ne remonte
+         simplement aucune fiche. Sans elle, un article que le client
+         désigne exactement mais qui manque à la copie locale n'était
+         atteignable que par la recherche approximative. */
+      const brute = String(l.reference || '').trim();
+      if (brute.length >= 4 && /[.\d]/.test(brute)) refs.add(brute.toUpperCase());
     });
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
@@ -1077,6 +1093,23 @@ const [contratOdoo, setContratOdoo] = useState<
         });
         if (annule) return;
         setTrouvaillesOdoo((data?.trouvailles || {}) as Record<string, TrouvailleOdoo[]>);
+        /* Les fiches lues par référence exacte, gardées entières : le panneau
+           Odoo doit pouvoir les proposer comme n'importe quelle trouvaille. */
+        const fiches: Record<string, TrouvailleOdoo> = {};
+        for (const [ref, v] of Object.entries((data?.prix || {}) as Record<string, any>)) {
+          if (!v) continue;
+          fiches[ref] = {
+            reference: ref,
+            designation: v.designation || ref,
+            categorie: '', unite: '',
+            contrat: v.contrat ?? null,
+            fiche: v.fiche || 0,
+            cout: v.cout || 0,
+            /* Lue par son code, pas devinée : aucune incertitude. */
+            certitude: 1,
+          };
+        }
+        setFichesOdoo(fiches);
 
         /* Les interlocuteurs de la société. On présélectionne celui dont
            l'adresse est celle de l'expéditeur — pas celui dont le prénom
@@ -1120,7 +1153,7 @@ const [contratOdoo, setContratOdoo] = useState<
             societeIncertaine: !!data.societeIncertaine,
           });
         } else setContratOdoo(null);
-      } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); } }
+      } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); } }
     })();
     return () => { annule = true; };
     // `quantiteManuelle` volontairement hors dépendances :
@@ -1153,12 +1186,18 @@ const [contratOdoo, setContratOdoo] = useState<
       let change = false;
       lignes.forEach((l, i) => {
         if (n[i] || refusOdoo.has(i) || produitDeLigne(i)) return;
-        const props = trouvaillesOdoo[texteRechercheOdoo(l, i)];
-        if (props?.length) { n[i] = props[0]; change = true; }
+        /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
+           d'abord, la recherche par mots ensuite. */
+        const brute = String(l.reference || '').trim().toUpperCase();
+        const exacte = brute ? fichesOdoo[brute] : undefined;
+        const props = exacte
+          ? [exacte]
+          : (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []);
+        if (props.length) { n[i] = props[0]; change = true; }
       });
       return change ? n : prev;
     });
-  }, [trouvaillesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo]);
+  }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -2344,8 +2383,24 @@ const [contratOdoo, setContratOdoo] = useState<
                                       locale, et surtout leurs vrais prix : le
                                       bordereau du client. */}
                                   {(() => {
-                                    const props = trouvaillesOdoo[texteRechercheOdoo(l, i)];
-                                    if (!props?.length) return null;
+                                    /* Deux sources, dans cet ordre :
+                                       la fiche lue par RÉFÉRENCE EXACTE — celle
+                                       de l'article retenu — puis ce que la
+                                       recherche par mots a ramené. La première
+                                       est certaine, la seconde approchée ; les
+                                       mélanger sans les ordonner laissait un
+                                       ARCEAU trouvé par similitude passer devant
+                                       l'AK5.1000.C2.BTR.IS.BRUT demandé. */
+                                    const refRetenue = retenu
+                                      ? (retenu.referenceOdoo || retenu.reference)
+                                      : '';
+                                    const exacte = refRetenue ? fichesOdoo[refRetenue] : undefined;
+                                    const cherchees = trouvaillesOdoo[texteRechercheOdoo(l, i)] || [];
+                                    const props = [
+                                      ...(exacte ? [exacte] : []),
+                                      ...cherchees.filter(t => t.reference !== exacte?.reference),
+                                    ];
+                                    if (!props.length) return null;
                                     // Odoo est la source : ses propositions
                                     // s'affichent même quand un article local a
                                     // été retenu, pour qu'on puisse comparer.
