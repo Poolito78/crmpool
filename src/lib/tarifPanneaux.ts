@@ -298,7 +298,13 @@ export function codeDansTexte(texte: string): { code: string; valeur?: string } 
      AB3a. Le motif s'arrêtait à la lettre, puis exigeait une fin de mot — qui
      n'arrivait pas, le chiffre étant un caractère de mot. Le B21a2 n'était donc
      reconnu ni comme panneau, ni comme rien : ni tarif, ni recherche Odoo. */
-  const m = t.match(/\b(AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
+  /* EB10 et EB20 en tête de l'alternance : sans eux, « EB10 » n'était reconnu
+     par aucune branche — « E\d » exige un chiffre juste après le E, et
+     « B\d » réclame une frontière de mot que le E empêche. Ces panneaux
+     d'agglomération ne recevaient donc ni forme, ni tarif, ni recherche
+     Odoo. Les placer d'abord évite aussi qu'une autre branche ne morde
+     dessus. */
+  const m = t.match(/\b(EB\d{1,2}|AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
   if (!m) return null;
   const code = m[1];
   // Une valeur entre guillemets ou juste après : « B14 « 30 » ».

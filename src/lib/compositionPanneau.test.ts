@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   longueurMention, longueurMentionComplete, margeLargeur,
   dimensionnerPanneau, dimensionnerEnsemble, dimensionnerAgglomeration,
+  typeAgglomeration, nomAgglomerationDansTexte,
   GAMMES_HC, LARGEURS_NORMALISEES,
 } from './compositionPanneau';
 
@@ -235,6 +236,31 @@ describe('entrée et sortie d’agglomération', () => {
     expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB20')?.caracteres).toBe(12);
     expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB20')?.largeur).toBe(1300);
     expect(dimensionnerAgglomeration('QUINCY-VOISI', 'EB10')?.largeur).toBe(1900);
+  });
+
+  it('reconnaît un panneau d’agglomération, et lui seul', () => {
+    expect(typeAgglomeration('EB10')).toBe('EB10');
+    expect(typeAgglomeration('eb20')).toBe('EB20');
+    // Ne doit pas happer les codes voisins.
+    expect(typeAgglomeration('EB1')).toBeNull();
+    expect(typeAgglomeration('B10')).toBeNull();
+    expect(typeAgglomeration('E43')).toBeNull();
+    expect(typeAgglomeration('')).toBeNull();
+  });
+
+  it('lit le nom écrit à la suite du code', () => {
+    expect(nomAgglomerationDansTexte('2 EB10 MOULIGNON', 'EB10')).toBe('MOULIGNON');
+    expect(nomAgglomerationDansTexte('EB20 SAINT-PIERRE-DU-VAUVRAY', 'EB20'))
+      .toBe('SAINT-PIERRE-DU-VAUVRAY');
+  });
+
+  it('ne prend pas la description de la commande pour un nom', () => {
+    /* Cas réel du devis AF035681 : la demande ne porte aucun nom. Rendre
+       « UNITES » serait pire que ne rien rendre. */
+    expect(nomAgglomerationDansTexte('EB10 2 UNITES', 'EB10')).toBeNull();
+    expect(nomAgglomerationDansTexte('EB20 2 UNITES', 'EB20')).toBeNull();
+    expect(nomAgglomerationDansTexte('4 EB10 entrée d’agglomération', 'EB10')).toBeNull();
+    expect(nomAgglomerationDansTexte('EB10', 'EB10')).toBeNull();
   });
 
   it('retrouve le format du plan Kadri de MOULIGNON', () => {

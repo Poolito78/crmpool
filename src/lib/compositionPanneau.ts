@@ -371,6 +371,64 @@ export interface PanneauAgglomeration {
  * sur deux lignes, ce qui relève d'un autre format. C'est le cas de l'EB10 de
  * QUINCY du dossier AF035681, dont le plan Kadri porte bien deux lignes.
  */
+/**
+ * Reconnaît un panneau d'agglomération dans un code IISR.
+ *
+ * Renvoie `null` pour tout le reste : c'est ce test qui aiguille vers
+ * `dimensionnerAgglomeration` plutôt que vers le calcul des directionnels.
+ */
+export function typeAgglomeration(code: string): TypeAgglomeration | null {
+  const t = String(code || '').toUpperCase().replace(/\s+/g, '');
+  if (/^EB10\b/.test(t)) return 'EB10';
+  if (/^EB20\b/.test(t)) return 'EB20';
+  return null;
+}
+
+/**
+ * Cherche le nom d'agglomération écrit à la suite du code, dans la demande.
+ *
+ * Le client l'indique parfois — « 2 EB10 MOULIGNON » — mais souvent pas : sur
+ * le devis AF035681, la demande dit seulement « EB10 2 UNITES » et le nom
+ * n'apparaît qu'au moment du plan. Cette lecture est donc une commodité, pas
+ * une source sûre : l'utilisateur doit toujours pouvoir corriger.
+ *
+ * On ne retient qu'un nom en capitales, éventuellement composé
+ * (« SAINT-PIERRE-DU-VAUVRAY »), et on écarte les mots qui décrivent la
+ * commande plutôt que le panneau — « 2 UNITES », « ENTREE D'AGGLOMERATION ».
+ */
+const MOTS_NON_NOMS = new Set([
+  'UNITE', 'UNITES', 'ENTREE', 'ENTREES', 'SORTIE', 'SORTIES', 'PANNEAU',
+  'PANNEAUX', 'AGGLO', 'AGGLOMERATION', 'CLASSE', 'CL', 'DE', 'DU', 'DES',
+  'ET', 'AVEC', 'POUR', 'SUR', 'EN', 'LE', 'LA', 'LES', 'PCS', 'PIECE',
+  'PIECES', 'U', 'X',
+]);
+
+export function nomAgglomerationDansTexte(
+  texte: string,
+  code: string,
+): string | null {
+  const t = String(texte || '');
+  const i = t.toUpperCase().indexOf(String(code || '').toUpperCase());
+  if (i === -1) return null;
+
+  const apres = t.slice(i + code.length, i + code.length + 60);
+  /* Un nom de commune : capitales, accents et traits d'union admis, au moins
+     trois lettres pour écarter les abréviations. */
+  const m = apres.match(/[^A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŒ]*([A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŒ][A-ZÀÂÄÇÉÈÊËÎÏÔÖÙÛÜŒ'\- ]{2,})/);
+  if (!m) return null;
+
+  const brut = m[1].trim().replace(/\s{2,}/g, ' ');
+  /* Le nom s'arrête au premier mot qui décrit la commande. Sans ce filtre,
+     « EB10 2 UNITES » rendrait « UNITES » comme nom d'agglomération. */
+  const mots: string[] = [];
+  for (const mot of brut.split(' ')) {
+    if (MOTS_NON_NOMS.has(mot.replace(/[^A-ZÀ-Ü]/g, ''))) break;
+    mots.push(mot);
+  }
+  const nom = mots.join(' ').replace(/[-'\s]+$/, '').trim();
+  return nom.length >= 3 ? nom : null;
+}
+
 export function dimensionnerAgglomeration(
   nom: string,
   type: TypeAgglomeration = 'EB10',

@@ -22,6 +22,9 @@ import {
   codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
   formeDeCode, niveauDepuisContrat, FORME_PANONCEAU, type Taille,
 } from '@/lib/tarifPanneaux';
+import {
+  typeAgglomeration, nomAgglomerationDansTexte, dimensionnerAgglomeration,
+} from '@/lib/compositionPanneau';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
@@ -157,6 +160,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      change quand une quantité bouge, pas son identifiant de règle. */
   const [quantiteManuelle, setQuantiteManuelle] = useState<Record<string, number>>({});
   const [prixManuel, setPrixManuel] = useState<Record<string, number>>({});
+  /* Nom porté par un panneau d'agglomération, saisi ou corrigé à la main.
+     Sa longueur commande le format, or le client l'écrit rarement dans sa
+     demande — « EB10 2 UNITES » sur le devis de référence. Clé « d<indice> ». */
+  const [nomAgglo, setNomAgglo] = useState<Record<string, string>>({});
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
 const [contratOdoo, setContratOdoo] = useState<
@@ -307,6 +314,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setQuantiteManuelle({}); setPrixManuel({});
+    setNomAgglo({});
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setOdooMuet(null);
     try {
       let analysis: DocumentAnalysis;
@@ -687,8 +695,22 @@ const [contratOdoo, setContratOdoo] = useState<
   ) => {
     const brut = [l.reference, l.description].filter(Boolean).join(' ').trim();
     const trouve = codeDansTexte(brut);
-    const forme = trouve && formeDeCode(trouve.code);
-    if (!trouve || !forme) return brut;
+    if (!trouve) return brut;
+
+    /* Un panneau d'agglomération est facturé comme un rectangle : le devis de
+       référence porte « DR50.1300.400.C2… » pour ses EB10 et EB20. C'est donc
+       la DIMENSION calculée qu'il faut envoyer chercher, pas le code EB, qui
+       ne figure nulle part dans le catalogue Odoo. Sans le nom, on ne peut
+       rien dimensionner : on s'en tient au texte brut. */
+    const typeEB = typeAgglomeration(trouve.code);
+    if (typeEB) {
+      const nom = nomAgglo[`d${i}`] ?? nomAgglomerationDansTexte(brut, trouve.code) ?? '';
+      const p = nom.trim() ? dimensionnerAgglomeration(nom, typeEB) : null;
+      return p ? `DR ${p.largeur} ${p.hauteur} C${classePanneau}` : brut;
+    }
+
+    const forme = formeDeCode(trouve.code);
+    if (!forme) return brut;
 
     /* Un panonceau se dimensionne d'après le panneau qu'il accompagne : sous
        un A de gamme P, un M9z d'une ligne fait 700x200. Sans cette dimension,
@@ -717,7 +739,7 @@ const [contratOdoo, setContratOdoo] = useState<
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
     return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
-  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne]);
+  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne, nomAgglo]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
@@ -1866,6 +1888,67 @@ const [contratOdoo, setContratOdoo] = useState<
                                     const texte = [l.reference, l.description].filter(Boolean).join(' ');
                                     const trouve = codeDansTexte(texte);
                                     if (!trouve) return null;
+
+                                    /* Les panneaux d'agglomération se traitent
+                                       avant tout le reste : ils ne se
+                                       dimensionnent pas comme les autres. Le
+                                       fabricant compte les caractères du nom au
+                                       lieu de mesurer le texte, d'où un bloc
+                                       dédié et un nom saisissable — le client
+                                       ne l'écrit presque jamais dans sa
+                                       demande. */
+                                    const typeEB = typeAgglomeration(trouve.code);
+                                    if (typeEB) {
+                                      const cle = `d${i}`;
+                                      const lu = nomAgglomerationDansTexte(texte, trouve.code);
+                                      const nom = nomAgglo[cle] ?? lu ?? '';
+                                      const p = nom.trim()
+                                        ? dimensionnerAgglomeration(nom, typeEB) : null;
+                                      const qte = quantiteDe(cle, l.quantite || 1);
+                                      return (
+                                        <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1 text-[11px]">
+                                          <p className="font-medium text-primary">
+                                            {typeEB === 'EB10' ? 'Entrée' : 'Sortie'} d’agglomération {trouve.code}
+                                          </p>
+                                          <div className="flex items-center gap-2">
+                                            <span className="shrink-0">Nom porté :</span>
+                                            <input
+                                              className="flex-1 rounded border px-1 py-0.5 text-[11px] uppercase"
+                                              value={nom}
+                                              placeholder="ex. MOULIGNON"
+                                              onChange={e => setNomAgglo(pr => ({
+                                                ...pr, [cle]: e.target.value.toUpperCase(),
+                                              }))}
+                                            />
+                                          </div>
+                                          {!nom.trim() ? (
+                                            <p className="text-warning">
+                                              Saisissez le nom : c’est sa longueur qui donne le format.
+                                            </p>
+                                          ) : !p ? (
+                                            <p className="text-destructive">
+                                              {[...nom.trim()].length} signes : trop long pour une ligne,
+                                              le nom doit être composé sur deux.
+                                            </p>
+                                          ) : (
+                                            <>
+                                              <div className="flex gap-2">
+                                                <span className="flex-1 truncate" title={p.explication}>
+                                                  {p.largeur} × {p.hauteur} mm · {p.caracteres} signes
+                                                </span>
+                                              </div>
+                                              <div className="flex gap-2 border-t border-primary/20 pt-0.5">
+                                                <span className="flex-1">× {qte}</span>
+                                                <span className="text-muted-foreground">
+                                                  réf. à retenir ci-dessus
+                                                </span>
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      );
+                                    }
+
                                     const forme = formeDeCode(trouve.code);
                                     if (!forme) return null;
 
