@@ -5,6 +5,8 @@ import {
   typeAgglomeration, nomAgglomerationDansTexte,
   GAMMES_HC, LARGEURS_NORMALISEES,
   couperEnDeuxLignes,
+  dimensionnerAgglomerationAuto,
+  lettrageForce,
 } from './compositionPanneau';
 
 /**
@@ -235,7 +237,7 @@ describe('entrée et sortie d’agglomération', () => {
   it('monte d’un cran de hauteur par ligne supplémentaire', () => {
     /* Les quatre cas attestés : le Hc donne le cran de départ, chaque ligne
        en plus — seconde ligne de nom ou mention de commune — en ajoute un. */
-    expect(dimensionnerAgglomeration('LYON', { hc: 100 })?.hauteur).toBe(250);
+    expect(dimensionnerAgglomeration('LYON', { hc: 100 })?.hauteur).toBe(300);
     expect(dimensionnerAgglomeration('LYON', { hc: 100, mention: 'c°ne de X' })?.hauteur)
       .toBe(400);
     expect(dimensionnerAgglomeration('LYON', { hc: 125 })?.hauteur).toBe(400);
@@ -243,10 +245,22 @@ describe('entrée et sortie d’agglomération', () => {
       .toBe(600);
   });
 
-  it('refuse ce qui dépasserait le dernier cran de hauteur', () => {
+  it('refuse une mention posée sous un nom déjà sur deux lignes', () => {
+    /* Aucun plan ne montre les deux à la fois : on ne devine pas. */
     expect(dimensionnerAgglomeration(
       ['SAINT-PIERRE', 'DU VAUVRAY'], { hc: 125, mention: 'c°ne de X' },
     )).toBeNull();
+  });
+
+  it('refuse un lettrage forcé plutôt que de lui inventer une table', () => {
+    /* Le Hc 80 du plan de Balvay n'est pas une gamme : c'est un lettrage
+       rapetissé pour tenir dans un panneau imposé. On ne dimensionne pas à
+       partir de là — on ne peut que vérifier après coup. */
+    expect(lettrageForce(80)).toBe(true);
+    expect(lettrageForce(62.5)).toBe(true);
+    expect(lettrageForce(100)).toBe(false);
+    expect(lettrageForce(125)).toBe(false);
+    expect(dimensionnerAgglomeration('BALVAY', { hc: 80 })).toBeNull();
   });
 
   it('signale qu’une mention de commune peut imposer le format au-dessus', () => {
@@ -347,12 +361,23 @@ describe("agglomération sur deux lignes", () => {
     expect(p.hauteur).toBe(400);
   });
 
-  it("suit la même règle en sortie qu'en entrée, à Hc égal", () => {
+  it("donne la même largeur en sortie qu'en entrée, mais pas la même hauteur", () => {
     const a = dimensionnerAgglomeration(['ORLEANS', 'LA SOURCE'], { type: 'EB10', hc: 125 })!;
     const b = dimensionnerAgglomeration(['ORLEANS', 'LA SOURCE'], { type: 'EB20', hc: 125 })!;
+    /* La largeur ne dépend que du Hc et du texte. */
     expect(b.largeur).toBe(a.largeur);
-    expect(b.hauteur).toBe(a.hauteur);
-    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB20', hc: 100 })?.hauteur).toBe(250);
+    /* La hauteur, elle, sépare l'entrée de la sortie dès qu'il y a une vraie
+       seconde ligne : le cadre rouge de l'EB10 coûte 100 mm. */
+    expect(a.hauteur).toBe(600);
+    expect(b.hauteur).toBe(500);
+
+    /* Sans seconde ligne, ou avec une simple mention, les deux se valent. */
+    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB20', hc: 100 })?.hauteur).toBe(300);
+    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB10', hc: 100 })?.hauteur).toBe(300);
+    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB20', hc: 100, mention: 'c°ne de X' })
+      ?.hauteur).toBe(400);
+    expect(dimensionnerAgglomeration('ORLEANS', { type: 'EB10', hc: 100, mention: 'c°ne de X' })
+      ?.hauteur).toBe(400);
   });
 });
 
@@ -363,11 +388,105 @@ describe('couperEnDeuxLignes', () => {
     ]);
   });
 
-  it("garde le trait d'union en fin de première ligne", () => {
-    expect(couperEnDeuxLignes('QUINCY-VOISINS')).toEqual(['QUINCY-', 'VOISINS']);
+  it("fait descendre le trait d'union en tête de seconde ligne", () => {
+    /* Relevé sur le plan des Pennes-Mirabeau : « LES PENNES » puis
+       « -MIRABEAU », et non « LES PENNES- » puis « MIRABEAU ». */
+    expect(couperEnDeuxLignes('LES PENNES-MIRABEAU')).toEqual([
+      'LES PENNES', '-MIRABEAU',
+    ]);
+    expect(couperEnDeuxLignes('QUINCY-VOISINS')).toEqual(['QUINCY', '-VOISINS']);
   });
 
   it("renvoie null quand le nom n'offre aucune coupe", () => {
     expect(couperEnDeuxLignes('VILLENEUVE')).toBeNull();
   });
+});
+
+describe('plans Kadri — contre-épreuve du dimensionnement', () => {
+  /* Dix panneaux relevés sur six plans. Le nom porté, sa mise en page et le
+     Hc sont lus sur le plan ; la dimension attendue est celle que Kadri
+     imprime. Toute régression du modèle casse ici. */
+  const PLANS: {
+    plan: string;
+    nom: string | string[];
+    hc: number;
+    mention?: string;
+    type?: 'EB10' | 'EB20';
+    largeur: number;
+    hauteur: number;
+  }[] = [
+    { plan: 'MDT 83 LE MUY', nom: 'LE MUY', hc: 100, largeur: 800, hauteur: 300 },
+    { plan: 'MDT 71 ATTIGNAT EB10', nom: 'ATTIGNAT', hc: 100, largeur: 1000, hauteur: 300 },
+    {
+      plan: 'MDT 71 ATTIGNAT EB20', nom: 'ATTIGNAT', hc: 100, type: 'EB20',
+      largeur: 1000, hauteur: 300,
+    },
+    {
+      plan: 'Les Pennes-Mirabeau', nom: ['LES PENNES', '-MIRABEAU'], hc: 100,
+      largeur: 1300, hauteur: 500,
+    },
+    {
+      plan: 'Saint André sur Vieux Jonc', nom: ['SAINT ANDRÉ', 'SUR VIEUX JONC'],
+      hc: 100, largeur: 1600, hauteur: 500,
+    },
+    {
+      plan: 'AF035681 QUINCY EB10', nom: 'MOULIGNON', hc: 100,
+      mention: 'c°ne de QUINCY-VOISINS', largeur: 1300, hauteur: 400,
+    },
+    {
+      plan: 'AF035681 QUINCY EB20', nom: 'MOULIGNON', hc: 100, type: 'EB20',
+      mention: 'c°ne de QUINCY-VOISINS', largeur: 1300, hauteur: 400,
+    },
+    {
+      plan: 'RN580 LAUDUN', nom: "L'ARDOISE", hc: 100,
+      mention: "Cne de LAUDUN-L'ARDOISE", largeur: 1300, hauteur: 400,
+    },
+    {
+      plan: 'MDT 84 APT COUSTELLET', nom: 'COUSTELLET', hc: 125,
+      mention: 'Cne de MAUBEC', largeur: 1600, hauteur: 500,
+    },
+    {
+      plan: 'MDT 83 BORMES LES MIMOSAS', nom: ['BORMES', 'LES MIMOSAS'],
+      hc: 125, largeur: 1600, hauteur: 600,
+    },
+    {
+      plan: 'MDT 83 ST MAXIMIN EB10', nom: ['St MAXIMIN', 'LA Ste BAUME'],
+      hc: 100, largeur: 1300, hauteur: 500,
+    },
+    {
+      /* Même nom, même mise en page, même plan que le précédent : seule la
+         sortie change, et elle vaut 100 mm de moins. */
+      plan: 'MDT 83 ST MAXIMIN EB20', nom: ['St MAXIMIN', 'LA Ste BAUME'],
+      hc: 100, type: 'EB20', largeur: 1300, hauteur: 400,
+    },
+  ];
+
+  for (const c of PLANS) {
+    it(`retrouve ${c.plan} : ${c.largeur} × ${c.hauteur}`, () => {
+      const p = dimensionnerAgglomeration(c.nom, {
+        hc: c.hc, mention: c.mention, type: c.type ?? 'EB10',
+      });
+      expect(p).not.toBeNull();
+      expect([p!.largeur, p!.hauteur]).toEqual([c.largeur, c.hauteur]);
+    });
+  }
+
+  /* Le vrai test d'usage : le nom brut, tel qu'un client l'écrit, sans qu'on
+     dise à l'appli où couper ni combien de lignes composer. */
+  const BRUTS: [string, number, [number, number]][] = [
+    ['LE MUY', 100, [800, 300]],
+    ['ATTIGNAT', 100, [1000, 300]],
+    ['LES PENNES-MIRABEAU', 100, [1300, 500]],
+    ['SAINT ANDRE SUR VIEUX JONC', 100, [1600, 500]],
+    ['ST MAXIMIN LA STE BAUME', 100, [1300, 500]],
+    ['BORMES LES MIMOSAS', 125, [1600, 600]],
+  ];
+
+  for (const [nom, hc, attendu] of BRUTS) {
+    it(`compose seul « ${nom} » comme le plan`, () => {
+      const p = dimensionnerAgglomerationAuto(nom, { hc })!;
+      expect(p).not.toBeNull();
+      expect([p.largeur, p.hauteur]).toEqual(attendu);
+    });
+  }
 });

@@ -372,35 +372,123 @@ const FORMATS_PAR_HC: Record<number, { largeur: number; caracteres: number }[]> 
   ],
 };
 
-/** Hauteurs de panneau admises, par crans successifs. */
-const ECHELLE_HAUTEURS = [250, 400, 600] as const;
+/**
+ * Nature de la seconde ligne, quand il y en a une.
+ *
+ *  - `aucune`  : le nom tient sur une ligne.
+ *  - `mention` : une mention de commune, composée à environ 0,62 Hc en
+ *    italique — « Cne de LAUDUN-L'ARDOISE » sous « L'ARDOISE ».
+ *  - `pleine`  : une vraie seconde ligne de nom, à pleine hauteur —
+ *    « LES PENNES » puis « -MIRABEAU ».
+ */
+export type SecondeLigne = 'aucune' | 'mention' | 'pleine';
 
 /**
- * Hauteur du panneau : un cran de départ donné par le Hc, puis un cran de
- * plus par ligne supplémentaire — seconde ligne de nom ou mention de commune.
+ * Socle de hauteur donné par la hauteur de composition, en millimètres.
  *
- * Les quatre cas attestés tombent tous sur cette règle :
+ * Relevé sur les plans Kadri : un panneau d'une seule ligne mesure 300 en
+ * Hc 100. Le 250 que publient les catalogues existe, mais Kadri le refuse :
+ * l'EB20 du dossier RN580-LAUDUN, imposé à 1000 × 250 par le client, porte
+ * la mention « HORS NORMES : les dimensions exigées sont inférieures aux
+ * dimensions calculées ». On retient donc la valeur calculée, pas celle du
+ * catalogue.
+ */
+const SOCLE_HAUTEUR: Record<number, number> = { 80: 200, 100: 300, 125: 400 };
+
+/**
+ * Les deux seules hauteurs de composition NORMALES d'un panneau
+ * d'agglomération : 100 mm jusqu'à 70 km/h, 125 mm à 80 km/h.
  *
- *   Hc 100, 1 ligne, sans mention → 250   (table fabricant EB20 une ligne)
- *   Hc 100, 1 ligne, avec mention → 400   (plan Kadri AF035681, EB10 et EB20)
- *   Hc 125, 1 ligne, sans mention → 400   (table fabricant EB10 une ligne)
- *   Hc 125, 2 lignes, sans mention → 600  (table fabricant EB10 deux lignes)
+ * Tout le reste est un LETTRAGE FORCÉ. Le 62,5 de la mention de commune en
+ * est un, par construction. Le 80 qu'on lit sur le plan de Balvay en est un
+ * autre : le dessinateur a rapetissé les lettres pour faire entrer le texte
+ * dans un panneau dont le client imposait la taille — le même plan porte
+ * d'ailleurs un coefficient d'espacement de 50 % au lieu des 70 % habituels,
+ * autre signe d'un texte comprimé.
  *
- * Renvoie `null` au-delà du dernier cran : un Hc 125 sur deux lignes AVEC
- * mention dépasserait 600 et n'est attesté nulle part.
+ * Conséquence pratique : un lettrage forcé ne se dimensionne PAS. Il part
+ * d'un panneau déjà décidé et cherche la composition qui y tient, alors que
+ * tout ce module fait l'inverse — partir du texte pour en déduire le
+ * panneau. Chercher une table de comptage pour le Hc 80 serait donc une
+ * erreur de méthode : cette table n'existe pas, et ne peut pas exister.
+ * `FORMATS_PAR_HC` ne contient volontairement que 100 et 125, et
+ * `dimensionnerAgglomeration` refuse le reste.
+ *
+ * Le socle de hauteur du Hc 80 reste tabulé ci-dessus, lui : il sert à
+ * VÉRIFIER un panneau forcé dont on connaît déjà les dimensions — Balvay
+ * tombe bien sur 200 + 100 = 300 — mais jamais à en proposer un.
+ */
+export const HC_AGGLO_NORMAUX = [100, 125] as const;
+
+/**
+ * Vrai quand la hauteur de composition sort des deux gammes normales, donc
+ * quand le panneau ne se calcule pas mais se relève sur le plan.
+ */
+export function lettrageForce(hc: number): boolean {
+  return !HC_AGGLO_NORMAUX.includes(hc as 100 | 125);
+}
+
+/**
+ * Ce que la seconde ligne ajoute au socle, en millimètres.
+ *
+ * L'entrée et la sortie se séparent ici, et là seulement : une vraie seconde
+ * ligne coûte 200 à l'EB10 mais 100 seulement à l'EB20. Le dossier
+ * MDT 83 ST MAXIMIN LA STE BAUME l'isole proprement — même nom, même mise en
+ * page, même jour, même dessinateur : l'EB10 sort en 1300 × 500 et l'EB20 en
+ * 1300 × 400. L'EB10 porte un large cadre rouge que l'EB20, barré d'une
+ * simple diagonale, n'a pas.
+ *
+ * Sans seconde ligne, ou avec une simple mention, les deux se valent :
+ * ATTIGNAT donne 300 des deux côtés, QUINCY 400, BALVAY 300.
+ */
+const SUPPLEMENT_LIGNE: Record<TypeAgglomeration, Record<SecondeLigne, number>> = {
+  EB10: { aucune: 0, mention: 100, pleine: 200 },
+  EB20: { aucune: 0, mention: 100, pleine: 100 },
+};
+
+/**
+ * Hauteur du panneau : un socle donné par le Hc, plus un supplément selon ce
+ * que porte la seconde ligne et selon le type de panneau.
+ *
+ * Vérifié sur quatorze panneaux Kadri, sans exception :
+ *
+ *   Hc 100, rien       → 300   LE MUY, ATTIGNAT (EB10 et EB20)
+ *   Hc 100, mention    → 400   QUINCY (EB10 et EB20), LAUDUN
+ *   Hc 100, pleine     → 500 en EB10   LES PENNES, SAINT ANDRÉ, ST MAXIMIN
+ *                        400 en EB20   ST MAXIMIN
+ *   Hc 80,  mention    → 300   BALVAY — mais lettrage FORCÉ, cf. plus haut
+ *   Hc 125, mention    → 500   COUSTELLET
+ *   Hc 125, pleine     → 600   BORMES LES MIMOSAS
  */
 function hauteurAgglomeration(
+  type: TypeAgglomeration,
   hc: number,
-  lignesNom: number,
-  avecMention: boolean,
+  seconde: SecondeLigne,
 ): number | null {
-  const depart = hc >= 125 ? 1 : 0;
-  const cran = depart + (lignesNom - 1) + (avecMention ? 1 : 0);
-  return ECHELLE_HAUTEURS[cran] ?? null;
+  const socle = SOCLE_HAUTEUR[hc];
+  return socle === undefined ? null : socle + SUPPLEMENT_LIGNE[type][seconde];
 }
 
 /** Hauteur de composition d'une mention de commune, en millimètres. */
 export const HC_MENTION_COMMUNE = 62.5;
+
+/**
+ * Poids d'un signe de mention rapporté à un signe de nom.
+ *
+ * La mention est composée à environ 0,62 Hc, mais elle ne compte pas 0,62 :
+ * elle mêle des bas-de-casse italiques, bien plus étroits que les capitales
+ * sur lesquelles la table est calibrée. Le facteur retenu est celui qui
+ * retrouve les deux plans où la mention commande la largeur :
+ *
+ *   LAUDUN  « Cne de LAUDUN-L'ARDOISE »  23 signes × 0,5 = 11,5 → 12 → 1300 ✓
+ *   QUINCY  « c°ne de QUINCY-VOISINS »   22 signes × 0,5 = 11   → 12 → 1300 ✓
+ *
+ * Deux relevés, donc un ordre de grandeur plutôt qu'une constante établie :
+ * le panneau reste marqué « largeur à confirmer ». Le mérite de ce calcul
+ * sur une simple règle « un format de plus dès qu'il y a une mention » est
+ * qu'une mention courte ne fait pas grandir le panneau pour rien.
+ */
+export const POIDS_SIGNE_MENTION = 0.5;
 
 /** Hauteur de composition retenue par défaut, faute de vitesse connue. */
 export const HC_AGGLO_DEFAUT = 125;
@@ -516,22 +604,37 @@ export function dimensionnerAgglomeration(
   if (!lignesTexte.length) return null;
 
   const formats = FORMATS_PAR_HC[hc];
-  /* Hc hors des deux tables du fabricant : on ne devine pas. */
+  /* Hc hors des tables du fabricant : on ne devine pas. */
   if (!formats) return null;
 
-  const hauteur = hauteurAgglomeration(hc, lignesTexte.length, !!mention);
+  /* Une vraie seconde ligne de nom l'emporte sur la mention : les deux à la
+     fois ne s'est jamais vu sur un plan, et rien ne dit ce que ça donnerait. */
+  const seconde: SecondeLigne = lignesTexte.length > 1
+    ? 'pleine'
+    : (mention ? 'mention' : 'aucune');
+  if (lignesTexte.length > 1 && mention) return null;
+
+  const hauteur = hauteurAgglomeration(type, hc, seconde);
   if (hauteur === null) return null;
 
   /* Tout signe compte, espaces et traits d'union compris : c'est
      l'encombrement qui décide, pas le nombre de lettres. La ligne la plus
      longue impose la largeur, les autres s'y alignent. */
-  const caracteres = Math.max(...lignesTexte.map((l) => [...l].length));
+  const signesNom = Math.max(...lignesTexte.map((l) => [...l].length));
+  /* La mention est plus petite mais souvent plus longue : on la ramène à un
+     nombre de signes de nom pour les comparer dans la même table. */
+  const signesMention = mention
+    ? Math.ceil([...mention].length * POIDS_SIGNE_MENTION)
+    : 0;
+  const caracteres = Math.max(signesNom, signesMention);
+
   const format = formats.find((f) => caracteres <= f.caracteres);
   /* Trop long même pour le plus grand format : à composer sur une ligne de
      plus, ce que l'appelant doit décider. */
   if (!format) return null;
 
   const mise = lignesTexte.length === 1 ? 'une ligne' : `${lignesTexte.length} lignes`;
+  const parLaMention = signesMention > signesNom;
   return {
     type,
     largeur: format.largeur,
@@ -540,10 +643,11 @@ export function dimensionnerAgglomeration(
     lignes: lignesTexte.length,
     mention: !!mention,
     caracteres,
-    largeurAConfirmer: !!mention,
+    largeurAConfirmer: parLaMention,
     explication:
       `« ${lignesTexte.join(' / ')} »${mention ? ` + « ${mention} »` : ''} : `
-      + `${caracteres} signe(s) sur la ligne de nom la plus longue → ${type} de `
+      + `${caracteres} signe(s) sur la ligne la plus exigeante`
+      + `${parLaMention ? ' — la mention' : ''} → ${type} de `
       + `${format.largeur} × ${hauteur} mm (SD1, ${mise}, Hc ${hc}`
       + `${mention ? `, mention en ${HC_MENTION_COMMUNE} italique` : ''})`,
   };
@@ -552,10 +656,14 @@ export function dimensionnerAgglomeration(
 /**
  * Coupe un nom d'agglomération en deux lignes.
  *
- * On coupe sur un séparateur existant du nom — espace ou trait d'union — en
- * cherchant l'équilibre entre les deux lignes, car c'est la plus longue qui
- * décide de la largeur. Le trait d'union reste attaché à la fin de la
- * première ligne, comme sur les plans.
+ * On coupe sur un séparateur existant — espace ou trait d'union — en
+ * cherchant l'équilibre entre les deux lignes, puisque c'est la plus longue
+ * qui décide de la largeur.
+ *
+ * Le trait d'union part EN TÊTE de la seconde ligne, et non en fin de la
+ * première : le plan des Pennes-Mirabeau compose « LES PENNES » puis
+ * « -MIRABEAU ». C'est l'inverse de l'usage typographique courant, d'où la
+ * nécessité de l'avoir relevé sur un plan.
  *
  * Renvoie `null` quand le nom n'offre aucun point de coupe : « VILLENEUVE »
  * ne se coupe pas, il faut un plus grand format.
@@ -571,9 +679,10 @@ export function couperEnDeuxLignes(nom: string): [string, string] | null {
   let meilleur: [string, string] | null = null;
   let ecartMin = Infinity;
   for (const i of points) {
-    /* L'espace disparaît à la coupe ; le trait d'union se garde. */
-    const haut = texte[i] === '-' ? texte.slice(0, i + 1) : texte.slice(0, i);
-    const bas = texte.slice(i + 1).trim();
+    /* L'espace disparaît à la coupe ; le trait d'union descend avec la
+       seconde ligne. */
+    const haut = texte.slice(0, i);
+    const bas = (texte[i] === '-' ? texte.slice(i) : texte.slice(i + 1)).trim();
     if (!haut || !bas) continue;
     const ecart = Math.abs(haut.length - bas.length);
     if (ecart < ecartMin) {
@@ -585,21 +694,32 @@ export function couperEnDeuxLignes(nom: string): [string, string] | null {
 }
 
 /**
- * Dimensionne un panneau d'agglomération en choisissant seul le nombre de
- * lignes.
+ * Dimensionne un panneau d'agglomération en choisissant seul sa mise en page.
  *
- * Une ligne d'abord, puisque c'est la mise en page normale. Si le nom est
- * trop long pour le plus grand format, on le coupe en deux lignes équilibrées
- * et on redimensionne. Renvoie `null` quand même la coupe ne suffit pas, ou
- * quand le nom ne se coupe pas.
+ * Une ligne et deux lignes sont mises en concurrence, et c'est LA PLUS PETITE
+ * SURFACE qui gagne — les panneaux se paient au mètre carré, et Kadri arbitre
+ * ainsi. Le cas décisif est celui des Pennes-Mirabeau : dix-neuf signes
+ * tiennent sur une ligne, en 2200 × 300 ; le plan compose pourtant
+ * 1300 × 500. Les deux surfaces sont 0,66 et 0,65 m² — l'écart est d'un et
+ * demi pour cent, et il départage quand même.
+ *
+ * À égalité, une ligne l'emporte : c'est la mise en page normale.
+ *
+ * Un nom que la coupe n'aide pas garde donc sa ligne unique — « LE MUY »
+ * coupé donnerait 800 × 500, plus grand que le 800 × 300 du plan.
  */
 export function dimensionnerAgglomerationAuto(
   nom: string,
   options: OptionsAgglomeration | TypeAgglomeration = {},
 ): PanneauAgglomeration | null {
   const uneLigne = dimensionnerAgglomeration(nom, options);
-  if (uneLigne) return uneLigne;
 
   const coupe = couperEnDeuxLignes(nom);
-  return coupe ? dimensionnerAgglomeration(coupe, options) : null;
+  const deuxLignes = coupe ? dimensionnerAgglomeration(coupe, options) : null;
+
+  if (!uneLigne) return deuxLignes;
+  if (!deuxLignes) return uneLigne;
+
+  const surface = (p: PanneauAgglomeration) => p.largeur * p.hauteur;
+  return surface(deuxLignes) < surface(uneLigne) ? deuxLignes : uneLigne;
 }
