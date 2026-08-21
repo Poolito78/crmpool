@@ -1525,27 +1525,25 @@ serve(async (req) => {
           porte: (c) => segments(c).some((x) => /^p$/i.test(x)),
           demandee: /\bpieds?\b/i,
         },
-        {
-          nom: "kit rail",
-          porte: (c) => segments(c).some((x) => /^r$/i.test(x)),
-          demandee: /\brails?\b/i,
-        },
-        /* LA GAMME.
+        /* PAS DE RÈGLE SUR LE KIT RAIL, ni sur « M contre KM ».
          *
-         * Le segment qui suit le libellé — « M » ou « KM » — ne dit pas le
-         * niveau d'équipement mais la GAMME : M pour la police, KM pour le
-         * temporaire. Deux produits différents, pas deux finitions.
+         * J'en avais écrit deux, le devis AF035816 les a démenties toutes
+         * les deux et elles écartaient les BONS articles :
          *
-         * La gamme se lit dans le code que le client cite : les K (KC1,
-         * KD22a…) et les AK sont du chantier, tout le reste relève de la
-         * police. Une demande de KC1 doit donc recevoir du KM — c'est
-         * l'inverse que faisait le départage par la longueur du code, qui
-         * prenait « M » parce qu'il est plus court d'une lettre. */
-        {
-          nom: "gamme temporaire",
-          porte: (c) => segments(c).some((x) => /^km$/i.test(x.trim().split(/\s+/).pop() || "")),
-          demandee: /\b(ak\d|k[a-z]{0,2}\d)/i,
-        },
+         *   AK5.1000.C2.BTR.R.IS.BRUT
+         *   KC1M#ROUTE BARREE.800.600.C2.BTR.R.IS.BRUT
+         *   KC1DDM#ROUTE BARREE M.800.600.C2.BTR.R.IS.BRUT
+         *   KD22A.1000.300.C2.BTR.R.IS.BRUT
+         *
+         * Les quatre articles de chantier portent « .R. ». Le kit rail n'est
+         * donc pas une option surajoutée qu'on écarte faute d'être demandée :
+         * c'est ce qui se vend. Et la gamme : la ligne 2 ne porte AUCUN
+         * segment M ni KM, la ligne 3 porte M — alors que les deux sont du
+         * chantier. Le « KM = temporaire » que j'avais déduit ne tient pas.
+         *
+         * Rien ne remplace ces deux règles : mieux vaut ne pas trancher que
+         * trancher à l'envers. Le kit rail reçoit seulement une PRÉFÉRENCE au
+         * classement, plus bas, qui ne peut écarter personne. */
       ];
       /* Le filtre joue DANS LES DEUX SENS. Écarter l'option non demandée ne
          suffisait pas : une demande qui la réclame doit aussi cesser de
@@ -1594,6 +1592,8 @@ serve(async (req) => {
          catégorie, ni un nombre. Les longueurs converties en millimètres
          sont ajoutées en tête de liste, si bien qu'un « 2000 » se retrouvait
          pivot et pesait double à la place du mot qui désigne la pièce. */
+      /* Gamme chantier : le code cité commence par K ou AK. */
+      const chantier = /\b(ak\d|k[a-z]{0,2}\d)/i.test(q);
       const iPivot = Math.max(0, motsQ.findIndex(
         (m) => !motGenerique(m) && !/^\d+$/.test(m)));
 
@@ -1624,6 +1624,11 @@ serve(async (req) => {
         const cl = classeDe(x.default_code || "");
         if (classeDemandee && cl && cl !== classeDemandee) return -100;
         let n = 0;
+        /* Le kit rail se vend d'office sur la gamme chantier : les quatre
+           articles de chantier du devis AF035816 le portent. On le préfère
+           donc, sans jamais l'imposer — une simple préférence au classement,
+           qui n'écarte rien. */
+        if (chantier && segments(x.default_code || "").some((y) => /^r$/i.test(y))) n += 3;
         for (let k = 0; k < motsQ.length; k++) {
           const poids = k === iPivot ? 4 : (motGenerique(motsQ[k]) ? 1 : 2);
           if (code.includes(motsQ[k])) n += poids + 1;
