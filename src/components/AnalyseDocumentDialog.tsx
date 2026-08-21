@@ -894,7 +894,22 @@ const [contratOdoo, setContratOdoo] = useState<
   ) => {
     const brut = [l.reference, l.description].filter(Boolean).join(' ').trim();
     const trouve = codeDansTexte(brut);
-    if (!trouve) return brut;
+    /* La CLASSE part avec la demande même quand la ligne ne porte aucun code
+       IISR reconnu.
+       
+       Elle n'était ajoutée que dans les branches ci-dessous, c'est-à-dire
+       uniquement pour les codes que `codeDansTexte` sait lire — A, B, C, EB,
+       M… La gamme temporaire n'en fait pas partie : « panneaux AK5 en
+       1000 mm » ne rendait aucun code, donc aucune classe, et Odoo recevait
+       une demande muette sur ce point. Il répondait alors avec les cinq
+       variantes AK5 mélangées, C1 comme C2, et la première venue était
+       retenue — un C1 à 41,31 € pour une demande de classe 2 à 56,84 €.
+       
+       Sur les lignes où la classe n'a aucun sens — un PLASTOBLOC, une bride —
+       le mot ne correspond à rien : la recherche le lâche au relâchement, et
+       le classement ne pénalise que les articles portant une classe
+       DIFFÉRENTE, jamais ceux qui n'en portent pas. */
+    if (!trouve) return `${brut} C${classePanneau}`;
 
     /* Un panneau d'agglomération est facturé comme un rectangle : le devis de
        référence porte « DR50.1300.400.C2… » pour ses EB10 et EB20. C'est donc
