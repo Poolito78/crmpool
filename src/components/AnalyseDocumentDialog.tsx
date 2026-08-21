@@ -165,6 +165,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      que l'utilisateur n'a rien saisi : la valeur affichée est alors celle
      déduite du document ou du client. */
   const [dptLivraison, setDptLivraison] = useState<string>('');
+  /* Niveau de remise FORCÉ à la main — R1 à R4.
+     Le niveau se lit normalement dans l'intitulé du contrat cadre, mais tous
+     ne le portent pas, et un chargé d'affaires peut avoir à en imposer un
+     autre : le contrat CCI10019 lui-même a été forcé sur ce devis. Vide =
+     on s'en remet au contrat. */
+  const [niveauForce, setNiveauForce] = useState<'' | 'R1' | 'R2' | 'R3' | 'R4'>('');
   /** Pourquoi Odoo n'a pas été interrogé, quand c'est le cas. */
   const [odooMuet, setOdooMuet] = useState<'sans-client' | null>(null);
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
@@ -528,7 +534,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     setQuantiteManuelle({}); setPrixManuel({});
-    setNomAgglo({}); setDptLivraison('');
+    setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     try {
@@ -904,6 +910,19 @@ const [contratOdoo, setContratOdoo] = useState<
     return null;
   }, [result]);
 
+  /**
+   * Niveau de remise appliqué : celui qu'on force, sinon celui du contrat,
+   * sinon R4.
+   *
+   * Il était recalculé à six endroits par le même appel ; en forcer un seul
+   * aurait laissé les cinq autres sur l'ancienne valeur. Un seul point de
+   * vérité, dont tout le reste dépend.
+   */
+  const niveauRemise = useMemo(
+    () => niveauForce || niveauDepuisContrat(contratOdoo?.contrat) || 'R4',
+    [niveauForce, contratOdoo],
+  );
+
   const texteRechercheOdoo = useCallback((
     l: { reference?: string; description?: string },
     i: number,
@@ -958,7 +977,7 @@ const [contratOdoo, setContratOdoo] = useState<
       if (!porteur) return brut;
       const p = panonceauPour(trouve.code, porteur, {
         taille: gammePanneau, classe: classePanneau,
-        niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+        niveau: niveauRemise,
         mention: l.description || '',
       });
       /* « 700x200 » → « 700 200 » : la recherche Odoo travaille par mots, et
@@ -970,11 +989,11 @@ const [contratOdoo, setContratOdoo] = useState<
 
     const pan = prixPanneau(trouve.code, {
       taille: gammePanneau, classe: classePanneau,
-      niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+      niveau: niveauRemise,
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
     return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
-  }, [gammePanneau, classePanneau, contratOdoo, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo]);
+  }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
@@ -1190,6 +1209,9 @@ const [contratOdoo, setContratOdoo] = useState<
             client: critere,
             lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
             recherches: aChercher,
+            /* Niveau imposé : Odoo ira lire la grille de CE niveau au lieu de
+               celle rattachée au client. Rien n'est copié en local. */
+            niveau: niveauForce || undefined,
           },
         });
         if (annule) return;
@@ -1262,7 +1284,7 @@ const [contratOdoo, setContratOdoo] = useState<
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creerDevisClientId, clients, referencesDuDevis, result, signature]);
+  }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce]);
 
   /**
    * Retient d'office la meilleure proposition Odoo.
@@ -2156,13 +2178,39 @@ const [contratOdoo, setContratOdoo] = useState<
                                 </SelectContent>
                               </Select>
                             </div>
-                            <p className="text-[11px] text-muted-foreground pb-1.5">
-                              grille ISOSIGN 2026, tarif{' '}
-                              <strong className="text-foreground">
-                                {niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4'}
-                              </strong>
-                              {niveauDepuisContrat(contratOdoo?.contrat) && ' lu dans le contrat cadre'}
-                            </p>
+                            {/* NIVEAU DE REMISE, FORÇABLE.
+                                Il se lit normalement dans l'intitulé du contrat
+                                cadre — « TARIF R4 » — mais tous ne le portent
+                                pas, et il arrive qu'on doive en imposer un
+                                autre : le contrat CCI10019 a lui-même été forcé
+                                sur le devis AF035816. */}
+                            <div className="flex items-center gap-2 pb-1.5 text-[11px]">
+                              <span className="text-muted-foreground">grille ISOSIGN 2026, tarif</span>
+                              <select
+                                className="rounded border px-1 py-0.5 text-[11px]"
+                                value={niveauForce || niveauRemise}
+                                onChange={e => setNiveauForce(e.target.value as '' | 'R1' | 'R2' | 'R3' | 'R4')}
+                              >
+                                <option value="R1">R1 — 20 %</option>
+                                <option value="R2">R2 — 25 %</option>
+                                <option value="R3">R3 — 30 %</option>
+                                <option value="R4">R4 — 35 %</option>
+                              </select>
+                              <span className={niveauForce ? 'text-warning' : 'text-muted-foreground'}>
+                                {niveauForce
+                                  ? 'forcé à la main'
+                                  : (niveauDepuisContrat(contratOdoo?.contrat)
+                                      ? 'lu dans le contrat cadre'
+                                      : 'valeur par défaut, aucun niveau lisible dans le contrat')}
+                              </span>
+                              {niveauForce && (
+                                <button
+                                  onClick={() => setNiveauForce('')}
+                                  className="text-warning hover:underline"
+                                  title="Revenir au niveau du contrat cadre"
+                                >↺</button>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -2455,7 +2503,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       }
                                       const p = panonceauPour(trouve.code, porteur, {
                                         taille: gammePanneau, classe: classePanneau,
-                                        niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4',
+                                        niveau: niveauRemise,
                                         mention: l.description || '',
                                       });
                                       if (!p) return null;
@@ -2484,7 +2532,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                        R4 à défaut, c'est le cas courant. */
                                     const opts = {
                                       taille: gammePanneau, classe: classePanneau,
-                                      niveau: niveauDepuisContrat(contratOdoo?.contrat) ?? 'R4' as const,
+                                      niveau: niveauRemise,
                                     };
                                     const pan = prixPanneau(trouve.code, opts);
                                     if (!pan) {

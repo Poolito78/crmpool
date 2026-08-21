@@ -37,6 +37,7 @@
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -417,6 +418,80 @@ class ContratCadre {
    * Ne lève jamais : sans contrat-cadre, la tarification retombe sur la
    * liste de prix comme avant.
    */
+  /**
+   * Contrat-cadre d'un NIVEAU imposé — R1 à R4.
+   *
+   * Les niveaux sont des contrats distincts dans Odoo, reconnaissables à leur
+   * intitulé : « CCI10019 TARIF R4 - 35 % REMISE … ». Quand le chargé
+   * d'affaires en impose un, on va lire CE contrat plutôt que celui rattaché
+   * au client — et on le lit chez Odoo, sans en garder de copie : la seule
+   * grille CCI10019 compte 9 165 lignes.
+   *
+   * À plusieurs contrats du même niveau, celui qui cite le client l'emporte ;
+   * à défaut le premier, et le nom retenu s'affiche pour qu'on le vérifie.
+   */
+  async chargerNiveau(niveau: string, ...partenaires: (number | null)[]): Promise<boolean> {
+    const n = String(niveau || "").trim().toUpperCase();
+    if (!/^R[1-4]$/.test(n)) return false;
+    try {
+      const candidats = (await this.od.kw(
+        "x_contrat_cadre", "search_read",
+        [[["x_name", "ilike", `TARIF ${n}`]], ["x_name", "display_name"]],
+        { limit: 20 },
+      )) as any[];
+      if (!candidats.length) {
+        console.warn(`[contrat-cadre] niveau ${n} imposé, mais aucun contrat `
+          + `dont l'intitulé porte « TARIF ${n} »`);
+        return false;
+      }
+
+      /* Celui qui cite le client, s'il y en a un. */
+      const cibles = [...new Set(partenaires.filter((p): p is number => !!p))];
+      let retenu = candidats[0];
+      if (cibles.length) {
+        const defs = (await this.od.kw(
+          "x_contrat_cadre", "fields_get", [[]], { attributes: ["type", "relation"] },
+        )) as Record<string, any>;
+        const versPartenaire = Object.entries(defs)
+          .filter(([, v]) => v?.relation === "res.partner")
+          .map(([k]) => k);
+        for (const champ of versPartenaire) {
+          const lies = (await this.od.kw(
+            "x_contrat_cadre", "search",
+            [[["id", "in", candidats.map((c) => c.id)], [champ, "in", cibles]]],
+            { limit: 5 },
+          )) as number[];
+          if (lies.length) {
+            retenu = candidats.find((c) => c.id === lies[0]) || retenu;
+            break;
+          }
+        }
+      }
+
+      this.ids = [retenu.id];
+      this.noms = [String(retenu.x_name || retenu.display_name || "").trim()];
+      this.cache.clear();
+      this.gabaritsRetenus.clear();
+      await this.reperClesLignes();
+      console.log(`[contrat-cadre] niveau ${n} imposé → #${retenu.id} `
+        + `« ${this.noms[0]} », lignes dans ${this.modeleLignes || "(introuvable)"}`);
+      return this.actif;
+    } catch (e) {
+      console.warn(`[contrat-cadre] niveau ${niveau} : `, (e as Error).message);
+      return false;
+    }
+  }
+
+  /** Retrouve le modèle des lignes de grille du contrat retenu. */
+  private async reperClesLignes(): Promise<void> {
+    const defsCadre = (await this.od.kw(
+      "x_contrat_cadre", "fields_get", [[]], { attributes: ["type", "relation"] },
+    )) as Record<string, any>;
+    const rel = Object.entries(defsCadre)
+      .find(([k, v]) => v?.type === "one2many" && /line/i.test(k));
+    this.modeleLignes = (rel?.[1]?.relation as string) || "";
+  }
+
   async charger(...partenaires: (number | null)[]): Promise<void> {
     try {
       const defsPartenaire = (await this.od.kw(
@@ -450,9 +525,47 @@ class ContratCadre {
           } else if (typeof v === "number") ids.add(v);
         }
       }
+      /* RECHERCHE À L'ENVERS.
+       *
+       * Le lien peut n'exister que d'un seul côté. Le contrat CCI10019 porte
+       * un champ « Contact » qui liste une soixantaine de sociétés — AEGL,
+       * REFLEX SIGNALISATION, SIGNANET… — et si Odoo Studio ne lui a pas créé
+       * de champ inverse, `res.partner.fields_get()` ne montre RIEN qui pointe
+       * vers x_contrat_cadre. La lecture ci-dessus revient alors vide et la
+       * tarification retombe silencieusement sur la liste de prix : c'est ce
+       * qui donnait 66,86 € au lieu de 56,13 € sur l'AK5 du devis AF035816.
+       *
+       * On interroge donc le contrat lui-même : quels contrats citent ce
+       * client parmi leurs contacts ? */
+      if (!ids.size) {
+        try {
+          const defs = (await this.od.kw(
+            "x_contrat_cadre", "fields_get", [[]], { attributes: ["type", "relation"] },
+          )) as Record<string, any>;
+          const versPartenaire = Object.entries(defs)
+            .filter(([, v]) => v?.relation === "res.partner"
+              && (v?.type === "many2many" || v?.type === "many2one"))
+            .map(([k]) => k);
+          for (const champ of versPartenaire) {
+            const trouves = (await this.od.kw(
+              "x_contrat_cadre", "search", [[[champ, "in", cibles]]], { limit: 10 },
+            )) as number[];
+            for (const i of trouves) ids.add(i);
+            if (trouves.length) {
+              console.log(`[contrat-cadre] trouvé À L'ENVERS via ${champ} : `
+                + `contrat(s) #${trouves.join(",")} citent la ou les fiches `
+                + `#${cibles.join(",")}`);
+            }
+          }
+        } catch (e) {
+          console.warn("[contrat-cadre] recherche inverse impossible :", (e as Error).message);
+        }
+      }
+
       if (!ids.size) {
         console.warn(`[contrat-cadre] champs [${champs.join(", ")}] vides sur les `
-          + `fiches #${cibles.join(",")} : aucun contrat-cadre rattaché`);
+          + `fiches #${cibles.join(",")}, et aucun contrat ne les cite : `
+          + `aucun contrat-cadre rattaché`);
         return;
       }
       this.ids = [...ids];
@@ -565,8 +678,88 @@ class ContratCadre {
    * plutôt que de rapatrier la grille entière : elle dépasse les 5 000
    * lignes, un dump complet est impraticable.
    */
+  /**
+   * Charge la grille depuis la COPIE LOCALE Supabase, une fois pour toutes.
+   *
+   * Sans elle, chaque lot d'articles déclenchait un aller-retour XML-RPC vers
+   * Odoo, avec un domaine de plusieurs centaines de motifs. La copie tient
+   * dans une requête indexée, et se reconstruit par « odoo-grille-sync ».
+   *
+   * Odoo reste la source : si la copie est absente ou vide — jamais
+   * synchronisée, contrat inconnu du cache — on retombe sur la lecture
+   * directe, silencieusement. Une copie manquante ne doit jamais faire
+   * perdre un prix.
+   */
+  private grilleLocale: Map<string, { prix: number; prio: number }> | null = null;
+
+  async chargerCopieLocale(): Promise<boolean> {
+    if (!this.ids.length) return false;
+    try {
+      const sb = createClient(
+        Deno.env.get("SUPABASE_URL") || "",
+        Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
+      );
+      const m = new Map<string, { prix: number; prio: number }>();
+      const PAS = 1000;
+      for (let debut = 0; ; debut += PAS) {
+        const { data, error } = await sb
+          .from("grille_contrat")
+          .select("codification, prix, priorite")
+          .in("contrat_id", this.ids)
+          .range(debut, debut + PAS - 1);
+        if (error) throw new Error(error.message);
+        if (!data?.length) break;
+        for (const l of data) {
+          const k = String(l.codification || "").toUpperCase();
+          const prix = Number(l.prix) || 0;
+          const prio = Number(l.priorite) || 0;
+          if (!k || prix <= 0) continue;
+          const vu = m.get(k);
+          /* Même arbitrage que sur la lecture directe : la priorité la plus
+             haute tranche, puis le prix le plus favorable au client. */
+          if (!vu || prio > vu.prio || (prio === vu.prio && prix < vu.prix)) {
+            m.set(k, { prix, prio });
+          }
+        }
+        if (data.length < PAS) break;
+      }
+      if (!m.size) {
+        console.log(`[grille] copie locale vide pour #${this.ids.join(",")} : `
+          + `lecture directe chez Odoo`);
+        return false;
+      }
+      this.grilleLocale = m;
+      console.log(`[grille] copie locale : ${m.size} codification(s) pour `
+        + `#${this.ids.join(",")}`);
+      return true;
+    } catch (e) {
+      console.warn("[grille] copie locale indisponible :", (e as Error).message);
+      return false;
+    }
+  }
+
   async precharger(codes: string[]): Promise<void> {
     if (!this.actif) return;
+
+    /* Copie locale disponible : on tarife sans sortir. */
+    if (this.grilleLocale) {
+      const orphelins: string[] = [];
+      for (const c of codes) {
+        if (this.cache.has(c)) continue;
+        const g = ContratCadre.gabarits(c)
+          .find((x) => this.grilleLocale!.has(x.toUpperCase()));
+        const p = g ? this.grilleLocale.get(g.toUpperCase())!.prix : null;
+        this.cache.set(c, p);
+        if (g) this.gabaritsRetenus.set(c, g);
+        else orphelins.push(c);
+      }
+      if (orphelins.length) {
+        console.log(`[grille] hors barème dans la copie locale : `
+          + `${orphelins.slice(0, 8).join(", ")}`);
+      }
+      return;
+    }
+
     const aChercher = [...new Set(codes.filter((c) => c && !this.cache.has(c)))];
     if (!aChercher.length) return;
 
@@ -1092,6 +1285,9 @@ serve(async (req) => {
   try {
     const corps = await req.json();
     const { client, lignes, recherches } = corps;
+    /* Niveau imposé par le chargé d'affaires — R1 à R4. Quand il est fourni,
+       c'est le contrat de CE niveau qui tarife, lu chez Odoo. */
+    const niveauImpose = String(corps?.niveau || "").trim().toUpperCase();
 
     /* ── Recherche libre dans le fichier client d'Odoo ──────────────────────
      *
@@ -1209,6 +1405,14 @@ serve(async (req) => {
        article, son prix l'emporte sur tout calcul de liste de prix. */
     const cadre = new ContratCadre(od);
     await cadre.charger(porteur.id, partenaire.id);
+    /* Le niveau imposé REMPLACE le contrat du client : c'est tout l'intérêt
+       du forçage. S'il n'aboutit pas — intitulé introuvable, grille vide —
+       on garde le contrat rattaché plutôt que de perdre toute tarification,
+       et le nom affiché à l'écran dira lequel a servi. */
+    if (niveauImpose) await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id);
+    /* Copie locale d'abord : elle évite des centaines de motifs envoyés à
+       Odoo sur chaque devis. Son absence n'est pas une erreur. */
+    await cadre.chargerCopieLocale();
 
     /* Les contacts de la société.
      *
