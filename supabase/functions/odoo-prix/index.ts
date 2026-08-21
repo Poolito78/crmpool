@@ -1288,6 +1288,10 @@ serve(async (req) => {
     /* Niveau imposé par le chargé d'affaires — R1 à R4. Quand il est fourni,
        c'est le contrat de CE niveau qui tarife, lu chez Odoo. */
     const niveauImpose = String(corps?.niveau || "").trim().toUpperCase();
+    /* Niveau par DÉFAUT — celui que MonCRM affiche faute de mieux. Il ne
+       remplace jamais un contrat trouvé : il sert de filet quand le client
+       n'en a aucun de rattaché. */
+    const niveauDefaut = String(corps?.niveauDefaut || "").trim().toUpperCase();
 
     /* ── Recherche libre dans le fichier client d'Odoo ──────────────────────
      *
@@ -1409,7 +1413,28 @@ serve(async (req) => {
        du forçage. S'il n'aboutit pas — intitulé introuvable, grille vide —
        on garde le contrat rattaché plutôt que de perdre toute tarification,
        et le nom affiché à l'écran dira lequel a servi. */
-    if (niveauImpose) await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id);
+    let niveauApplique = "";
+    if (niveauImpose) {
+      if (await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id)) {
+        niveauApplique = niveauImpose;
+      }
+    } else if (!cadre.actif && niveauDefaut) {
+      /* FILET DE SÉCURITÉ.
+       *
+       * Aucun contrat rattaché au client : jusqu'ici tout retombait sur la
+       * liste de prix, qui recalcule depuis des fiches à 1 € et donnait
+       * 66,86 € là où le bordereau cote 56,13 €. Or les quatre grilles sont
+       * désormais en base, et celle du niveau affiché convient : on
+       * l'applique plutôt que de laisser passer un prix reconstruit.
+       *
+       * Le client reste maître : la réponse dit que le niveau a servi de
+       * repli, l'écran l'affiche, et le sélecteur permet d'en changer. */
+      if (await cadre.chargerNiveau(niveauDefaut, porteur.id, partenaire.id)) {
+        niveauApplique = niveauDefaut;
+        console.log(`[contrat-cadre] aucun contrat rattaché : repli sur la `
+          + `grille ${niveauDefaut}`);
+      }
+    }
     /* Copie locale d'abord : elle évite des centaines de motifs envoyés à
        Odoo sur chaque devis. Son absence n'est pas une erreur. */
     await cadre.chargerCopieLocale();
@@ -2015,6 +2040,10 @@ serve(async (req) => {
          l'écran doit le dire au lieu de laisser croire au contraire. */
       contratCadre: cadre.intitule,
       contratCadreActif: cadre.actif,
+      /* Niveau réellement appliqué, et s'il l'a été par défaut plutôt que
+         par rattachement. L'écran doit pouvoir le dire. */
+      niveauApplique,
+      niveauParDefaut: !!niveauApplique && !niveauImpose,
       /** Résultats de la recherche libre, par texte demandé. */
       trouvailles,
       /** Coordonnées, pour créer la fiche dans MonCRM sans ressaisie. */

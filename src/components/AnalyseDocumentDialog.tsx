@@ -396,7 +396,11 @@ const [contratOdoo, setContratOdoo] = useState<
        *  confondre avec `contrat` ci-dessus, qui est la LISTE DE PRIX. */
       cadre?: string;
       /** Un contrat-cadre exploitable a-t-il été trouvé pour ce client ? */
-      cadreActif?: boolean } | null
+      cadreActif?: boolean;
+      /** Niveau dont la grille a réellement tarifé — R1 à R4. */
+      niveauApplique?: string;
+      /** Ce niveau a-t-il servi de repli, faute de contrat rattaché ? */
+      niveauParDefaut?: boolean } | null
   >(null);
   /* Client trouvé dans Odoo alors qu'il n'existe pas encore dans MonCRM.
      Le Chiffrage crée la fiche à la volée : ressaisir des coordonnées qu'Odoo
@@ -1251,6 +1255,11 @@ const [contratOdoo, setContratOdoo] = useState<
             /* Niveau imposé : Odoo ira lire la grille de CE niveau au lieu de
                celle rattachée au client. Rien n'est copié en local. */
             niveau: niveauForce || undefined,
+            /* Niveau affiché, envoyé comme FILET : il ne sert que si le client
+               n'a aucun contrat rattaché. Sans lui, l'absence de rattachement
+               faisait retomber la tarification sur la liste de prix, qui
+               recalcule depuis des fiches à 1 €. */
+            niveauDefaut: niveauRemise,
           },
         });
         if (annule) return;
@@ -1315,6 +1324,8 @@ const [contratOdoo, setContratOdoo] = useState<
             societeIncertaine: !!data.societeIncertaine,
             cadre: String(data.contratCadre || ''),
             cadreActif: !!data.contratCadreActif,
+            niveauApplique: String(data.niveauApplique || ''),
+            niveauParDefaut: !!data.niveauParDefaut,
           });
         } else setContratOdoo(null);
       } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); } }
@@ -2113,14 +2124,23 @@ const [contratOdoo, setContratOdoo] = useState<
                                 l'objet Studio « CCI10019 TARIF R4 … », et c'est
                                 LUI qui tarife. Tant que les deux portaient le
                                 même nom à l'écran, son absence était invisible. */}
-                            {contratOdoo.cadreActif && contratOdoo.cadre ? (
+                            {contratOdoo.cadreActif && contratOdoo.cadre && !contratOdoo.niveauParDefaut ? (
                               <>Contrat cadre <strong>{contratOdoo.cadre}</strong></>
                             ) : (
-                              <span className="text-warning">
-                                <AlertTriangle className="inline w-3 h-3 mr-1" />
-                                Aucun contrat cadre trouvé pour ce client — les prix
-                                viennent de la liste de prix, pas du bordereau
-                              </span>
+                              contratOdoo.niveauParDefaut && contratOdoo.cadre ? (
+                                <span className="text-warning">
+                                  <AlertTriangle className="inline w-3 h-3 mr-1" />
+                                  Aucun contrat rattaché à ce client : grille{' '}
+                                  <strong>{contratOdoo.niveauApplique}</strong> appliquée
+                                  par défaut — <strong>{contratOdoo.cadre}</strong>
+                                </span>
+                              ) : (
+                                <span className="text-warning">
+                                  <AlertTriangle className="inline w-3 h-3 mr-1" />
+                                  Aucun contrat cadre trouvé pour ce client — les prix
+                                  viennent de la liste de prix, pas du bordereau
+                                </span>
+                              )
                             )}
                             <span className="text-muted-foreground">
                               {' '}· liste de prix <strong>{contratOdoo.contrat}</strong>
@@ -2227,9 +2247,14 @@ const [contratOdoo, setContratOdoo] = useState<
                               <span className="text-muted-foreground">grille ISOSIGN 2026, tarif</span>
                               <select
                                 className="rounded border px-1 py-0.5 text-[11px]"
-                                value={niveauForce || niveauRemise}
+                                value={niveauForce}
                                 onChange={e => setNiveauForce(e.target.value as '' | 'R1' | 'R2' | 'R3' | 'R4')}
                               >
+                                {/* Une entrée « automatique » explicite : sans elle,
+                                    le sélecteur affichait déjà « R4 » et choisir R4
+                                    ne déclenchait aucun changement — impossible de
+                                    forcer le niveau qui se trouvait être le défaut. */}
+                                <option value="">{niveauRemise} — automatique</option>
                                 <option value="R1">R1 — 20 %</option>
                                 <option value="R2">R2 — 25 %</option>
                                 <option value="R3">R3 — 30 %</option>
