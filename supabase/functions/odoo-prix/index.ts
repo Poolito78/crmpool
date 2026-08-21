@@ -389,6 +389,11 @@ class ContratCadre {
   private modeleLignes = "";
   /** Code article → prix net contractuel, ou null si l'article n'est pas couvert. */
   private cache = new Map<string, number | null>();
+  /* Quelle ligne de la grille a tarifé chaque code. Sans cette trace, un
+     prix venu du contrat et un prix reconstruit depuis la liste de prix sont
+     indiscernables à l'écran — c'est exactement ce qui a rendu l'écart
+     impossible à diagnostiquer sur le devis AF035816. */
+  private gabaritsRetenus = new Map<string, string>();
 
   constructor(od: Odoo) {
     this.od = od;
@@ -614,6 +619,7 @@ class ContratCadre {
         const g = ContratCadre.gabarits(c).find((x) => parCode.has(x.toUpperCase()));
         const p = g ? parCode.get(g.toUpperCase())!.prix : null;
         this.cache.set(c, p);
+        if (g) this.gabaritsRetenus.set(c, g);
         if (!g) orphelins.push(c);
         console.log(`[contrat-cadre] ${c} → ${g ? `${g} = ${p} €` : "aucun gabarit"}`);
       }
@@ -678,6 +684,11 @@ class ContratCadre {
   }
 
   /** Prix net contractuel de l'article, ou null s'il n'est pas au contrat. */
+  /** Codification de grille qui a tarifé ce code, si le contrat l'a couvert. */
+  gabarit(code: string): string | null {
+    return this.gabaritsRetenus.get(code) ?? null;
+  }
+
   prix(code: string): number | null {
     return this.cache.get(code) ?? null;
   }
@@ -1300,6 +1311,8 @@ serve(async (req) => {
       }
       prix[ref] = {
         designation: a.name,
+        source: auCadre !== null ? "contrat" : (contratPrix !== null ? "liste" : "aucun"),
+        gabarit: cadre.gabarit(ref),
         contrat: contratPrix,
         fiche: a.lst_price,
         cout: cout || a.standard_price,
@@ -1750,6 +1763,11 @@ serve(async (req) => {
              demandée : l'écart doit se lire à l'écran, pas se deviner. */
           classe: classeDe(x.default_code || ""),
           classeDemandee,
+          /* D'où vient le prix : la grille du client, ou un calcul de liste
+             de prix. L'écran doit pouvoir le dire — un prix reconstruit n'a
+             pas la même valeur qu'un prix négocié. */
+          source: auCadre !== null ? "contrat" : (p !== null ? "liste" : "aucun"),
+          gabarit: cadre.gabarit(x.default_code || ""),
           /* Part des mots de la demande que cet article porte réellement.
              C'est ce qui permet à l'appli de retenir le premier d'office
              sans le faire à l'aveugle : au-dessus du seuil elle l'annonce

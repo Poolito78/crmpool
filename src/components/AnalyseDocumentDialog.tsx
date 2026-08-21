@@ -78,6 +78,10 @@ interface TrouvailleOdoo {
   classe?: string;
   /** Classe que la demande réclamait, quand elle en nomme une. */
   classeDemandee?: string;
+  /** D'où vient le prix : la grille du client, ou un calcul de liste de prix. */
+  source?: 'contrat' | 'liste' | 'aucun';
+  /** Codification de grille qui a tarifé l'article, quand le contrat l'a couvert. */
+  gabarit?: string | null;
 }
 
 /* En dessous de ce seuil, l'article est bien retenu — la ligne ne reste
@@ -2634,13 +2638,32 @@ const [contratOdoo, setContratOdoo] = useState<
                                             );
                                           }
                                           return (
-                                            <p className={`text-[10px] ${dOffice && !sur ? 'text-warning' : 'text-muted-foreground'}`}>
-                                              {dOffice
-                                                ? (sur
-                                                    ? `Retenu d’office : ${ch.reference} — la ligne partira au devis avec ce prix.`
-                                                    : `Retenu d’office : ${ch.reference}, mais la demande ne le désigne qu’en partie — vérifiez, ou cliquez-en un autre.`)
-                                                : `Retenu : ${ch.reference} — la ligne partira au devis avec ce prix.`}
-                                            </p>
+                                            <>
+                                              <p className={`text-[10px] ${dOffice && !sur ? 'text-warning' : 'text-muted-foreground'}`}>
+                                                {dOffice
+                                                  ? (sur
+                                                      ? `Retenu d’office : ${ch.reference} — la ligne partira au devis avec ce prix.`
+                                                      : `Retenu d’office : ${ch.reference}, mais la demande ne le désigne qu’en partie — vérifiez, ou cliquez-en un autre.`)
+                                                  : `Retenu : ${ch.reference} — la ligne partira au devis avec ce prix.`}
+                                              </p>
+                                              {/* D'OÙ VIENT LE PRIX.
+                                                  Un montant négocié au bordereau et un montant
+                                                  reconstruit depuis la liste de prix s'affichaient
+                                                  à l'identique. Sur le devis AF035816 c'est
+                                                  précisément ce qui rendait l'écart indiagnosticable :
+                                                  impossible de savoir si la grille avait répondu ou
+                                                  si l'on regardait un prix calculé. */}
+                                              {ch.source === 'contrat' ? (
+                                                <p className="text-[10px] text-muted-foreground">
+                                                  Prix du bordereau{ch.gabarit ? <> — ligne <code>{ch.gabarit}</code></> : null}
+                                                </p>
+                                              ) : ch.source === 'liste' ? (
+                                                <p className="text-[10px] text-warning">
+                                                  Prix reconstruit depuis la liste de prix : cet article
+                                                  n’est pas au bordereau du client.
+                                                </p>
+                                              ) : null}
+                                            </>
                                           );
                                         })()}
                                       </div>
