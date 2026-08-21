@@ -1144,7 +1144,19 @@ export function motsDeRecherche(texte: string): string[] {
        correspond à rien telle quelle : ni le code « MAT.80.40.2000 » ni le
        libellé « 80 x 40 » ne portent cette suite de caractères. On la sépare
        en deux nombres, qui eux se retrouvent partout. */
-    .replace(/(\d{2,4})\s*[x*]\s*(\d{2,4})/g, " $1 $2 ");
+    .replace(/(\d{2,4})\s*[x*]\s*(\d{2,4})/g, " $1 $2 ")
+    /* QUANTITÉ COLLÉE AU MOT.
+     *
+     * Selon la mise en forme du document, la quantité arrive parfois soudée
+     * au libellé : « 3panneaux AK5 en 1000 mm », « 1panneau KC1 800 × 600 ».
+     * « 3panneaux » n'est alors ni un nombre ni le mot « panneaux » : c'est un
+     * mot inconnu, exigé par la recherche, absent de tout le catalogue — et
+     * comme il n'est pas dans la liste des noms de catégorie, le relâchement
+     * le garde jusqu'au bout. Plus aucun article ne sortait.
+     *
+     * On ne sépare que des chiffres suivis d'au moins TROIS lettres : « AK5 »,
+     * « C2 », « KD22a » et « 100m » gardent leur forme, qui les distingue. */
+    .replace(/\b(\d+)([a-z]{3,})/g, "$1 $2");
 
   for (const brut of reste.split(/[^a-z0-9]+/)) {
     if (!brut || MOTS_IGNORES.has(brut)) continue;
