@@ -1060,7 +1060,13 @@ const [contratOdoo, setContratOdoo] = useState<
       const art = articlePlastique(ref)
         || articlePlastique([l.reference, l.description].filter(Boolean).join(' ').trim());
       if (!art) return;
-      const qte = quantiteDe(cle, l.quantite || 1);
+      /* On lit `quantiteManuelle` directement plutôt que d'appeler
+         `quantiteDe` : ce raccourci est déclaré PLUS BAS dans le composant,
+         et une constante n'existe pas avant sa ligne. L'appeler ici faisait
+         lever « Cannot access before initialization » au premier rendu qui
+         suivait le choix du client — l'analyse disparaissait et l'écran
+         revenait au tableau de bord. */
+      const qte = quantiteManuelle[cle] ?? (l.quantite || 1);
       const d = chiffrerTransport(art, qte, livraison.dpt);
       if (!d) return;
       total += d.montant;
