@@ -1495,6 +1495,75 @@ serve(async (req) => {
         if (nonOV.length) res = nonOV;
       }
 
+      /* OPTIONS JAMAIS FOURNIES D'OFFICE.
+       *
+       * Le volet et l'OV ci-dessus sont deux cas d'une même règle : une
+       * option que la demande ne nomme pas ne doit pas être livrée. Les
+       * codes en portent d'autres, que le dossier KC1 a mises au jour :
+       *
+       *   KC1DDM#ROUTE BARREE M.800.600.C2.BTR.IS.BRUT     49,68 €
+       *   KC1DDM#ROUTE BARREE M.800.600.C2.BTR.P.IS.BRUT   69,69 €   pieds
+       *   KC1DDM#ROUTE BARREE M.800.600.C2.BTR.R.IS.BRUT   59,70 €   kit rail
+       *
+       * « panneaux KC1 800 × 600 ROUTE BARREE » recevait la version à pieds,
+       * vingt euros plus chère, sans que personne les ait demandés.
+       *
+       * Le DISQUE DE DISTANCE n'est pas un segment mais une autre famille —
+       * KC1DD contre KC1, « IS KC1 DD » contre « IS KC1 ». Il se lit donc
+       * dans le début du code, avant le # ou le premier point. Une demande le
+       * réclame quand elle nomme le disque, ou quand elle porte une distance
+       * en mètres : « ROUTE BARREE a 100m », c'est un KC1 DD.
+       */
+      const OPTIONS: { nom: string; porte: (c: string) => boolean; demandee: RegExp }[] = [
+        {
+          nom: "disque de distance",
+          porte: (c) => /^[a-z]+\d*dd/i.test(c.split(/[.#]/)[0] || ""),
+          demandee: /\bdd\b|\bdisques?\b|\b\d{2,4}\s*m\b/i,
+        },
+        {
+          nom: "pieds",
+          porte: (c) => segments(c).some((x) => /^p$/i.test(x)),
+          demandee: /\bpieds?\b/i,
+        },
+        {
+          nom: "kit rail",
+          porte: (c) => segments(c).some((x) => /^r$/i.test(x)),
+          demandee: /\brails?\b/i,
+        },
+        /* LA GAMME.
+         *
+         * Le segment qui suit le libellé — « M » ou « KM » — ne dit pas le
+         * niveau d'équipement mais la GAMME : M pour la police, KM pour le
+         * temporaire. Deux produits différents, pas deux finitions.
+         *
+         * La gamme se lit dans le code que le client cite : les K (KC1,
+         * KD22a…) et les AK sont du chantier, tout le reste relève de la
+         * police. Une demande de KC1 doit donc recevoir du KM — c'est
+         * l'inverse que faisait le départage par la longueur du code, qui
+         * prenait « M » parce qu'il est plus court d'une lettre. */
+        {
+          nom: "gamme temporaire",
+          porte: (c) => segments(c).some((x) => /^km$/i.test(x.trim().split(/\s+/).pop() || "")),
+          demandee: /\b(ak\d|k[a-z]{0,2}\d)/i,
+        },
+      ];
+      /* Le filtre joue DANS LES DEUX SENS. Écarter l'option non demandée ne
+         suffisait pas : une demande qui la réclame doit aussi cesser de
+         recevoir la version nue. « ROUTE BARREE a 100m » se voyait sinon
+         proposer un KC1 sans disque, moins cher, en tête de liste — ce qui
+         n'est pas ce qui a été demandé. */
+      for (const o of OPTIONS) {
+        const veut = o.demandee.test(q);
+        const garde = res.filter((x) => o.porte(x.default_code || "") === veut);
+        /* Seulement si ça laisse quelque chose : mieux vaut proposer une
+           version approchante que rien du tout. */
+        if (garde.length && garde.length < res.length) {
+          console.log(`[recherche] « ${q} » : ${res.length - garde.length} article(s)`
+            + ` écarté(s), ${o.nom} ${veut ? "demandé(e)" : "non demandé(e)"}`);
+          res = garde;
+        }
+      }
+
       /* Trace volontairement bavarde : sans elle, une recherche qui ne ramène
          rien est indiscernable d'une recherche qui n'a pas eu lieu. Les mots
          retenus et le nombre de réponses suffisent à trancher. */
@@ -1574,6 +1643,12 @@ serve(async (req) => {
       };
       res.sort((a, b) => points(b) - points(a)
         || rang(a) - rang(b)
+        /* Le départage par la longueur du code a été retiré : entre
+           « …M.800.600… » et « …KM.800.600… » il prenait le plus court en
+           croyant choisir la version nue, alors qu'il choisissait une GAMME —
+           M pour la police, KM pour le temporaire. Ce n'est pas un détail de
+           finition, c'est un autre produit. La gamme se tranche plus haut,
+           dans les options. */
         || (a.default_code || "").localeCompare(b.default_code || ""));
 
       /* Ce que vaut le meilleur, rapporté au maximum atteignable : l'appli
