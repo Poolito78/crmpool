@@ -27,6 +27,9 @@ import {
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
+import {
+  articlePlastique, chiffrerTransport, departement,
+} from '@/lib/transportPlastique';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -154,6 +157,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      Sans cette mémoire, l'effet de sélection automatique la remettrait au
      rechargement suivant et le retrait paraîtrait « revenir en arrière ». */
   const [refusOdoo, setRefusOdoo] = useState<Set<number>>(new Set());
+  /* Département de LIVRAISON retenu pour les frais de transport. Vide tant
+     que l'utilisateur n'a rien saisi : la valeur affichée est alors celle
+     déduite du document ou du client. */
+  const [dptLivraison, setDptLivraison] = useState<string>('');
   /** Pourquoi Odoo n'a pas été interrogé, quand c'est le cas. */
   const [odooMuet, setOdooMuet] = useState<'sans-client' | null>(null);
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
@@ -512,7 +519,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     setQuantiteManuelle({}); setPrixManuel({});
-    setNomAgglo({});
+    setNomAgglo({}); setDptLivraison('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     try {
@@ -1003,6 +1010,66 @@ const [contratOdoo, setContratOdoo] = useState<
      Brugel » ne dit rien de l'accord, c'est « AGILIS » qui le porte. Et la
      galette suit le même contrat que la balise : la facturer au tarif public
      ferait un devis faux. */
+  /**
+   * Département de livraison, et d'où il vient.
+   *
+   * Ordre de préférence : ce que l'utilisateur a saisi, puis l'adresse de
+   * LIVRAISON lue sur le document, puis celle du client dans MonCRM, puis son
+   * adresse de facturation. Le devis AF035816 justifie ce dernier repli : sa
+   * livraison est « À PRÉCISER » et le transport y est pourtant chiffré pour
+   * le 78, celui de la facturation. Mais un repli n'est pas une certitude,
+   * d'où l'origine rendue avec la valeur — et un champ toujours modifiable.
+   */
+  const livraison = useMemo(() => {
+    const cp = (v?: string) => {
+      const d = departement(String(v || '').trim().slice(0, 2));
+      return /^(\d{2}|2[AB])$/.test(d) ? d : '';
+    };
+    if (dptLivraison) return { dpt: cp(dptLivraison), origine: 'saisi à la main' };
+
+    const duDoc = cp(result?.codePostalLivraison);
+    if (duDoc) return { dpt: duDoc, origine: 'adresse de livraison du document' };
+
+    const cli = clients.find(c => c.id === creerDevisClientId);
+    const liv = cli?.adressesLivraison?.find(a => cp(a.codePostal));
+    if (liv) return { dpt: cp(liv.codePostal), origine: `livraison « ${liv.libelle || liv.ville} »` };
+
+    const fact = cp(cli?.codePostal);
+    if (fact) return { dpt: fact, origine: 'adresse de facturation, à défaut' };
+
+    return { dpt: '', origine: '' };
+  }, [dptLivraison, result, clients, creerDevisClientId]);
+
+  /**
+   * Frais de transport des produits plastique STI présents dans la demande.
+   *
+   * Le barème est celui du classeur ISOSIGN : messagerie au poids contre
+   * affrètement à l'encombrement, le moins cher l'emporte. Il ne couvre QUE
+   * le catalogue plastique — les panneaux et les supports relèvent d'un autre
+   * barème, qu'on n'a pas. Les lignes qu'il ne sait pas chiffrer sont donc
+   * laissées de côté plutôt que comptées à zéro.
+   */
+  const transport = useMemo(() => {
+    if (!result?.lignes?.length || !livraison.dpt) return null;
+    const detail: { texte: string; montant: number; explication: string }[] = [];
+    let total = 0;
+    result.lignes.forEach((l, i) => {
+      const cle = `d${i}`;
+      const ref = choixOdoo[i]?.reference
+        || produitDeLigne(i)?.referenceOdoo || produitDeLigne(i)?.reference || '';
+      const art = articlePlastique(ref)
+        || articlePlastique([l.reference, l.description].filter(Boolean).join(' ').trim());
+      if (!art) return;
+      const qte = quantiteDe(cle, l.quantite || 1);
+      const d = chiffrerTransport(art, qte, livraison.dpt);
+      if (!d) return;
+      total += d.montant;
+      detail.push({ texte: art.reference, montant: d.montant, explication: d.explication });
+    });
+    return detail.length ? { total, detail } : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle]);
+
   const referencesDuDevis = useMemo(() => {
     const refs = new Set<string>();
     (result?.lignes ?? []).forEach((l, i) => {
@@ -2063,6 +2130,63 @@ const [contratOdoo, setContratOdoo] = useState<
                             </p>
                           </div>
                         )}
+
+                        {/* FRAIS DE TRANSPORT — produits plastique STI.
+                            Le barème est au département de LIVRAISON, pas de
+                            facturation : un client facturé à Porcheville peut
+                            se faire livrer ailleurs, et le tarif change. */}
+                        <div className="space-y-1 pt-1">
+                          <Label className="text-xs">Livraison et transport</Label>
+                          <div className="flex items-center gap-2 text-[11px]">
+                            <span className="shrink-0">Département :</span>
+                            <input
+                              className="w-16 rounded border px-1 py-0.5 text-[11px]"
+                              value={dptLivraison || livraison.dpt}
+                              placeholder="ex. 78"
+                              onChange={e => setDptLivraison(e.target.value.replace(/[^0-9AaBb]/g, '').slice(0, 3).toUpperCase())}
+                            />
+                            {livraison.origine && (
+                              <span className={`truncate ${livraison.origine.includes('à défaut') ? 'text-warning' : 'text-muted-foreground'}`}>
+                                {livraison.origine}
+                              </span>
+                            )}
+                            {dptLivraison && (
+                              <button
+                                onClick={() => setDptLivraison('')}
+                                className="text-warning hover:underline shrink-0"
+                                title="Revenir à ce que le document indique"
+                              >↺</button>
+                            )}
+                          </div>
+                          {!livraison.dpt ? (
+                            <p className="text-[11px] text-warning">
+                              Sans département de livraison, le transport ne se chiffre pas.
+                            </p>
+                          ) : transport ? (
+                            <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5 text-[11px]">
+                              {transport.detail.map(d => (
+                                <div key={d.texte} className="flex gap-2" title={d.explication}>
+                                  <span className="font-mono text-[10px] truncate flex-1">{d.texte}</span>
+                                  <span className="font-semibold shrink-0">{formatMontant(d.montant)}</span>
+                                </div>
+                              ))}
+                              <div className="flex gap-2 border-t border-primary/20 pt-0.5">
+                                <span className="flex-1 font-medium">Transport</span>
+                                <span className="font-bold">{formatMontant(transport.total)}</span>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                Messagerie ou affrètement, le moins cher des deux. Barème
+                                plastique STI seulement — les panneaux et supports n’y sont
+                                pas et restent à chiffrer.
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-muted-foreground">
+                              Aucun produit plastique STI dans cette demande : rien à chiffrer
+                              avec ce barème.
+                            </p>
+                          )}
+                        </div>
 
                         {/* Lignes demandées : quantité et choix de l'article.
                             Un client écrit « J11 » ; le catalogue en compte

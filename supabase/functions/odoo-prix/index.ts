@@ -489,11 +489,26 @@ class ContratCadre {
       const gardes = retirer ? reste.filter((s) => !retirer.test(s)) : reste;
       return gardes.length ? "." + gardes.join(".") : "";
     };
+    /* Les segments d'OPTION — R le kit rail, P les pieds, ST la face simple —
+       s'ajoutent à BTR et IS dans la liste de ce qui peut manquer côté
+       grille. Le devis AF035816 les fait apparaître partout dans les codes
+       Odoo — « KD22A.1000.300.C2.BTR.R.IS.BRUT » — alors que le bordereau
+       cote souvent la famille sans eux. Sans ce dépouillement, ces articles
+       ressortaient hors barème tout en étant bel et bien tarifés. */
+    const sansOptions = (r: RegExp | null) => {
+      const gardes = reste.filter((x) => !/^(R|P|ST)$/i.test(x));
+      const filtres = r ? gardes.filter((x) => !r.test(x)) : gardes;
+      return filtres.length ? "." + filtres.join(".") : "";
+    };
     const suffixes = [...new Set([
       suffixe(null),
       suffixe(/^BTR$/i),
       suffixe(/^IS$/i),
       suffixe(/^(BTR|IS)$/i),
+      sansOptions(null),
+      sansOptions(/^BTR$/i),
+      sansOptions(/^IS$/i),
+      sansOptions(/^(BTR|IS)$/i),
     ])];
 
     const out: string[] = [];
@@ -1592,8 +1607,17 @@ serve(async (req) => {
          catégorie, ni un nombre. Les longueurs converties en millimètres
          sont ajoutées en tête de liste, si bien qu'un « 2000 » se retrouvait
          pivot et pesait double à la place du mot qui désigne la pièce. */
-      /* Gamme chantier : le code cité commence par K ou AK. */
-      const chantier = /\b(ak\d|k[a-z]{0,2}\d)/i.test(q);
+      /* GAMME CHANTIER.
+       *
+       * Deux formes de codes : ceux qui commencent par K — KC1, KD22a — et
+       * ceux qui accolent le K à la lettre de la famille police, AK, BK, CK.
+       * Un AK5 est le pendant chantier d'un A5, un BK celui d'un B.
+       *
+       * Sur cette gamme, le KIT RAIL se vend d'office : les quatre articles
+       * de chantier du devis AF035816 le portent tous. On le préfère donc au
+       * classement — sans jamais l'imposer, un filtre écarterait les bons
+       * articles chez un client qui n'en prend pas. */
+      const chantier = /\b([abc]k\d|k[a-z]{0,2}\d)/i.test(q);
       const iPivot = Math.max(0, motsQ.findIndex(
         (m) => !motGenerique(m) && !/^\d+$/.test(m)));
 
@@ -1624,10 +1648,8 @@ serve(async (req) => {
         const cl = classeDe(x.default_code || "");
         if (classeDemandee && cl && cl !== classeDemandee) return -100;
         let n = 0;
-        /* Le kit rail se vend d'office sur la gamme chantier : les quatre
-           articles de chantier du devis AF035816 le portent. On le préfère
-           donc, sans jamais l'imposer — une simple préférence au classement,
-           qui n'écarte rien. */
+        /* Préférence, pas obligation : elle départage à égalité de mots
+           retrouvés, et ne peut écarter personne. */
         if (chantier && segments(x.default_code || "").some((y) => /^r$/i.test(y))) n += 3;
         for (let k = 0; k < motsQ.length; k++) {
           const poids = k === iPivot ? 4 : (motGenerique(motsQ[k]) ? 1 : 2);

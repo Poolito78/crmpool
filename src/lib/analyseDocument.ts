@@ -47,6 +47,19 @@ export interface DocumentAnalysis {
   totalHT?: number;
   totalTTC?: number;
   notes?: string;
+  /**
+   * Adresse de LIVRAISON, quand le document la distingue de la facturation.
+   *
+   * C'est elle qui commande les frais de transport — un client facturé à
+   * Porcheville peut se faire livrer en Picardie, et le barème n'est pas le
+   * même. Le devis Odoo AF035816 le montre à l'envers : sa livraison est
+   * « À PRÉCISER » alors que le transport y est chiffré pour le 78, celui de
+   * la facturation. Faute de mieux, c'est bien ce repli qu'il faut, mais il
+   * doit rester visible et corrigeable.
+   */
+  adresseLivraison?: string;
+  codePostalLivraison?: string;
+  villeLivraison?: string;
 }
 
 const PROMPT = `Tu es un assistant spécialisé dans l'extraction de données depuis des documents commerciaux (commandes fournisseur, bons de livraison, devis, commandes client, factures, emails commerciaux).
@@ -64,6 +77,9 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
   "totalHT": nombre ou null,
   "totalTTC": nombre ou null,
   "notes": "remarques importantes ou null",
+  "adresseLivraison": "rue de l'adresse de LIVRAISON si elle est distincte de la facturation, ou null",
+  "codePostalLivraison": "code postal de l'adresse de LIVRAISON (5 chiffres) ou null",
+  "villeLivraison": "ville de l'adresse de LIVRAISON ou null",
   "lignes": [
     {
       "reference": "référence article ou null",
