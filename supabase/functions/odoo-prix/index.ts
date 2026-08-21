@@ -849,11 +849,17 @@ const ALIAS_FAMILLES: [RegExp, string][] = [
  * seul « panneaux » avait survécu au relâchement, et l'arceau le portait.
  */
 const MOTS_GENERIQUES = new Set([
-  "panneau", "panneaux", "support", "supports", "mat", "mats", "poteau",
-  "poteaux", "fourniture", "fournitures", "article", "articles", "piece",
-  "pieces", "lot", "lots", "ensemble", "ensembles", "unite", "unites",
-  "materiel", "produit", "produits", "accessoire", "accessoires",
+  "panneau", "panneaux", "fourniture", "fournitures", "article", "articles",
+  "lot", "lots", "ensemble", "ensembles", "materiel", "produit", "produits",
+  "accessoire", "accessoires",
 ]);
+/* « support », « mat » et « poteau » ont figuré ici par erreur : ce sont de
+   vrais noms de famille dans CE catalogue — « IS FARDEAU 61 SUPPORT ACIER
+   D60 LONGUEUR 3,50m » en porte un. Les traiter en mots vides revenait à
+   effacer ce qui désigne l'article et à ne garder que les dimensions, si
+   bien qu'un fourreau GBA en 80×40 satisfaisait une demande de mât 80×40.
+   Un mot n'est générique que s'il ne nomme RIEN au catalogue ; « panneaux »
+   en est un, Odoo nommant ses panneaux « IS AK5 » et non « PANNEAU AK5 ». */
 
 /** Ce mot ne sert-il qu'à nommer la catégorie ? */
 export function motGenerique(m: string): boolean {
@@ -869,7 +875,7 @@ export function normaliserFamilles(texte: string): string {
 
 export function motsDeRecherche(texte: string): string[] {
   const t = normaliserFamilles(String(texte || ""))
-    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/ø/g, " ");
 
@@ -877,11 +883,27 @@ export function motsDeRecherche(texte: string): string[] {
   /* Longueurs en mètres → millimètres, AVANT tout découpage, et le motif est
      retiré du texte dans la foulée. Sans cela, « 3.50 m » laissait derrière lui
      un « 50 » orphelin qui devenait un critère : on aurait exigé que le libellé
-     contienne « 50 », et écarté le bon article. */
-  const reste = t.replace(/(\d{1,2})[.,](\d{1,2})\s*m\b/g, (_, a, b) => {
-    mots.push(String(Math.round(parseFloat(`${a}.${b}`) * 1000)));
-    return " ";
-  });
+     contienne « 50 », et écarté le bon article.
+     
+     Le mètre ENTIER compte autant que le décimal : « 2 m », « 2m », « 2 ml »
+     se perdaient entièrement — « ml » est un mot vide et « 2 », à un seul
+     chiffre, était rejeté. La demande « mât de 80 × 40 de 2 ml » arrivait donc
+     à Odoo sans sa longueur, et n'importe quelle pièce en 80×40 la satisfaisait,
+     fourreau GBA compris. */
+  const reste = t
+    .replace(/(\d{1,2})[.,](\d{1,2})\s*ml?\b/g, (_, a, b) => {
+      mots.push(String(Math.round(parseFloat(`${a}.${b}`) * 1000)));
+      return " ";
+    })
+    .replace(/(\d{1,2})\s*ml?\b/g, (_, a) => {
+      mots.push(String(Math.round(parseFloat(a) * 1000)));
+      return " ";
+    })
+    /* Une paire de cotes collée — « 80x40 », « 80X40 », « 80*40 » — ne
+       correspond à rien telle quelle : ni le code « MAT.80.40.2000 » ni le
+       libellé « 80 x 40 » ne portent cette suite de caractères. On la sépare
+       en deux nombres, qui eux se retrouvent partout. */
+    .replace(/(\d{2,4})\s*[x*]\s*(\d{2,4})/g, " $1 $2 ");
 
   for (const brut of reste.split(/[^a-z0-9]+/)) {
     if (!brut || MOTS_IGNORES.has(brut)) continue;
@@ -898,8 +920,23 @@ export function motsDeRecherche(texte: string): string[] {
     const codeCourt = /^[a-z]\d{1,2}$/.test(brut);
     if ((brut.length >= 3 || codeCourt) && !mots.includes(brut)) mots.push(brut);
   }
-  // Au-delà de cinq critères, on n'exclut plus que des articles corrects.
-  return mots.slice(0, 5);
+
+  /* La CLASSE échappe au plafond.
+     
+     « KC1 route barrée avec disque de distance C2 » produit six mots, et le
+     plafond de cinq faisait tomber le dernier — précisément la classe, qu'on
+     ajoute en queue de demande. La ligne repartait donc chercher sans elle et
+     ramenait du C1. Elle est mise de côté avant la coupe, puis remise. */
+  const classe = mots.find((m) => /^(c\d(?:fj)?|3430)$/.test(m));
+  const sansClasse = mots.filter((m) => m !== classe);
+  /* Le plafond était à cinq, du temps où la recherche exigeait tout sans
+     jamais relâcher : un critère de trop et l'on ne trouvait rien. Depuis
+     qu'elle relâche, sur-contraindre ne coûte plus qu'une passe, tandis que
+     couper coûte un critère — et la coupe frappait justement les cotes, que
+     l'on sépare désormais en deux nombres. « support ou mât 80×40 en 2 m »
+     perdait ainsi son 40. */
+  const gardes = sansClasse.slice(0, 7);
+  return classe ? [...gardes, classe] : gardes;
 }
 
 /**
@@ -978,6 +1015,14 @@ export function domaineDepuisMots(mots: string[], texte: string): unknown[] {
      sens. On l'exclut, sauf si la demande mentionne elle-même « fardeau ». */
   if (!/\bfardeau\b/i.test(texte)) {
     termes.push([["name", "not ilike", "fardeau"]]);
+  }
+  /* Un FOURREAU GBA est la pièce qu'on scelle dans un muret béton, pas le
+     mât qu'on y glisse. Il porte pourtant les mêmes dimensions — 80×40 — et
+     remontait donc sur « support ou mât 80×40 en 2 m », d'autant plus
+     facilement que la longueur du mât se perdait au découpage. On l'écarte
+     sauf si la demande le nomme, exactement comme le fardeau. */
+  if (!/\b(fourreau|gba)\b/i.test(texte)) {
+    termes.push([["name", "not ilike", "fourreau"]]);
   }
 
   for (const m of mots) {
@@ -1476,7 +1521,12 @@ serve(async (req) => {
       /* Le bonus du « premier mot » vise le premier mot qui DÉSIGNE quelque
          chose : sur « panneaux AK5 … », l'appuyer sur « panneaux » aurait fait
          remonter tout ce dont le libellé contient ce mot. */
-      const iPivot = Math.max(0, motsQ.findIndex((m) => !motGenerique(m)));
+      /* Le pivot est le premier mot qui NOMME l'article : ni un nom de
+         catégorie, ni un nombre. Les longueurs converties en millimètres
+         sont ajoutées en tête de liste, si bien qu'un « 2000 » se retrouvait
+         pivot et pesait double à la place du mot qui désigne la pièce. */
+      const iPivot = Math.max(0, motsQ.findIndex(
+        (m) => !motGenerique(m) && !/^\d+$/.test(m)));
 
       /* CLASSE DE FILM.
        *
