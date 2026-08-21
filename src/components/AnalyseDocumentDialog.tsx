@@ -381,7 +381,12 @@ const [contratOdoo, setContratOdoo] = useState<
       /** `societe` ci-dessus est en fait le nom d'un simple contact Odoo
        *  (souvent une adresse de livraison mal rattachée) : à vérifier/corriger
        *  dans Odoo plutôt qu'à prendre pour une vraie société cliente. */
-      societeIncertaine?: boolean } | null
+      societeIncertaine?: boolean;
+      /** Intitulé du CONTRAT-CADRE Odoo — « CCI10019 TARIF R4 … ». À ne pas
+       *  confondre avec `contrat` ci-dessus, qui est la LISTE DE PRIX. */
+      cadre?: string;
+      /** Un contrat-cadre exploitable a-t-il été trouvé pour ce client ? */
+      cadreActif?: boolean } | null
   >(null);
   /* Client trouvé dans Odoo alors qu'il n'existe pas encore dans MonCRM.
      Le Chiffrage crée la fiche à la volée : ressaisir des coordonnées qu'Odoo
@@ -1247,6 +1252,8 @@ const [contratOdoo, setContratOdoo] = useState<
           setContratOdoo({
             contrat: data.contrat, societe: data.societe || data.partenaire || '', prix, isomark,
             societeIncertaine: !!data.societeIncertaine,
+            cadre: String(data.contratCadre || ''),
+            cadreActif: !!data.contratCadreActif,
           });
         } else setContratOdoo(null);
       } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); } }
@@ -2038,7 +2045,25 @@ const [contratOdoo, setContratOdoo] = useState<
 
                         {contratOdoo && (
                           <div className="rounded-lg border border-primary/30 bg-primary/5 px-2 py-1.5 text-[11px]">
-                            Contrat cadre <strong>{contratOdoo.contrat}</strong>
+                            {/* DEUX CHOSES DISTINCTES, longtemps confondues ici.
+                                `contrat` est la LISTE DE PRIX Odoo — « APPLIQU
+                                SIGNA (ISO-STI) » — et cette étiquette l'appelait
+                                « Contrat cadre ». Le vrai contrat-cadre est
+                                l'objet Studio « CCI10019 TARIF R4 … », et c'est
+                                LUI qui tarife. Tant que les deux portaient le
+                                même nom à l'écran, son absence était invisible. */}
+                            {contratOdoo.cadreActif && contratOdoo.cadre ? (
+                              <>Contrat cadre <strong>{contratOdoo.cadre}</strong></>
+                            ) : (
+                              <span className="text-warning">
+                                <AlertTriangle className="inline w-3 h-3 mr-1" />
+                                Aucun contrat cadre trouvé pour ce client — les prix
+                                viennent de la liste de prix, pas du bordereau
+                              </span>
+                            )}
+                            <span className="text-muted-foreground">
+                              {' '}· liste de prix <strong>{contratOdoo.contrat}</strong>
+                            </span>
                            {contratOdoo.societe && <> chez <strong>{contratOdoo.societe}</strong></>}
                             {contratOdoo.societeIncertaine && (
                               <span

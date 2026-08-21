@@ -394,6 +394,8 @@ class ContratCadre {
      indiscernables à l'écran — c'est exactement ce qui a rendu l'écart
      impossible à diagnostiquer sur le devis AF035816. */
   private gabaritsRetenus = new Map<string, string>();
+  /** Nom des contrats-cadres rattachés — « CCI10019 TARIF R4 … ». */
+  private noms: string[] = [];
 
   constructor(od: Odoo) {
     this.od = od;
@@ -454,6 +456,21 @@ class ContratCadre {
         return;
       }
       this.ids = [...ids];
+
+      /* Le NOM du contrat, pour qu'il s'affiche à l'écran.
+       *
+       * MonCRM montrait jusqu'ici « APPLIQU SIGNA (ISO-STI) (EUR) », qui est
+       * la LISTE DE PRIX Odoo — pas le contrat-cadre. Impossible, en le
+       * lisant, de savoir si « CCI10019 TARIF R4 » avait été trouvé ou non :
+       * les deux cas donnaient le même écran. */
+      try {
+        const noms = (await this.od.kw(
+          "x_contrat_cadre", "read", [this.ids, ["x_name", "display_name"]],
+        )) as any[];
+        this.noms = noms
+          .map((n) => String(n.x_name || n.display_name || "").trim())
+          .filter(Boolean);
+      } catch { /* le nom est un confort, jamais une condition */ }
 
       const defsCadre = (await this.od.kw(
         "x_contrat_cadre", "fields_get", [[]], { attributes: ["type", "relation"] },
@@ -684,6 +701,11 @@ class ContratCadre {
   }
 
   /** Prix net contractuel de l'article, ou null s'il n'est pas au contrat. */
+  /** Nom du ou des contrats-cadres trouvés, pour l'afficher tel quel. */
+  get intitule(): string {
+    return this.noms.join(" + ");
+  }
+
   /** Codification de grille qui a tarifé ce code, si le contrat l'a couvert. */
   gabarit(code: string): string | null {
     return this.gabaritsRetenus.get(code) ?? null;
@@ -1784,6 +1806,11 @@ serve(async (req) => {
     return repondre({
       partenaire: partenaire.name,
       partenaireId: partenaire.id,
+      /* Le contrat-cadre trouvé, distinct de la liste de prix. Vide quand
+         aucun n'est rattaché : c'est alors la liste de prix qui tarife, et
+         l'écran doit le dire au lieu de laisser croire au contraire. */
+      contratCadre: cadre.intitule,
+      contratCadreActif: cadre.actif,
       /** Résultats de la recherche libre, par texte demandé. */
       trouvailles,
       /** Coordonnées, pour créer la fiche dans MonCRM sans ressaisie. */
