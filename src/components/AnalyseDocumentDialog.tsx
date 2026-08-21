@@ -171,6 +171,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      autre : le contrat CCI10019 lui-même a été forcé sur ce devis. Vide =
      on s'en remet au contrat. */
   const [niveauForce, setNiveauForce] = useState<'' | 'R1' | 'R2' | 'R3' | 'R4'>('');
+  /* Synchronisation des grilles R1-R4 depuis Odoo vers la copie Supabase.
+     `null` tant qu'on n'a pas regardé, sinon la date de la dernière réussie. */
+  const [grilleMaj, setGrilleMaj] = useState<string | null>(null);
+  const [grilleEnCours, setGrilleEnCours] = useState(false);
   /** Pourquoi Odoo n'a pas été interrogé, quand c'est le cas. */
   const [odooMuet, setOdooMuet] = useState<'sans-client' | null>(null);
   /* Interlocuteurs de la société chez Odoo, et celui retenu pour l'affaire.
@@ -1103,6 +1107,41 @@ const [contratOdoo, setContratOdoo] = useState<
     return detail.length ? { total, detail } : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle]);
+
+  /* Date de la dernière synchronisation réussie. Une grille périmée est
+     indiscernable d'une grille à jour : il faut la montrer. */
+  useEffect(() => {
+    if (!open) return;
+    supabase
+      .from('grille_synchro')
+      .select('fin')
+      .eq('etat', 'terminé')
+      .order('fin', { ascending: false })
+      .limit(1)
+      .then(({ data }) => setGrilleMaj(data?.[0]?.fin ?? ''));
+  }, [open]);
+
+  const synchroniserGrilles = useCallback(async () => {
+    setGrilleEnCours(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('odoo-grille-sync', {
+        body: { niveaux: ['R1', 'R2', 'R3', 'R4'] },
+      });
+      if (error) throw error;
+      const faits = (data?.contrats || []) as { nom: string; lignes: number }[];
+      if (!faits.length) {
+        toast.warning(data?.message || 'Aucune grille trouvée chez Odoo.');
+      } else {
+        const total = faits.reduce((t, c) => t + (c.lignes || 0), 0);
+        toast.success(`${faits.length} grille(s), ${total} ligne(s) recopiée(s).`);
+        setGrilleMaj(new Date().toISOString());
+      }
+    } catch (e) {
+      toast.error(`Synchronisation impossible : ${(e as Error).message}`);
+    } finally {
+      setGrilleEnCours(false);
+    }
+  }, []);
 
   const referencesDuDevis = useMemo(() => {
     const refs = new Set<string>();
@@ -2210,6 +2249,28 @@ const [contratOdoo, setContratOdoo] = useState<
                                   title="Revenir au niveau du contrat cadre"
                                 >↺</button>
                               )}
+                            </div>
+                            {/* COPIE LOCALE DES GRILLES.
+                                Les quatre grilles vivent dans Supabase, pas dans
+                                Odoo à chaque appel. Odoo reste la source : cette
+                                copie se refait à la demande, et sa date doit
+                                rester visible — une grille périmée ressemble
+                                trait pour trait à une grille à jour. */}
+                            <div className="flex items-center gap-2 pb-1.5 text-[10px]">
+                              <span className={grilleMaj ? 'text-muted-foreground' : 'text-warning'}>
+                                {grilleMaj === null
+                                  ? 'Grilles R1–R4 : vérification…'
+                                  : grilleMaj
+                                    ? `Grilles R1–R4 copiées le ${new Date(grilleMaj).toLocaleString('fr-FR')}`
+                                    : 'Grilles R1–R4 jamais copiées — les prix sont lus directement chez Odoo, plus lentement'}
+                              </span>
+                              <button
+                                onClick={synchroniserGrilles}
+                                disabled={grilleEnCours}
+                                className="rounded border px-1.5 py-0.5 hover:bg-primary/10 disabled:opacity-50"
+                              >
+                                {grilleEnCours ? 'Synchronisation…' : 'Synchroniser depuis Odoo'}
+                              </button>
                             </div>
                           </div>
                         )}
