@@ -30,6 +30,7 @@ import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import {
   articlePlastique, chiffrerTransport, departement,
 } from '@/lib/transportPlastique';
+import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -1108,9 +1109,34 @@ const [contratOdoo, setContratOdoo] = useState<
       total += d.montant;
       detail.push({ texte: art.reference, montant: d.montant, explication: d.explication });
     });
-    return detail.length ? { total, detail } : null;
+    /* PORT ISOSIGN, qui s'AJOUTE au port plastique.
+     *
+     * Les deux expéditions sont distinctes — le plastique part de chez STI,
+     * les panneaux et supports de chez ISOSIGN — et le devis AF035816 les
+     * réunit sur une seule ligne « BALISAGE + SV ». Le franco de 700 € se
+     * juge donc sur les seules lignes ISOSIGN : le plastique voyage à part et
+     * ne peut pas faire franchir un seuil qui ne le concerne pas. */
+    let baseIsosign = 0;
+    const lignesIsosign: { reference: string; designation?: string }[] = [];
+    result.lignes.forEach((l, i) => {
+      const cle = `d${i}`;
+      const odoo = choixOdoo[i];
+      const local = produitDeLigne(i);
+      const ref = odoo?.reference || local?.referenceOdoo || local?.reference || '';
+      if (!ref || articlePlastique(ref)) return;   // le plastique a son barème
+      const qte = quantiteManuelle[cle] ?? (l.quantite || 1);
+      const pu = prixManuel[cle] ?? odoo?.contrat ?? 0;
+      baseIsosign += (Number(pu) || 0) * qte;
+      lignesIsosign.push({ reference: ref, designation: odoo?.designation });
+    });
+    const isosign = lignesIsosign.length
+      ? chiffrerPortIsosign(baseIsosign, lignesIsosign)
+      : null;
+
+    if (isosign) total += isosign.montant;
+    return (detail.length || isosign) ? { total, detail, isosign } : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle]);
+  }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel]);
 
   /* Date de la dernière synchronisation réussie. Une grille périmée est
      indiscernable d'une grille à jour : il faut la montrer. */
@@ -2339,14 +2365,26 @@ const [contratOdoo, setContratOdoo] = useState<
                                   <span className="font-semibold shrink-0">{formatMontant(d.montant)}</span>
                                 </div>
                               ))}
+                              {transport.isosign && (
+                                <div className="flex gap-2" title={transport.isosign.explication}>
+                                  <span className="flex-1 truncate">
+                                    Port ISOSIGN{transport.isosign.avecSupport ? ' (avec support)' : ''}
+                                  </span>
+                                  <span className="font-semibold shrink-0">
+                                    {transport.isosign.offert
+                                      ? 'offert'
+                                      : formatMontant(transport.isosign.montant)}
+                                  </span>
+                                </div>
+                              )}
                               <div className="flex gap-2 border-t border-primary/20 pt-0.5">
                                 <span className="flex-1 font-medium">Transport</span>
                                 <span className="font-bold">{formatMontant(transport.total)}</span>
                               </div>
                               <p className="text-[10px] text-muted-foreground">
-                                Messagerie ou affrètement, le moins cher des deux. Barème
-                                plastique STI seulement — les panneaux et supports n’y sont
-                                pas et restent à chiffrer.
+                                Deux expéditions distinctes, additionnées : le plastique part
+                                de chez STI — messagerie ou affrètement, le moins cher — les
+                                panneaux et supports de chez ISOSIGN, au forfait.
                               </p>
                             </div>
                           ) : (

@@ -1102,6 +1102,31 @@ const MOTS_GENERIQUES = new Set([
    Un mot n'est générique que s'il ne nomme RIEN au catalogue ; « panneaux »
    en est un, Odoo nommant ses panneaux « IS AK5 » et non « PANNEAU AK5 ». */
 
+/**
+ * Mots interchangeables : le client et Odoo ne nomment pas la même chose
+ * pareil.
+ *
+ * « mât de 80 × 40 de 2 ml » ne partage AUCUN mot avec « SUPPORT ACIER GALVA
+ * 80X40 1.5 LG 2000 + BOUCHON BRUT », qui est pourtant l'article du devis.
+ * Exiger « mat » revenait à écarter le bon support ; le relâchement finissait
+ * par lâcher le mot, et la recherche se rabattait sur n'importe quelle pièce
+ * en 80×40 — un fourreau GBA, en l'occurrence.
+ *
+ * Chaque groupe devient une seule condition : l'article convient s'il porte
+ * l'un OU l'autre des mots.
+ */
+const SYNONYMES: string[][] = [
+  ["mat", "mats", "mât", "poteau", "poteaux", "support", "supports"],
+  ["fleche", "flèche", "directionnel"],
+  ["bloc", "blocs", "lest", "lestage"],
+];
+
+/** Tous les mots équivalents à celui-ci, lui compris. */
+export function motsEquivalents(m: string): string[] {
+  const groupe = SYNONYMES.find((g) => g.includes(m));
+  return groupe ? [...new Set(groupe)] : [m];
+}
+
 /** Ce mot ne sert-il qu'à nommer la catégorie ? */
 export function motGenerique(m: string): boolean {
   return MOTS_GENERIQUES.has(m);
@@ -1275,11 +1300,21 @@ export function domaineDepuisMots(mots: string[], texte: string): unknown[] {
      facilement que la longueur du mât se perdait au découpage. On l'écarte
      sauf si la demande le nomme, exactement comme le fardeau. */
   if (!/\b(fourreau|gba)\b/i.test(texte)) {
+    /* Le libellé ne porte pas toujours le mot : la référence FGBA8040, elle,
+       le dit toujours. On écarte les deux formes. */
     termes.push([["name", "not ilike", "fourreau"]]);
+    termes.push([["default_code", "not ilike", "FGBA"]]);
   }
 
   for (const m of mots) {
-    termes.push(["|", ["name", "ilike", m], ["default_code", "ilike", m]]);
+    /* Un mot vaut pour tous ses équivalents : autant de couples
+       (libellé, référence) réunis par des OU. */
+    const variantes = motsEquivalents(m);
+    const feuilles: unknown[] = [];
+    for (const v of variantes) {
+      feuilles.push(["name", "ilike", v], ["default_code", "ilike", v]);
+    }
+    termes.push([...Array(feuilles.length - 1).fill("|"), ...feuilles]);
   }
 
   return combinerEt(termes);
