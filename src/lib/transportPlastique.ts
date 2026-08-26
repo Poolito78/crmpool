@@ -138,14 +138,28 @@ export function chiffrerTransport(
 }
 
 /** Retrouve un article plastique par son libellé exact, ou par sa référence. */
+/**
+ * Index des références en majuscules, construit une seule fois.
+ *
+ * La version précédente rappelait `Object.values()` sur les 450 articles à
+ * CHAQUE appel — un nouveau tableau de 450 entrées, puis un balayage. Le
+ * calcul du transport interroge deux fois par ligne et se refait à chaque
+ * frappe dans une quantité ou un prix : sur un devis de trente lignes, 27 000
+ * objets créés puis jetés par caractère tapé.
+ */
+let indexParReference: Map<string, ArticlePlastique> | null = null;
+
 export function articlePlastique(cle: string): ArticlePlastique | null {
   const t = String(cle ?? '').trim();
   if (!t) return null;
   const direct = ARTICLES_PLASTIQUE[t];
   if (direct) return direct;
-  const ref = t.toUpperCase();
-  for (const a of Object.values(ARTICLES_PLASTIQUE)) {
-    if ((a.reference || '').toUpperCase() === ref) return a;
+  if (!indexParReference) {
+    indexParReference = new Map();
+    for (const a of Object.values(ARTICLES_PLASTIQUE)) {
+      const r = (a.reference || '').toUpperCase();
+      if (r && !indexParReference.has(r)) indexParReference.set(r, a);
+    }
   }
-  return null;
+  return indexParReference.get(t.toUpperCase()) ?? null;
 }

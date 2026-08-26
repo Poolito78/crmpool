@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, Fragment } from 'react';
+import { useState, useCallback, useRef, useMemo, Fragment, lazy, Suspense } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, getPrixPourQuantite, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { exportToExcel } from '@/lib/exportExcel';
@@ -7,7 +7,11 @@ import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, Scan
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
+/* Chargé à la demande. Cet écran pèse 188 ko à lui seul, sans compter les
+   alphabets de signalisation et le barème plastique qu'il entraîne : tant que
+   personne n'analyse de document, rien de tout cela n'a à être téléchargé ni
+   exécuté au rendu du tableau de bord. */
+const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
 import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
@@ -28,6 +32,10 @@ export default function Dashboard() {
   });
   const setDashTabPersist = (t: 'overview' | 'previsionnel') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
   const [analyseOpen, setAnalyseOpen] = useState(false);
+  /* Vrai dès la première ouverture : l'écran d'analyse reste alors monté,
+     pour que le refermer ne perde pas le travail en cours. */
+  const analyseDejaOuvert = useRef(false);
+  if (analyseOpen) analyseDejaOuvert.current = true;
   const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
   const [droppedText, setDroppedText] = useState('');
   const [isDragging, setIsDragging] = useState(false);
@@ -311,12 +319,20 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <AnalyseDocumentDialog
-        open={analyseOpen}
-        onOpenChange={(v) => { setAnalyseOpen(v); if (!v) { setDroppedFiles([]); setDroppedText(''); } }}
-        initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
-        initialText={droppedText || undefined}
-      />
+      {/* Une fois ouvert, il RESTE monté : le refermer ne doit pas jeter
+          l'analyse en cours, comme c'était le cas quand il vivait ici en
+          permanence. Avant la première ouverture, en revanche, il ne coûte
+          rien. */}
+      {(analyseOpen || analyseDejaOuvert.current) && (
+        <Suspense fallback={null}>
+          <AnalyseDocumentDialog
+            open={analyseOpen}
+            onOpenChange={(v) => { setAnalyseOpen(v); if (!v) { setDroppedFiles([]); setDroppedText(''); } }}
+            initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
+            initialText={droppedText || undefined}
+          />
+        </Suspense>
+      )}
 
       {/* ── Encours fin de mois (admin uniquement) ── */}
       {isAdmin && ((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (

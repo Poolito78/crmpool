@@ -1,11 +1,18 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { useCommercials } from '@/hooks/useCommercials';
-import AnalyseDocumentDialog from '@/components/AnalyseDocumentDialog';
+/* Chargé à la demande.
+ *
+ * Cet écran vivait ici, monté en permanence : présent sur CHAQUE page de
+ * l'application, ses quelque soixante hooks se rejouaient à chaque rendu de
+ * la coquille, et ses 188 ko — plus les alphabets de signalisation et le
+ * barème plastique qu'il entraîne — partaient dans le paquet principal,
+ * téléchargés par tout le monde à la première visite. */
+const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 
 type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string };
@@ -54,6 +61,8 @@ const NAV: NavEntry[] = [
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [analyseOpen, setAnalyseOpen] = useState(false);
+  const analyseDejaOuvert = useRef(false);
+  if (analyseOpen) analyseDejaOuvert.current = true;
   // Sidebar desktop repliée (icônes seules) — persistée
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('crm_sidebar_collapsed') === '1'; } catch { return false; }
@@ -322,7 +331,13 @@ export default function CRMLayout() {
         </main>
       </div>
 
-      <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
+      {/* Monté à la première ouverture, et plus jamais démonté : refermer la
+          fenêtre ne doit pas jeter l'analyse en cours. */}
+      {(analyseOpen || analyseDejaOuvert.current) && (
+        <Suspense fallback={null}>
+          <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
+        </Suspense>
+      )}
 
       {/* Mobile bottom nav — show first 5 flat items */}
       <nav className="md:hidden fixed bottom-0 inset-x-0 bg-card border-t border-border z-30 flex justify-around py-2">

@@ -115,7 +115,14 @@ export default function Devis() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
-  const _savedFilters = (() => { try { const s = localStorage.getItem('crm_devis_filters'); return s ? JSON.parse(s) : {}; } catch { return {}; } })();
+  /* Lu UNE fois. Sans mémoire, cette lecture de `localStorage` et son
+     `JSON.parse` repartaient à chaque rendu de la page — donc à chaque
+     caractère tapé dans le devis — alors que ces filtres ne servent qu'au
+     premier rendu, pour initialiser les états ci-dessous. */
+  const _savedFilters = useMemo(() => {
+    try { const s = localStorage.getItem('crm_devis_filters'); return s ? JSON.parse(s) : {}; }
+    catch { return {}; }
+  }, []);
   const [filterStatut, setFilterStatut] = useState<string>(_savedFilters.filterStatut ?? 'tous');
   const [filterClient, setFilterClient] = useState<string>(_savedFilters.filterClient ?? 'tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
