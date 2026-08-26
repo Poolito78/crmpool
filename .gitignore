@@ -33,3 +33,6 @@ dist-ssr
 # Fichiers temporaires laisses par Vitest lors du chargement de sa configuration
 vitest.config.ts.timestamp-*
 vitest.*.config.ts.timestamp-*
+
+# Cache du CLI Supabase : reecrit a chaque deploiement, sans valeur.
+supabase/.temp/
