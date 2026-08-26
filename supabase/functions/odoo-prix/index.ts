@@ -1299,11 +1299,24 @@ export function domaineDepuisMots(mots: string[], texte: string): unknown[] {
      remontait donc sur « support ou mât 80×40 en 2 m », d'autant plus
      facilement que la longueur du mât se perdait au découpage. On l'écarte
      sauf si la demande le nomme, exactement comme le fardeau. */
-  if (!/\b(fourreau|gba)\b/i.test(texte)) {
-    /* Le libellé ne porte pas toujours le mot : la référence FGBA8040, elle,
-       le dit toujours. On écarte les deux formes. */
-    termes.push([["name", "not ilike", "fourreau"]]);
-    termes.push([["default_code", "not ilike", "FGBA"]]);
+  /* ACCESSOIRES : ils habillent la pièce nue, ils ne la remplacent pas.
+   *
+   * Une gaine plastique, un fourreau à sceller, un support GBA portent tous
+   * la section de la pièce qu'ils accompagnent — « Gaine Plastique pour Tube
+   * 80 × 40 » — et satisfont donc une demande de « mât 80 × 40 » aussi bien
+   * que le support lui-même, à des prix sans rapport : 39 € contre 15,09 €.
+   * On les écarte, sauf quand la demande les nomme.
+   *
+   * Le libellé ne suffit pas : la référence FGBA8040 ne contient pas le mot
+   * « fourreau ». On regarde donc les deux. */
+  const ACCESSOIRES: { demande: RegExp; libelle?: string; code?: string }[] = [
+    { demande: /\b(fourreaux?|gba)\b/i, libelle: "fourreau", code: "FGBA" },
+    { demande: /\bgaines?\b/i, libelle: "gaine", code: "GAINE" },
+  ];
+  for (const a of ACCESSOIRES) {
+    if (a.demande.test(texte)) continue;
+    if (a.libelle) termes.push([["name", "not ilike", a.libelle]]);
+    if (a.code) termes.push([["default_code", "not ilike", a.code]]);
   }
 
   for (const m of mots) {

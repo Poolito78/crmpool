@@ -90,14 +90,27 @@ describe('rapprochement d’une demande', () => {
   });
 });
 
-describe('déclinaisons de scellement et conditionnements groupés', () => {
+describe('accessoires et conditionnements groupés', () => {
   /* Catalogue réel, tel qu'il est en base. */
   const CATALOGUE = [
     { id: '1', reference: 'SUPGBA8040', description: 'Support GBA 80 x 40 Longueur 2m' },
     { id: '2', reference: 'SUPGBA80401.5', description: 'Support GBA 80 x 40 Longueur 1.50m' },
     { id: '3', reference: 'SG.F.8040.2500', description: 'IS FARDEAU 54 SUPPORT ACIER 80x40 LONGUEUR 2,50m' },
     { id: '4', reference: 'SG80402.2000', description: 'IS SUPPORT ACIER GALVA 80x40 LONGUEUR 2,00m' },
+    { id: '5', reference: 'GAINE8040', description: 'Gaine Plastique pour Tube 80 × 40 lg 3.00m' },
   ] as any[];
+
+  it('ne propose pas une gaine pour une demande de support', () => {
+    /* La gaine porte la section du tube qu'elle habille : sans règle, elle
+       arrivait en tête à 39 € quand le support en vaut 15,09. */
+    const r = rapprocherArticle('mat de 80 x 40 de 2 ml', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).not.toContain('GAINE8040');
+  });
+
+  it('propose la gaine quand la demande la nomme', () => {
+    const r = rapprocherArticle('gaine plastique pour tube 80 x 40', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).toContain('GAINE8040');
+  });
 
   it('ne propose pas un support GBA pour une demande de support nu', () => {
     /* « Support GBA 80 × 40 Longueur 2m » a la même section et la même
