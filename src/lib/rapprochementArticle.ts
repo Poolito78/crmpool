@@ -27,6 +27,18 @@ export interface Caracteristiques {
   longueur?: number;
   /** L'article est un conditionnement groupé : fardeau, lot, kit, palette. */
   groupe?: boolean;
+  /**
+   * L'article est une DÉCLINAISON de scellement — support GBA pour glissière
+   * béton, fourreau à sceller — et non la pièce nue.
+   *
+   * Un « Support GBA 80 × 40 Longueur 2m » a exactement la section et la
+   * longueur d'un support ordinaire : le rapprochement le retenait donc en
+   * tête sur « mât de 80 × 40 de 2 ml », alors que le bon article est
+   * « SUPPORT ACIER GALVA 80X40 1.5 LG 2000 ». Ce sont deux produits
+   * différents, à deux prix différents — 104,88 € contre 15,09 € — pas deux
+   * finitions.
+   */
+  scellement?: boolean;
 }
 
 export type Confiance = 'sure' | 'douteux' | 'aucun';
@@ -80,6 +92,9 @@ export function caracteristiques(texte: string): Caracteristiques {
   // Un fardeau de 61 supports ne répond pas à une demande de 12 supports.
   if (/\b(fardeau|lot\s*\d|palette|kit\b|paquet|botte)/.test(t)) out.groupe = true;
 
+  /* GBA et fourreau : à demander explicitement, jamais proposés d'office. */
+  if (/\b(gba|fourreau)\b/.test(t)) out.scellement = true;
+
   return out;
 }
 
@@ -125,6 +140,8 @@ export function noter(
   }
   // Un conditionnement groupé ne répond pas à une demande à l'unité.
   if (cible.groupe && !demande.groupe) return null;
+  /* Ni une déclinaison de scellement à une demande de pièce nue. */
+  if (cible.scellement && !demande.scellement) return null;
 
   let score = 0;
   const raisons: string[] = [];

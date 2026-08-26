@@ -89,3 +89,39 @@ describe('rapprochement d’une demande', () => {
     expect(r.confiance).not.toBe('sure');
   });
 });
+
+describe('déclinaisons de scellement et conditionnements groupés', () => {
+  /* Catalogue réel, tel qu'il est en base. */
+  const CATALOGUE = [
+    { id: '1', reference: 'SUPGBA8040', description: 'Support GBA 80 x 40 Longueur 2m' },
+    { id: '2', reference: 'SUPGBA80401.5', description: 'Support GBA 80 x 40 Longueur 1.50m' },
+    { id: '3', reference: 'SG.F.8040.2500', description: 'IS FARDEAU 54 SUPPORT ACIER 80x40 LONGUEUR 2,50m' },
+    { id: '4', reference: 'SG80402.2000', description: 'IS SUPPORT ACIER GALVA 80x40 LONGUEUR 2,00m' },
+  ] as any[];
+
+  it('ne propose pas un support GBA pour une demande de support nu', () => {
+    /* « Support GBA 80 × 40 Longueur 2m » a la même section et la même
+       longueur que la demande : sans règle, il arrivait en tête à 104,88 €
+       quand le bon support en vaut 15,09. */
+    const r = rapprocherArticle('mat de 80 x 40 de 2 ml', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).not.toContain('SUPGBA8040');
+    expect(r.candidats.map(c => c.reference)).toContain('SG80402.2000');
+  });
+
+  it('propose le GBA quand la demande le nomme', () => {
+    const r = rapprocherArticle('support GBA 80 x 40 de 2 ml', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).toContain('SUPGBA8040');
+  });
+
+  it('n’oppose jamais un fardeau à une demande à l’unité', () => {
+    /* Un fardeau de 54 supports ne peut pas satisfaire une demande de 9 :
+       sa quantité est imposée par le conditionnement. */
+    const r = rapprocherArticle('9 supports acier 80 x 40 de 2,50 m', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).not.toContain('SG.F.8040.2500');
+  });
+
+  it('propose le fardeau quand la demande le nomme', () => {
+    const r = rapprocherArticle('fardeau support acier 80 x 40 de 2,50 m', CATALOGUE);
+    expect(r.candidats.map(c => c.reference)).toContain('SG.F.8040.2500');
+  });
+});
