@@ -1092,8 +1092,13 @@ const ALIAS_FAMILLES: [RegExp, string][] = [
 const MOTS_GENERIQUES = new Set([
   "panneau", "panneaux", "fourniture", "fournitures", "article", "articles",
   "lot", "lots", "ensemble", "ensembles", "materiel", "produit", "produits",
-  "accessoire", "accessoires",
+  "accessoire", "accessoires", "pot", "pots",
 ]);
+/* « pot » est un contenant, pas un article : sur les 22 635 désignations du
+   catalogue, UNE SEULE le porte comme mot. « seau » en porte 50, « kit » 203
+   et « bidon » 9 — ceux-là nomment de vraies choses et restent des critères.
+   Tant que « pot » comptait, « pot de primaire flowfast » se relâchait
+   jusqu'à ne garder que lui, et « %pot% » retrouvait VAPOTER. */
 /* « support », « mat » et « poteau » ont figuré ici par erreur : ce sont de
    vrais noms de famille dans CE catalogue — « IS FARDEAU 61 SUPPORT ACIER
    D60 LONGUEUR 3,50m » en porte un. Les traiter en mots vides revenait à
@@ -1119,6 +1124,10 @@ const SYNONYMES: string[][] = [
   ["mat", "mats", "mât", "poteau", "poteaux", "support", "supports"],
   ["fleche", "flèche", "directionnel"],
   ["bloc", "blocs", "lest", "lestage"],
+  /* Le client écrit « primaire », le catalogue « Primer » — « FLOWFAST 107
+     Primer », « FLOWFAST CERAMIC PRIMER ». Neuf articles portent l'anglais,
+     onze le français : ni l'un ni l'autre ne peut être ignoré. */
+  ["primaire", "primaires", "primer", "primers"],
 ];
 
 /** Tous les mots équivalents à celui-ci, lui compris. */
@@ -1980,6 +1989,20 @@ serve(async (req) => {
       const classeDemandee = motsQ.find((m) => CLASSE.test(m))?.toUpperCase() || "";
       const classeDe = (code: string) =>
         (code.split(".").find((seg) => CLASSE.test(seg)) || "").toUpperCase();
+      /**
+       * Ce mot est-il PRÉSENT, et non simplement contenu ?
+       *
+       * Odoo ne sait chercher qu'en sous-chaîne. « pot » se retrouve donc
+       * dans « INTERDICTION DE FUMER ET VAPOTER », « vis » dans « visserie »,
+       * « ral » dans « rallonge ». Sur un mot court et sans chiffre, on exige
+       * une frontière ; « ak5 », « c2 » ou « d60 » portent un chiffre et
+       * restent collés dans les codes, où ils sont légitimes.
+       */
+      const contientMot = (texte: string, m: string) => {
+        if (m.length > 4 || /\d/.test(m)) return texte.includes(m);
+        return new RegExp(`(^|[^a-z0-9])${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`)
+          .test(texte);
+      };
       const points = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
@@ -1995,8 +2018,8 @@ serve(async (req) => {
         if (chantier && segments(x.default_code || "").some((y) => /^r$/i.test(y))) n += 3;
         for (let k = 0; k < motsQ.length; k++) {
           const poids = k === iPivot ? 4 : (motGenerique(motsQ[k]) ? 1 : 2);
-          if (code.includes(motsQ[k])) n += poids + 1;
-          else if (nom.includes(motsQ[k])) n += poids;
+          if (contientMot(code, motsQ[k])) n += poids + 1;
+          else if (contientMot(nom, motsQ[k])) n += poids;
         }
         return n;
       };
