@@ -138,3 +138,43 @@ describe('accessoires et conditionnements groupés', () => {
     expect(r.candidats.map(c => c.reference)).toContain('SG.F.8040.2500');
   });
 });
+
+describe('conditionnement', () => {
+  const art = (reference: string, description: string) =>
+    ({ id: reference, reference, description } as any);
+
+  const PRIMAIRES = [
+    art('FLOWFASTF107', 'FLOWFAST 107 CERAMIC PRIMER (180KG)'),
+    art('FLOWFASTPRIMER107.20', 'FLOWFAST 107 CERAMIC PRIMER (20KG)'),
+  ];
+
+  it('préfère le pot au fût quand la demande dit « pot »', () => {
+    /* Le devis AF036228 est parti avec le fût de 180 kg à 4 088 € pour une
+       demande de « pot de primaire flowfast » : neuf fois la marchandise. */
+    const r = rapprocherArticle('pot de primaire flowfast 107', PRIMAIRES);
+    expect(r.candidats[0].reference).toBe('FLOWFASTPRIMER107.20');
+  });
+
+  it('suit le poids quand la demande le donne', () => {
+    const r = rapprocherArticle('primaire flowfast 107 180 kg', PRIMAIRES);
+    expect(r.candidats[0].reference).toBe('FLOWFASTF107');
+  });
+
+  it('n’élimine jamais l’autre conditionnement', () => {
+    /* Un client qui voulait le fût doit le retrouver juste en dessous. */
+    const r = rapprocherArticle('pot de primaire flowfast 107', PRIMAIRES);
+    expect(r.candidats.map(p => p.reference)).toContain('FLOWFASTF107');
+  });
+
+  it('retient le plus petit format à égalité de mots', () => {
+    const r = rapprocherArticle('primaire flowfast 107', PRIMAIRES);
+    expect(r.candidats[0].reference).toBe('FLOWFASTPRIMER107.20');
+  });
+
+  it('lit le conditionnement des libellés réels', () => {
+    expect(caracteristiques('FLOWFAST 107 Primer (20 kg)').conditionnement).toBe(20);
+    expect(caracteristiques('FLOWCOAT PA302 A 2,93KG').conditionnement).toBeCloseTo(2.93, 2);
+    /* Les grammes ne sont pas un conditionnement concurrent. */
+    expect(caracteristiques('CATALYST (400 gr)').conditionnement).toBeUndefined();
+  });
+});

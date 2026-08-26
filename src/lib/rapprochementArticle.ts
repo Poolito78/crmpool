@@ -42,6 +42,20 @@ export interface Caracteristiques {
    * Ils restent proposés dès que la demande les nomme.
    */
   accessoire?: boolean;
+  /**
+   * Conditionnement en kilogrammes, lu dans le libellé — « (20KG) »,
+   * « (180KG) », « (2,93 kg) ».
+   *
+   * Chez ISOMARK et ISOFLOOR, deux articles peuvent porter exactement les
+   * mêmes mots et ne différer que par là : FLOWFASTPRIMER107.20 est le pot de
+   * 20 kg à 462 €, FLOWFASTF107 le fût de 180 kg à 4 088 €. Se tromper de
+   * ligne, c'est neuf fois la marchandise.
+   */
+  conditionnement?: number;
+  /** La demande parle d'un pot, d'un seau, d'un bidon : petit format. */
+  petitContenant?: boolean;
+  /** Elle parle d'un fût, d'une palette : grand format. */
+  grosContenant?: boolean;
 }
 
 export type Confiance = 'sure' | 'douteux' | 'aucun';
@@ -97,6 +111,15 @@ export function caracteristiques(texte: string): Caracteristiques {
 
   /* À demander explicitement, jamais proposés d'office. */
   if (/\b(gaine|gaines|gba|fourreau|fourreaux)\b/.test(t)) out.accessoire = true;
+
+  /* Conditionnement. Les grammes sont volontairement ignorés : un catalyseur
+     de 400 g n'est pas un conditionnement concurrent d'un pot de 20 kg, c'est
+     un autre produit. */
+  const kg = t.match(/(\d+(?:[.,]\d+)?)\s*kgs?\b/);
+  if (kg) out.conditionnement = parseFloat(kg[1].replace(',', '.'));
+
+  if (/\b(pot|pots|seau|seaux|bidon|bidons|boite|boites)\b/.test(t)) out.petitContenant = true;
+  if (/\b(fut|futs|tonnelet|tonnelets|palette|palettes)\b/.test(t)) out.grosContenant = true;
 
   return out;
 }
@@ -163,6 +186,39 @@ export function noter(
   if (demande.diametre && !cible.diametre) { score -= 15; raisons.push('diamètre absent'); }
   if (demande.longueur && !cible.longueur) { score -= 15; raisons.push('longueur absente'); }
 
+  /* CONDITIONNEMENT.
+   *
+   * « pot de primaire flowfast » retenait FLOWFASTF107, le fût de 180 kg à
+   * 4 088 €, quand le client demandait le pot de 20 kg à 462 € : les deux
+   * articles portent les mêmes mots, seul le conditionnement les sépare.
+   *
+   * On classe, on n'élimine pas : un client qui voulait le fût le retrouve
+   * juste en dessous, à un clic. Les malus sont donc VOLONTAIREMENT modestes
+   * — un article dont la note tombe sous zéro disparaît de la liste, et le
+   * premier jet de cette règle faisait exactement cela. Un poids
+   * explicitement demandé prime sur le mot du contenant. */
+  if (cible.conditionnement !== undefined) {
+    if (demande.conditionnement !== undefined) {
+      if (Math.abs(cible.conditionnement - demande.conditionnement) < 0.01) {
+        score += 40; raisons.push(`${cible.conditionnement} kg`);
+      } else {
+        score -= 25; raisons.push(`conditionnement ${cible.conditionnement} kg`);
+      }
+    } else if (demande.petitContenant) {
+      if (cible.conditionnement <= SEUIL_PETIT_CONDITIONNEMENT) {
+        score += 20; raisons.push(`${cible.conditionnement} kg`);
+      } else {
+        score -= 12; raisons.push(`${cible.conditionnement} kg, trop gros pour un pot`);
+      }
+    } else if (demande.grosContenant) {
+      if (cible.conditionnement >= SEUIL_PETIT_CONDITIONNEMENT) {
+        score += 20; raisons.push(`${cible.conditionnement} kg`);
+      } else {
+        score -= 12; raisons.push(`${cible.conditionnement} kg seulement`);
+      }
+    }
+  }
+
   // Recouvrement de vocabulaire, pour départager à caractéristiques égales.
   const md = mots(demandeTexte);
   const mc = mots(`${produit.reference} ${produit.description}`);
@@ -171,6 +227,9 @@ export function noter(
 
   return { score, pourquoi: raisons.join(', ') };
 }
+
+/** Au-delà, ce n'est plus un pot mais un fût. */
+export const SEUIL_PETIT_CONDITIONNEMENT = 30;
 
 /** Au-dessus, on retient l'article d'office. En dessous, on demande à voir. */
 const SEUIL_SUR = 55;
@@ -191,6 +250,11 @@ export function rapprocherArticle(
     if (n && n.score > 0) notes.push({ p, score: n.score, pourquoi: n.pourquoi });
   }
   notes.sort((a, b) => b.score - a.score
+    /* À égalité, le conditionnement courant plutôt que le fût : se tromper
+       vers le petit coûte une relance, se tromper vers le gros engage neuf
+       fois la marchandise. */
+    || (caracteristiques(`${a.p.reference} ${a.p.description}`).conditionnement ?? 0)
+       - (caracteristiques(`${b.p.reference} ${b.p.description}`).conditionnement ?? 0)
     || a.p.reference.length - b.p.reference.length);
 
   const candidats = notes.slice(0, limite).map(n => n.p);
