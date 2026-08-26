@@ -1689,8 +1689,22 @@ serve(async (req) => {
            là qu'un tri par longueur ou par nature aurait sacrifié le 24 avant
            le 80 et rendu les quatre PLASTOBLOC au lieu du bon. */
         const gardes = new Set(mots);
+        /* Un critère DÉSIGNE quelque chose : ni un nom de catégorie, ni une
+           classe de film. La classe qualifie un panneau, elle n'en nomme
+           aucun — et depuis qu'elle échappe au plafond et accompagne toutes
+           les lignes, elle survivait au relâchement jusqu'à rester seule.
+           « pot de primaire flowfast » finissait ainsi sur le seul « C2 » et
+           recevait un panneau « INTERDICTION DE FUMER ET VAPOTER », qui le
+           porte comme des milliers d'autres. */
+        const designe = (m: string) => !motGenerique(m) && !/^(c\d(?:fj)?|3430)$/i.test(m);
         const essayer = async (raison: string) => {
           if (!gardes.size) return false;
+          if (![...gardes].some(designe)) {
+            console.log(`[recherche] « ${q} » : relâchement interrompu, il ne `
+              + `resterait que ${JSON.stringify([...gardes])} — aucun mot ne `
+              + `désigne d'article`);
+            return false;
+          }
           res = await chercher(domaineDepuisMots([...gardes], q));
           if (!res.length) return false;
           console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
@@ -1720,6 +1734,10 @@ serve(async (req) => {
           for (let i = mots.length - 1; i >= 0; i--) {
             if (!gardes.has(mots[i]) || gardes.size <= 1) continue;
             gardes.delete(mots[i]);
+            /* Inutile d'interroger Odoo pour un jeu de critères qui ne
+               désigne plus rien : on s'arrête là et la ligne ressort sans
+               proposition, ce qui est le bon aveu. */
+            if (![...gardes].some(designe)) break;
             if (await essayer("mots de fin écartés")) break;
           }
         }

@@ -31,6 +31,8 @@ import {
   articlePlastique, chiffrerTransport, departement,
 } from '@/lib/transportPlastique';
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
+import { portGammes, type LigneGamme } from '@/lib/transportGammes';
+import { prixApplicateur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -1118,6 +1120,11 @@ const [contratOdoo, setContratOdoo] = useState<
      * ne peut pas faire franchir un seuil qui ne le concerne pas. */
     let baseIsosign = 0;
     const lignesIsosign: { reference: string; designation?: string }[] = [];
+    /* Les gammes ISOMARK et ISOFLOOR ont leur propre barème, au poids, et
+       leurs propres expéditions — H1 depuis ISOSIGN, H2 depuis l'usine
+       ISOMARK, ISOFLOOR à part. Les laisser dans le sac ISOSIGN leur faisait
+       franchir un franco de 700 € qui ne les concerne pas. */
+    const lignesGamme: LigneGamme[] = [];
     result.lignes.forEach((l, i) => {
       const cle = `d${i}`;
       const odoo = choixOdoo[i];
@@ -1125,6 +1132,17 @@ const [contratOdoo, setContratOdoo] = useState<
       const ref = odoo?.reference || local?.referenceOdoo || local?.reference || '';
       if (!ref || articlePlastique(ref)) return;   // le plastique a son barème
       const qte = quantiteManuelle[cle] ?? (l.quantite || 1);
+      const designation = odoo?.designation || local?.description || '';
+      const categorie = odoo?.categorie || local?.categorie || '';
+      const niveau = niveauGamme(categorie, local?.catalogue);
+      const gamme = niveau !== null || estGamme(local?.catalogue);
+      if (gamme) {
+        const remise = prixApplicateur(odoo?.fiche ?? local?.prixTarif ?? local?.prixHT, categorie, local?.catalogue);
+        const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : (odoo?.contrat ?? 0));
+        lignesGamme.push({ reference: ref, designation, quantite: qte,
+                           montant: (Number(pu) || 0) * qte, niveau });
+        return;
+      }
       const pu = prixManuel[cle] ?? odoo?.contrat ?? 0;
       baseIsosign += (Number(pu) || 0) * qte;
       lignesIsosign.push({ reference: ref, designation: odoo?.designation });
@@ -1132,9 +1150,13 @@ const [contratOdoo, setContratOdoo] = useState<
     const isosign = lignesIsosign.length
       ? chiffrerPortIsosign(baseIsosign, lignesIsosign)
       : null;
+    const gammes = lignesGamme.length ? portGammes(lignesGamme) : [];
 
     if (isosign) total += isosign.montant;
-    return (detail.length || isosign) ? { total, detail, isosign } : null;
+    for (const g of gammes) total += g.montant;
+    return (detail.length || isosign || gammes.length)
+      ? { total, detail, isosign, gammes }
+      : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel]);
 
@@ -1412,13 +1434,24 @@ const [contratOdoo, setContratOdoo] = useState<
     p: typeof produits[number] | undefined,
     prixImpose?: number | null,
   ) => {
-    if (!p) return { retenu: prixImpose ?? 0, contrat: null as number | null, catalogue: 0, source: 'aucun' as const };
+    if (!p) return { retenu: prixImpose ?? 0, contrat: null as number | null, catalogue: 0, source: 'aucun' as const, remise: null as PrixGamme | null };
     const ref = p.referenceOdoo || p.reference;
     const contrat = contratOdoo?.prix[ref] ?? null;
     const catalogue = p.prixHT ?? 0;
 
+    /* Remise de gamme. Le catalogue ISOMARK/ISOFLOOR ne porte que le TARIF
+       PUBLIC ; la remise applicateur se lit sur la catégorie Odoo de
+       l'article — « ISOMARK / H1 » à 50 %, « ISOMARK / H2 » à 30 %, ISOFLOOR
+       à 30 %. Le champ `prix_tarif` est lui aussi public : sur les 157
+       articles qui en portent un, il égale le prix de la fiche au centime
+       près. Le retenir tel quel facturait l'applicateur au prix public. */
+    const gamme = estGamme(p.catalogue) || niveauGamme(p.categorie, p.catalogue)
+      ? prixApplicateur(p.prixTarif ?? p.prixHT, p.categorie, p.catalogue)
+      : null;
+    const remise = gamme && gamme.remise > 0 ? gamme : null;
+
     if (prixImpose !== undefined && prixImpose !== null) {
-      return { retenu: prixImpose, contrat, catalogue, source: 'règle' as const };
+      return { retenu: prixImpose, contrat, catalogue, source: 'règle' as const, remise };
     }
     /* Le tarif ISOMARK doit primer sur le contrat quand il diffère — une remise
        oubliée dans Odoo y fait apparaître un prix qui n'est pas celui annoncé
@@ -1431,13 +1464,22 @@ const [contratOdoo, setContratOdoo] = useState<
        catalogue PDF et rapproché à la main. Il est DÉJÀ remisé — H1 à 50 %,
        H2 à 30 % — et prime sur le contrat Odoo quand il en diffère : une
        remise oubliée dans Odoo y ferait apparaître un prix jamais annoncé. */
-    const tarifMetier = p.prixTarif ?? contratOdoo?.isomark?.[ref];
+    const tarifMetier = remise ? remise.prix : contratOdoo?.isomark?.[ref];
     if (tarifMetier != null && contrat !== null
         && Math.abs(contrat - tarifMetier) >= 0.01) {
       return { retenu: tarifMetier, contrat, catalogue: tarifMetier,
-               source: (p.sourceTarif || 'catalogue métier') as any };
+               source: (remise?.niveau ? `ISOMARK ${remise.niveau}`.replace('ISOMARK ISOFLOOR', 'ISOFLOOR')
+                        : p.sourceTarif || 'catalogue métier') as any, remise };
     }
-    if (contrat !== null) return { retenu: contrat, contrat, catalogue, source: 'contrat' as const };
+    if (contrat !== null) return { retenu: contrat, contrat, catalogue, source: 'contrat' as const, remise };
+
+    /* Faute de contrat, la remise de gamme tient lieu de prix : c'est
+       exactement le cas des primaires ISOFLOOR, absents de toute grille. */
+    if (remise) {
+      return { retenu: remise.prix, contrat, catalogue: remise.public,
+               source: (remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${remise.niveau}`) as any,
+               remise };
+    }
 
     /* Sur 22 635 articles vendables, 7 670 portent un prix inférieur à 2 € et
        4 657 un prix nul : chez ISOSIGN le prix de vente n'est pas sur la fiche
@@ -1447,10 +1489,35 @@ const [contratOdoo, setContratOdoo] = useState<
        tels a mis un support Ø60 à 1,00 € sur une demande où Odoo facture
        39,852 €. Faute de prix contrat, on ne propose plus rien. */
     if (catalogue <= SEUIL_PRIX_FACTICE) {
-      return { retenu: 0, contrat, catalogue, source: 'absent' as const };
+      return { retenu: 0, contrat, catalogue, source: 'absent' as const, remise };
     }
-    return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const };
+    return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const, remise };
   }, [contratOdoo]);
+
+  /**
+   * Prix d'un article venu d'Odoo, remise de gamme comprise.
+   *
+   * La fiche Odoo porte le tarif PUBLIC et sa catégorie dit le niveau de
+   * remise ; la grille du client, elle, ne couvre pas ces gammes. Sans ce
+   * calcul, un primaire ISOFLOOR arrivait à 0,00 € — hors barème — ou au
+   * prix public.
+   *
+   * Déclaré ici, au-dessus de tout ce qui s'en sert : une constante n'existe
+   * pas avant sa ligne, et l'appeler plus haut ferait disparaître l'écran.
+   */
+  const prixOdoo = useCallback((odoo: TrouvailleOdoo) => {
+    const gamme = prixApplicateur(odoo.fiche, odoo.categorie);
+    const remise = gamme && gamme.remise > 0 ? gamme : null;
+    if (remise) {
+      return { retenu: remise.prix, contrat: odoo.contrat,
+               catalogue: remise.public,
+               source: (remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${remise.niveau}`) as any,
+               remise };
+    }
+    return { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
+             catalogue: odoo.fiche, source: 'contrat' as any,
+             remise: null as PrixGamme | null };
+  }, []);
 
   /** Prix effectivement appliqué, correction manuelle comprise. */
   const prixDe = useCallback((
@@ -2377,14 +2444,27 @@ const [contratOdoo, setContratOdoo] = useState<
                                   </span>
                                 </div>
                               )}
+                              {transport.gammes.map(g => (
+                                <div key={g.explication} className="flex gap-2" title={g.explication}>
+                                  <span className="flex-1 truncate">
+                                    Port {g.gamme}{g.explication.startsWith('H2') ? ' H2 (usine)' : g.gamme === 'ISOMARK' ? ' H1' : ''}
+                                    {g.poidsIncomplet && <span className="text-warning"> · poids partiel</span>}
+                                  </span>
+                                  <span className="font-semibold shrink-0">
+                                    {g.offert ? 'offert' : formatMontant(g.montant)}
+                                  </span>
+                                </div>
+                              ))}
                               <div className="flex gap-2 border-t border-primary/20 pt-0.5">
                                 <span className="flex-1 font-medium">Transport</span>
                                 <span className="font-bold">{formatMontant(transport.total)}</span>
                               </div>
                               <p className="text-[10px] text-muted-foreground">
-                                Deux expéditions distinctes, additionnées : le plastique part
+                                Des expéditions distinctes, additionnées : le plastique part
                                 de chez STI — messagerie ou affrètement, le moins cher — les
-                                panneaux et supports de chez ISOSIGN, au forfait.
+                                panneaux et supports de chez ISOSIGN, au forfait, ISOMARK H2
+                                de son usine, ISOFLOOR au poids, franco à deux tonnes hors
+                                granulats.
                               </p>
                             </div>
                           ) : (
@@ -2435,12 +2515,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                     const cle = `d${i}`;
                                     const odoo = choixOdoo[i];
                                     const d = odoo
-                                      ? { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
-                                          catalogue: odoo.fiche, source: 'contrat' as const }
+                                      ? prixOdoo(odoo)
                                       : prixDetail(retenu);
                                     const qte = quantiteDe(cle, l.quantite || 1);
                                     const pu = odoo
-                                      ? (prixManuel[cle] ?? odoo.contrat ?? 0)
+                                      ? (prixManuel[cle] ?? d.retenu)
                                       : prixDe(retenu, undefined, cle);
                                     return (
                                       <>
@@ -2470,8 +2549,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <div className="text-[11px] text-muted-foreground">
                                           {prixManuel[cle] !== undefined
                                             ? 'prix saisi à la main'
-                                            : (d.source === 'ISOMARK' || d.source === 'ISOFLOOR')
-                                              ? <>tarif <strong className="text-foreground">{d.source} {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
+                                            : d.remise
+                                              ? <>{d.remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${d.remise.niveau}`} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong>{d.contrat != null && Math.abs(d.contrat - d.remise.prix) >= 0.01 ? <> — contrat Odoo {formatMontant(d.contrat)}</> : null}</>
                                               : d.source === 'absent'
                                                   ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
                                                   : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
@@ -2917,8 +2996,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                             <div className="text-[11px] text-muted-foreground">
                                               {a.prixImpose === 0
                                                 ? <span className="text-warning">règle — compris dans l'enduit</span>
-                                                : d.source === 'ISOMARK'
-                                                  ? <>tarif <strong className="text-foreground">ISOMARK {formatMontant(d.catalogue)}</strong> retenu — contrat Odoo {formatMontant(d.contrat!)}</>
+                                                : d.remise
+                                                  ? <>{d.remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${d.remise.niveau}`} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong></>
                                                   : d.source === 'absent'
                                                   ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
                                                   : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
