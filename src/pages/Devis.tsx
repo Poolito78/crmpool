@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
-import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, type OdooPayload } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -360,7 +360,91 @@ export default function Devis() {
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
   // Pont Odoo : devis déposé, en attente du clic sur le marque-page
-  const [odooInfo, setOdooInfo] = useState<{ numero: string; transport: string; script: string } | null>(null);
+  /** Ce que l'écran doit montrer de l'envoi vers Odoo, à chaque étape. */
+  interface EtatOdoo {
+    numero: string;
+    etat: 'envoi' | 'cree' | 'verifie' | 'client' | 'echec';
+    message?: string;
+    url?: string;
+    numeroOdoo?: string;
+    montantHT?: number;
+    lignes?: number;
+    erreurs?: string[];
+    negoce?: string[];
+    candidats?: { id: number; nom: string; ville: string; estSociete: boolean; societeMere: string }[];
+    payload?: OdooPayload;
+    /* Chemin de secours : dépôt pour le pont, et script console. */
+    transport?: string;
+    script?: string;
+  }
+  const [odooInfo, setOdooInfo] = useState<EtatOdoo | null>(null);
+
+  /**
+   * Crée le devis DANS Odoo, sans marque-page ni presse-papiers.
+   *
+   * L'ancien chemin demandait trois gestes : déposer le devis, ouvrir Odoo,
+   * cliquer un favori qui injectait un pont dans la page. Il fallait avoir
+   * installé ce favori, et rien de tout cela ne marchait depuis un
+   * téléphone. La fonction `odoo-devis` fait maintenant le travail côté
+   * serveur, avec le compte Odoo qui sert déjà aux prix.
+   *
+   * Le chemin d'avant reste entier, en secours : si le serveur échoue —
+   * droits d'écriture refusés, Odoo indisponible — le devis est déposé pour
+   * le pont comme avant, et l'écran le dit.
+   */
+  const lancerOdoo = useCallback(async (
+    payload: OdooPayload,
+    scriptSecours: string,
+    options?: { partnerId?: number; dryRun?: boolean },
+  ) => {
+    setOdooInfo({ numero: payload.numero, etat: 'envoi', payload, script: scriptSecours });
+    try {
+      const { data, error } = await supabase.functions.invoke('odoo-devis', {
+        body: { payload, dryRun: !!options?.dryRun, partnerId: options?.partnerId },
+      });
+      if (error) throw new Error(error.message || 'Appel refusé');
+      if (data?.erreur) throw new Error(data.erreur);
+
+      if (data?.etat === 'client-ambigu' || data?.etat === 'client-introuvable') {
+        /* Plusieurs sociétés portent ce nom, ou aucune. On ne devine pas à
+           la place de l'utilisateur : la liste s'affiche, il tranche. */
+        setOdooInfo({
+          numero: payload.numero, etat: 'client', payload, script: scriptSecours,
+          candidats: data.candidats || [],
+          message: data.etat === 'client-introuvable'
+            ? `Aucune société « ${data.cherche} » dans Odoo.`
+            : `Plusieurs fiches répondent à « ${data.cherche} ».`,
+        });
+        return;
+      }
+
+      if (data?.etat === 'verifie') {
+        setOdooInfo({
+          numero: payload.numero, etat: 'verifie', payload, script: scriptSecours,
+          negoce: data.rapport?.negoce || [],
+          message: `${data.rapport?.client?.nom} — `
+            + `${(data.rapport?.articles || []).length} article(s) reconnu(s) `
+            + `sur ${data.rapport?.lignes} ligne(s). Rien n'a été écrit.`,
+        });
+        return;
+      }
+
+      setOdooInfo({
+        numero: payload.numero, etat: 'cree', payload, script: scriptSecours,
+        url: data?.url, numeroOdoo: data?.numero, montantHT: data?.montantHT,
+        lignes: data?.lignes, erreurs: data?.erreurs || [],
+        negoce: data?.rapport?.negoce || [],
+      });
+      if (data?.url) window.open(data.url, '_blank', 'noopener');
+    } catch (e) {
+      let transport = '';
+      try { transport = await envoyerVersOdoo(payload); } catch { /* ni serveur ni presse-papiers */ }
+      setOdooInfo({
+        numero: payload.numero, etat: 'echec', payload, script: scriptSecours,
+        transport, message: (e as Error).message,
+      });
+    }
+  }, []);
   const [moFiches, setMoFiches] = useState<MoFiche[]>([]);
   const [moFolderName, setMoFolderName] = useState<string | null>(null);
   const [moSearching, setMoSearching] = useState(false);
@@ -402,6 +486,46 @@ export default function Devis() {
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
   const [contactLivraisonId, setContactLivraisonId] = useState('');
+
+  /**
+   * Rassemble le devis en cours et l'envoie à Odoo.
+   *
+   * `verifier` n'écrit rien : il ne fait que résoudre le client et les
+   * articles, et rendre son compte rendu.
+   */
+  const preparerOdoo = useCallback(async (verifier: boolean) => {
+    try {
+      if (!editingId) return;
+      save(true);
+      const selectedClient = clients.find(c => c.id === clientId);
+      if (!selectedClient) { toast.error('Client introuvable'); return; }
+      const defaultName = selectedClient.societe || selectedClient.nom;
+      const odooNom = promptOdooPartnerName(clientId, defaultName);
+      if (odooNom === null) return;
+      const contact = (selectedClient.contacts || []).find(ct => ct.id === contactId);
+      const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+      const current: DevisType = {
+        id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
+        clientId, contactId: contactId || undefined,
+        dateCreation, dateValidite, statut, lignes, referenceAffaire,
+        systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+        surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+      };
+      const opts = { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
+      await lancerOdoo(
+        buildOdooPayload(current, selectedClient, produits, opts),
+        genererScriptOdoo(current, selectedClient, produits, opts),
+        { dryRun: verifier },
+      );
+    } catch (err) {
+      toast.error('Erreur lors de la préparation du devis Odoo');
+      console.error(err);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editingId, clientId, contactId, clients, devis, produits, dateCreation, dateValidite,
+      statut, lignes, referenceAffaire, systeme, notes, conditions, fraisPortHT, fraisPortTVA,
+      modeCalcul, surfaceGlobaleM2]);
+
 
   // Archive
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -2095,40 +2219,16 @@ export default function Devis() {
                       </DropdownMenuItem>
                     )}
                     {editingId && (
-                      <DropdownMenuItem onClick={async () => {
-                        try {
-                          save(true);
-                          const selectedClient = clients.find(c => c.id === clientId);
-                          if (!selectedClient) { toast.error('Client introuvable'); return; }
-                          const defaultName = selectedClient.societe || selectedClient.nom;
-                          const odooNom = promptOdooPartnerName(clientId, defaultName);
-                          if (odooNom === null) return;
-                          const allContacts = selectedClient.contacts || [];
-                          const contact = allContacts.find(ct => ct.id === contactId);
-                          const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
-                          const current: DevisType = {
-                            id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
-                            clientId, contactId: contactId || undefined,
-                            dateCreation, dateValidite, statut, lignes, referenceAffaire,
-                            systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
-                            surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
-                          };
-                          const opts = { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
-                          // Pont navigateur : on dépose le devis (serveur local du
-                          // Chiffrage s'il tourne, sinon presse-papiers) — plus de console.
-                          const transport = await envoyerVersOdoo(buildOdooPayload(current, selectedClient, produits, opts));
-                          setOdooInfo({
-                            numero: current.numero,
-                            transport,
-                            script: genererScriptOdoo(current, selectedClient, produits, opts),
-                          });
-                        } catch (err) {
-                          toast.error('Erreur lors de la préparation du devis Odoo');
-                          console.error(err);
-                        }
-                      }}>
-                        <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer vers Odoo
-                      </DropdownMenuItem>
+                      <>
+                        <DropdownMenuItem onClick={() => preparerOdoo(false)}>
+                          <Send className="w-4 h-4 mr-2 text-muted-foreground" /> Créer le devis dans Odoo
+                        </DropdownMenuItem>
+                        {/* Résout le client et les articles, n'écrit RIEN. À employer
+                            la première fois, ou quand un devis inquiète. */}
+                        <DropdownMenuItem onClick={() => preparerOdoo(true)}>
+                          <Eye className="w-4 h-4 mr-2 text-muted-foreground" /> Vérifier sans créer
+                        </DropdownMenuItem>
+                      </>
                     )}
                     {dialogTab === 'devis' && (
                       <>
@@ -3614,43 +3714,153 @@ export default function Devis() {
       {/* ── Pont Odoo : devis déposé, il ne reste qu'à cliquer le marque-page ── */}
       <Dialog open={!!odooInfo} onOpenChange={(o) => { if (!o) setOdooInfo(null); }}>
         <DialogContent className="sm:max-w-lg">
-          <DialogHeader><DialogTitle>Devis {odooInfo?.numero} prêt pour Odoo</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>
+            {odooInfo?.etat === 'cree' ? `Devis ${odooInfo?.numeroOdoo || ''} créé dans Odoo`
+              : odooInfo?.etat === 'verifie' ? `Vérification du devis ${odooInfo?.numero}`
+              : odooInfo?.etat === 'client' ? 'Quelle société, dans Odoo ?'
+              : odooInfo?.etat === 'envoi' ? `Envoi du devis ${odooInfo?.numero}…`
+              : `Devis ${odooInfo?.numero} — création impossible`}
+          </DialogTitle></DialogHeader>
+
           <div className="space-y-3 text-sm">
-            <p className="text-muted-foreground">
-              Transmis via {odooInfo?.transport === 'serveur' ? 'le serveur local du Chiffrage' : 'le presse-papiers'}.
-            </p>
-            <ol className="list-decimal pl-5 space-y-1.5">
-              <li>Ouvrez Odoo dans un onglet et connectez-vous.</li>
-              <li>Cliquez sur le marque-page <b>Devis → Odoo</b> : le devis se remplit tout seul (choix du client, contrôle des articles, création en brouillon).</li>
-            </ol>
-            <a
-              href="https://www.odoo-sign.fr/web#cids=13&menu_id=178&action=302"
-              target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-primary hover:underline"
-            ><ExternalLink className="w-3.5 h-3.5" /> Ouvrir Odoo</a>
-
-            <div className="border-t border-border pt-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">Première utilisation</p>
-              <p className="text-xs text-muted-foreground mb-2">
-                Glissez ce lien dans votre barre de favoris (une seule fois) :
+            {odooInfo?.etat === 'envoi' && (
+              <p className="text-muted-foreground">
+                Odoo crée la commande : recherche du client, des articles, puis des lignes.
+                Quelques secondes.
               </p>
-              {/* href javascript: — React bloque ce schéma en JSX, d'où l'insertion HTML directe */}
-              <div dangerouslySetInnerHTML={{ __html:
-                '<a href="javascript:(function(){var s=document.createElement(\'script\');s.src=\'https://crmpool.vercel.app/odoo-bridge.js?\'+Date.now();document.body.appendChild(s);})()"'
-                + ' style="display:inline-block;padding:6px 12px;border-radius:8px;background:#7c3aed;color:#fff;font-weight:600;text-decoration:none;cursor:grab">Devis → Odoo</a>' }} />
-            </div>
+            )}
 
-            <div className="border-t border-border pt-3">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!odooInfo) return;
-                  await navigator.clipboard.writeText(odooInfo.script);
-                  toast.success('Script console copié', { description: 'Odoo → F12 → Console → Ctrl+V → Entrée' });
-                }}
-                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
-              >Méthode de secours : copier le script pour la console</button>
-            </div>
+            {/* Plusieurs fiches Odoo portent ce nom : c'est à l'utilisateur de
+                dire laquelle, pas à l'application de parier. */}
+            {odooInfo?.etat === 'client' && (
+              <>
+                <p className="text-muted-foreground">{odooInfo.message}</p>
+                <div className="max-h-64 overflow-y-auto border border-border rounded divide-y divide-border">
+                  {(odooInfo.candidats || []).map(c => (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        if (!odooInfo.payload) return;
+                        lancerOdoo(odooInfo.payload, odooInfo.script || '', { partnerId: c.id });
+                      }}
+                      className="w-full text-left px-3 py-2 hover:bg-muted/60"
+                    >
+                      <span className="font-medium">{c.nom}</span>
+                      {c.ville && <span className="text-muted-foreground"> · {c.ville}</span>}
+                      {!c.estSociete && (
+                        <span className="text-warning text-xs">
+                          {' '}· contact{c.societeMere ? ` de ${c.societeMere}` : ''}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+                {!(odooInfo.candidats || []).length && (
+                  <p className="text-destructive text-xs">
+                    Créez la fiche dans Odoo, ou corrigez le nom : le bouton « Envoyer »
+                    le demande à chaque fois et retient votre réponse.
+                  </p>
+                )}
+              </>
+            )}
+
+            {odooInfo?.etat === 'verifie' && (
+              <>
+                <p>{odooInfo.message}</p>
+                <p className="text-xs text-muted-foreground">
+                  Rien n'a été écrit dans Odoo. Relancez par « Créer le devis dans Odoo »
+                  quand ce relevé vous convient.
+                </p>
+              </>
+            )}
+
+            {odooInfo?.etat === 'cree' && (
+              <>
+                <p>
+                  <strong>{odooInfo.lignes}</strong> ligne(s) ·{' '}
+                  <strong>{formatMontant(odooInfo.montantHT || 0)} HT</strong> · brouillon.
+                </p>
+                {odooInfo.url && (
+                  <a href={odooInfo.url} target="_blank" rel="noopener noreferrer"
+                     className="inline-flex items-center gap-1.5 text-primary hover:underline">
+                    <ExternalLink className="w-3.5 h-3.5" /> Ouvrir le devis dans Odoo
+                  </a>
+                )}
+              </>
+            )}
+
+            {/* Les lignes qu'Odoo n'a pas su rattacher à un article : elles
+                existent, sous l'article négoce, avec leur désignation dans le
+                libellé. Il faut le savoir avant d'envoyer au client. */}
+            {!!odooInfo?.negoce?.length && (
+              <div className="rounded border border-warning/40 bg-warning/5 p-2">
+                <p className="text-xs font-medium text-warning mb-1">
+                  {odooInfo.negoce.length} ligne(s) en négoce — article Odoo non trouvé :
+                </p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {odooInfo.negoce.slice(0, 8).map((n, i) => <li key={i}>· {n}</li>)}
+                  {odooInfo.negoce.length > 8 && <li>· …</li>}
+                </ul>
+              </div>
+            )}
+
+            {!!odooInfo?.erreurs?.length && (
+              <div className="rounded border border-destructive/40 bg-destructive/5 p-2">
+                <p className="text-xs font-medium text-destructive mb-1">Erreurs :</p>
+                <ul className="text-xs text-muted-foreground space-y-0.5">
+                  {odooInfo.erreurs.map((e, i) => <li key={i}>· {e}</li>)}
+                </ul>
+              </div>
+            )}
+
+            {/* Repli : le chemin d'avant, intact. Il sert quand le serveur ne
+                peut pas écrire dans Odoo — droits refusés, Odoo injoignable. */}
+            {odooInfo?.etat === 'echec' && (
+              <>
+                <p className="text-destructive">{odooInfo.message}</p>
+                <p className="text-muted-foreground">
+                  Le devis a été déposé pour le pont
+                  {odooInfo.transport === 'serveur' ? ' (serveur local du Chiffrage)'
+                    : odooInfo.transport === 'presse-papiers' ? ' (presse-papiers)' : ''}.
+                  L'ancienne méthode reste disponible :
+                </p>
+                <ol className="list-decimal pl-5 space-y-1.5">
+                  <li>Ouvrez Odoo dans un onglet et connectez-vous.</li>
+                  <li>Cliquez sur le marque-page <b>Devis → Odoo</b>.</li>
+                </ol>
+                <a
+                  href="https://www.odoo-sign.fr/web#cids=13&menu_id=178&action=302"
+                  target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 text-primary hover:underline"
+                ><ExternalLink className="w-3.5 h-3.5" /> Ouvrir Odoo</a>
+
+                <div className="border-t border-border pt-3">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-1.5">
+                    Si le marque-page n'est pas installé
+                  </p>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    Glissez ce lien dans votre barre de favoris (une seule fois) :
+                  </p>
+                  {/* href javascript: — React bloque ce schéma en JSX, d'où l'insertion HTML directe */}
+                  <div dangerouslySetInnerHTML={{ __html:
+                    '<a href="javascript:(function(){var s=document.createElement(\'script\');s.src=\'https://crmpool.vercel.app/odoo-bridge.js?\'+Date.now();document.body.appendChild(s);})()"'
+                    + ' style="display:inline-block;padding:6px 12px;border-radius:8px;background:#7c3aed;color:#fff;font-weight:600;text-decoration:none;cursor:grab">Devis → Odoo</a>' }} />
+                </div>
+
+                <div className="border-t border-border pt-3">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!odooInfo?.script) return;
+                      await navigator.clipboard.writeText(odooInfo.script);
+                      toast.success('Script console copié', { description: 'Odoo → F12 → Console → Ctrl+V → Entrée' });
+                    }}
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+                  >Méthode de secours : copier le script pour la console</button>
+                </div>
+              </>
+            )}
           </div>
         </DialogContent>
       </Dialog>

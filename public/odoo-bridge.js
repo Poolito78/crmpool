@@ -487,16 +487,25 @@
             } else if (l.type === "note") {
               vals.display_type = "line_note"; vals.name = l.desc;
             } else {
-              var pid = (l.ref && resolved[l.ref]) || (l.port ? payload.port_id : payload._negId);
-              vals.product_id = pid;
-              vals.name = l.desc;
+              var trouve = !!(l.ref && resolved[l.ref]);
+              vals.product_id = trouve ? resolved[l.ref] : (l.port ? payload.port_id : payload._negId);
+              // La DESIGNATION d'Odoo reste celle d'Odoo quand l'article est
+              // reconnu : envoyer le libelle MonCRM affichait « FLOWFAST 107
+              // Primer (20 kg) » sur un article nomme autrement. Le libelle ne
+              // sert qu'aux lignes sans article : negoce et port.
+              if (!trouve) vals.name = l.desc;
               vals.product_uom_qty = l.qty || 1;
               vals.price_unit = l.pu || 0;
               vals.discount = 0;
               if (tvaId) vals.tax_id = [[6, 0, [tvaId]]];
             }
             return rpc("sale.order.line", "create", [vals], { context: ctx })
-              .then(function (id) { ok++; if (l.type === "product") made.push({ id: id, src: l }); })
+              .then(function (id) {
+                ok++;
+                if (l.type === "product") {
+                  made.push({ id: id, src: l, garderLibelle: !(l.ref && resolved[l.ref]) });
+                }
+              })
               .catch(function (e) { errs.push(l.desc + " : " + (e.message || "").slice(0, 80)); });
           });
         });
@@ -509,8 +518,9 @@
         var chain = Promise.resolve();
         made.forEach(function (m) {
           chain = chain.then(function () {
-            return rpc("sale.order.line", "write",
-              [[m.id], { price_unit: m.src.pu || 0, discount: 0, name: m.src.desc }], { context: ctx })
+            var maj = { price_unit: m.src.pu || 0, discount: 0 };
+            if (m.garderLibelle) maj.name = m.src.desc;   // negoce et port seulement
+            return rpc("sale.order.line", "write", [[m.id], maj], { context: ctx })
               .catch(function (e) {
                 res.errs.push("P.U. « " + m.src.desc + " » : " + (e.message || "").slice(0, 60));
               });

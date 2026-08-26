@@ -6,3 +6,7 @@ verify_jwt = false
 
 [functions.odoo-prix]
 verify_jwt = false
+
+# Ecriture dans Odoo : reservee aux sessions authentifiees.
+[functions.odoo-devis]
+verify_jwt = true
