@@ -6,6 +6,7 @@
 
 import type { Devis, Client, Produit } from './store';
 import { calculerTotalDevis } from './store';
+import { produitParId } from '@/lib/indexProduits';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -64,8 +65,15 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
     } else if (l.type === 'texte') {
       result.push({ type: 'note', desc: l.description });
     } else {
-      const produit = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-      const ref = (produit?.reference || '').trim();
+      const produit = produitParId(produits, l.produitId);
+      /* La référence ODOO d'abord.
+       *
+       * On envoyait `reference`, la référence MonCRM. Elle coïncide avec
+       * celle d'Odoo pour les articles importés, mais PAS pour ceux du
+       * catalogue métier : le primaire ISOFLOOR se code « FLOWFAST107 » ici
+       * et n'existe pas sous ce code chez Odoo. La ligne partait alors en
+       * négoce, ou pire, tombait sur un homonyme. */
+      const ref = (produit?.referenceOdoo || produit?.reference || '').trim();
       result.push({
         type: 'product',
         desc: l.description,
@@ -312,16 +320,29 @@ for(const l of lignes){
       if(pid)nArt++; else if(!l.port){nNeg++;negLabels.push((l.ref?l.ref+' — ':'')+l.desc);}
       // Arrondi supérieur à 2 décimales
       const netPrice=Math.ceil((l.pu||0)*(1-((l.rem||0)/100))*100)/100;
+      /* La DESIGNATION reste celle d'Odoo quand l'article y est resolu.
+         Envoyer le libelle MonCRM l'ecrasait : la commande affichait
+         « FLOWFAST 107 Primer (20 kg) » sur un article Odoo qui s'appelle
+         autrement. Sans libelle, Odoo le calcule lui-meme d'apres le produit,
+         exactement comme une ligne saisie a la main. Le texte MonCRM ne sert
+         plus qu'aux lignes sans article : negoce et port. */
       Object.assign(vals,{
         product_id:finalId,
-        name:l.desc,
+        ...(pid?{}:{name:l.desc}),
         product_uom_qty:l.qty||1,
         price_unit:netPrice,
         discount:0,
         ...(tva20Id?{tax_id:[[6,0,[tva20Id]]]}:{}),
       });
     }
-    await rpc('sale.order.line','create',[vals]);
+    try{
+      await rpc('sale.order.line','create',[vals]);
+    }catch(e1){
+      /* Certaines configurations exigent un libellé explicite. On retente
+         avec le nôtre plutôt que de perdre la ligne. */
+      if(vals.name===undefined){vals.name=l.desc;await rpc('sale.order.line','create',[vals]);}
+      else throw e1;
+    }
     ok++;
     console.log('Ligne OK:',(l.type==='product'?(l.ref&&prodMap[l.ref]?'✅ ':'📦 '):''),l.desc);
   }catch(e){

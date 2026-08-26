@@ -2003,6 +2003,29 @@ serve(async (req) => {
         return new RegExp(`(^|[^a-z0-9])${m.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}([^a-z0-9]|$)`)
           .test(texte);
       };
+      /**
+       * Conditionnement — le mot que le client emploie pour le contenant.
+       *
+       * « pot de primaire flowfast » a fait retenir FLOWFASTF107, le FÛT de
+       * 180 kg à 4 088 €, quand le client demandait le pot de 20 kg à
+       * 462 € : neuf fois trop de marchandise. Les deux articles portent les
+       * mêmes mots, seul le conditionnement les sépare, et il est écrit dans
+       * la désignation — « (20KG) », « (180KG) ».
+       *
+       * « pot » ne sert à rien pour CHERCHER : aucun libellé Odoo ne le
+       * porte. Il dit en revanche tout du conditionnement. On s'en sert donc
+       * pour CLASSER, jamais pour écarter — un client qui veut le fût et
+       * écrit « pot » retrouve le fût juste en dessous.
+       */
+      const POIDS_LIBELLE = /(\d+(?:[.,]\d+)?)\s*(?:kg|kgs|kilos?)\b/i;
+      const conditionnement = (texte: string) => {
+        const m = String(texte || "").match(POIDS_LIBELLE);
+        return m ? parseFloat(m[1].replace(",", ".")) : null;
+      };
+      const poidsDemande = conditionnement(q);
+      const petitContenant = /\b(pots?|seaux?|seau|bidons?|boites?|boîtes?)\b/i.test(q);
+      const grosContenant = /\b(f[uû]ts?|tonnelets?|palettes?)\b/i.test(q);
+
       const points = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
@@ -2021,6 +2044,13 @@ serve(async (req) => {
           if (contientMot(code, motsQ[k])) n += poids + 1;
           else if (contientMot(nom, motsQ[k])) n += poids;
         }
+        /* Le conditionnement départage, il n'élimine pas. */
+        const cond = conditionnement(x.name || "");
+        if (cond !== null) {
+          if (poidsDemande !== null) n += Math.abs(cond - poidsDemande) < 0.01 ? 6 : -4;
+          else if (petitContenant) n += cond <= 30 ? 3 : -4;
+          else if (grosContenant) n += cond >= 100 ? 3 : -2;
+        }
         return n;
       };
       const rang = (x: any) => {
@@ -2035,6 +2065,10 @@ serve(async (req) => {
       };
       res.sort((a, b) => points(b) - points(a)
         || rang(a) - rang(b)
+        /* À égalité parfaite, le conditionnement courant plutôt que le fût :
+           se tromper vers le petit coûte une ligne à recommander, se tromper
+           vers le gros engage neuf fois la marchandise. */
+        || ((conditionnement(a.name || "") ?? 0) - (conditionnement(b.name || "") ?? 0))
         /* Le départage par la longueur du code a été retiré : entre
            « …M.800.600… » et « …KM.800.600… » il prenait le plus court en
            croyant choisir la version nue, alors qu'il choisissait une GAMME —
