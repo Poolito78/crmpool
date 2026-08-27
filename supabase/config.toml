@@ -10,3 +10,6 @@ verify_jwt = false
 # Ecriture dans Odoo : reservee aux sessions authentifiees.
 [functions.odoo-devis]
 verify_jwt = true
+
+[functions.odoo-stock-sync]
+verify_jwt = true

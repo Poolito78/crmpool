@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
-import { Plus, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check } from 'lucide-react';
+import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -118,6 +118,42 @@ export default function Produits() {
    * en mémoire, qui arrive en arrière-plan. Un simple map() ne trouverait rien
    * et perdrait la modification sans rien dire : on l'ajoute alors à la liste.
    */
+  /**
+   * Va chercher chez Odoo le stock et les prix, par tranches.
+   *
+   * Une tranche par appel : `qty_available` est un champ CALCULÉ, qu'Odoo
+   * reconstruit en parcourant les mouvements. Le demander pour tout le
+   * catalogue d'un coup dépasserait le temps alloué à la fonction. On boucle
+   * donc tant qu'il reste des articles ET que l'utilisateur ne s'est pas
+   * lassé — la fonction reprend d'elle-même là où elle en était, les articles
+   * jamais lus d'abord.
+   */
+  const [syncOdoo, setSyncOdoo] = useState(false);
+  const synchroniserOdoo = useCallback(async () => {
+    setSyncOdoo(true);
+    let total = 0, prix = 0;
+    try {
+      for (let tour = 0; tour < 60; tour++) {
+        const { data, error } = await supabase.functions.invoke('odoo-stock-sync', {
+          body: { limite: 400 },
+        });
+        if (error) throw new Error(error.message);
+        if (data?.erreur) throw new Error(data.erreur);
+        total += data?.traites || 0;
+        prix += data?.majPrix || 0;
+        toast.info(`${total} article(s) relus — ${data?.restants ?? 0} restants`);
+        if (!data?.restants || !data?.traites) break;
+      }
+      toast.success(`${total} article(s) actualisés depuis Odoo`, {
+        description: prix ? `${prix} prix modifiés.` : 'Aucun prix n’a changé.',
+      });
+    } catch (e) {
+      toast.error(`Actualisation impossible : ${(e as Error).message}`);
+    } finally {
+      setSyncOdoo(false);
+    }
+  }, []);
+
   const majProduitEdite = useCallback((f: (p: Produit) => Produit) => {
     setEditing(cur => {
       if (!cur) return cur;
@@ -1084,6 +1120,18 @@ export default function Produits() {
                   <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter la sélection ({selected.size})
                 </DropdownMenuItem>
               )}
+              {/* Le stock et les prix d'Odoo ne se remplissaient qu'au fil des
+                  devis : sur 22 637 articles, autant dire jamais. Ce tour de
+                  catalogue va les chercher, par tranches, en reprenant là où
+                  il s'est arrêté. */}
+              <DropdownMenuItem
+                onClick={synchroniserOdoo}
+                disabled={syncOdoo}
+                className="border-t border-border mt-1 pt-1.5"
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 text-muted-foreground ${syncOdoo ? 'animate-spin' : ''}`} />
+                {syncOdoo ? 'Lecture d’Odoo…' : 'Actualiser stock et prix depuis Odoo'}
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button size="sm" onClick={openNew} className="shrink-0" title="Nouveau produit">
