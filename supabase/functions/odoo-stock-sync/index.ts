@@ -195,6 +195,22 @@ serve(async (req) => {
         maj.prix_achat_maj = horodate;
       }
 
+      /* UN PRIX INCHANGÉ A QUAND MÊME UN ÂGE.
+       *
+       * On ne datait que les prix qu'on REMPLAÇAIT. Résultat : un article
+       * dont le prix est déjà le bon restait sans date — c'est-à-dire la
+       * quasi-totalité du catalogue — et une date absente ne s'affiche pas.
+       * On initialise donc la date manquante à ce qu'on sait de mieux : la
+       * dernière écriture de la fiche Odoo quand elle porte un vrai prix,
+       * la date de cette vérification sinon. Les dates déjà présentes ne
+       * sont jamais touchées : elles disent un vrai changement. */
+      if (!p.prix_vente_maj) {
+        maj.prix_vente_maj = vente > SEUIL_PRIX_FACTICE ? horodate : maintenant;
+      }
+      if (!p.prix_achat_maj) {
+        maj.prix_achat_maj = achat > 0 ? horodate : maintenant;
+      }
+
       const { error } = await sb.from("produits").update(maj).eq("id", p.id);
       if (!error) traites++;
     }
