@@ -38,6 +38,7 @@ import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
   type Client, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
+  type Produit,
   generateId, calculerDateEcheance, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
@@ -124,6 +125,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const {
     commandesFournisseur, fournisseurs, produits, produitsCharges, clients, devis,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
+    updateProduits,
   } = useCRM();
 
   /* ── état analyse ── */
@@ -1537,6 +1539,59 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
     if (!creerDevisDate) { toast.error('Veuillez saisir la date'); return; }
+    /* LES ARTICLES ODOO ENTRENT AU CATALOGUE, ET ODOO FAIT FOI.
+     *
+     * L'analyse retient souvent un article trouvé chez Odoo et absent de
+     * MonCRM : la ligne partait « libre », sans article, et la colonne Réf.
+     * restait vide. Désormais l'article est CRÉÉ dans le catalogue local au
+     * moment où on s'en sert, et la ligne le désigne comme n'importe quel
+     * autre. S'il existe déjà — même référence, ou même référence Odoo — il
+     * est MIS À JOUR : désignation, catégorie, unité et prix viennent
+     * d'Odoo, qui est la source. Le catalogue local converge ainsi vers
+     * Odoo au fil des devis, au lieu de s'en écarter.
+     *
+     * Rien n'est écrit tant que le devis n'est pas confirmé : seuls les
+     * articles réellement retenus entrent au catalogue. */
+    const aEcrire = new Map<string, Produit>();
+    const idParReference = new Map<string, string>();
+
+    const enregistrerArticleOdoo = (o: TrouvailleOdoo): string => {
+      const ref = String(o.reference || '').trim();
+      if (!ref) return '';
+      const deja = idParReference.get(ref.toUpperCase());
+      if (deja) return deja;
+
+      const local = produits.find(p =>
+        String(p.referenceOdoo || p.reference).toUpperCase() === ref.toUpperCase());
+      const article: Produit = local ? { ...local } : {
+        id: generateId(), reference: ref, description: '',
+        prixAchat: 0, coefficient: 1, prixHT: 0,
+        coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
+        tva: 20, unite: 'u', stock: 0, stockMin: 0,
+        dateCreation: today(),
+      };
+
+      article.referenceOdoo = ref;
+      if (o.designation) article.description = o.designation;
+      if (o.categorie) article.categorie = o.categorie;
+      if (o.unite) article.unite = o.unite;
+      /* Le prix de la FICHE Odoo est le tarif public : c'est lui qu'on range,
+         les remises se recalculent à l'affichage. Un prix nul ou dérisoire
+         n'est pas un prix — on garde alors ce qu'on avait. */
+      if ((o.fiche || 0) > SEUIL_PRIX_FACTICE) article.prixHT = o.fiche;
+      if ((o.cout || 0) > 0) article.prixAchat = o.cout;
+      article.disponibleVente = true;
+      /* La gamme se déduit de la catégorie Odoo : elle commande les remises
+         et le barème de port, autant la fixer tout de suite. */
+      const niveau = niveauGamme(o.categorie, article.catalogue);
+      if (niveau === 'ISOFLOOR') article.catalogue = 'ISOFLOOR';
+      else if (niveau === 'H1' || niveau === 'H2') article.catalogue = 'ISOMARK';
+
+      aEcrire.set(ref.toUpperCase(), article);
+      idParReference.set(ref.toUpperCase(), article.id);
+      return article.id;
+    };
+
     const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
       const cle = `d${i}`;
       /* Un article Odoo retenu l'emporte sur le rapprochement local : c'est un
@@ -1547,12 +1602,13 @@ const [contratOdoo, setContratOdoo] = useState<
       if (odoo) {
         return {
           id: generateId(),
-          produitId: undefined,
-          /* La référence Odoo est PORTÉE par la ligne, pas seulement écrite
-             dans son libellé : sans elle, l'envoi vers Odoo ne retrouvait pas
-             l'article et le remplaçait par la ligne négoce générique. */
+          /* L'article existe désormais dans le catalogue : la ligne le
+             désigne, et la colonne Réf. l'affiche comme les autres. */
+          produitId: enregistrerArticleOdoo(odoo) || undefined,
+          /* La référence Odoo reste portée par la ligne : elle sert à
+             l'envoi vers Odoo même si l'article venait à changer ici. */
           referenceOdoo: odoo.reference,
-          description: `${odoo.reference} — ${odoo.designation}`,
+          description: odoo.designation || odoo.reference,
           quantite: quantiteDe(cle, l.quantite),
           unite: odoo.unite || 'u',
           prixUnitaireHT: prixManuel[cle] ?? odoo.contrat ?? 0,
@@ -1612,8 +1668,19 @@ const [contratOdoo, setContratOdoo] = useState<
       fraisPortHT: transport?.total || undefined,
       fraisPortTVA: transport?.total ? 20 : undefined,
     };
+    /* Le catalogue d'abord, le devis ensuite : les lignes désignent ces
+       articles, ils doivent exister quand l'écran Devis les relit. */
+    if (aEcrire.size) {
+      updateProduits(prev => {
+        const parId = new Map(prev.map(p => [p.id, p]));
+        for (const a of aEcrire.values()) parId.set(a.id, a);
+        return [...parId.values()];
+      });
+    }
     updateDevis(prev => [nouveauDevis, ...prev]);
-    toast.success(`Devis ${creerDevisNumero} créé`);
+    const nb = aEcrire.size;
+    toast.success(`Devis ${creerDevisNumero} créé`,
+      nb ? { description: `${nb} article(s) Odoo repris au catalogue.` } : undefined);
     onOpenChange(false);
   }
 
