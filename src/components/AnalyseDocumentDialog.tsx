@@ -88,6 +88,10 @@ interface TrouvailleOdoo {
   gabarit?: string | null;
   /** Dernière modification de la fiche Odoo, en ISO. Arbitre des prix. */
   maj?: string;
+  /** Stock constaté chez Odoo. */
+  stockDispo?: number;
+  /** Stock prévisionnel Odoo : constaté + attendu − réservé. */
+  stockPrevu?: number;
 }
 
 /* En dessous de ce seuil, l'article est bien retenu — la ligne ne reste
@@ -1617,6 +1621,13 @@ const [contratOdoo, setContratOdoo] = useState<
         article.prixAchatMaj = article.prixAchatMaj || horodate;
       }
       article.disponibleVente = true;
+      /* Le stock d'Odoo est RECOPIÉ, pas fusionné : `stock` reste celui de
+         MonCRM. On date la lecture — un stock sans date ne veut rien dire. */
+      if (o.stockDispo !== undefined) {
+        article.stockOdoo = o.stockDispo;
+        article.stockOdooPrevu = o.stockPrevu ?? o.stockDispo;
+        article.stockOdooMaj = new Date().toISOString();
+      }
       /* La gamme se déduit de la catégorie Odoo : elle commande les remises
          et le barème de port, autant la fixer tout de suite. */
       const niveau = niveauGamme(o.categorie, article.catalogue);
@@ -2985,6 +2996,23 @@ const [contratOdoo, setContratOdoo] = useState<
                                               <span className="truncate flex-1" title={t.designation}>
                                                 {t.designation}
                                               </span>
+                                              {/* Ce qu'Odoo a en magasin, et ce qu'il prévoit
+                                                  d'avoir une fois les réceptions attendues
+                                                  entrées et les sorties réservées parties.
+                                                  Le prévu ne s'affiche que s'il diffère :
+                                                  répéter le même nombre n'apprend rien. */}
+                                              {t.stockDispo !== undefined && (
+                                                <span
+                                                  className={`shrink-0 text-[10px] ${
+                                                    t.stockDispo > 0 ? 'text-muted-foreground' : 'text-warning'}`}
+                                                  title={`Stock Odoo : ${t.stockDispo} disponible`
+                                                    + `, ${t.stockPrevu ?? t.stockDispo} prévu`}
+                                                >
+                                                  {t.stockDispo > 0 ? `${t.stockDispo} dispo` : 'rupture'}
+                                                  {t.stockPrevu !== undefined && t.stockPrevu !== t.stockDispo
+                                                    && ` · ${t.stockPrevu} prévu`}
+                                                </span>
+                                              )}
                                               <span className="font-semibold shrink-0">
                                                 {t.contrat != null
                                                   ? formatMontant(t.contrat)

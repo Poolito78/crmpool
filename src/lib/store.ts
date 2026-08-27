@@ -210,6 +210,17 @@ export interface Produit {
   prixAchatMaj?: string;
   /** Même chose pour le prix de VENTE HT : les deux ne bougent pas ensemble. */
   prixVenteMaj?: string;
+  /**
+   * Stock constaté chez Odoo, à distinguer de `stock` qui est celui de
+   * MonCRM. Les deux cohabitent : l'un est ce que l'ERP voit, l'autre ce que
+   * MonCRM tient. Les confondre dans un seul champ ferait perdre l'un des
+   * deux sans qu'on sache lequel.
+   */
+  stockOdoo?: number;
+  /** Prévisionnel Odoo : constaté + réceptions attendues − sorties réservées. */
+  stockOdooPrevu?: number;
+  /** Quand ce stock a été lu. Un stock sans date ne veut rien dire. */
+  stockOdooMaj?: string;
   /** Prix applicateur du catalogue métier, remises déjà comprises. */
   prixTarif?: number;
   /** Code de l'article dans ce catalogue. */
@@ -668,6 +679,9 @@ function dbToProduit(r: any): Produit {
     modeleCle: r.modele_cle || undefined,
     estModele: r.est_modele !== false,
     nbVariantes: Number(r.nb_variantes) || 1,
+    stockOdoo: r.stock_odoo != null ? Number(r.stock_odoo) : undefined,
+    stockOdooPrevu: r.stock_odoo_prevu != null ? Number(r.stock_odoo_prevu) : undefined,
+    stockOdooMaj: r.stock_odoo_maj || undefined,
     prixAchatMaj: r.prix_achat_maj || undefined,
     prixVenteMaj: r.prix_vente_maj || undefined,
     prixTarif: r.prix_tarif != null ? Number(r.prix_tarif) : undefined,
@@ -686,6 +700,9 @@ function produitToDb(p: Produit, userId: string) {
     description_detaillee: p.descriptionDetaillee || null,
     prix_achat: p.prixAchat,
     prix_achat_maj: p.prixAchatMaj || null,
+    stock_odoo: p.stockOdoo ?? null,
+    stock_odoo_prevu: p.stockOdooPrevu ?? null,
+    stock_odoo_maj: p.stockOdooMaj || null,
     coefficient: p.coefficient,
     prix_ht: p.prixHT,
     prix_vente_maj: p.prixVenteMaj || null,

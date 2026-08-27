@@ -127,6 +127,10 @@ interface Article {
   name: string;
   lst_price: number;
   standard_price: number;
+  /** Stock constaté chez Odoo. */
+  qty_available?: number;
+  /** Stock prévisionnel : constaté + attendu - réservé. */
+  virtual_available?: number;
 }
 
 interface Regle {
@@ -1562,7 +1566,8 @@ serve(async (req) => {
       [
         [["default_code", "in", references]],
         ["id", "default_code", "name", "lst_price", "standard_price",
-          "categ_id", "product_tmpl_id", "write_date", "create_date"],
+          "categ_id", "product_tmpl_id", "write_date", "create_date",
+          "qty_available", "virtual_available"],
       ],
       { limit: references.length + 50 },
     )) as any[];
@@ -1570,6 +1575,8 @@ serve(async (req) => {
     const parReference = new Map<string, Article>();
     for (const r of bruts) {
       parReference.set(r.default_code, {
+        qty_available: Number(r.qty_available) || 0,
+        virtual_available: Number(r.virtual_available) || 0,
         id: r.id,
         tmpl_id: r.product_tmpl_id ? r.product_tmpl_id[0] : null,
         categ_id: r.categ_id ? r.categ_id[0] : null,
@@ -1637,6 +1644,9 @@ serve(async (req) => {
         fiche: a.lst_price,
         cout: cout || a.standard_price,
         quantite: qte,
+        /* Ce qu'Odoo a en magasin, et ce qu'il prévoit d'avoir. */
+        stockDispo: a.qty_available,
+        stockPrevu: a.virtual_available,
       };
     }
 
@@ -2088,6 +2098,34 @@ serve(async (req) => {
         + ` certitude ${(certitude * 100).toFixed(0)} %`);
       const retenus = res.slice(0, 8);
 
+      /* LE STOCK, LU SEULEMENT SUR LES ARTICLES RETENUS.
+       *
+       * `qty_available` et `virtual_available` sont des champs CALCULÉS :
+       * Odoo les reconstruit à chaque lecture en parcourant les mouvements.
+       * Les demander sur les 500 articles de la recherche coûterait des
+       * secondes pour huit valeurs affichées. On les lit donc après le
+       * classement, sur les huit qui remontent.
+       *
+       * « Disponible » est le stock constaté ; « prévu » ajoute les
+       * réceptions attendues et retire les sorties déjà réservées — c'est
+       * lui qui dit si l'on peut promettre une date. */
+      const stocks = new Map<number, { dispo: number; prevu: number }>();
+      if (retenus.length) {
+        try {
+          const lus = await odoo.kw("product.product", "read",
+            [retenus.map((x: any) => x.id),
+             ["id", "qty_available", "virtual_available"]]) as any[];
+          for (const l of lus) {
+            stocks.set(l.id, {
+              dispo: Number(l.qty_available) || 0,
+              prevu: Number(l.virtual_available) || 0,
+            });
+          }
+        } catch (e) {
+          console.log(`[stock] lecture impossible : ${(e as Error).message}`);
+        }
+      }
+
       const arts: Article[] = retenus.map((x) => ({
         id: x.id,
         tmpl_id: x.product_tmpl_id ? x.product_tmpl_id[0] : null,
@@ -2147,6 +2185,8 @@ serve(async (req) => {
              ancienne que la sienne : une correction faite à la main hier ne
              doit pas être effacée par une fiche Odoo inchangée depuis un an. */
           maj: x.write_date || x.create_date || "",
+          stockDispo: stocks.get(x.id)?.dispo,
+          stockPrevu: stocks.get(x.id)?.prevu,
           contrat: p,
           fiche: x.lst_price || 0,
           cout: cout || 0,

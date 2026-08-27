@@ -2565,7 +2565,22 @@ export default function Produits() {
 
                 {/* Champs stock */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div><Label>Stock total</Label><Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} /></div>
+                  <div>
+                    <Label>Stock total</Label>
+                    <Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} />
+                    {/* Le stock d'Odoo est montré A COTE, jamais fondu dans le
+                        precedent : l'un est ce que MonCRM tient, l'autre ce que
+                        l'ERP constate, et l'ecart est justement l'information. */}
+                    {editing?.stockOdoo !== undefined && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Odoo : <strong>{editing.stockOdoo}</strong> dispo
+                        {editing.stockOdooPrevu !== undefined
+                          && editing.stockOdooPrevu !== editing.stockOdoo
+                          && <> · <strong>{editing.stockOdooPrevu}</strong> prévu</>}
+                        {editing.stockOdooMaj && ` — lu le ${formatDate(editing.stockOdooMaj)}`}
+                      </p>
+                    )}
+                  </div>
                   <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
                 </div>
 
