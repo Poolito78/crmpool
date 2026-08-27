@@ -1548,6 +1548,10 @@ const [contratOdoo, setContratOdoo] = useState<
         return {
           id: generateId(),
           produitId: undefined,
+          /* La référence Odoo est PORTÉE par la ligne, pas seulement écrite
+             dans son libellé : sans elle, l'envoi vers Odoo ne retrouvait pas
+             l'article et le remplaçait par la ligne négoce générique. */
+          referenceOdoo: odoo.reference,
           description: `${odoo.reference} — ${odoo.designation}`,
           quantite: quantiteDe(cle, l.quantite),
           unite: odoo.unite || 'u',
@@ -1599,6 +1603,14 @@ const [contratOdoo, setContratOdoo] = useState<
       lignes,
       referenceAffaire: creerDevisRefAffaire || undefined,
       notes: creerDevisNotes || result?.notes || undefined,
+      /* LE TRANSPORT SUIT LE DEVIS.
+       *
+       * L'écran chiffrait le port — « Port ISOFLOOR 85,00 € » — et le devis
+       * créé arrivait avec des frais de port VIDES : le calcul restait dans
+       * la fenêtre d'analyse et personne ne le reportait. Il fallait le
+       * ressaisir à la main, ou l'oublier. */
+      fraisPortHT: transport?.total || undefined,
+      fraisPortTVA: transport?.total ? 20 : undefined,
     };
     updateDevis(prev => [nouveauDevis, ...prev]);
     toast.success(`Devis ${creerDevisNumero} créé`);

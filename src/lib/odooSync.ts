@@ -73,7 +73,10 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
        * catalogue métier : le primaire ISOFLOOR se code « FLOWFAST107 » ici
        * et n'existe pas sous ce code chez Odoo. La ligne partait alors en
        * négoce, ou pire, tombait sur un homonyme. */
-      const ref = (produit?.referenceOdoo || produit?.reference || '').trim();
+      /* À défaut d'article MonCRM, la référence portée par la ligne elle-même :
+         c'est le cas des articles retenus chez Odoo et absents du catalogue
+         local, qui partaient jusqu'ici en négoce. */
+      const ref = (produit?.referenceOdoo || produit?.reference || l.referenceOdoo || '').trim();
       result.push({
         type: 'product',
         desc: l.description,

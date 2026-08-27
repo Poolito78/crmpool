@@ -384,6 +384,18 @@ export interface LigneDevis {
   note?: string;
   variantesChoisies?: Record<string, string>; // dimensionId -> option.label
   prixAchatLigne?: number; // coût achat unitaire pour lignes libres (ex: surcharges énergie)
+  /**
+   * Référence Odoo de l'article, pour les lignes qui n'ont pas d'article
+   * MonCRM.
+   *
+   * L'analyse retient souvent un article trouvé chez Odoo et absent du
+   * catalogue local : la ligne part alors « libre », sans `produitId`. Sa
+   * référence ne vivait plus que dans le texte de la description, si bien
+   * que l'envoi vers Odoo ne la retrouvait pas et basculait la ligne en
+   * NÉGOCE — un article générique — alors que le bon article existe et
+   * qu'on venait de le désigner.
+   */
+  referenceOdoo?: string;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';
