@@ -2617,9 +2617,19 @@ export default function Produits() {
               <div className="space-y-4 py-2">
                 {/* Indicateurs disponible / réservé / final */}
                 <div className="grid grid-cols-3 gap-3">
+                  {/* Le chiffre d'ODOO est mis à hauteur du nôtre, dans la
+                      même tuile — c'est là que l'œil va. Les deux restent
+                      distincts : « Disponible » est ce que MonCRM tient,
+                      la ligne du dessous ce que l'ERP constate, et l'écart
+                      entre les deux est justement ce qu'il faut voir. */}
                   <div className="bg-card border border-border rounded-xl p-3 text-center">
                     <p className="text-2xl font-heading font-bold text-success">{stockActuel}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Disponible</p>
+                    {editing?.stockOdoo !== undefined && (
+                      <p className="text-[11px] font-semibold text-success/80 mt-1">
+                        {editing.stockOdoo} chez Odoo
+                      </p>
+                    )}
                   </div>
                   <div className="bg-card border border-border rounded-xl p-3 text-center">
                     <p className="text-2xl font-heading font-bold text-warning">{reserve}</p>
@@ -2628,6 +2638,11 @@ export default function Produits() {
                   <div className={`bg-card border rounded-xl p-3 text-center ${dispo < 0 ? 'border-destructive/50' : 'border-border'}`}>
                     <p className={`text-2xl font-heading font-bold ${dispo < 0 ? 'text-destructive' : dispo === 0 ? 'text-muted-foreground' : 'text-primary'}`}>{dispo}</p>
                     <p className="text-xs text-muted-foreground mt-0.5">Dispo finale</p>
+                    {editing?.stockOdooPrevu !== undefined && (
+                      <p className="text-[11px] font-semibold text-primary/80 mt-1">
+                        {editing.stockOdooPrevu} prévu Odoo
+                      </p>
+                    )}
                   </div>
                 </div>
 
