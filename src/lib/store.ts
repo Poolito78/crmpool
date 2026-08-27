@@ -199,6 +199,17 @@ export interface Produit {
   estModele?: boolean;
   /** Nombre d'articles partageant ce modèle ; 1 = pas de déclinaison. */
   nbVariantes?: number;
+  /**
+   * Date de dernière modification du prix d'ACHAT, en ISO.
+   *
+   * C'est l'arbitre de la synchronisation Odoo : on ne remplace un prix que
+   * par un plus RÉCENT. Sans cette date, une reprise depuis Odoo écrasait un
+   * prix corrigé la veille à la main par une valeur plus ancienne, sans que
+   * personne ne s'en aperçoive.
+   */
+  prixAchatMaj?: string;
+  /** Même chose pour le prix de VENTE HT : les deux ne bougent pas ensemble. */
+  prixVenteMaj?: string;
   /** Prix applicateur du catalogue métier, remises déjà comprises. */
   prixTarif?: number;
   /** Code de l'article dans ce catalogue. */
@@ -657,6 +668,8 @@ function dbToProduit(r: any): Produit {
     modeleCle: r.modele_cle || undefined,
     estModele: r.est_modele !== false,
     nbVariantes: Number(r.nb_variantes) || 1,
+    prixAchatMaj: r.prix_achat_maj || undefined,
+    prixVenteMaj: r.prix_vente_maj || undefined,
     prixTarif: r.prix_tarif != null ? Number(r.prix_tarif) : undefined,
     codeTarif: r.code_tarif || undefined,
     sourceTarif: r.source_tarif || undefined,
@@ -672,8 +685,10 @@ function produitToDb(p: Produit, userId: string) {
     description: p.description,
     description_detaillee: p.descriptionDetaillee || null,
     prix_achat: p.prixAchat,
+    prix_achat_maj: p.prixAchatMaj || null,
     coefficient: p.coefficient,
     prix_ht: p.prixHT,
+    prix_vente_maj: p.prixVenteMaj || null,
     coeff_revendeur: p.coeffRevendeur,
     remise_revendeur: p.remiseRevendeur,
     prix_revendeur: p.prixRevendeur,
@@ -1398,9 +1413,45 @@ export function useStore() {
     });
   }, []);
 
+  /**
+   * Horodate les prix qui viennent de changer.
+   *
+   * Placé ICI, et nulle part ailleurs : tout ce qui écrit dans le catalogue
+   * passe par `updateProduits` — la fiche article, l'import Excel, la reprise
+   * depuis Odoo, les corrections en masse. Dater à chaque appelant, c'était
+   * s'assurer qu'un chemin serait oublié, et la date d'un prix qui ne bouge
+   * jamais ne vaut rien.
+   *
+   * Une date FOURNIE par l'appelant est respectée : la reprise Odoo pose la
+   * date de la fiche Odoo, pas celle du jour, et c'est bien elle qui fait foi
+   * pour les comparaisons suivantes.
+   */
+  function dater(avant: Produit[], apres: Produit[]): Produit[] {
+    const parId = new Map(avant.map(p => [p.id, p]));
+    const maintenant = new Date().toISOString();
+    let change = false;
+    const sortie = apres.map(p => {
+      const a = parId.get(p.id);
+      if (a === p) return p;
+      const venteBouge = !a || Math.abs((a.prixHT || 0) - (p.prixHT || 0)) >= 0.005;
+      const achatBouge = !a || Math.abs((a.prixAchat || 0) - (p.prixAchat || 0)) >= 0.005;
+      /* Si l'appelant a lui-même changé la date, il sait ce qu'il fait. */
+      const venteDatee = !a || a.prixVenteMaj !== p.prixVenteMaj;
+      const achatDatee = !a || a.prixAchatMaj !== p.prixAchatMaj;
+      if ((!venteBouge || venteDatee) && (!achatBouge || achatDatee)) return p;
+      change = true;
+      return {
+        ...p,
+        prixVenteMaj: venteBouge && !venteDatee ? maintenant : p.prixVenteMaj,
+        prixAchatMaj: achatBouge && !achatDatee ? maintenant : p.prixAchatMaj,
+      };
+    });
+    return change ? sortie : apres;
+  }
+
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
-      const next = fn(prev);
+      const next = dater(prev, fn(prev));
       const userId = userIdRef.current;
       if (userId) {
         const { added, removed, updated } = diffArrays(prev, next);

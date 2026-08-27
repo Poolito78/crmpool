@@ -47,7 +47,7 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'qteVendue', 'qteCommandeeF', 'valeurStock'];
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
+  reference: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
 };
@@ -673,7 +673,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
+    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -1560,6 +1560,14 @@ export default function Produits() {
                     ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" />
                     : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
                   }
+                  {/* Depuis quand ce prix est-il celui-là. C'est aussi ce qui
+                      décide, à la synchronisation Odoo, lequel des deux prix
+                      est le plus récent — donc lequel l'emporte. */}
+                  {form.prixAchatMaj && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      maj {formatDate(form.prixAchatMaj)}
+                    </p>
+                  )}
                 </div>
                 )}
                 {canAchat && (
@@ -1605,6 +1613,11 @@ export default function Produits() {
                       <div className="col-span-2 sm:col-span-1">
                         <Label className="text-xs">Prix Vente HT (public)</Label>
                         <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
+                        {form.prixVenteMaj && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            maj {formatDate(form.prixVenteMaj)}
+                          </p>
+                        )}
                       </div>
                     </div>
                     {canAchat && (

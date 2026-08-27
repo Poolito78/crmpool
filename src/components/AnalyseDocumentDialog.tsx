@@ -86,6 +86,8 @@ interface TrouvailleOdoo {
   source?: 'contrat' | 'liste' | 'aucun';
   /** Codification de grille qui a tarifé l'article, quand le contrat l'a couvert. */
   gabarit?: string | null;
+  /** Dernière modification de la fiche Odoo, en ISO. Arbitre des prix. */
+  maj?: string;
 }
 
 /* En dessous de ce seuil, l'article est bien retenu — la ligne ne reste
@@ -1575,11 +1577,45 @@ const [contratOdoo, setContratOdoo] = useState<
       if (o.designation) article.description = o.designation;
       if (o.categorie) article.categorie = o.categorie;
       if (o.unite) article.unite = o.unite;
-      /* Le prix de la FICHE Odoo est le tarif public : c'est lui qu'on range,
-         les remises se recalculent à l'affichage. Un prix nul ou dérisoire
-         n'est pas un prix — on garde alors ce qu'on avait. */
-      if ((o.fiche || 0) > SEUIL_PRIX_FACTICE) article.prixHT = o.fiche;
-      if ((o.cout || 0) > 0) article.prixAchat = o.cout;
+      /* LE PLUS RÉCENT L'EMPORTE, PAS ODOO SYSTÉMATIQUEMENT.
+       *
+       * « Odoo fait foi » ne peut pas vouloir dire « Odoo écrase toujours » :
+       * un prix corrigé ici hier serait effacé par une fiche Odoo inchangée
+       * depuis un an. On compare donc les dates — celle de la fiche Odoo
+       * contre celle du dernier changement de prix chez nous — et on ne
+       * remplace que par plus récent. Faute de date d'un côté ou de l'autre,
+       * Odoo l'emporte : c'est la source.
+       *
+       * Le prix de la FICHE est le tarif public ; les remises se recalculent
+       * à l'affichage. Un prix nul ou dérisoire n'est pas un prix : sur
+       * 22 637 articles, 7 670 fiches Odoo portent moins de 2 €. */
+      const majOdoo = o.maj ? new Date(o.maj.replace(' ', 'T') + 'Z') : null;
+      const plusRecentQue = (dateLocale?: string) => {
+        if (!majOdoo || isNaN(majOdoo.getTime())) return true;
+        if (!dateLocale) return true;
+        return majOdoo.getTime() >= new Date(dateLocale).getTime();
+      };
+      const horodate = (majOdoo && !isNaN(majOdoo.getTime())
+        ? majOdoo : new Date()).toISOString();
+
+      if ((o.fiche || 0) > SEUIL_PRIX_FACTICE
+          && Math.abs((article.prixHT || 0) - o.fiche) >= 0.01
+          && plusRecentQue(article.prixVenteMaj)) {
+        article.prixHT = o.fiche;
+        article.prixVenteMaj = horodate;
+      }
+      if ((o.cout || 0) > 0
+          && Math.abs((article.prixAchat || 0) - o.cout) >= 0.01
+          && plusRecentQue(article.prixAchatMaj)) {
+        article.prixAchat = o.cout;
+        article.prixAchatMaj = horodate;
+      }
+      /* Un article tout neuf n'a pas d'antériorité : on date ses deux prix
+         pour que la prochaine synchro ait un point de comparaison. */
+      if (!local) {
+        article.prixVenteMaj = article.prixVenteMaj || horodate;
+        article.prixAchatMaj = article.prixAchatMaj || horodate;
+      }
       article.disponibleVente = true;
       /* La gamme se déduit de la catégorie Odoo : elle commande les remises
          et le barème de port, autant la fixer tout de suite. */

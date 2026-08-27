@@ -1562,7 +1562,7 @@ serve(async (req) => {
       [
         [["default_code", "in", references]],
         ["id", "default_code", "name", "lst_price", "standard_price",
-          "categ_id", "product_tmpl_id"],
+          "categ_id", "product_tmpl_id", "write_date", "create_date"],
       ],
       { limit: references.length + 50 },
     )) as any[];
@@ -1665,7 +1665,7 @@ serve(async (req) => {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
       const CHAMPS_ART = ["id", "default_code", "name", "lst_price", "standard_price",
-                          "categ_id", "product_tmpl_id", "uom_id"];
+                          "categ_id", "product_tmpl_id", "uom_id", "write_date", "create_date"];
       const chercher = (domaine: unknown[]) => od.kw(
         "product.product", "search_read", [domaine, CHAMPS_ART],
         { limit: 40, order: "default_code, name" },
@@ -2142,6 +2142,11 @@ serve(async (req) => {
           designation: x.name,
           categorie: x.categ_id ? x.categ_id[1] : "",
           unite: x.uom_id ? x.uom_id[1] : "",
+          /* Quand la fiche Odoo a bougé pour la dernière fois. MonCRM s'en
+             sert pour ne JAMAIS remplacer un prix par une valeur plus
+             ancienne que la sienne : une correction faite à la main hier ne
+             doit pas être effacée par une fiche Odoo inchangée depuis un an. */
+          maj: x.write_date || x.create_date || "",
           contrat: p,
           fiche: x.lst_price || 0,
           cout: cout || 0,
