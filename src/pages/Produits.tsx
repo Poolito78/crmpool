@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
+import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
@@ -153,6 +154,36 @@ export default function Produits() {
       setSyncOdoo(false);
     }
   }, []);
+
+  /**
+   * Relit le stock Odoo de l'article qu'on vient d'ouvrir.
+   *
+   * Un stock daté d'il y a trois semaines n'aide personne à promettre une
+   * date. Un seul article est relu — celui qu'on regarde — donc l'appel est
+   * court et n'alourdit ni la liste ni les autres écrans. S'il échoue, la
+   * fiche s'ouvre quand même avec la dernière valeur connue et sa date.
+   */
+  useEffect(() => {
+    const ref = editing?.referenceOdoo || editing?.reference;
+    if (!editing?.id || !ref) return;
+    let annule = false;
+    rafraichirStockOdoo([ref]).then(stocks => {
+      if (annule) return;
+      const v = stocks[ref.toUpperCase()];
+      if (!v) return;
+      const id = editing.id;
+      updateProduits(prev => prev.map(x => x.id === id
+        ? { ...x, stockOdoo: v.dispo, stockOdooPrevu: v.prevu,
+            stockOdooMaj: new Date().toISOString() }
+        : x));
+      setEditing(cur => cur && cur.id === id
+        ? { ...cur, stockOdoo: v.dispo, stockOdooPrevu: v.prevu,
+            stockOdooMaj: new Date().toISOString() }
+        : cur);
+    });
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing?.id]);
 
   const majProduitEdite = useCallback((f: (p: Produit) => Produit) => {
     setEditing(cur => {

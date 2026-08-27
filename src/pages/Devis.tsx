@@ -29,6 +29,7 @@ import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import VarianteSelect from '@/components/VarianteSelect';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
@@ -486,6 +487,37 @@ export default function Devis() {
   const [surfaceGlobaleM2, setSurfaceGlobaleM2] = useState(0);
   const [adresseLivraisonId, setAdresseLivraisonId] = useState('');
   const [contactLivraisonId, setContactLivraisonId] = useState('');
+
+  /**
+   * Relit le stock Odoo des SEULS articles présents dans le devis ouvert.
+   *
+   * Au moment de chiffrer, savoir ce qu'il reste en magasin change la
+   * réponse qu'on donne au client. Mais on ne relit que les quelques lignes
+   * du devis, jamais le catalogue : `qty_available` est un champ calculé chez
+   * Odoo, et le demander en masse ralentirait l'ouverture de l'écran — ce
+   * qu'on vient justement de corriger ailleurs.
+   */
+  useEffect(() => {
+    if (!dialogOpen || !lignes.length) return;
+    const refs = lignes
+      .map(l => {
+        const p = produitParId(produits, l.produitId);
+        return l.referenceOdoo || p?.referenceOdoo || p?.reference || '';
+      })
+      .filter(Boolean);
+    if (!refs.length) return;
+    let annule = false;
+    rafraichirStockOdoo(refs).then(stocks => {
+      if (annule || !Object.keys(stocks).length) return;
+      const lu = new Date().toISOString();
+      updateProduits(prev => prev.map(x => {
+        const v = stocks[String(x.referenceOdoo || x.reference).toUpperCase()];
+        return v ? { ...x, stockOdoo: v.dispo, stockOdooPrevu: v.prevu, stockOdooMaj: lu } : x;
+      }));
+    });
+    return () => { annule = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dialogOpen]);
 
   /**
    * Rassemble le devis en cours et l'envoie à Odoo.

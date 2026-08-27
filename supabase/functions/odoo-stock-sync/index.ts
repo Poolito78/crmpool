@@ -100,6 +100,16 @@ serve(async (req) => {
   try {
     const entree = await req.json().catch(() => ({}));
     const limite = Math.min(Math.max(Number(entree?.limite) || 400, 1), 1000);
+    /* Mode CIBLÉ : on ne relit que les références demandées.
+     *
+     * C'est le mode courant — celui de l'ouverture d'une fiche article ou
+     * d'un devis. Relire tout le catalogue pour afficher le stock d'un seul
+     * article serait absurde ; à l'inverse, afficher un stock vieux d'un mois
+     * ne vaut pas mieux que ne rien afficher. On relit donc les quelques
+     * articles qu'on a sous les yeux, et rien d'autre. */
+    const demandees: string[] = Array.isArray(entree?.references)
+      ? entree.references.map((r: unknown) => String(r || "").trim()).filter(Boolean).slice(0, 60)
+      : [];
 
     const sb = createClient(
       Deno.env.get("SUPABASE_URL") || "",
@@ -109,11 +119,14 @@ serve(async (req) => {
     /* Les jamais lus d'abord, puis les plus anciennement lus. Cet ordre suffit
        à faire le tour du catalogue en appels successifs, sans tenir de curseur
        ni risquer d'oublier une tranche. */
-    const { data: lot, error: err } = await sb
-      .from("produits")
-      .select("id, reference, reference_odoo, prix_ht, prix_achat, prix_vente_maj, prix_achat_maj")
-      .order("stock_odoo_maj", { ascending: true, nullsFirst: true })
-      .limit(limite);
+    const champs = "id, reference, reference_odoo, prix_ht, prix_achat, prix_vente_maj, prix_achat_maj";
+    const { data: lot, error: err } = demandees.length
+      ? await sb.from("produits").select(champs)
+          .or(demandees.map(r => `reference.eq.${r},reference_odoo.eq.${r}`).join(","))
+          .limit(demandees.length * 2)
+      : await sb.from("produits").select(champs)
+          .order("stock_odoo_maj", { ascending: true, nullsFirst: true })
+          .limit(limite);
     if (err) throw new Error(`Lecture du catalogue : ${err.message}`);
     if (!lot?.length) return json({ traites: 0, majPrix: 0, restants: 0, introuvables: 0 });
 
@@ -184,6 +197,22 @@ serve(async (req) => {
 
       const { error } = await sb.from("produits").update(maj).eq("id", p.id);
       if (!error) traites++;
+    }
+
+    /* En mode ciblé il n'y a rien « à finir » : on rend les valeurs lues,
+       que l'écran affiche immédiatement sans attendre un rechargement. */
+    if (demandees.length) {
+      const stocks: Record<string, { dispo: number; prevu: number }> = {};
+      for (const [code, a] of parCode) {
+        stocks[code] = {
+          dispo: Number(a.qty_available) || 0,
+          prevu: Number(a.virtual_available) || 0,
+        };
+      }
+      return json({
+        traites, majPrix, introuvables, restants: 0, stocks,
+        secondes: Math.round((Date.now() - debut) / 100) / 10,
+      });
     }
 
     /* Ce qu'il reste à voir : les articles jamais lus, plus ceux dont la
