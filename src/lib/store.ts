@@ -1247,9 +1247,25 @@ async function lireTout(table: string) {
     return data || [];
   };
 
-  const suites = await Promise.all(departs.map(d => lireTranche(d)));
-
-  for (const lot of suites) tout.push(...lot);
+  /* QUATRE TRANCHES À LA FOIS, PAS VINGT-TROIS.
+   *
+   * Lancées toutes ensemble, les vingt-trois tranches du catalogue reviennent
+   * en même temps — et le décodage de leur JSON occupe le fil d'exécution,
+   * celui-là même qui doit afficher les lettres qu'on tape. La recherche
+   * accrochait pendant tout le chargement.
+   *
+   * Par paquets de quatre, avec une respiration entre chaque, le total prend
+   * à peine plus longtemps et l'application reste utilisable pendant ce
+   * temps. Mieux vaut un chargement un peu plus long qu'une saisie qui
+   * bafouille. */
+  const CONCURRENCE = 4;
+  for (let i = 0; i < departs.length; i += CONCURRENCE) {
+    const paquet = departs.slice(i, i + CONCURRENCE);
+    const lots = await Promise.all(paquet.map(d => lireTranche(d)));
+    for (const lot of lots) tout.push(...lot);
+    // Une respiration : le navigateur reprend la main entre deux paquets.
+    if (i + CONCURRENCE < departs.length) await new Promise(r => setTimeout(r, 0));
+  }
 
   if (tout.length < total) {
     const manque = total - tout.length;
@@ -1327,8 +1343,16 @@ export function useStore() {
         .then(({ count }) => { if (typeof count === 'number') setNbProduits(count); });
 
       // Le catalogue continue d'arriver en arrière-plan.
-      lireTout('produits').then(pRes => {
-        setProduits(pRes.map(dbToProduit));
+      lireTout('produits').then(async pRes => {
+        /* Convertir 22 508 lignes d'un seul élan bloque le fil d'exécution
+           une bonne fraction de seconde. On le fait par paquets, en rendant
+           la main entre chacun. */
+        const sortie: Produit[] = [];
+        for (let i = 0; i < pRes.length; i += 2000) {
+          for (const r of pRes.slice(i, i + 2000)) sortie.push(dbToProduit(r));
+          if (i + 2000 < pRes.length) await new Promise(r => setTimeout(r, 0));
+        }
+        setProduits(sortie);
         setProduitsCharges(true);
       });
     }
