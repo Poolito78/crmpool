@@ -1219,20 +1219,46 @@ async function lireTout(table: string) {
   const departs: number[] = [];
   for (let d = TRANCHE; d < total; d += TRANCHE) departs.push(d);
 
-  const suites = await Promise.all(departs.map(async d => {
+  /* UN LOT QUI ÉCHOUE NE DOIT PAS DISPARAÎTRE EN SILENCE.
+   *
+   * Les vingt-trois tranches du catalogue partent ensemble. Il suffisait
+   * qu'une seule échoue — un incident réseau, une rafale de requêtes trop
+   * serrée — pour que mille articles manquent à l'appel, sans autre trace
+   * qu'une ligne dans la console. C'est ce qui s'est produit : la base en
+   * comptait 22 508, l'écran en affichait 21 508.
+   *
+   * On réessaie donc chaque tranche, une fois, après un court répit. Et si
+   * le compte n'y est toujours pas, on le DIT plutôt que de rendre une liste
+   * amputée dont personne ne saura qu'elle l'est. */
+  const lireTranche = async (d: number, essai = 0): Promise<any[]> => {
     const { data, error } = await supabase
       .from(table as any)
       .select('*')
       .order('id')
       .range(d, d + TRANCHE - 1);
     if (error) {
-      console.error(`Lecture de ${table} (${d}) interrompue :`, error.message);
+      if (essai < 2) {
+        await new Promise(r => setTimeout(r, 300 * (essai + 1)));
+        return lireTranche(d, essai + 1);
+      }
+      console.error(`Lecture de ${table} (${d}) abandonnée :`, error.message);
       return [];
     }
     return data || [];
-  }));
+  };
+
+  const suites = await Promise.all(departs.map(d => lireTranche(d)));
 
   for (const lot of suites) tout.push(...lot);
+
+  if (tout.length < total) {
+    const manque = total - tout.length;
+    console.error(`Lecture de ${table} incomplète : ${tout.length} sur ${total}.`);
+    toast.error(
+      `Chargement incomplet : ${manque} ligne(s) de « ${table} » manquent. Rechargez la page.`,
+      { duration: 12000 },
+    );
+  }
   return tout;
 }
 
@@ -1251,6 +1277,13 @@ export function useStore() {
      quelques centaines de lignes pour les autres tables. Les pages qui en
      dépendent peuvent afficher « chargement… » plutôt qu'une liste vide. */
   const [produitsCharges, setProduitsCharges] = useState(false);
+  /* Le NOMBRE d'articles n'a pas à attendre les articles.
+   *
+   * La tuile « Produits » du tableau de bord affichait `produits.length` :
+   * elle restait donc vide, puis fausse, tant que les vingt-trois tranches du
+   * catalogue n'étaient pas toutes rentrées — plusieurs secondes. Compter se
+   * demande à la base, qui répond sans rien transporter. */
+  const [nbProduits, setNbProduits] = useState<number | null>(null);
   const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1288,6 +1321,10 @@ export function useStore() {
       setFacturesFournisseur(ffRes.map(dbToFactureFournisseur));
       // L'application est utilisable ici : on ne fait plus attendre personne.
       setLoading(false);
+
+      // Le compte part sans attendre : c'est lui qu'on affiche en premier.
+      supabase.from('produits').select('id', { count: 'exact', head: true })
+        .then(({ count }) => { if (typeof count === 'number') setNbProduits(count); });
 
       // Le catalogue continue d'arriver en arrière-plan.
       lireTout('produits').then(pRes => {
@@ -1627,7 +1664,7 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────

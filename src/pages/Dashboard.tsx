@@ -22,7 +22,7 @@ const TYPE_ICON: Record<string, any> = {
 };
 
 export default function Dashboard() {
-  const { clients, produits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
+  const { clients, produits, nbProduits, fournisseurs, devis, commandesFournisseur, commandesClient } = useCRM();
   const { canAchat, isAdmin } = useCurrentUser();
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
@@ -164,7 +164,7 @@ export default function Dashboard() {
 
   const stats = [
     { id: 'stat-clients', label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
-    { id: 'stat-produits', label: 'Produits', value: produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
+    { id: 'stat-produits', label: 'Produits', value: nbProduits ?? produits.length, icon: Package, color: 'text-accent', bg: 'bg-accent/10', link: '/produits' },
     { id: 'stat-fournisseurs', label: 'Fournisseurs', value: fournisseurs.length, icon: Truck, color: 'text-info', bg: 'bg-info/10', link: '/fournisseurs' },
     { id: 'stat-devis', label: 'Devis', value: devis.length, icon: FileText, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
     { id: 'stat-ca', label: 'CA Accepté HT', value: formatMontant(caTotal), icon: TrendingUp, color: 'text-success', bg: 'bg-success/10', link: '/devis' },
