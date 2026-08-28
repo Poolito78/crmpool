@@ -1466,17 +1466,46 @@ export function useStore() {
     return change ? sortie : apres;
   }
 
+  /* UNE ÉCRITURE QUI ÉCHOUE DOIT SE VOIR.
+   *
+   * Ces trois appels se terminaient par un `.then()` vide : la base pouvait
+   * refuser l'enregistrement — référence en double, colonne inconnue, droit
+   * manquant — sans que personne n'en sache rien. L'écran affichait « Produit
+   * modifié », le prix revenait à sa valeur d'avant au rechargement suivant,
+   * et le bouton passait pour cassé. Les devis, eux, signalaient déjà leurs
+   * erreurs ; les produits non.
+   *
+   * `upsert` plutôt qu'`insert` pour la même raison : le catalogue arrive
+   * après le reste de l'application. Un article modifié avant la fin de ce
+   * chargement n'était pas trouvé en mémoire, donc traité comme nouveau,
+   * donc INSÉRÉ — et l'insertion se heurtait à la référence déjà présente.
+   * Silencieusement. L'`upsert` écrit dans les deux cas. */
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
       const next = dater(prev, fn(prev));
       const userId = userIdRef.current;
       if (userId) {
+        const signaler = (quoi: string) => ({ error }: { error: { message: string } | null }) => {
+          if (!error) return;
+          console.error(`[produits ${quoi}]`, error.message);
+          toast.error(`Enregistrement du produit refusé : ${error.message}`);
+        };
         const { added, removed, updated } = diffArrays(prev, next);
-        if (added.length) supabase.from('produits').insert(added.map(p => produitToDb(p, userId)) as any).then();
-        if (updated.length) {
-          updated.forEach(p => supabase.from('produits').update(produitToDb(p, userId) as any).eq('id', p.id).then());
+        if (added.length) {
+          supabase.from('produits')
+            .upsert(added.map(p => produitToDb(p, userId)) as any, { onConflict: 'id' })
+            .then(signaler('ajout'));
         }
-        if (removed.length) supabase.from('produits').delete().in('id', removed.map(p => p.id)).then();
+        if (updated.length) {
+          updated.forEach(p => supabase.from('produits')
+            .update(produitToDb(p, userId) as any)
+            .eq('id', p.id)
+            .then(signaler('modification')));
+        }
+        if (removed.length) {
+          supabase.from('produits').delete().in('id', removed.map(p => p.id))
+            .then(signaler('suppression'));
+        }
       }
       return next;
     });

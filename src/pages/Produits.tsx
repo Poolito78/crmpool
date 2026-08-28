@@ -25,6 +25,7 @@ import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCatalogueServeur, COLONNES_BASE, COLONNES_TEXTE } from '@/hooks/useCatalogueServeur';
 import { getRalInfo } from '@/lib/ralColors';
+import { InputNombre } from '@/components/InputNombre';
 
 const COLUMNS = [
   { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
@@ -190,14 +191,20 @@ export default function Produits() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editing?.id]);
 
+  /* L'article en cours d'édition, lisible sans repasser par un `setState`.
+     L'enregistrement se déclenchait depuis L'INTÉRIEUR d'un `setEditing` :
+     une fonction de mise à jour d'état doit être pure, et React se réserve
+     le droit de la rejouer — ou de l'abandonner. L'écriture partait donc
+     deux fois, ou pas du tout, sans que rien ne le dise. */
+  const editingRef = useRef<Produit | null>(null);
+  editingRef.current = editing;
+
   const majProduitEdite = useCallback((f: (p: Produit) => Produit) => {
-    setEditing(cur => {
-      if (!cur) return cur;
-      updateProduits(prev => prev.some(x => x.id === cur.id)
-        ? prev.map(x => (x.id === cur.id ? f(x) : x))
-        : [...prev, f(cur)]);
-      return cur;
-    });
+    const cur = editingRef.current;
+    if (!cur) return;
+    updateProduits(prev => prev.some(x => x.id === cur.id)
+      ? prev.map(x => (x.id === cur.id ? f(x) : x))
+      : [...prev, f(cur)]);
   }, [updateProduits]);
   const [form, setForm] = useState(emptyProduit);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -1645,14 +1652,14 @@ export default function Produits() {
                   <div>
                     <Label className="text-xs font-semibold">% Achat (coût fournisseur)</Label>
                     <div className="flex items-center gap-1">
-                      <Input type="number" step="0.1" value={form.prixAchat} onChange={e => setForm(p => ({ ...p, prixAchat: parseFloat(e.target.value) || 0 }))} className="font-semibold" />
+                      <InputNombre decimales={2} value={form.prixAchat} onChange={v => setForm(p => ({ ...p, prixAchat: v }))} className="font-semibold" />
                       <span className="text-sm text-muted-foreground">%</span>
                     </div>
                   </div>
                   <div>
                     <Label className="text-xs font-semibold">% Vente (facturé client)</Label>
                     <div className="flex items-center gap-1">
-                      <Input type="number" step="0.1" value={form.prixRevendeur} onChange={e => setForm(p => ({ ...p, prixRevendeur: parseFloat(e.target.value) || 0 }))} className="font-semibold" />
+                      <InputNombre decimales={2} value={form.prixRevendeur} onChange={v => setForm(p => ({ ...p, prixRevendeur: v }))} className="font-semibold" />
                       <span className="text-sm text-muted-foreground">%</span>
                     </div>
                   </div>
@@ -1683,7 +1690,7 @@ export default function Produits() {
                   <Label className="text-xs">Prix Achat *{composants.length > 0 && <span className="ml-1 text-primary font-normal">(calculé)</span>}</Label>
                   {composants.length > 0
                     ? <Input value={formatMontant(form.prixAchat)} readOnly className="bg-muted font-semibold" />
-                    : <Input type="number" step="0.01" value={form.prixAchat} onChange={e => updateFormPrix({ prixAchat: parseFloat(e.target.value) || 0 })} />
+                    : <InputNombre decimales={2} value={form.prixAchat} onChange={v => updateFormPrix({ prixAchat: v })} />
                   }
                   {/* Depuis quand ce prix est-il celui-là. C'est aussi ce qui
                       décide, à la synchronisation Odoo, lequel des deux prix
@@ -1698,12 +1705,12 @@ export default function Produits() {
                 {canAchat && (
                 <div>
                   <Label className="text-xs">Coefficient</Label>
-                  <Input type="number" step="0.01" value={form.coefficient} onChange={e => updateFormPrix({ coefficient: parseFloat(e.target.value) || 1 })} />
+                  <InputNombre decimales={4} value={form.coefficient} onChange={v => updateFormPrix({ coefficient: v || 1 })} />
                 </div>
                 )}
                 <div>
                   <Label className="text-xs">Prix Revendeur HT</Label>
-                  <Input type="number" step="0.01" value={form.prixRevendeur} onChange={e => updateFormPrixRevendeur(parseFloat(e.target.value) || 0)} className="font-semibold" />
+                  <InputNombre decimales={2} value={form.prixRevendeur} onChange={v => updateFormPrixRevendeur(v)} className="font-semibold" />
                 </div>
                 {canAchat && (
                 <div>
@@ -1727,7 +1734,7 @@ export default function Produits() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                       <div>
                         <Label className="text-xs">Remise revendeur %</Label>
-                        <Input type="number" step="1" value={form.remiseRevendeur} onChange={e => updateFormPrix({ remiseRevendeur: parseFloat(e.target.value) || 0 })} />
+                        <InputNombre decimales={2} value={form.remiseRevendeur} onChange={v => updateFormPrix({ remiseRevendeur: v })} />
                       </div>
                       {canAchat && (
                       <div>
@@ -2000,10 +2007,10 @@ export default function Produits() {
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div><Label>TVA %</Label><Input type="number" value={form.tva} onChange={e => setForm(p => ({ ...p, tva: parseFloat(e.target.value) || 20 }))} /></div>
+              <div><Label>TVA %</Label><InputNombre decimales={2} value={form.tva} onChange={v => setForm(p => ({ ...p, tva: v }))} /></div>
               <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
-              <div><Label>Poids (kg)</Label><Input type="number" step="0.01" value={form.poids || ''} onChange={e => setForm(p => ({ ...p, poids: parseFloat(e.target.value) || 0 }))} /></div>
-              <div><Label>Conso. (kg/m²)</Label><Input type="number" step="0.01" value={form.consommation || ''} onChange={e => setForm(p => ({ ...p, consommation: parseFloat(e.target.value) || 0 }))} placeholder="Ex: 1.5" /></div>
+              <div><Label>Poids (kg)</Label><InputNombre decimales={3} value={form.poids} onChange={v => setForm(p => ({ ...p, poids: v }))} /></div>
+              <div><Label>Conso. (kg/m²)</Label><InputNombre decimales={3} value={form.consommation} onChange={v => setForm(p => ({ ...p, consommation: v }))} placeholder="Ex: 1,5" /></div>
             </div>
             {form.poids > 0 && (() => {
               const paKg = form.prixAchat / form.poids;
@@ -2707,7 +2714,7 @@ export default function Produits() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>Stock total</Label>
-                    <Input type="number" value={form.stock} onChange={e => setForm(p => ({ ...p, stock: parseInt(e.target.value) || 0 }))} />
+                    <InputNombre decimales={0} value={form.stock} onChange={v => setForm(p => ({ ...p, stock: v }))} />
                     {/* Le stock d'Odoo est montré A COTE, jamais fondu dans le
                         precedent : l'un est ce que MonCRM tient, l'autre ce que
                         l'ERP constate, et l'ecart est justement l'information. */}
@@ -2721,7 +2728,7 @@ export default function Produits() {
                       </p>
                     )}
                   </div>
-                  <div><Label>Stock minimum</Label><Input type="number" value={form.stockMin} onChange={e => setForm(p => ({ ...p, stockMin: parseInt(e.target.value) || 0 }))} /></div>
+                  <div><Label>Stock minimum</Label><InputNombre decimales={0} value={form.stockMin} onChange={v => setForm(p => ({ ...p, stockMin: v }))} /></div>
                 </div>
 
                 {/* Disponible à la vente */}
