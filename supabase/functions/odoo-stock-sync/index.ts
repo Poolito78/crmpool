@@ -193,6 +193,18 @@ serve(async (req) => {
         stock_odoo_maj: maintenant,
       };
 
+      /* EN MODE CIBLÉ, ON NE TOUCHE QU'AU STOCK.
+       *
+       * Ce mode se déclenche à l'ouverture d'une fiche article — c'est-à-dire
+       * précisément au moment où quelqu'un s'apprête à en modifier le prix.
+       * Y écrire des tarifs, fût-ce seulement leur date, revenait à publier
+       * une version complète de la ligne pendant la saisie. Le tour de nuit,
+       * lui, garde la reprise des prix : personne n'a la fiche sous les yeux. */
+      if (demandees.length) {
+        aEcrire.push({ id: p.id, maj });
+        continue;
+      }
+
       /* Le plus récent l'emporte — jamais Odoo par principe. */
       const brut = String(a.write_date || "").replace(" ", "T") + "Z";
       const dateOdoo = a.write_date ? new Date(brut) : null;

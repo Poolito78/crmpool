@@ -375,21 +375,28 @@ export default function Produits() {
         composants: p.composants, // toujours préserver explicitement
       };
     });
-    if (needsUpdate) {
-      setTimeout(() => updateProduits(prev => prev.map(p => {
-        const safeP = safe.find(s => s.id === p.id);
-        if (!safeP) return p;
-        return {
-          ...p, // préserve composants et tous les champs depuis l'état actuel
-          prixAchat: safeP.prixAchat,
-          coefficient: safeP.coefficient,
-          coeffRevendeur: safeP.coeffRevendeur,
-          remiseRevendeur: safeP.remiseRevendeur,
-          prixRevendeur: safeP.prixRevendeur,
-          prixHT: safeP.prixHT,
-        };
-      })), 0);
-    }
+    /* CE RATTRAPAGE N'ÉCRIT PLUS EN BASE. C'est lui qui effaçait les prix.
+     *
+     * Il recalculait les tarifs de tout le catalogue, puis les RÉÉCRIVAIT —
+     * en piochant dans `safe`, c'est-à-dire dans l'instantané pris AVANT la
+     * saisie. Un prix d'achat tapé à la main était donc remplacé, quelques
+     * secondes plus tard, par la valeur d'avant : 170,99 redevenait 0, et la
+     * date de mise à jour du tarif enregistrait fidèlement l'effacement.
+     * Rien ne le signalait, puisque l'écriture réussissait.
+     *
+     * Le déclencheur pouvait être n'importe quel changement du catalogue,
+     * y compris la relecture du stock Odoo à l'ouverture de la fiche — d'où
+     * l'apparition du défaut au moment où cette relecture a été ajoutée.
+     *
+     * Le calcul reste, car l'affichage en a besoin : coefficient déduit du
+     * couple achat/revendeur, remise revendeur à 30 %, prix d'achat des
+     * articles composés. Simplement, il ne s'impose plus à la base. Une
+     * correction de données se décide et se date ; elle ne se glisse pas
+     * dans un rendu, avec un instantané périmé sous le bras.
+     *
+     * (`needsUpdate` reste calculé plus haut : il ne sert plus qu'à dire que
+     * l'affichage diffère du stocké, ce qui est justement le cas normal.) */
+    void needsUpdate;
     return safe;
   }, [produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
