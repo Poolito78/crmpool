@@ -21,8 +21,10 @@
  * de prix ici. Un prix corrigé à la main hier n'est pas effacé par une fiche
  * inchangée depuis un an.
  *
- * Entrée  : { limite?: number }   (défaut 400, plafond 1000)
- * Sortie  : { traites, majPrix, restants, introuvables }
+ * Entrée  : { limite?: number }        tranche, défaut 400, plafond 1000
+ *           { references?: string[] }  mode ciblé (fiche ouverte, devis saisi)
+ *           { chainer?: boolean }      false pour empêcher la relance auto
+ * Sortie  : { traites, majPrix, restants, introuvables, tour }
  *
  * Secrets : ODOO_URL, ODOO_DB, ODOO_LOGIN, ODOO_APIKEY.
  * SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY sont fournis par la plateforme.
@@ -111,6 +113,21 @@ serve(async (req) => {
       ? entree.references.map((r: unknown) => String(r || "").trim()).filter(Boolean).slice(0, 60)
       : [];
 
+    /* Le tour du catalogue se poursuit TOUT SEUL.
+     *
+     * Une tranche de 400 articles ne fait pas le tour d'un catalogue de
+     * 22 637 références : il en faut cinquante-sept. Tant que la suite
+     * dépendait d'un clic, les colonnes restaient vides — c'est exactement
+     * ce qui s'est passé. La fonction se rappelle donc elle-même à la fin
+     * de chaque tranche, tant qu'il reste des articles à lire.
+     *
+     * Le compteur `tour` est la ceinture de sécurité : il plafonne la
+     * chaîne, de sorte qu'une anomalie ne puisse pas la faire tourner sans
+     * fin. Et on ne se rappelle que si la tranche a effectivement avancé. */
+    const chainer = entree?.chainer !== false && !Array.isArray(entree?.references);
+    const tour = Math.max(0, Number(entree?.tour) || 0);
+    const TOURS_MAX = 70;
+
     const sb = createClient(
       Deno.env.get("SUPABASE_URL") || "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "",
@@ -153,6 +170,11 @@ serve(async (req) => {
     const maintenant = new Date().toISOString();
     let traites = 0, majPrix = 0, introuvables = 0;
 
+    /* Les écritures partent par paquets plutôt qu'une par une.
+       Quatre cents allers-retours en file indienne prenaient l'essentiel du
+       temps de la fonction — bien plus que la lecture d'Odoo elle-même. */
+    const aEcrire: { id: string; maj: Record<string, unknown> }[] = [];
+
     for (const p of lot as any[]) {
       const code = String(p.reference_odoo || p.reference || "").trim().toUpperCase();
       const a = code ? parCode.get(code) : null;
@@ -161,7 +183,7 @@ serve(async (req) => {
         /* On date quand même la tentative : sans cela, un article absent
            d'Odoo remonterait en tête à chaque appel et bloquerait le tour du
            catalogue sur les mêmes lignes. */
-        await sb.from("produits").update({ stock_odoo_maj: maintenant }).eq("id", p.id);
+        aEcrire.push({ id: p.id, maj: { stock_odoo_maj: maintenant } });
         continue;
       }
 
@@ -211,8 +233,16 @@ serve(async (req) => {
         maj.prix_achat_maj = achat > 0 ? horodate : maintenant;
       }
 
-      const { error } = await sb.from("produits").update(maj).eq("id", p.id);
-      if (!error) traites++;
+      aEcrire.push({ id: p.id, maj });
+    }
+
+    for (let i = 0; i < aEcrire.length; i += 25) {
+      const paquet = aEcrire.slice(i, i + 25);
+      const rendus = await Promise.all(paquet.map(e =>
+        sb.from("produits").update(e.maj).eq("id", e.id)));
+      for (let k = 0; k < rendus.length; k++) {
+        if (!rendus[k].error && "stock_odoo" in paquet[k].maj) traites++;
+      }
     }
 
     /* En mode ciblé il n'y a rien « à finir » : on rend les valeurs lues,
@@ -239,9 +269,27 @@ serve(async (req) => {
       .select("id", { count: "exact", head: true })
       .or(`stock_odoo_maj.is.null,stock_odoo_maj.lt.${maintenant}`);
 
+    const restants = Math.max(0, (count || 0));
+
+    /* On passe le relais à la tranche suivante sans l'attendre : la réponse
+       part tout de suite, et le tour se poursuit de lui-même. */
+    if (chainer && restants > 0 && (traites + introuvables) > 0 && tour < TOURS_MAX) {
+      const suite = fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/odoo-stock-sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || ""}`,
+        },
+        body: JSON.stringify({ limite, chainer: true, tour: tour + 1 }),
+      }).catch(() => {});
+      // deno-lint-ignore no-explicit-any
+      const rt = (globalThis as any).EdgeRuntime;
+      if (rt?.waitUntil) rt.waitUntil(suite);
+    }
+
     return json({
-      traites, majPrix, introuvables,
-      restants: Math.max(0, (count || 0)),
+      traites, majPrix, introuvables, tour,
+      restants,
       secondes: Math.round((Date.now() - debut) / 100) / 10,
     });
   } catch (e) {
