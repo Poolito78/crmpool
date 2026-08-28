@@ -30,11 +30,17 @@ function afficher(v: number | undefined | null, decimales: number): string {
   return String(Math.round(v * f) / f).replace('.', ',');
 }
 
-/** Ce qu'on comprend : virgule ou point, espaces tolérés. */
+/** Ce qu'on comprend : virgule ou point, espaces tolérés.
+ *
+ * Un champ VIDE ne vaut pas zéro. Effacer avant de retaper est le geste le
+ * plus banal du monde ; le comprendre comme « mets 0 » enregistrait un prix
+ * nul en cours de frappe, et faisait tomber au passage le prix revendeur qui
+ * s'en déduit. On ne remonte donc rien tant qu'il n'y a rien à lire — pour
+ * poser un zéro, on tape zéro. */
 function lire(t: string): number | null {
   const net = t.replace(/\s/g, '').replace(',', '.');
-  if (net === '') return 0;
-  if (!/^-?\d*\.?\d*$/.test(net) || net === '.' || net === '-') return null;
+  if (net === '' || net === '.' || net === '-') return null;
+  if (!/^-?\d*\.?\d*$/.test(net)) return null;
   const n = Number(net);
   return Number.isFinite(n) ? n : null;
 }
