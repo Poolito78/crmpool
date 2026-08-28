@@ -66,6 +66,15 @@ const ChampRecherche = memo(function ChampRecherche(
   );
 });
 
+/** Date et heure d'une mise à jour de tarif. Le jour seul ne suffit pas :
+ *  un prix corrigé deux fois dans la journée mérite qu'on les distingue. */
+function dateHeure(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+}
+
 const COLUMNS = [
   { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
   { key: 'description',  label: 'Description',      align: 'left'  as const },
@@ -1762,7 +1771,21 @@ export default function Produits() {
             {/* Tarif — revendeur par défaut, public en option */}
             {form.categorie !== 'surcharge' && <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-semibold text-foreground">Tarif</p>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Tarif</p>
+                  {/* LES DEUX DATES, TOUJOURS VISIBLES.
+                      Celle de la vente ne s'affichait que dans le bloc
+                      « tarif public », replié par défaut : en pratique,
+                      personne ne la voyait. Or ce sont ces dates qui
+                      arbitrent face à Odoo — « le plus récent l'emporte ». */}
+                  {(form.prixAchatMaj || form.prixVenteMaj) && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-tight">
+                      {canAchat && form.prixAchatMaj && <>Achat maj. le <strong className="font-medium">{dateHeure(form.prixAchatMaj)}</strong></>}
+                      {canAchat && form.prixAchatMaj && form.prixVenteMaj && <span className="mx-1.5">·</span>}
+                      {form.prixVenteMaj && <>Vente maj. le <strong className="font-medium">{dateHeure(form.prixVenteMaj)}</strong></>}
+                    </p>
+                  )}
+                </div>
                 <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
                   <input
                     type="checkbox"
@@ -1788,7 +1811,7 @@ export default function Produits() {
                       est le plus récent — donc lequel l'emporte. */}
                   {form.prixAchatMaj && (
                     <p className="text-[10px] text-muted-foreground mt-0.5">
-                      maj {formatDate(form.prixAchatMaj)}
+                      maj {dateHeure(form.prixAchatMaj)}
                     </p>
                   )}
                 </div>
@@ -1838,7 +1861,7 @@ export default function Produits() {
                         <Input value={formatMontant(form.prixHT)} readOnly className="bg-muted font-semibold" />
                         {form.prixVenteMaj && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            maj {formatDate(form.prixVenteMaj)}
+                            maj {dateHeure(form.prixVenteMaj)}
                           </p>
                         )}
                       </div>
