@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback, Fragment, cloneElement, type ReactElement } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback, memo, Fragment, cloneElement, type ReactElement } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
@@ -26,6 +26,45 @@ import { exportToExcel } from '@/lib/exportExcel';
 import { useCatalogueServeur, COLONNES_BASE, COLONNES_TEXTE } from '@/hooks/useCatalogueServeur';
 import { getRalInfo } from '@/lib/ralColors';
 import { InputNombre } from '@/components/InputNombre';
+
+/**
+ * Le champ de recherche, isolé du reste de l'écran.
+ *
+ * Il tenait sa valeur dans l'état de la PAGE. Chaque lettre frappée
+ * redessinait donc l'écran Produits en entier — en-têtes, filtres, tableau,
+ * pagination — avant que la lettre elle-même n'apparaisse. Sur un catalogue
+ * de vingt-deux mille articles, cela se voit : on tape plus vite que
+ * l'affichage.
+ *
+ * Ici, la frappe ne touche que ce champ : la lettre s'affiche tout de suite.
+ * La page n'est prévenue qu'après un silence au clavier, et ne se redessine
+ * donc qu'une fois la saisie posée, au lieu d'une fois par touche.
+ */
+const ChampRecherche = memo(function ChampRecherche(
+  { valeurInitiale, onValider, className, placeholder }: {
+    valeurInitiale: string;
+    onValider: (v: string) => void;
+    className?: string;
+    placeholder?: string;
+  },
+) {
+  const [texte, setTexte] = useState(valeurInitiale);
+  const minuteur = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(minuteur.current), []);
+  return (
+    <Input
+      placeholder={placeholder}
+      value={texte}
+      className={className}
+      onChange={e => {
+        const v = e.target.value;
+        setTexte(v);
+        clearTimeout(minuteur.current);
+        minuteur.current = setTimeout(() => onValider(v), 180);
+      }}
+    />
+  );
+});
 
 const COLUMNS = [
   { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
@@ -87,6 +126,9 @@ export default function Produits() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [search, setSearch] = useState(() => searchParams.get('search') || '');
+  /* Stable : sans quoi le champ de recherche se reconstruirait à chaque
+     rendu de la page, et perdrait le bénéfice de son isolement. */
+  const validerRecherche = useCallback((v: string) => setSearch(v), []);
   const [columnFilters, setColumnFilters] = useState<Record<string, string>>({});
   const [openFilterCols, setOpenFilterCols] = useState<Set<ColKey>>(new Set());
   const [visibleCols, setVisibleCols] = useState<Set<ColKey>>(() => {
@@ -1194,7 +1236,7 @@ export default function Produits() {
       <PageHeaderSlot>
         <div className="relative w-32 sm:w-48 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
+          <ChampRecherche placeholder="Rechercher..." valeurInitiale={search} onValider={validerRecherche} className="pl-9 h-9" />
         </div>
         <div className="ml-auto flex flex-nowrap gap-1.5 items-center shrink-0">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} className="hidden" />

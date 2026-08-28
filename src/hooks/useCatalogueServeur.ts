@@ -89,8 +89,12 @@ function mots(v: string): string[] {
   return (utiles.length ? utiles : tous).slice(0, 5);
 }
 
-/** Attente avant d'interroger la base, en millisecondes. */
-const DELAI_FRAPPE = 250;
+/** Attente avant d'interroger la base, en millisecondes.
+ *
+ * Le champ de recherche attend déjà un court silence avant de prévenir la
+ * page ; inutile d'attendre deux fois autant ici. Ce délai sert surtout aux
+ * filtres de colonne, qui, eux, remontent chaque frappe. */
+const DELAI_FRAPPE = 120;
 
 export function useCatalogueServeur(o: OptionsCatalogue) {
   const [lignes, setLignes] = useState<Produit[]>([]);
