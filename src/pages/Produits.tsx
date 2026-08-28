@@ -854,8 +854,20 @@ export default function Produits() {
     const achatsToSave = achatsManuel.filter(a => a.date && a.prix > 0 && a.quantite > 0).map(a => ({ ...a, source: 'manuel' as const }));
     const achatsToSaveOrNull = achatsToSave.length > 0 ? achatsToSave : null;
     if (editing) {
-      const updatedProd = { ...editing, ...form, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
-      majProduitEdite(() => updatedProd);
+      /* Les dates de tarif ne repartent PAS du formulaire.
+       *
+       * Elles y ont été chargées à l'ouverture de la fiche et n'y bougent
+       * plus. Les réécrire telles quelles revenait à reposer l'ancienne date
+       * par-dessus celle que l'enregistrement venait de poser : un prix
+       * corrigé à la main gardait la date d'avant. Ce n'est pas cosmétique —
+       * c'est cette date qui arbitre face à Odoo, « le plus récent
+       * l'emporte ». Une date périmée fait perdre le prix saisi.
+       *
+       * On laisse donc `dater()` seul juge, en partant du produit tel qu'il
+       * est en base plutôt que du formulaire. */
+      const { prixAchatMaj: _pam, prixVenteMaj: _pvm, ...formSansDates } = form;
+      const complements = { composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
+      majProduitEdite(p => ({ ...p, ...formSansDates, ...complements }));
       // Écriture directe Supabase pour garantir la persistance
       supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
@@ -898,7 +910,10 @@ export default function Produits() {
     autoSaveProdRef.current = setTimeout(() => {
       if (form.reference.trim() && form.description.trim()) {
         const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-        majProduitEdite(p => ({ ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined }));
+        // Même raison qu'à l'enregistrement : les dates de tarif sont posées
+        // par `dater()`, pas recopiées depuis le formulaire.
+        const { prixAchatMaj: _pam, prixVenteMaj: _pvm, ...formSansDates } = form;
+        majProduitEdite(p => ({ ...p, ...formSansDates, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined }));
       }
     }, 500);
     return () => clearTimeout(autoSaveProdRef.current);
