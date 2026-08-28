@@ -488,10 +488,33 @@ export default function Produits() {
     return map;
   }, [produits, pmpParProduit]);
 
+  /* Mode « base de données », comme Odoo : la recherche, le tri et la
+     pagination sont faits par Supabase, qui ne renvoie que 50 lignes.
+     On y renonce dès qu'un filtre ou un tri porte sur une colonne que la base
+     ne connaît pas — quantité vendue, valeur de stock, fournisseur, ou un
+     montant, PostgREST ne sachant pas chercher dans un nombre. Dans ce cas on
+     retombe sur la liste en mémoire, exacte mais plus lente.
+
+     Ce calcul est ici, AVANT le filtrage mémoire, et non plus après : le
+     filtrage a besoin de savoir s'il sert à quelque chose. */
+  const filtresActifs = Object.entries(columnFilters).filter(([, v]) => v);
+  const filtreHorsBase = filtresActifs.some(([k]) => !COLONNES_TEXTE[k]);
+  const triHorsBase = !!sortCol && !COLONNES_BASE[sortCol];
+  const modeServeur = !filtreHorsBase && !triHorsBase;
+
   /* Mémorisé : sans cela le filtrage repassait sur les 22 634 articles à
      chaque rendu — donc à chaque frappe dans la recherche, à chaque case
-     cochée, à chaque changement de page. */
-  const filtered = useMemo(() => safeProduits.filter(p => {
+     cochée, à chaque changement de page.
+
+     ET SURTOUT : on ne filtre plus DU TOUT quand c'est la base qui cherche.
+     Le résultat était calculé puis jeté — vingt-deux mille articles passés
+     au crible, trois `toLowerCase()` chacun, soit près de soixante-dix mille
+     chaînes créées puis abandonnées À CHAQUE TOUCHE FRAPPÉE. Le fil
+     d'exécution était pris pendant ce temps : la frappe accrochait, et la
+     réponse de la base — arrivée en quelques dizaines de millisecondes —
+     attendait son tour pour s'afficher. D'où « le temps de recherche est
+     trop long » alors que la base, elle, répondait tout de suite. */
+  const filtered = useMemo(() => modeServeur ? [] : safeProduits.filter(p => {
     // Global search
     if (search) {
       const q = search.toLowerCase();
@@ -528,7 +551,7 @@ export default function Produits() {
       }
     }
     return true;
-  }), [safeProduits, search, columnFilters, produitFournisseurs, fournisseurs,
+  }), [modeServeur, safeProduits, search, columnFilters, produitFournisseurs, fournisseurs,
        qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
 
   const sortedFiltered = useMemo(() => {
@@ -567,17 +590,6 @@ export default function Produits() {
      totalité : on pagine l'affichage, pas la recherche. */
   const PAR_PAGE = 50;
   const [page, setPage] = useState(1);
-
-  /* Mode « base de données », comme Odoo : la recherche, le tri et la
-     pagination sont faits par Supabase, qui ne renvoie que 50 lignes.
-     On y renonce dès qu'un filtre ou un tri porte sur une colonne que la base
-     ne connaît pas — quantité vendue, valeur de stock, fournisseur, ou un
-     montant, PostgREST ne sachant pas chercher dans un nombre. Dans ce cas on
-     retombe sur la liste en mémoire, exacte mais plus lente. */
-  const filtresActifs = Object.entries(columnFilters).filter(([, v]) => v);
-  const filtreHorsBase = filtresActifs.some(([k]) => !COLONNES_TEXTE[k]);
-  const triHorsBase = !!sortCol && !COLONNES_BASE[sortCol];
-  const modeServeur = !filtreHorsBase && !triHorsBase;
 
   /* Vue « modèles », comme Odoo : la liste de vente ne propose pas les
      déclinaisons. J11C2, J11C2DOUILLE80, J11C2SANSDOUILLE et J11C2DROUGE

@@ -71,6 +71,24 @@ function motif(v: string) {
   return v.replace(/[%,()]/g, ' ').trim();
 }
 
+/**
+ * Découpe la recherche en mots.
+ *
+ * « flowfast 107 » cherché tel quel ne trouve que les articles où les deux
+ * mots se suivent, dans cet ordre, séparés par une seule espace — donc pas
+ * FLOWFAST PRIMER 107.20, qui est pourtant l'article voulu. On cherche donc
+ * chaque mot séparément, et on ne garde que les articles qui les portent
+ * TOUS, où qu'ils soient : référence, description ou catégorie.
+ *
+ * Les mots d'une seule lettre sont écartés : ils figurent partout, ne
+ * rétrécissent rien, et l'index trigramme ne sait pas les exploiter.
+ */
+function mots(v: string): string[] {
+  const tous = motif(v).split(/\s+/).filter(Boolean);
+  const utiles = tous.filter(m => m.length >= 2);
+  return (utiles.length ? utiles : tous).slice(0, 5);
+}
+
 /** Attente avant d'interroger la base, en millisecondes. */
 const DELAI_FRAPPE = 250;
 
@@ -121,10 +139,12 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
         if (o.modeleCle) q = q.eq('modele_cle', o.modeleCle);
         else if (o.seulementModeles) q = q.eq('est_modele', true);
 
-        const r = motif(rechercheDifferee);
-        if (r) {
+        /* Un `or` par mot. PostgREST assemble les appels successifs avec ET :
+           chaque mot doit se trouver quelque part, mais pas forcément dans
+           le même champ ni dans l'ordre saisi. */
+        for (const m of mots(rechercheDifferee)) {
           q = q.or(
-            `reference.ilike.%${r}%,description.ilike.%${r}%,categorie.ilike.%${r}%`,
+            `reference.ilike.%${m}%,description.ilike.%${m}%,categorie.ilike.%${m}%`,
           );
         }
 
