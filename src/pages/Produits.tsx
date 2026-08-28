@@ -756,6 +756,10 @@ export default function Produits() {
     toast.success(`Produit dupliqué — réf. ${newRef}`);
   }
   function openEdit(p: Produit) {
+    /* Rouvrir la fiche déjà ouverte remettrait le formulaire à ce qu'il y a
+       en base, effaçant la saisie en cours. On ne recharge donc que si l'on
+       change d'article. */
+    if (dialogOpen && editingRef.current?.id === p.id) return;
     setEditing(p);
     const comps = p.composants || [];
     // Recalculate prixAchat from composants if composite (handles qty / poids / % modes)
@@ -882,7 +886,30 @@ export default function Produits() {
           unite: form.unite,
         } : l),
       })));
+      /* ON RELIT CE QU'ON VIENT D'ÉCRIRE.
+       *
+       * « Produit modifié » s'affichait quoi qu'il arrive. Tant que rien ne
+       * vérifiait, un prix pouvait repartir sans jamais arriver — c'est
+       * précisément ce qui s'est produit, et personne ne pouvait le savoir
+       * avant de recharger la page. On relit donc la ligne une seconde plus
+       * tard : si le prix en base n'est pas celui qu'on a envoyé, on le dit,
+       * en rouge, avec les deux valeurs. */
+      const idVerif = editing.id;
+      const achatVoulu = form.prixAchat;
       toast.success('Produit modifié');
+      setTimeout(() => {
+        supabase.from('produits').select('prix_achat').eq('id', idVerif).maybeSingle()
+          .then(({ data, error }) => {
+            if (error || !data) return;
+            const enBase = Number((data as { prix_achat: number }).prix_achat) || 0;
+            if (Math.abs(enBase - achatVoulu) >= 0.005) {
+              toast.error(
+                `Le prix d'achat n'a pas été retenu : ${formatMontant(achatVoulu)} envoyé, ${formatMontant(enBase)} en base.`,
+                { duration: 15000 },
+              );
+            }
+          });
+      }, 1200);
     } else {
       const newId = generateId();
       const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
@@ -902,22 +929,22 @@ export default function Produits() {
     }
   }
 
-  // Auto-save produit en temps réel
-  const autoSaveProdRef = useRef<ReturnType<typeof setTimeout>>();
-  useEffect(() => {
-    if (!editing || !dialogOpen) return;
-    clearTimeout(autoSaveProdRef.current);
-    autoSaveProdRef.current = setTimeout(() => {
-      if (form.reference.trim() && form.description.trim()) {
-        const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-        // Même raison qu'à l'enregistrement : les dates de tarif sont posées
-        // par `dater()`, pas recopiées depuis le formulaire.
-        const { prixAchatMaj: _pam, prixVenteMaj: _pvm, ...formSansDates } = form;
-        majProduitEdite(p => ({ ...p, ...formSansDates, composants: composantsValides.length > 0 ? composantsValides : undefined, typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined }));
-      }
-    }, 500);
-    return () => clearTimeout(autoSaveProdRef.current);
-  }, [form, composants, isTypeKit, lignesKit, editing, dialogOpen]);
+  /* PLUS D'ENREGISTREMENT AUTOMATIQUE.
+   *
+   * La fiche s'enregistrait toute seule, une demi-seconde après la dernière
+   * frappe, et à chaque fois que l'article changeait par ailleurs — la
+   * relecture du stock Odoo, par exemple, en déclenchait un. Ce n'est pas
+   * la fréquence qui posait problème, c'est ce qu'elle écrivait : l'état du
+   * formulaire à cet instant précis, quel qu'il soit. Un prix à moitié tapé,
+   * ou un formulaire que quelque chose venait de remettre à zéro, partait en
+   * base sans que personne n'ait rien demandé. Le journal l'a montré : une
+   * écriture juste, puis une écriture à zéro cinq cents millisecondes plus
+   * tard.
+   *
+   * Il y a un bouton « Modifier ». C'est lui qui enregistre, et lui seul.
+   * Ce qui est à l'écran au moment du clic est ce qui part en base — rien
+   * avant, rien après. Fermer sans cliquer n'écrit rien, ce qui est le
+   * comportement attendu de n'importe quelle fiche. */
 
   function remove(id: string) {
     confirmDelete(id);
