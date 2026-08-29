@@ -1825,6 +1825,15 @@ export default function Produits() {
                 <div>
                   <Label className="text-xs">Prix Revendeur HT</Label>
                   <InputNombre decimales={2} value={form.prixRevendeur} onChange={v => updateFormPrixRevendeur(v)} className="font-semibold" />
+                  {/* La contrepartie de la date d'achat, sous le champ de
+                      vente. Le prix revendeur et le prix public bougent
+                      ensemble — l'un se déduit de l'autre par la remise —
+                      donc une seule date de vente les couvre tous deux. */}
+                  {form.prixVenteMaj && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      maj {dateHeure(form.prixVenteMaj)}
+                    </p>
+                  )}
                 </div>
                 {canAchat && (
                 <div>
