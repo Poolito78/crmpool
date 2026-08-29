@@ -91,12 +91,14 @@ const COLUMNS = [
   { key: 'qteVendue',      label: 'Qté vendue',       align: 'right'  as const },
   { key: 'qteCommandeeF',  label: 'Qté cmd fourn.',   align: 'right'  as const },
   { key: 'valeurStock',    label: 'Valeur stock (PMP)', align: 'right'  as const },
+  { key: 'prixAchatMaj',   label: 'Date prix achat',  align: 'center' as const },
+  { key: 'prixVenteMaj',   label: 'Date prix vente',  align: 'center' as const },
   { key: 'stockOdoo',      label: 'Qté dispo Odoo',   align: 'right'  as const },
   { key: 'stockOdooPrevu', label: 'Prévisionnel Odoo', align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
 
 const emptyProduit = {
   reference: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -147,7 +149,7 @@ export default function Produits() {
         // Filtre uniquement les clés valides (supprime les anciennes clés obsolètes)
         const validKeys = new Set(COLUMNS.map(c => c.key));
         const saved = new Set((JSON.parse(s) as ColKey[]).filter(k => validKeys.has(k)));
-        if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); saved.add('stockOdoo'); saved.add('stockOdooPrevu'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
+        if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); saved.add('stockOdoo'); saved.add('stockOdooPrevu'); saved.add('prixAchatMaj'); saved.add('prixVenteMaj'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
       }
     } catch {}
     return new Set(DEFAULT_VISIBLE_COLS);
@@ -607,6 +609,10 @@ export default function Produits() {
         case 'consommation': if (isNonVide ? !p.consommation : !String(p.consommation || 0).includes(v)) return false; break;
         case 'tva':          if (isNonVide ? p.tva === 0 : !String(p.tva).includes(v)) return false; break;
         case 'stock':        if (isNonVide ? p.stock === 0 : !String(p.stock).includes(v)) return false; break;
+        /* On filtre sur la date telle qu'elle s'affiche : taper « 28/08 »
+           doit retrouver les articles retarifés ce jour-là. */
+        case 'prixAchatMaj': if (isNonVide ? !p.prixAchatMaj : !formatDate(p.prixAchatMaj || '').includes(v)) return false; break;
+        case 'prixVenteMaj': if (isNonVide ? !p.prixVenteMaj : !formatDate(p.prixVenteMaj || '').includes(v)) return false; break;
         case 'stockOdoo':    if (isNonVide ? !(p.stockOdoo ?? null) : !String(p.stockOdoo ?? '').includes(v)) return false; break;
         case 'stockOdooPrevu': if (isNonVide ? !(p.stockOdooPrevu ?? null) : !String(p.stockOdooPrevu ?? '').includes(v)) return false; break;
         case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
@@ -636,6 +642,8 @@ export default function Produits() {
         case 'consommation': av = a.consommation || 0; bv = b.consommation || 0; break;
         case 'tva':          av = a.tva; bv = b.tva; break;
         case 'stock':           av = a.stock; bv = b.stock; break;
+        case 'prixAchatMaj':    av = a.prixAchatMaj ? new Date(a.prixAchatMaj).getTime() : 0; bv = b.prixAchatMaj ? new Date(b.prixAchatMaj).getTime() : 0; break;
+        case 'prixVenteMaj':    av = a.prixVenteMaj ? new Date(a.prixVenteMaj).getTime() : 0; bv = b.prixVenteMaj ? new Date(b.prixVenteMaj).getTime() : 0; break;
         case 'stockOdoo':       av = a.stockOdoo ?? -1; bv = b.stockOdoo ?? -1; break;
         case 'stockOdooPrevu':  av = a.stockOdooPrevu ?? -1; bv = b.stockOdooPrevu ?? -1; break;
         case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
@@ -1467,6 +1475,23 @@ export default function Produits() {
                           <span className="block text-xs text-muted-foreground font-normal">{prioFournName ? `⭐ ${prioFournName}` : `${pfs.length} fourn.`}</span>
                         ) : null}
                       </td>;
+                    }
+                    /* La date, et l'heure en dessous : deux corrections dans
+                       la même journée ne se distinguent pas autrement. */
+                    case 'prixAchatMaj':
+                    case 'prixVenteMaj': {
+                      const iso = key === 'prixAchatMaj' ? p.prixAchatMaj : p.prixVenteMaj;
+                      if (!iso) return <td className="px-2 py-2.5 text-center text-muted-foreground">—</td>;
+                      const d = new Date(iso);
+                      if (isNaN(d.getTime())) return <td className="px-2 py-2.5 text-center text-muted-foreground">—</td>;
+                      return (
+                        <td className="px-2 py-2.5 text-center whitespace-nowrap">
+                          {d.toLocaleDateString('fr-FR')}
+                          <span className="block text-[11px] text-muted-foreground leading-tight font-normal">
+                            {d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </td>
+                      );
                     }
                     /* Le chiffre d'Odoo, et la date à laquelle il a été lu.
                        Un stock sans date ne veut rien dire : celui-ci peut
