@@ -404,6 +404,15 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      Ces trois états portent ce que l'utilisateur peut corriger : la variante
      quand l'épaisseur ne suffit pas à trancher, la surface, et les composants
      facultatifs — un primaire au choix, une finition en option. */
+  /* LE LIBELLÉ DE LA DEMANDE, CORRIGÉ À LA MAIN.
+   *
+   * « système Flowshield confort 100 m² » : une lettre de trop et le système
+   * n'est pas reconnu ; une épaisseur oubliée et la variante reste à choisir.
+   * Le texte du client n'est pas toujours celui qu'il fallait écrire, et
+   * refaire l'analyse pour un mot est cher. On le rend donc modifiable, et
+   * tout ce qui en dépend suit : reconnaissance du système, rapprochement
+   * d'article, recherche Odoo, et le libellé porté au devis. */
+  const [libelleManuel, setLibelleManuel] = useState<Record<number, string>>({});
   /** Identifiant de la variante retenue à la main. Clé : indice de ligne. */
   const [varianteSysteme, setVarianteSysteme] = useState<Record<number, string>>({});
   /** Surface corrigée à la main, en m². Clé : indice de ligne. */
@@ -572,6 +581,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({});
+    setLibelleManuel({});
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
@@ -906,16 +916,30 @@ const [contratOdoo, setContratOdoo] = useState<
    * panneau, à 0,70 €, multiplié par 30. Une résine se chiffre par ses
    * composants, chacun avec son dosage au m² et son conditionnement.
    */
+  /**
+   * Le texte d'une ligne demandée : celui que l'utilisateur a corrigé, sinon
+   * celui du document.
+   *
+   * Un seul point de vérité — la détection, le rapprochement d'article et la
+   * recherche Odoo doivent lire la même chose, faute de quoi on corrigerait
+   * un libellé sans que le chiffrage bouge.
+   */
+  const texteDemande = useCallback((
+    l: { reference?: string; description?: string },
+    i: number,
+  ) => libelleManuel[i]
+    ?? [l.reference, l.description].filter(Boolean).join(' ').trim(),
+  [libelleManuel]);
+
   const systemesDetectes = useMemo(() => {
     const m = new Map<number, RapprochementSysteme>();
     if (!systemes.length) return m;
     (result?.lignes || []).forEach((l, i) => {
-      const texte = [l.reference, l.description].filter(Boolean).join(' ').trim();
-      const r = rapprocherSysteme(texte, systemes);
+      const r = rapprocherSysteme(texteDemande(l, i), systemes);
       if (r) m.set(i, r);
     });
     return m;
-  }, [result, systemes]);
+  }, [result, systemes, texteDemande]);
 
   const rapprochements = useMemo(() => {
     const m = new Map<number, ReturnType<typeof rapprocherArticle>>();
@@ -923,11 +947,10 @@ const [contratOdoo, setContratOdoo] = useState<
       /* Une ligne système ne cherche pas d'article : la balayer contre les
          22 634 références ne produirait qu'un faux candidat à écarter. */
       if (systemesDetectes.has(i)) return;
-      const texte = [l.reference, l.description].filter(Boolean).join(' ').trim();
-      m.set(i, rapprocherArticle(texte, produits));
+      m.set(i, rapprocherArticle(texteDemande(l, i), produits));
     });
     return m;
-  }, [result, produits, systemesDetectes]);
+  }, [result, produits, systemesDetectes, texteDemande]);
 
   /** Variante retenue pour une ligne : le choix de l'utilisateur, sinon celle
       que l'épaisseur désigne. Rien tant que la variante reste à trancher. */
@@ -1042,7 +1065,7 @@ const [contratOdoo, setContratOdoo] = useState<
     l: { reference?: string; description?: string },
     i: number,
   ) => {
-    const brut = [l.reference, l.description].filter(Boolean).join(' ').trim();
+    const brut = texteDemande(l, i);
     const trouve = codeDansTexte(brut);
     /* La CLASSE part avec la demande même quand la ligne ne porte aucun code
        IISR reconnu.
@@ -1108,7 +1131,8 @@ const [contratOdoo, setContratOdoo] = useState<
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
     return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
-  }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo]);
+  }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo,
+      texteDemande]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
@@ -1871,7 +1895,10 @@ const [contratOdoo, setContratOdoo] = useState<
       return {
         id: generateId(),
         produitId: p?.id,
-        description: l.description || p?.description || '',
+        /* Le libellé corrigé à l'écran est celui qui part au devis : le
+           laisser de côté remettrait sous les yeux du client le texte qu'on
+           venait justement de rectifier. */
+        description: libelleManuel[i] || l.description || p?.description || '',
         quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
         prixUnitaireHT: prixDe(p, undefined, cle),
@@ -2824,7 +2851,40 @@ const [contratOdoo, setContratOdoo] = useState<
                                       : 'bg-muted text-muted-foreground'}`}>
                                       {sysRap ? 'système' : 'demandé'}
                                     </span>
-                                    <span className="font-medium">{l.description || l.reference}</span>
+                                    {/* LE LIBELLÉ SE CORRIGE SUR PLACE.
+                                        « Flowshield confort » sans épaisseur,
+                                        une référence mal lue : plutôt que de
+                                        relancer l'analyse pour un mot, on
+                                        rectifie ici et tout suit. Champ non
+                                        contrôlé, validé à la sortie ou par
+                                        Entrée — le rapprochement balaie 22 634
+                                        articles, il ne peut pas le faire à
+                                        chaque touche. */}
+                                    <input
+                                      key={`lib-${i}`}
+                                      defaultValue={texteDemande(l, i)}
+                                      onBlur={e => {
+                                        const v = e.target.value.trim();
+                                        const origine = [l.reference, l.description]
+                                          .filter(Boolean).join(' ').trim();
+                                        setLibelleManuel(pr => {
+                                          const n = { ...pr };
+                                          if (!v || v === origine) delete n[i]; else n[i] = v;
+                                          return n;
+                                        });
+                                      }}
+                                      onKeyDown={e => {
+                                        if (e.key === 'Enter') e.currentTarget.blur();
+                                        if (e.key === 'Escape') {
+                                          e.currentTarget.value = texteDemande(l, i);
+                                          e.currentTarget.blur();
+                                        }
+                                      }}
+                                      title="Corrigez le libellé si le système ou l'article n'est pas reconnu"
+                                      className="flex-1 min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5
+                                                 font-medium hover:border-border focus:border-primary focus:bg-background
+                                                 focus:outline-none"
+                                    />
                                     {/* Dire ce qui a été compris de la demande, et
                                         ce qui n'a pas été trouvé. Un « à choisir »
                                         explicite vaut mieux qu'un article retenu
@@ -3060,7 +3120,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       à donner le prix — et à savoir ce qui
                                       l'accompagne. */}
                                   {(() => {
-                                    const texte = [l.reference, l.description].filter(Boolean).join(' ');
+                                    const texte = texteDemande(l, i);
                                     const trouve = codeDansTexte(texte);
                                     if (!trouve) return null;
 

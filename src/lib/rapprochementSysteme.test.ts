@@ -108,6 +108,17 @@ describe('reconnaissance d’un système dans une demande', () => {
       .toBeNull();
   });
 
+  /* « Comfort » chez Flowcrete, « confort » chez ceux qui le vendent : une
+     lettre séparait la demande du système, et le rapprochement retombait sur
+     un kit de crochets à 0,70 €. */
+  it('tient « confort » et « comfort » pour la même chose', () => {
+    const fr = rapprocherSysteme('système Flowshield confort 100 m²', CATALOGUE)!;
+    expect(fr.nom).toBe('Flowshield Comfort');
+    expect(fr.surfaceM2).toBe(100);
+    expect(rapprocherSysteme('FLOWSHIELD CONFORT 3MM', CATALOGUE)!.retenu).toBe(COMFORT_3);
+    expect(rapprocherSysteme('peran confort 2,5mm', CATALOGUE)!.nom).toBe('Peran Comfort');
+  });
+
   it('ne reconnaît rien sans systèmes en base', () => {
     expect(rapprocherSysteme('Flowshield Comfort 3mm', [])).toBeNull();
     expect(rapprocherSysteme('', CATALOGUE)).toBeNull();

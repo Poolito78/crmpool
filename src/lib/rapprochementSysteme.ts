@@ -55,6 +55,11 @@ export function normaliser(texte: string): string {
     .toLowerCase()
     /* « m² » s'écrit aussi « m2 » : une seule forme à chercher ensuite. */
     .replace(/²/g, '2')
+    /* Flowcrete écrit ses gammes en anglais, ceux qui les vendent écrivent en
+       français : « Flowshield Comfort » se demande « flowshield confort », et
+       le système n'était pas reconnu pour une lettre. Les deux graphies sont
+       la même chose. */
+    .replace(/\bcomfort\b/g, 'confort')
     .replace(/(\d)\s*(mm|cm|m2)\b/g, '$1 $2')
     .replace(/[^a-z0-9,.]+/g, ' ')
     .trim();
