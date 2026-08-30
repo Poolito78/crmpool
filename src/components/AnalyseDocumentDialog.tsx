@@ -1712,6 +1712,34 @@ const [contratOdoo, setContratOdoo] = useState<
   const quantiteDe = useCallback((cle: string, defaut: number) =>
     quantiteManuelle[cle] ?? defaut, [quantiteManuelle]);
 
+  /**
+   * LE PRIX UNITAIRE D'UNE LIGNE DEMANDÉE — UN SEUL CALCUL.
+   *
+   * Il s'en faisait trois, qui ne disaient pas la même chose. Sur trente
+   * plots de route, la ligne affichait 6,95 € — le bordereau VILL'EQUIP lu
+   * chez Odoo — le TOTAL comptait 9,93 € — le tarif ISOMARK H2 de l'article
+   * local — et le devis partait avec 6,95 €. L'écran annonçait donc 297,90 €
+   * pour un devis de 208,50 €.
+   *
+   * L'article Odoo l'emporte quand il est retenu : c'est un choix explicite,
+   * et c'est déjà ce que fait la création du devis.
+   */
+  const puDeLigne = useCallback((i: number) => {
+    const cle = `d${i}`;
+    const odoo = choixOdoo[i];
+    if (odoo) return prixManuel[cle] ?? prixOdoo(odoo).retenu;
+    return prixDe(produitDeLigne(i), undefined, cle);
+  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne]);
+
+  /** Ce que pèse une ligne système : la somme de ses composants. */
+  const totalSystemeDe = useCallback((i: number, quantite?: number | null) =>
+    lignesSystemeDe(i, quantite).reduce((t, ls) => {
+      const p = ls.composant.produitId
+        ? produitParId(produits, ls.composant.produitId) : undefined;
+      return t + quantiteComposant(i, ls) * prixDe(p, undefined, `d${i}:${ls.composant.id}`);
+    }, 0),
+  [lignesSystemeDe, produits, quantiteComposant, prixDe]);
+
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerDevisNumero.trim()) { toast.error('Veuillez saisir un numéro de devis'); return; }
@@ -1886,7 +1914,10 @@ const [contratOdoo, setContratOdoo] = useState<
           description: odoo.designation || odoo.reference,
           quantite: quantiteDe(cle, l.quantite),
           unite: odoo.unite || 'u',
-          prixUnitaireHT: prixManuel[cle] ?? odoo.contrat ?? 0,
+          /* Le prix AFFICHÉ, remise de gamme comprise : `odoo.contrat` seul
+             ignorait le calcul applicateur et faisait partir au devis un prix
+             que l'écran n'avait jamais montré. */
+          prixUnitaireHT: puDeLigne(i),
           tva: l.tva ?? 20,
           remise: 0,
         };
@@ -1901,7 +1932,7 @@ const [contratOdoo, setContratOdoo] = useState<
         description: libelleManuel[i] || l.description || p?.description || '',
         quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
-        prixUnitaireHT: prixDe(p, undefined, cle),
+        prixUnitaireHT: puDeLigne(i),
         tva: l.tva ?? 20,
         remise: 0,
       };
@@ -3049,9 +3080,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       ? prixOdoo(odoo)
                                       : prixDetail(retenu);
                                     const qte = quantiteDe(cle, l.quantite || 1);
-                                    const pu = odoo
-                                      ? (prixManuel[cle] ?? d.retenu)
-                                      : prixDe(retenu, undefined, cle);
+                                    const pu = puDeLigne(i);
                                     return (
                                       <>
                                         <div className="flex items-center gap-1.5 text-[11px]">
@@ -3570,11 +3599,19 @@ const [contratOdoo, setContratOdoo] = useState<
                             )}
 
                             {(() => {
+                              /* LE TOTAL COMPTE CE QUI PARTIRA AU DEVIS.
+                               *
+                               * Il ne regardait que l'article LOCAL : une ligne
+                               * tarifée par Odoo était comptée au prix du
+                               * catalogue, et une ligne SYSTÈME — qui ne retient
+                               * aucun article — ne comptait pas du tout. Un
+                               * chantier de résine à 3 912 € s'affichait donc à
+                               * 0,00 €. */
                               const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
-                                const p = produitDeLigne(i);
-                                if (!p) return t;
+                                if (systemesDetectes.has(i)) return t + totalSystemeDe(i, l.quantite);
+                                if (!choixOdoo[i] && !produitDeLigne(i)) return t;
                                 const cle = `d${i}`;
-                                return t + prixDe(p, undefined, cle) * quantiteDe(cle, l.quantite || 1);
+                                return t + puDeLigne(i) * quantiteDe(cle, l.quantite || 1);
                               }, 0);
                               const totalAcc = accompagnements.reduce((t, a) => {
                                 const p = produits.find(x => x.id === a.produitId);
