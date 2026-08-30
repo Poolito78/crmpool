@@ -2066,7 +2066,7 @@ const [contratOdoo, setContratOdoo] = useState<
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[85vh] overflow-y-auto flex flex-col p-4 sm:p-5 [&>button]:z-20">
+        <DialogContent mobileFullscreen className="sm:max-w-3xl lg:max-w-5xl sm:max-h-[85vh] overflow-y-auto flex flex-col p-4 sm:p-5 [&>button]:z-20">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
@@ -2930,11 +2930,18 @@ const [contratOdoo, setContratOdoo] = useState<
                                                 const pu = prixDe(p, undefined, cle);
                                                 return (
                                                   <div key={ls.composant.id} className="flex items-center gap-1.5">
-                                                    <span className="w-[38%] truncate" title={ls.composant.phraseSource}>
+                                                    <span
+                                                      className="flex-1 min-w-0 truncate"
+                                                      title={[
+                                                        `${ls.composant.role} — ${p?.description || ls.composant.libelle}`,
+                                                        ls.composant.condition,
+                                                        ls.composant.phraseSource,
+                                                      ].filter(Boolean).join('\n')}
+                                                    >
                                                       <span className="text-muted-foreground">{ls.composant.role} · </span>
                                                       {p?.description || ls.composant.libelle}
                                                     </span>
-                                                    <span className="w-20 text-right text-muted-foreground" title={ls.explication}>
+                                                    <span className="w-20 shrink-0 text-right text-muted-foreground" title={ls.explication}>
                                                       {ls.quantiteKg ? `${ls.quantiteKg} kg` : '—'}
                                                     </span>
                                                     <Input
@@ -2942,12 +2949,12 @@ const [contratOdoo, setContratOdoo] = useState<
                                                       onChange={e => setQuantiteManuelle(pr => ({
                                                         ...pr, [cle]: Math.max(0, Number(e.target.value) || 0),
                                                       }))}
-                                                      className="h-6 w-14 text-[11px]"
+                                                      className="h-6 w-14 shrink-0 text-[11px]"
                                                     />
-                                                    <span className="text-muted-foreground">
+                                                    <span className="w-16 shrink-0 text-muted-foreground">
                                                       {p?.poids ? `× ${p.poids} kg` : 'kg'}
                                                     </span>
-                                                    <span className="ml-auto text-right">
+                                                    <span className="w-44 shrink-0 text-right">
                                                       {p
                                                         ? <>{formatMontant(pu)} → <strong className="text-foreground">{formatMontant(pu * q)}</strong></>
                                                         : <span className="text-destructive">absent du catalogue — prix à saisir</span>}
