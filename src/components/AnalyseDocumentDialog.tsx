@@ -36,7 +36,7 @@ import {
 } from '@/lib/transportPlastique';
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
-import { prixApplicateur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
+import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -1591,7 +1591,20 @@ const [contratOdoo, setContratOdoo] = useState<
     const gamme = estGamme(p.catalogue) || niveauGamme(p.categorie, p.catalogue)
       ? prixApplicateur(p.prixTarif ?? p.prixHT, p.categorie, p.catalogue)
       : null;
-    const remise = gamme && gamme.remise > 0 ? gamme : null;
+    /* LA FICHE CLIENT PASSE AVANT LE TARIF DE GAMME.
+     *
+     * Le prix revendeur est le prix PUBLIC moins la remise que le client a
+     * négociée pour cette famille — c'est la règle, et les exceptions sont
+     * précisément ce que sa fiche enregistre. Le tarif de gamme n'est qu'un
+     * défaut pour les clients qui n'ont rien de négocié.
+     *
+     * Les deux donnaient 30 % chez HORUS, mais pas sur la même base : la
+     * gamme remise `prixTarif` quand il existe — 244,80 € sur l'Hydraseal
+     * DPM — là où le prix public est à 264,70 €. Le seau partait à 171,36 €
+     * au lieu de 185,29 €, et le devis entier était faux de 13,93 €. */
+    const client = clients.find(c => c.id === creerDevisClientId);
+    const negociee = prixRevendeur(p.prixHT, p.categorie, client?.remisesParCategorie);
+    const remise = negociee ?? (gamme && gamme.remise > 0 ? gamme : null);
 
     if (prixImpose !== undefined && prixImpose !== null) {
       return { retenu: prixImpose, contrat, catalogue, source: 'règle' as const, remise };
@@ -1611,8 +1624,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (tarifMetier != null && contrat !== null
         && Math.abs(contrat - tarifMetier) >= 0.01) {
       return { retenu: tarifMetier, contrat, catalogue: tarifMetier,
-               source: (remise?.niveau ? `ISOMARK ${remise.niveau}`.replace('ISOMARK ISOFLOOR', 'ISOFLOOR')
-                        : p.sourceTarif || 'catalogue métier') as any, remise };
+               source: (remise?.libelle || p.sourceTarif || 'catalogue métier') as any, remise };
     }
     if (contrat !== null) return { retenu: contrat, contrat, catalogue, source: 'contrat' as const, remise };
 
@@ -1620,7 +1632,7 @@ const [contratOdoo, setContratOdoo] = useState<
        exactement le cas des primaires ISOFLOOR, absents de toute grille. */
     if (remise) {
       return { retenu: remise.prix, contrat, catalogue: remise.public,
-               source: (remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${remise.niveau}`) as any,
+               source: remise.libelle as any,
                remise };
     }
 
@@ -1635,7 +1647,7 @@ const [contratOdoo, setContratOdoo] = useState<
       return { retenu: 0, contrat, catalogue, source: 'absent' as const, remise };
     }
     return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const, remise };
-  }, [contratOdoo]);
+  }, [contratOdoo, clients, creerDevisClientId]);
 
   /**
    * Prix d'un article venu d'Odoo, remise de gamme comprise.
@@ -1654,7 +1666,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (remise) {
       return { retenu: remise.prix, contrat: odoo.contrat,
                catalogue: remise.public,
-               source: (remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${remise.niveau}`) as any,
+               source: remise.libelle as any,
                remise };
     }
     return { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
@@ -3002,7 +3014,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                           {prixManuel[cle] !== undefined
                                             ? 'prix saisi à la main'
                                             : d.remise
-                                              ? <>{d.remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${d.remise.niveau}`} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong>{d.contrat != null && Math.abs(d.contrat - d.remise.prix) >= 0.01 ? <> — contrat Odoo {formatMontant(d.contrat)}</> : null}</>
+                                              ? <>{d.remise.libelle} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong>{d.contrat != null && Math.abs(d.contrat - d.remise.prix) >= 0.01 ? <> — contrat Odoo {formatMontant(d.contrat)}</> : null}</>
                                               : d.source === 'absent'
                                                   ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
                                                   : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
@@ -3476,7 +3488,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                               {a.prixImpose === 0
                                                 ? <span className="text-warning">règle — compris dans l'enduit</span>
                                                 : d.remise
-                                                  ? <>{d.remise.niveau === 'ISOFLOOR' ? 'ISOFLOOR' : `ISOMARK ${d.remise.niveau}`} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong></>
+                                                  ? <>{d.remise.libelle} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong></>
                                                   : d.source === 'absent'
                                                   ? <span className="text-destructive">prix à saisir — la fiche Odoo n’est pas tarifée</span>
                                                   : contratOdoo ? `contrat ${contratOdoo.contrat}` : 'tarif catalogue'}
