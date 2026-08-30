@@ -1312,13 +1312,37 @@ const [contratOdoo, setContratOdoo] = useState<
          atteignable que par la recherche approximative. */
       const brute = String(l.reference || '').trim();
       if (brute.length >= 4 && /[.\d]/.test(brute)) refs.add(brute.toUpperCase());
+
+      /* LES COMPOSANTS D'UN SYSTÈME SONT LES ARTICLES VENDUS.
+       *
+       * Une ligne système ne retient aucun article, donc n'apportait aucune
+       * référence. Sur un document qui n'en contient qu'une — « HORUS systeme
+       * flowshield comfort 30m² » — la liste tombait à zéro et l'appel à Odoo
+       * était sauté tout entier : plus de contrat cadre, plus de client
+       * reconnu, et des composants tarifés au catalogue faute de grille.
+       *
+       * Ce sont pourtant les composants qu'on facture, et ils portent chacun
+       * leur référence. On les envoie donc chercher leur prix contrat comme
+       * n'importe quel autre article. Toutes les variantes sont couvertes,
+       * pas seulement celle retenue : la liste reste ainsi stable quand on
+       * change de variante ou qu'on coche une option, au lieu de relancer
+       * Odoo à chaque clic. */
+      const sys = systemesDetectes.get(i);
+      if (sys) {
+        for (const v of sys.variantes) {
+          for (const c of v.composants) {
+            const pc = c.produitId ? produitParId(produits, c.produitId) : undefined;
+            if (pc) refs.add(pc.referenceOdoo || pc.reference);
+          }
+        }
+      }
     });
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
       if (p) refs.add(p.referenceOdoo || p.reference);
     }
     return [...refs];
-  }, [result, accompagnements, produits, produitDeLigne]);
+  }, [result, accompagnements, produits, produitDeLigne, systemesDetectes]);
 
   useEffect(() => {
     const cli = clients.find(c => c.id === creerDevisClientId);
@@ -1397,7 +1421,14 @@ const [contratOdoo, setContratOdoo] = useState<
        message marchait. On le dit maintenant, et désigner le client à la main
        relance tout. */
     setOdooMuet(!critere ? 'sans-client' : null);
-    if (!critere || (!referencesDuDevis.length && !aChercher.length)) {
+    /* Le contrat cadre et le client ne dépendent pas des articles : un
+       document dont tous les composants manquent au catalogue n'apporte
+       aucune référence, et laisserait pourtant le contrat à l'écran s'il y a
+       un système à chiffrer. On interroge donc Odoo dès qu'il y a de quoi
+       reconnaître le client ET quelque chose à tarifer, système compris. */
+    const aTarifer = referencesDuDevis.length || aChercher.length
+      || systemesDetectes.size;
+    if (!critere || !aTarifer) {
       setContratOdoo(null); setTrouvaillesOdoo({}); return;
     }
     let annule = false;
