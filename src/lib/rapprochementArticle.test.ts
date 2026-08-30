@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { caracteristiques, rapprocherArticle } from './rapprochementArticle';
+import { caracteristiques, couleurs, rapprocherArticle } from './rapprochementArticle';
 import type { Produit } from './store';
 
 function art(reference: string, description: string): Produit {
@@ -176,5 +176,67 @@ describe('conditionnement', () => {
     expect(caracteristiques('FLOWCOAT PA302 A 2,93KG').conditionnement).toBeCloseTo(2.93, 2);
     /* Les grammes ne sont pas un conditionnement concurrent. */
     expect(caracteristiques('CATALYST (400 gr)').conditionnement).toBeUndefined();
+  });
+});
+
+
+/* ── La couleur ──────────────────────────────────────────────────────────── */
+
+/* Le catalogue tel qu'Odoo l'a proposé sur « Plots bordure Incol D100 360°
+   BLANC » : quatre plots blancs, et un coussin berlinois ROUGE. */
+const PLOTS = [
+  art('PLOROUTE360B', 'PLOT DE ROUTE HRS 360° BLANC Ø100 (SI1041)'),
+  art('PLOTCHAUSSEE', 'Plots de Chaussée SF Blanc 290B1F'),
+  art('PLOTCHAUSSEEAL', 'Plots de Chaussée Aluminium DF Blanc'),
+  art('PLOTCHAUSSEEDF', 'PLOTS DE CHAUSSEE DF BLANC 290B2F'),
+  art('COUSSINBERLINOIS', 'COUSSIN BERLINOIS ROUGE EN 6 ÉLÉMENTS'),
+  art('PLOROUTE360J', 'PLOT DE ROUTE HRS 360° JAUNE Ø100'),
+];
+
+describe('lecture des couleurs', () => {
+  it('lit toutes les couleurs citées, féminins et abréviations compris', () => {
+    expect(couleurs('Plots bordure Incol D100 360° BLANC')).toEqual(['incolore', 'blanc']);
+    expect(couleurs('Plots de Chaussée Aluminium DF Blanche')).toEqual(['blanc']);
+    expect(couleurs('résine transparente')).toEqual(['incolore']);
+    expect(couleurs('PLOT DE ROUTE HRS 360°')).toEqual([]);
+  });
+
+  it('ne prend pas un mot pour une couleur', () => {
+    // « BRUT », « BLANK », « ORANGERIE » ne sont pas des couleurs.
+    expect(couleurs('PROFIL MAT ALU 6005A BRUT')).toEqual([]);
+    expect(couleurs('FLOWCOAT SF41 BLANK (14 kg)')).toEqual([]);
+  });
+});
+
+describe('la couleur écarte un article, comme le diamètre', () => {
+  /* Le cas signalé : un coussin berlinois ROUGE proposé sur une demande
+     explicitement incolore ou blanche. */
+  it('élimine une couleur que la demande n’accepte pas', () => {
+    const r = rapprocherArticle('Plots bordure Incol D100 360° BLANC', PLOTS);
+    const refs = r.candidats.map(p => p.reference);
+    expect(refs).not.toContain('COUSSINBERLINOIS');
+    expect(refs).not.toContain('PLOROUTE360J');
+    expect(refs).toContain('PLOROUTE360B');
+  });
+
+  it('accepte l’une OU l’autre des couleurs demandées', () => {
+    const incolore = art('PLOROUTE360I', 'PLOT DE ROUTE HRS 360° INCOLORE Ø100');
+    const r = rapprocherArticle('Plots bordure Incol D100 360° BLANC', [...PLOTS, incolore]);
+    const refs = r.candidats.map(p => p.reference);
+    expect(refs).toContain('PLOROUTE360I');
+    expect(refs).toContain('PLOROUTE360B');
+  });
+
+  it('garde un article muet sur sa couleur', () => {
+    // Beaucoup de fiches ne la disent pas : l'écarter ferait disparaître le
+    // bon article aussi souvent que le mauvais.
+    const muet = art('PLOROUTE360X', 'PLOT DE ROUTE HRS 360° Ø100');
+    const r = rapprocherArticle('Plots bordure D100 360° BLANC', [muet]);
+    expect(r.candidats.map(p => p.reference)).toContain('PLOROUTE360X');
+  });
+
+  it('ne filtre rien quand la demande ne dit pas la couleur', () => {
+    const r = rapprocherArticle('Plots de chaussée D100', PLOTS);
+    expect(r.candidats.length).toBeGreaterThan(1);
   });
 });

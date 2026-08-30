@@ -52,6 +52,15 @@ export interface Caracteristiques {
    * ligne, c'est neuf fois la marchandise.
    */
   conditionnement?: number;
+  /**
+   * Couleurs citées, normalisées — « blanc », « rouge », « incolore ».
+   *
+   * Une demande peut en accepter plusieurs : « Plots bordure Incol D100 360°
+   * BLANC » veut l'incolore OU le blanc. Un article d'une autre couleur n'y
+   * répond pas — le rapprochement proposait pourtant un COUSSIN BERLINOIS
+   * ROUGE, qui n'est ni l'un ni l'autre.
+   */
+  couleurs?: string[];
   /** La demande parle d'un pot, d'un seau, d'un bidon : petit format. */
   petitContenant?: boolean;
   /** Elle parle d'un fût, d'une palette : grand format. */
@@ -118,10 +127,50 @@ export function caracteristiques(texte: string): Caracteristiques {
   const kg = t.match(/(\d+(?:[.,]\d+)?)\s*kgs?\b/);
   if (kg) out.conditionnement = parseFloat(kg[1].replace(',', '.'));
 
+  const cs = couleurs(t);
+  if (cs.length) out.couleurs = cs;
+
   if (/\b(pot|pots|seau|seaux|bidon|bidons|boite|boites)\b/.test(t)) out.petitContenant = true;
   if (/\b(fut|futs|tonnelet|tonnelets|palette|palettes)\b/.test(t)) out.grosContenant = true;
 
   return out;
+}
+
+/**
+ * Couleurs du domaine, et les mots qui les désignent.
+ *
+ * « Incol » est l'abréviation d'incolore telle que les demandes l'écrivent ;
+ * transparent et incolore sont la même chose. Les féminins et les pluriels
+ * sont listés plutôt que devinés : « blanche » n'est pas « blanc » + e pour
+ * une expression régulière, et deviner ici coûterait des éliminations à tort.
+ */
+const COULEURS: Record<string, string[]> = {
+  incolore: ['incolore', 'incolores', 'incol', 'transparent', 'transparente', 'neutre'],
+  blanc: ['blanc', 'blanche', 'blancs', 'blanches'],
+  noir: ['noir', 'noire', 'noirs', 'noires'],
+  gris: ['gris', 'grise', 'grises', 'anthracite'],
+  rouge: ['rouge', 'rouges'],
+  jaune: ['jaune', 'jaunes'],
+  bleu: ['bleu', 'bleue', 'bleus', 'bleues'],
+  vert: ['vert', 'verte', 'verts', 'vertes'],
+  orange: ['orange', 'oranges'],
+  marron: ['marron', 'brun', 'brune'],
+  beige: ['beige', 'sable'],
+};
+
+const COULEUR_PAR_MOT = new Map<string, string>();
+for (const [couleur, mots] of Object.entries(COULEURS)) {
+  for (const m of mots) COULEUR_PAR_MOT.set(m, couleur);
+}
+
+/** Les couleurs citées dans un texte, sans doublon. */
+export function couleurs(texte: string): string[] {
+  const out = new Set<string>();
+  for (const mot of sansAccents(texte).split(/[^a-z0-9]+/)) {
+    const c = COULEUR_PAR_MOT.get(mot);
+    if (c) out.add(c);
+  }
+  return [...out];
 }
 
 /* ── Comparaison ─────────────────────────────────────────────────────────── */
@@ -164,6 +213,18 @@ export function noter(
   if (demande.longueur && cible.longueur && demande.longueur !== cible.longueur) {
     return null;
   }
+  /* LA COULEUR ÉLIMINE, COMME LE DIAMÈTRE.
+   *
+   * « Plots bordure Incol D100 360° BLANC » ne peut pas recevoir un COUSSIN
+   * BERLINOIS ROUGE. La demande peut accepter plusieurs couleurs — incolore
+   * OU blanc — et il suffit que l'article en porte une. Un article muet sur
+   * sa couleur reste candidat : beaucoup de fiches ne la disent pas, et
+   * l'écarter ferait disparaître le bon article aussi souvent que le mauvais. */
+  if (demande.couleurs?.length && cible.couleurs?.length
+      && !cible.couleurs.some(c => demande.couleurs!.includes(c))) {
+    return null;
+  }
+
   // Un conditionnement groupé ne répond pas à une demande à l'unité.
   if (cible.groupe && !demande.groupe) return null;
   /* Ni un accessoire à une demande de pièce nue. */
@@ -180,6 +241,13 @@ export function noter(
   }
   if (demande.section && cible.section === demande.section) {
     score += 40; raisons.push(cible.section);
+  }
+
+  const communes = demande.couleurs?.length && cible.couleurs?.length
+    ? cible.couleurs.filter(c => demande.couleurs!.includes(c)) : [];
+  if (communes.length) { score += 30; raisons.push(communes.join('/')); }
+  else if (demande.couleurs?.length && !cible.couleurs?.length) {
+    score -= 8; raisons.push('couleur non précisée');
   }
 
   // Les caractéristiques demandées mais absentes de l'article laissent un doute.
@@ -287,5 +355,6 @@ export function decrire(c: Caracteristiques): string {
   if (c.diametre) bouts.push(`Ø${c.diametre}`);
   if (c.section) bouts.push(c.section);
   if (c.longueur) bouts.push(`${c.longueur} mm`);
+  if (c.couleurs?.length) bouts.push(c.couleurs.join(' ou '));
   return bouts.join(', ');
 }
