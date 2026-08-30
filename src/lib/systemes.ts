@@ -15,9 +15,20 @@ import type { Produit } from '@/lib/store';
  * ne sait rien dire de ce qui précède.
  */
 
+/**
+ * Le rôle tenu par un composant dans la mise en œuvre.
+ *
+ * Les valeurs ci-dessous sont celles qu'on écrit ; la base en porte d'autres,
+ * recopiées mot pour mot des fiches système — « couche de masse - liant »,
+ * « saupoudrage à refus », « finition teintée ». Les enfermer dans une union
+ * fermée obligerait à réécrire la fiche pour la faire entrer dans nos cases,
+ * et c'est la fiche qui fait foi. Le type reste donc ouvert, tout en gardant
+ * l'autocomplétion sur les rôles courants.
+ */
 export type RoleComposant =
   | 'base' | 'charge' | 'billes' | 'pigment' | 'catalyseur'
-  | 'primaire' | 'silice' | 'quartz' | 'durcisseur' | 'autre';
+  | 'primaire' | 'silice' | 'quartz' | 'durcisseur' | 'autre'
+  | (string & {});
 
 export interface PalierTemperature {
   de: number;
@@ -52,7 +63,13 @@ export interface Systeme {
   /** L'homologation ou la finition qui distingue deux variantes. */
   variante?: string;
   usage?: string;
-  support: 'enrobe' | 'beton' | 'tous';
+  /**
+   * Les exigences de support, telles que la fiche les écrit — « Béton ou
+   * chape ciment, résistance mini 25 N/mm², HR max 93 % ». Trois valeurs
+   * codées ne sauraient pas dire cela, et c'est cette phrase-là qu'un
+   * applicateur doit lire avant de commander.
+   */
+  support: string;
   description?: string;
   sourceFiche?: string;
   sourceDrive?: string;
@@ -137,8 +154,20 @@ export function declinerSysteme(
     c => c.obligatoire || conditionnelsRetenus?.has(c.id),
   );
 
-  // La base sert de référence aux ratios et aux pourcentages.
-  const base = retenus.find(c => c.role === 'base') ?? retenus[0];
+  /* LA BASE SERT DE RÉFÉRENCE AUX RATIOS ET AUX POURCENTAGES.
+   *
+   * Les fiches système n'écrivent presque jamais le mot « base » : elles
+   * parlent de « couche de masse », de « revêtement », de « liant ». Prendre
+   * le premier composant venu désignait le PRIMAIRE — 0,3 kg/m² — comme
+   * référence, et la charge d'un mortier s'en trouvait divisée par quinze.
+   * On cherche donc, dans l'ordre : la base déclarée, puis la couche qui en
+   * tient lieu, puis n'importe quel composant qui sache dire un dosage. */
+  const ROLE_PORTEUR = /base|masse|rev[eê]tement|liant|autolissant|mortier/i;
+  const base =
+    retenus.find(c => c.role === 'base' && c.consommation != null)
+    ?? retenus.find(c => ROLE_PORTEUR.test(c.role) && c.consommation != null)
+    ?? retenus.find(c => c.consommation != null)
+    ?? retenus[0];
   const masseBase = base?.consommation ? base.consommation * surfaceM2 : 0;
 
   return retenus.map((c) => {

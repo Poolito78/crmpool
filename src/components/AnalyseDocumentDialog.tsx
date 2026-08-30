@@ -27,6 +27,10 @@ import {
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
+import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
+import {
+  rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
+} from '@/lib/rapprochementSysteme';
 import {
   articlePlastique, chiffrerTransport, departement,
 } from '@/lib/transportPlastique';
@@ -393,6 +397,20 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Mention de commune portée sous le nom, quand la commune diffère de
      l'agglomération : « MOULIGNON » puis « c°ne de QUINCY-VOISINS ». */
   const [mentionAgglo, setMentionAgglo] = useState<Record<string, string>>({});
+  /* ── état des lignes reconnues comme SYSTÈME ──────────────────────────────
+     Une demande de résine nomme une mise en œuvre, pas un article : « SYSTEME
+     FLOWSHIELD COMFORT 3MM · 30 ». Aucun article ne porte ce nom, et le
+     rapprochement par le libellé retenait un SYSTÈME D'ACCROCHE à 0,70 €.
+     Ces trois états portent ce que l'utilisateur peut corriger : la variante
+     quand l'épaisseur ne suffit pas à trancher, la surface, et les composants
+     facultatifs — un primaire au choix, une finition en option. */
+  /** Identifiant de la variante retenue à la main. Clé : indice de ligne. */
+  const [varianteSysteme, setVarianteSysteme] = useState<Record<number, string>>({});
+  /** Surface corrigée à la main, en m². Clé : indice de ligne. */
+  const [surfaceSysteme, setSurfaceSysteme] = useState<Record<number, number>>({});
+  /** Composants facultatifs cochés. Clé : « <indice>:<id du composant> ». */
+  const [optionsSysteme, setOptionsSysteme] = useState<Record<string, boolean>>({});
+  const { systemes } = useSystemes();
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
 const [contratOdoo, setContratOdoo] = useState<
@@ -553,6 +571,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     setQuantiteManuelle({}); setPrixManuel({});
+    setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({});
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
@@ -878,14 +897,91 @@ const [contratOdoo, setContratOdoo] = useState<
    * glissière béton pour tube 40×40, chiffré au prix contrat de ce mauvais
    * article. Le 3,50 m et le 4,00 m recevaient le même.
    */
+  /**
+   * Lignes qui nomment un SYSTÈME plutôt qu'un article.
+   *
+   * « SYSTEME FLOWSHIELD COMFORT 3MM », quantité 30 : le catalogue n'a rien
+   * de tel à vendre, et le rapprochement par le libellé retenait le seul
+   * article contenant le mot « système » — un kit de deux crochets pour
+   * panneau, à 0,70 €, multiplié par 30. Une résine se chiffre par ses
+   * composants, chacun avec son dosage au m² et son conditionnement.
+   */
+  const systemesDetectes = useMemo(() => {
+    const m = new Map<number, RapprochementSysteme>();
+    if (!systemes.length) return m;
+    (result?.lignes || []).forEach((l, i) => {
+      const texte = [l.reference, l.description].filter(Boolean).join(' ').trim();
+      const r = rapprocherSysteme(texte, systemes);
+      if (r) m.set(i, r);
+    });
+    return m;
+  }, [result, systemes]);
+
   const rapprochements = useMemo(() => {
     const m = new Map<number, ReturnType<typeof rapprocherArticle>>();
     (result?.lignes || []).forEach((l, i) => {
+      /* Une ligne système ne cherche pas d'article : la balayer contre les
+         22 634 références ne produirait qu'un faux candidat à écarter. */
+      if (systemesDetectes.has(i)) return;
       const texte = [l.reference, l.description].filter(Boolean).join(' ').trim();
       m.set(i, rapprocherArticle(texte, produits));
     });
     return m;
-  }, [result, produits]);
+  }, [result, produits, systemesDetectes]);
+
+  /** Variante retenue pour une ligne : le choix de l'utilisateur, sinon celle
+      que l'épaisseur désigne. Rien tant que la variante reste à trancher. */
+  const systemeDeLigne = useCallback((i: number): Systeme | undefined => {
+    const rap = systemesDetectes.get(i);
+    if (!rap) return undefined;
+    const choisi = varianteSysteme[i];
+    if (choisi) return rap.variantes.find(v => v.id === choisi);
+    return rap.retenu;
+  }, [systemesDetectes, varianteSysteme]);
+
+  /** Surface chiffrée pour une ligne système, correction manuelle comprise. */
+  const surfaceDeLigne = useCallback((i: number, quantite?: number | null) =>
+    surfaceSysteme[i] ?? surfaceDeDemande(systemesDetectes.get(i), quantite),
+  [surfaceSysteme, systemesDetectes]);
+
+  /**
+   * Le système d'une ligne, décliné sur sa surface.
+   *
+   * Le poids du contenant vient de l'article du catalogue : c'est lui qui
+   * convertit 135 kg de résine en huit seaux de 19 kg. Un composant sans
+   * article rattaché reste en kilogrammes — on ne devine pas un
+   * conditionnement.
+   */
+  const lignesSystemeDe = useCallback((i: number, quantite?: number | null): LigneSysteme[] => {
+    const sys = systemeDeLigne(i);
+    if (!sys) return [];
+    const retenus = new Set(
+      sys.composants
+        .filter(c => !c.obligatoire && optionsSysteme[`${i}:${c.id}`])
+        .map(c => c.id),
+    );
+    return declinerSysteme(sys, surfaceDeLigne(i, quantite), {
+      conditionnelsRetenus: retenus,
+      poidsParProduit: (produitId) => {
+        if (!produitId) return undefined;
+        const p = produitParId(produits, produitId);
+        return p?.poids && p.poids > 0 ? p.poids : undefined;
+      },
+    });
+  }, [systemeDeLigne, surfaceDeLigne, optionsSysteme, produits]);
+
+  /**
+   * Quantité commandée pour un composant : des contenants entiers quand le
+   * catalogue en donne le poids, des kilogrammes sinon.
+   *
+   * Un seul point de vérité — l'écran et le devis doivent afficher le même
+   * nombre, faute de quoi on chiffre à l'écran et on commande autre chose.
+   */
+  const quantiteComposant = useCallback((i: number, ls: LigneSysteme) =>
+    quantiteManuelle[`d${i}:${ls.composant.id}`]
+      ?? ls.contenants
+      ?? Math.round(ls.quantiteKg * 100) / 100,
+  [quantiteManuelle]);
 
   const candidatsPour = useCallback(
     (i: number) => rapprochements.get(i)?.candidats ?? [],
@@ -1285,7 +1381,11 @@ const [contratOdoo, setContratOdoo] = useState<
        demander à la source. */
     const aChercher = (result?.lignes || [])
       .map((l, i) => ({
-        texte: texteRechercheOdoo(l, i),
+        /* Une ligne système ne désigne pas un article : la chercher chez Odoo
+           ne peut ramener qu'un homonyme — le mot « système » y trouve un kit
+           de crochets pour panneau. Elle se chiffre par ses composants, qui
+           portent chacun leur propre référence. */
+        texte: systemesDetectes.has(i) ? '' : texteRechercheOdoo(l, i),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
@@ -1390,7 +1490,8 @@ const [contratOdoo, setContratOdoo] = useState<
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce]);
+  }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce,
+      systemesDetectes]);
 
   /**
    * Retient d'office la meilleure proposition Odoo.
@@ -1416,7 +1517,9 @@ const [contratOdoo, setContratOdoo] = useState<
       const n = { ...prev };
       let change = false;
       lignes.forEach((l, i) => {
-        if (n[i] || refusOdoo.has(i) || produitDeLigne(i)) return;
+        /* Une ligne système est déjà chiffrée par ses composants : lui coller
+           en plus un article Odoo la ferait compter deux fois. */
+        if (n[i] || refusOdoo.has(i) || produitDeLigne(i) || systemesDetectes.has(i)) return;
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -1428,7 +1531,8 @@ const [contratOdoo, setContratOdoo] = useState<
       });
       return change ? n : prev;
     });
-  }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo]);
+  }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo,
+      systemesDetectes]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -1639,8 +1743,65 @@ const [contratOdoo, setContratOdoo] = useState<
       return article.id;
     };
 
-    const lignes: LigneDevis[] = (result?.lignes ?? []).map((l, i) => {
+    /** Lignes du devis pour une ligne de demande reconnue comme système. */
+    const lignesDuSysteme = (i: number, l: { quantite: number; tva?: number }): LigneDevis[] => {
+      const sys = systemeDeLigne(i);
+      const declinees = lignesSystemeDe(i, l.quantite);
+      if (!sys || !declinees.length) return [];
+      const surface = surfaceDeLigne(i, l.quantite);
+
+      /* Un en-tête de groupe porte le nom du système et la surface : sans lui,
+         le devis aligne huit seaux et trois pots sans dire de quoi ils sont la
+         mise en œuvre. Il ne compte pas dans les totaux. */
+      const entete: LigneDevis = {
+        id: generateId(), type: 'groupe',
+        description: `${sys.nom}${sys.variante ? ` — ${sys.variante}` : ''} · ${surface} m²`,
+        quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+      };
+
+      const composants = declinees.map((ls): LigneDevis => {
+        const p = ls.composant.produitId
+          ? produitParId(produits, ls.composant.produitId) : undefined;
+        const cle = `d${i}:${ls.composant.id}`;
+        /* Le conditionnement fait la quantité : on achète huit seaux de 19 kg,
+           pas 135 kg. Sans article rattaché, la fiche ne dit pas le contenant :
+           la ligne reste en kilogrammes et son prix est à saisir. */
+        const quantite = quantiteComposant(i, ls);
+        return {
+          id: generateId(),
+          produitId: p?.id,
+          description: p?.description || ls.composant.libelle,
+          quantite,
+          unite: p?.unite || (ls.contenants ? 'u' : 'kg'),
+          prixUnitaireHT: prixDe(p, undefined, cle),
+          tva: p?.tva ?? l.tva ?? 20,
+          remise: 0,
+          /* La surface et le dosage restent portés par la ligne : le devis
+             peut ainsi se recalculer si la surface change, et le chargé
+             d'affaires lit d'où sort la quantité. */
+          surfaceM2: surface,
+          consommation: ls.composant.consommation,
+          note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
+        };
+      });
+
+      return [entete, ...composants];
+    };
+
+    const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => {
       const cle = `d${i}`;
+      /* UNE LIGNE SYSTÈME S'ÉCLATE EN SES COMPOSANTS.
+       *
+       * Elle ne désigne aucun article : la laisser passer telle quelle
+       * mettait au devis un kit de crochets à 0,70 €. Chaque composant part
+       * en ligne propre, avec son conditionnement et son prix remisé — c'est
+       * aussi ce qu'attendent le stock et la commande fournisseur. */
+      if (systemesDetectes.has(i)) {
+        const eclatees = lignesDuSysteme(i, l);
+        /* Tant que la variante n'est pas tranchée, on ne chiffre rien plutôt
+           que de chiffrer au hasard : entre 2 et 3 mm il y a 620 € d'écart. */
+        if (eclatees.length) return eclatees;
+      }
       /* Un article Odoo retenu l'emporte sur le rapprochement local : c'est un
          choix explicite, et souvent la bonne marchandise là où le catalogue
          local proposait un article approchant. Faute d'exister dans MonCRM, il
@@ -2611,28 +2772,162 @@ const [contratOdoo, setContratOdoo] = useState<
                               const candidats = candidatsPour(i);
                               const retenu = produitDeLigne(i);
                               const rap = rapprochements.get(i);
+                              const sysRap = systemesDetectes.get(i);
                               return (
                                 <div key={i} className="rounded-lg border border-border p-2 space-y-1.5">
                                   <div className="flex items-center gap-2 text-xs">
-                                    <span className="bg-muted text-muted-foreground px-1.5 py-0.5 rounded text-[10px]">
-                                      demandé
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${sysRap
+                                      ? 'bg-primary/15 text-primary'
+                                      : 'bg-muted text-muted-foreground'}`}>
+                                      {sysRap ? 'système' : 'demandé'}
                                     </span>
                                     <span className="font-medium">{l.description || l.reference}</span>
                                     {/* Dire ce qui a été compris de la demande, et
                                         ce qui n'a pas été trouvé. Un « à choisir »
                                         explicite vaut mieux qu'un article retenu
                                         au hasard et chiffré avec assurance. */}
-                                    {!choixProduit[i] && rap && rap.confiance !== 'sure' && (
+                                    {!sysRap && !choixProduit[i] && rap && rap.confiance !== 'sure' && (
                                       <span className="ml-auto text-[11px] text-destructive">
                                         à choisir — {rap.pourquoi}
                                       </span>
                                     )}
-                                    {!choixProduit[i] && rap?.confiance === 'sure' && candidats.length > 1 && (
+                                    {!sysRap && !choixProduit[i] && rap?.confiance === 'sure' && candidats.length > 1 && (
                                       <span className="ml-auto text-[11px] text-warning">
                                         {rap.pourquoi} · {candidats.length} candidats
                                       </span>
                                     )}
+                                    {sysRap && (
+                                      <span className="ml-auto text-[11px] text-primary">
+                                        {sysRap.pourquoi}
+                                      </span>
+                                    )}
                                   </div>
+
+                                  {/* ── LA DEMANDE NOMME UN SYSTÈME ─────────
+                                      Pas un article : une mise en œuvre, qui
+                                      se décline en primaire, couche de masse
+                                      et finition. On chiffre les composants,
+                                      chacun au dosage de sa fiche, et on
+                                      convertit les kilogrammes en contenants
+                                      — on n'achète pas huit dixièmes de
+                                      seau. */}
+                                  {sysRap && (() => {
+                                    const sys = systemeDeLigne(i);
+                                    const surface = surfaceDeLigne(i, l.quantite);
+                                    const declinees = lignesSystemeDe(i, l.quantite);
+                                    const totalHT = declinees.reduce((s, ls) => {
+                                      const p = ls.composant.produitId
+                                        ? produitParId(produits, ls.composant.produitId) : undefined;
+                                      const cle = `d${i}:${ls.composant.id}`;
+                                      return s + quantiteComposant(i, ls) * prixDe(p, undefined, cle);
+                                    }, 0);
+                                    const facultatifs = (sys?.composants ?? []).filter(c => !c.obligatoire);
+                                    return (
+                                      <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5 text-[11px]">
+                                        <div className="flex items-center gap-2">
+                                          <span className="shrink-0 text-muted-foreground">Surface :</span>
+                                          <Input
+                                            type="number" min={0} step="0.1" value={surface}
+                                            onChange={e => setSurfaceSysteme(pr => ({
+                                              ...pr, [i]: Math.max(0, Number(e.target.value) || 0),
+                                            }))}
+                                            className="h-7 w-24 text-xs"
+                                          />
+                                          <span className="text-muted-foreground">m²</span>
+                                          {sysRap.variantes.length > 1 && (
+                                            <select
+                                              className="ml-auto rounded border bg-background px-1 py-0.5 text-[11px]"
+                                              value={sys?.id ?? ''}
+                                              onChange={e => setVarianteSysteme(pr => ({ ...pr, [i]: e.target.value }))}
+                                            >
+                                              <option value="">— variante à choisir —</option>
+                                              {sysRap.variantes.map(v => (
+                                                <option key={v.id} value={v.id}>{v.variante || v.nom}</option>
+                                              ))}
+                                            </select>
+                                          )}
+                                        </div>
+
+                                        {!sys ? (
+                                          <p className="text-warning">
+                                            Choisissez la variante : les dosages en dépendent.
+                                          </p>
+                                        ) : (
+                                          <>
+                                            {/* Les composants facultatifs — primaire au
+                                                choix, finition en option — ne sont jamais
+                                                cochés d'office : la fiche les propose, le
+                                                chantier les décide. */}
+                                            {facultatifs.length > 0 && (
+                                              <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
+                                                {facultatifs.map(c => (
+                                                  <label key={c.id} className="flex items-center gap-1 cursor-pointer">
+                                                    <input
+                                                      type="checkbox"
+                                                      checked={!!optionsSysteme[`${i}:${c.id}`]}
+                                                      onChange={e => setOptionsSysteme(pr => ({
+                                                        ...pr, [`${i}:${c.id}`]: e.target.checked,
+                                                      }))}
+                                                    />
+                                                    <span title={c.condition || c.phraseSource}>
+                                                      {c.libelle}
+                                                      {c.consommation != null ? ` · ${c.consommation} kg/m²` : ''}
+                                                    </span>
+                                                  </label>
+                                                ))}
+                                              </div>
+                                            )}
+
+                                            <div className="space-y-1 pt-0.5">
+                                              {declinees.map((ls) => {
+                                                const p = ls.composant.produitId
+                                                  ? produitParId(produits, ls.composant.produitId) : undefined;
+                                                const cle = `d${i}:${ls.composant.id}`;
+                                                const q = quantiteComposant(i, ls);
+                                                const pu = prixDe(p, undefined, cle);
+                                                return (
+                                                  <div key={ls.composant.id} className="flex items-center gap-1.5">
+                                                    <span className="w-[38%] truncate" title={ls.composant.phraseSource}>
+                                                      <span className="text-muted-foreground">{ls.composant.role} · </span>
+                                                      {p?.description || ls.composant.libelle}
+                                                    </span>
+                                                    <span className="w-20 text-right text-muted-foreground" title={ls.explication}>
+                                                      {ls.quantiteKg ? `${ls.quantiteKg} kg` : '—'}
+                                                    </span>
+                                                    <Input
+                                                      type="number" min={0} step="1" value={q}
+                                                      onChange={e => setQuantiteManuelle(pr => ({
+                                                        ...pr, [cle]: Math.max(0, Number(e.target.value) || 0),
+                                                      }))}
+                                                      className="h-6 w-14 text-[11px]"
+                                                    />
+                                                    <span className="text-muted-foreground">
+                                                      {p?.poids ? `× ${p.poids} kg` : 'kg'}
+                                                    </span>
+                                                    <span className="ml-auto text-right">
+                                                      {p
+                                                        ? <>{formatMontant(pu)} → <strong className="text-foreground">{formatMontant(pu * q)}</strong></>
+                                                        : <span className="text-destructive">absent du catalogue — prix à saisir</span>}
+                                                    </span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+
+                                            <div className="flex items-center justify-between border-t border-primary/20 pt-1">
+                                              <span className="text-muted-foreground">
+                                                {declinees.length} composant(s) · {surface} m²
+                                              </span>
+                                              <span>
+                                                <strong className="text-foreground">{formatMontant(totalHT)}</strong>
+                                                {surface > 0 && <> — {formatMontant(totalHT / surface)}/m²</>}
+                                              </span>
+                                            </div>
+                                          </>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
                                   {/* La quantité et le prix restent modifiables
                                       même quand l'article vient d'Odoo et non du
                                       catalogue local : ce sont justement ces
@@ -2684,18 +2979,23 @@ const [contratOdoo, setContratOdoo] = useState<
                                       </>
                                     );
                                   })()}
-                                  <ProduitCombobox
-                                    produits={candidats.length ? candidats : produits}
-                                    value={retenu?.id ?? ''}
-                                    onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
-                                  />
+                                  {/* Une ligne système ne se choisit pas dans le
+                                      catalogue : c'est le bloc ci-dessus qui la
+                                      chiffre, composant par composant. */}
+                                  {!sysRap && (
+                                    <ProduitCombobox
+                                      produits={candidats.length ? candidats : produits}
+                                      value={retenu?.id ?? ''}
+                                      onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
+                                    />
+                                  )}
                                   {/* Cet avertissement ne parle que du catalogue
                                       LOCAL. Depuis qu'un article Odoo peut être
                                       retenu d'office, l'afficher à côté de
                                       « Retenu d'office : PLASTOBLOC24GM » se
                                       contredisait : la ligne a bien un article
                                       et un prix, ils viennent d'ailleurs. */}
-                                  {!retenu && !choixOdoo[i] && (
+                                  {!sysRap && !retenu && !choixOdoo[i] && (
                                     <p className="text-[11px] text-warning">
                                       {candidats.length
                                         ? `Aucun candidat ne correspond assez pour être retenu d’office — ${candidats.length} proposition(s) ci-dessus.`
@@ -2946,6 +3246,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                        mélanger sans les ordonner laissait un
                                        ARCEAU trouvé par similitude passer devant
                                        l'AK5.1000.C2.BTR.IS.BRUT demandé. */
+                                    /* Rien à proposer pour une ligne système :
+                                       ses composants ont leurs propres
+                                       références, et le mot « système » ne
+                                       ramène d'Odoo que des homonymes. */
+                                    if (sysRap) return null;
                                     const refRetenue = retenu
                                       ? (retenu.referenceOdoo || retenu.reference)
                                       : '';
