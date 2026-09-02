@@ -26,7 +26,7 @@ import {
   typeAgglomeration, nomAgglomerationDansTexte, dimensionnerAgglomerationAuto,
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
-import { rapprocherArticle } from '@/lib/rapprochementArticle';
+import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
   rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
@@ -1579,15 +1579,18 @@ const [contratOdoo, setContratOdoo] = useState<
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
         const exacte = brute ? fichesOdoo[brute] : undefined;
+        /* Même contrôle qu'à l'affichage : une proposition qu'on n'aurait pas
+           montrée ne doit pas être retenue d'office dans son dos. */
         const props = exacte
           ? [exacte]
-          : (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []);
+          : (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []).filter(
+              t => memeFamille(texteDemande(l, i), `${t.reference} ${t.designation || ''}`));
         if (props.length) { n[i] = props[0]; change = true; }
       });
       return change ? n : prev;
     });
   }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo,
-      systemesDetectes]);
+      systemesDetectes, texteDemande]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -3394,7 +3397,21 @@ const [contratOdoo, setContratOdoo] = useState<
                                       ? (retenu.referenceOdoo || retenu.reference)
                                       : '';
                                     const exacte = refRetenue ? fichesOdoo[refRetenue] : undefined;
-                                    const cherchees = trouvaillesOdoo[texteRechercheOdoo(l, i)] || [];
+                                    /* ODOO CHERCHE LARGE, ET RAMENAIT D'AUTRES
+                                       PRODUITS.
+                                       Sur « Plots bordure Incol D100 360° », sa
+                                       recherche par mots proposait un COUSSIN
+                                       BERLINOIS ROUGE EN 6 ÉLÉMENTS — et le
+                                       filtrage du catalogue local, lui, ne
+                                       s'appliquait pas ici. Ces propositions
+                                       passent maintenant par le même contrôle :
+                                       pas un mot en commun, pas le même
+                                       produit. La fiche lue par référence
+                                       EXACTE, elle, n'a rien à prouver. */
+                                    const demandeTexte = texteDemande(l, i);
+                                    const cherchees = (trouvaillesOdoo[texteRechercheOdoo(l, i)] || [])
+                                      .filter(t => memeFamille(
+                                        demandeTexte, `${t.reference} ${t.designation || ''}`));
                                     const props = [
                                       ...(exacte ? [exacte] : []),
                                       ...cherchees.filter(t => t.reference !== exacte?.reference),

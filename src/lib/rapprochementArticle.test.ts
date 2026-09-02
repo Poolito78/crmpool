@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { caracteristiques, couleurs, rapprocherArticle } from './rapprochementArticle';
+import {
+  caracteristiques, couleurs, memeFamille, rapprocherArticle,
+} from './rapprochementArticle';
 import type { Produit } from './store';
 
 function art(reference: string, description: string): Produit {
@@ -238,5 +240,48 @@ describe('la couleur écarte un article, comme le diamètre', () => {
   it('ne filtre rien quand la demande ne dit pas la couleur', () => {
     const r = rapprocherArticle('Plots de chaussée D100', PLOTS);
     expect(r.candidats.length).toBeGreaterThan(1);
+  });
+});
+
+
+/* ── La famille de produit ───────────────────────────────────────────────── */
+
+describe('un plot de route n’est pas un coussin berlinois', () => {
+  /* Ce qu'Odoo proposait sur « Plots bordure Incol D100 360° ». La couleur
+     n'y était pour rien : un coussin BLANC n'aurait pas mieux répondu. */
+  const MELANGE = [
+    art('PLOROUTE360B', 'PLOT DE ROUTE HRS 360° BLANC Ø100 (SI1041)'),
+    art('COUSSINBERLINOIS', 'COUSSIN BERLINOIS ROUGE EN 6 ÉLÉMENTS'),
+    art('COUSSINBLANC', 'COUSSIN BERLINOIS BLANC EN 6 ÉLÉMENTS'),
+  ];
+
+  it('écarte un article qui ne partage ni mot ni dimension', () => {
+    const refs = rapprocherArticle('Plots bordure Incol D100 360°', MELANGE)
+      .candidats.map(p => p.reference);
+    expect(refs).toEqual(['PLOROUTE360B']);
+  });
+
+  it('l’écarte aussi quand la couleur, elle, conviendrait', () => {
+    // Le coussin blanc passe le filtre de couleur et tombe sur celui-ci.
+    expect(memeFamille('Plots bordure Incol D100 360° BLANC',
+      'COUSSIN BERLINOIS BLANC EN 6 ÉLÉMENTS')).toBe(false);
+  });
+
+  it('rapproche le pluriel du singulier', () => {
+    expect(memeFamille('Plots bordure D100', 'PLOT DE ROUTE HRS 360°')).toBe(true);
+  });
+
+  /* Une dimension partagée suffit : « mat de 80 x 40 » et « SUPPORT ACIER
+     GALVA 80x40 » n'ont aucun mot commun — la section s'écrit d'un côté en
+     un mot, de l'autre en trois — et désignent pourtant le même article. */
+  it('retient un article qu’une dimension commune rattache à la demande', () => {
+    const supports = [art('SG80402.2000', 'IS SUPPORT ACIER GALVA 80x40 LONGUEUR 2,00m')];
+    const refs = rapprocherArticle('mat de 80 x 40 de 2 ml', supports)
+      .candidats.map(p => p.reference);
+    expect(refs).toContain('SG80402.2000');
+  });
+
+  it('ne juge pas quand la demande n’a aucun mot significatif', () => {
+    expect(memeFamille('100 360', 'COUSSIN BERLINOIS')).toBe(true);
   });
 });

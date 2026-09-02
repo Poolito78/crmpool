@@ -158,6 +158,21 @@ const COULEURS: Record<string, string[]> = {
   beige: ['beige', 'sable'],
 };
 
+/**
+ * Couleurs interchangeables.
+ *
+ * « Plots bordure Incol D100 360° » doit trouver « PLOT DE ROUTE HRS 360°
+ * BLANC Ø100 » : dans cette gamme, l'incolore et le blanc sont le même
+ * article non teinté, et les distinguer aurait écarté la bonne référence.
+ * Ce qui est exclu, c'est la COULEUR — rouge, jaune, vert.
+ */
+const EQUIVALENTES: string[][] = [['incolore', 'blanc']];
+
+function compatibles(a: string, b: string): boolean {
+  if (a === b) return true;
+  return EQUIVALENTES.some(g => g.includes(a) && g.includes(b));
+}
+
 const COULEUR_PAR_MOT = new Map<string, string>();
 for (const [couleur, mots] of Object.entries(COULEURS)) {
   for (const m of mots) COULEUR_PAR_MOT.set(m, couleur);
@@ -180,10 +195,67 @@ const MOTS_VIDES = new Set([
   'et', 'sur', 'par', 'is', 'mm', 'cm', 'm', 'long', 'longueur', 'lg',
 ]);
 
+/**
+ * Le singulier approximatif d'un mot.
+ *
+ * « Plots bordure » doit rencontrer « PLOT DE ROUTE ». On ne coupe le s final
+ * qu'à partir de cinq lettres : « gris » n'est pas un pluriel. La règle est
+ * appliquée des DEUX côtés, donc même une coupe abusive — « berlinois »
+ * devient « berlinoi » — reste sans conséquence : les deux textes la
+ * subissent identiquement.
+ */
+function singulier(m: string) {
+  return m.length >= 5 && m.endsWith('s') ? m.slice(0, -1) : m;
+}
+
 function mots(t: string) {
   return new Set(
-    sansAccents(t).split(/[^a-z0-9]+/).filter(m => m.length > 1 && !MOTS_VIDES.has(m)),
+    sansAccents(t).split(/[^a-z0-9]+/)
+      .filter(m => m.length > 1 && !MOTS_VIDES.has(m))
+      .map(singulier),
   );
+}
+
+/**
+ * Les mots qui disent DE QUOI on parle : ceux de `mots`, moins les nombres.
+ *
+ * « 360 » se retrouve dans un plot de route comme dans n'importe quelle
+ * référence qui porte ce chiffre ; il ne prouve aucune parenté. Une couleur
+ * non plus : un coussin berlinois BLANC et un plot BLANC partagent le mot
+ * sans être le même produit. « plot », « coussin », « support », si.
+ */
+function motsFamille(t: string) {
+  return new Set([...mots(t)].filter(
+    m => !/^\d+$/.test(m) && !COULEUR_PAR_MOT.has(m),
+  ));
+}
+
+/** Les mots significatifs que deux textes ont en commun. */
+export function motsCommuns(a: string, b: string): string[] {
+  const ma = mots(a);
+  const mb = mots(b);
+  return [...ma].filter(m => mb.has(m));
+}
+
+/**
+ * Deux textes parlent-ils du même genre d'article ?
+ *
+ * UN PLOT DE ROUTE ET UN COUSSIN BERLINOIS SONT DEUX PRODUITS DIFFÉRENTS.
+ * Sur « Plots bordure Incol D100 360° », Odoo proposait un COUSSIN BERLINOIS
+ * ROUGE EN 6 ÉLÉMENTS : pas un mot de la demande ne s'y retrouve. Ce n'était
+ * pas une question de couleur — un coussin blanc n'aurait pas été meilleur —
+ * mais de famille.
+ *
+ * Un seul mot commun suffit : la demande du client et le libellé du catalogue
+ * ne s'écrivent jamais pareil, et exiger davantage écarterait le bon article.
+ * Faute de mot significatif d'un côté, on ne juge pas.
+ */
+export function memeFamille(demandeTexte: string, cibleTexte: string): boolean {
+  const md = motsFamille(demandeTexte);
+  if (!md.size) return true;
+  const mc = motsFamille(cibleTexte);
+  if (!mc.size) return true;
+  return [...md].some(m => mc.has(m));
 }
 
 /**
@@ -221,7 +293,7 @@ export function noter(
    * sa couleur reste candidat : beaucoup de fiches ne la disent pas, et
    * l'écarter ferait disparaître le bon article aussi souvent que le mauvais. */
   if (demande.couleurs?.length && cible.couleurs?.length
-      && !cible.couleurs.some(c => demande.couleurs!.includes(c))) {
+      && !cible.couleurs.some(c => demande.couleurs!.some(d => compatibles(c, d)))) {
     return null;
   }
 
@@ -232,19 +304,22 @@ export function noter(
 
   let score = 0;
   const raisons: string[] = [];
+  /* Une dimension, un conditionnement ou une couleur que les deux partagent :
+     de quoi tenir un article pour parent de la demande même sans mot commun. */
+  let caracteristiqueCommune = false;
 
   if (demande.diametre && cible.diametre === demande.diametre) {
-    score += 40; raisons.push(`Ø${cible.diametre}`);
+    score += 40; raisons.push(`Ø${cible.diametre}`); caracteristiqueCommune = true;
   }
   if (demande.longueur && cible.longueur === demande.longueur) {
-    score += 40; raisons.push(`longueur ${cible.longueur} mm`);
+    score += 40; raisons.push(`longueur ${cible.longueur} mm`); caracteristiqueCommune = true;
   }
   if (demande.section && cible.section === demande.section) {
-    score += 40; raisons.push(cible.section);
+    score += 40; raisons.push(cible.section); caracteristiqueCommune = true;
   }
 
   const communes = demande.couleurs?.length && cible.couleurs?.length
-    ? cible.couleurs.filter(c => demande.couleurs!.includes(c)) : [];
+    ? cible.couleurs.filter(c => demande.couleurs!.some(d => compatibles(c, d))) : [];
   if (communes.length) { score += 30; raisons.push(communes.join('/')); }
   else if (demande.couleurs?.length && !cible.couleurs?.length) {
     score -= 8; raisons.push('couleur non précisée');
@@ -269,6 +344,7 @@ export function noter(
     if (demande.conditionnement !== undefined) {
       if (Math.abs(cible.conditionnement - demande.conditionnement) < 0.01) {
         score += 40; raisons.push(`${cible.conditionnement} kg`);
+        caracteristiqueCommune = true;
       } else {
         score -= 25; raisons.push(`conditionnement ${cible.conditionnement} kg`);
       }
@@ -292,6 +368,21 @@ export function noter(
   const mc = mots(`${produit.reference} ${produit.description}`);
   const communs = [...md].filter(m => mc.has(m)).length;
   score += md.size ? Math.round((communs / md.size) * 30) : 0;
+
+  /* RIEN NE LES RAPPROCHE : CE N'EST PAS LE MÊME PRODUIT.
+   *
+   * Sur « Plots bordure Incol D100 360° », Odoo proposait un COUSSIN
+   * BERLINOIS ROUGE EN 6 ÉLÉMENTS. Pas un mot de la demande ne s'y retrouve,
+   * pas un diamètre, pas une section : ce n'était pas une affaire de couleur
+   * — un coussin blanc n'aurait pas mieux répondu — mais deux produits
+   * différents.
+   *
+   * Le contrôle vient EN DERNIER, une fois les caractéristiques confrontées.
+   * Placé avant, il éliminait « IS SUPPORT ACIER GALVA 80x40 » sur une
+   * demande de « mat de 80 x 40 » : la section les rapproche, mais elle
+   * s'écrit d'un côté en un mot et de l'autre en trois. Une dimension
+   * commune suffit donc à retenir un article muet sur le reste. */
+  if (!communs && !caracteristiqueCommune) return null;
 
   return { score, pourquoi: raisons.join(', ') };
 }
