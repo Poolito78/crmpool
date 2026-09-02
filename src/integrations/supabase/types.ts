@@ -1124,6 +1124,42 @@ export type Database = {
         }
         Relationships: []
       }
+      grille_synchro: {
+        Row: {
+          contrat_id: number
+          contrat_nom: string
+          debut: string
+          etat: string
+          fin: string | null
+          id: number
+          lignes: number
+          message: string | null
+          niveau: string | null
+        }
+        Insert: {
+          contrat_id: number
+          contrat_nom: string
+          debut?: string
+          etat?: string
+          fin?: string | null
+          id?: number
+          lignes?: number
+          message?: string | null
+          niveau?: string | null
+        }
+        Update: {
+          contrat_id?: number
+          contrat_nom?: string
+          debut?: string
+          etat?: string
+          fin?: string | null
+          id?: number
+          lignes?: number
+          message?: string | null
+          niveau?: string | null
+        }
+        Relationships: []
+      }
       historique: {
         Row: {
           action: string
@@ -1154,6 +1190,42 @@ export type Database = {
           entite_type?: string
           id?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      journal_prix: {
+        Row: {
+          achat_apres: number | null
+          achat_avant: number | null
+          id: number
+          maj_recue: string | null
+          produit_id: string
+          quand: string
+          reference: string | null
+          vente_apres: number | null
+          vente_avant: number | null
+        }
+        Insert: {
+          achat_apres?: number | null
+          achat_avant?: number | null
+          id?: number
+          maj_recue?: string | null
+          produit_id: string
+          quand?: string
+          reference?: string | null
+          vente_apres?: number | null
+          vente_avant?: number | null
+        }
+        Update: {
+          achat_apres?: number | null
+          achat_avant?: number | null
+          id?: number
+          maj_recue?: string | null
+          produit_id?: string
+          quand?: string
+          reference?: string | null
+          vente_apres?: number | null
+          vente_avant?: number | null
         }
         Relationships: []
       }

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect, useMemo, useCallback, memo, Fragment, cloneElement, type ReactElement } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
+import { useJournalPrix, periodesDePrix } from '@/lib/journalPrix';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
-import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check } from 'lucide-react';
+import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -282,10 +283,15 @@ export default function Produits() {
   const [kitDragOverIdx, setKitDragOverIdx] = useState<number | null>(null);
   const [showPrixPublic, setShowPrixPublic] = useState(false);
   const [editingStack, setEditingStack] = useState<import('@/lib/store').Produit[]>([]);
+  /* L'historique de prix se lit à la demande, pour l'article ouvert. Jamais
+     au chargement du catalogue : 22 508 articles, on ne rapatrie pas
+     l'historique de tous pour en afficher un. */
+  const { mouvements: mvtsPrix, chargement: prixChargement, erreur: prixErreur } =
+    useJournalPrix(editing?.id);
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [achatsManuel, setAchatsManuel] = useState<AchatDate[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
-  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation'>('infos');
+  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation' | 'prix'>('infos');
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -1739,6 +1745,7 @@ export default function Produits() {
               { id: 'commandes',   label: 'Cmd client', icon: ShoppingCart },
               { id: 'commandesF',  label: 'Cmd fourn.', icon: Truck },
               { id: 'valorisation', label: 'Valorisation', icon: Euro },
+              { id: 'prix',        label: 'Prix', icon: History },
             ] as const).filter(t => canAchat || !(['fournisseurs', 'commandesF', 'valorisation'] as const).includes(t.id as 'fournisseurs' | 'commandesF' | 'valorisation')).map(t => (
               <button
                 key={t.id}
@@ -3269,6 +3276,96 @@ export default function Produits() {
                   )}
                   <p className="text-[11px] text-muted-foreground mt-1">La saisie manuelle est enregistrée avec le produit (bouton Modifier).</p>
                 </div>
+              </div>
+            );
+          })()}
+
+          {/* ══ Onglet Prix ════════════════════════════════════════════════
+              L'HISTORIQUE ÉTAIT ENREGISTRÉ SANS ÊTRE LISIBLE.
+              Le déclencheur `trg_noter_prix` consigne chaque changement en
+              base depuis des mois ; la fiche n'affichait que la DATE du
+              dernier. Or ce qu'on cherche en justifiant une hausse, c'est la
+              PÉRIODE pendant laquelle un prix a été en vigueur. */}
+          {produitTab === 'prix' && (() => {
+            const periodes = periodesDePrix(mvtsPrix, editing
+              ? { prixAchat: editing.prixAchat, prixHT: editing.prixRevendeur || editing.prixHT }
+              : undefined);
+            const dateCourte = (d?: string) => (d ? formatDate(d) : null);
+            return (
+              <div className="py-2 space-y-3">
+                {prixErreur && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    Historique illisible ({prixErreur}) — la liste ci-dessous
+                    est incomplète, ne la prenez pas pour un prix immobile.
+                  </p>
+                )}
+                {prixChargement && (
+                  <p className="text-xs text-muted-foreground">Lecture de l’historique…</p>
+                )}
+                {!prixChargement && !prixErreur && periodes.length <= 1 && (
+                  <p className="text-xs text-muted-foreground">
+                    Aucun changement de prix enregistré pour cet article. Le
+                    journal ne remonte pas avant sa mise en service : un prix
+                    fixé plus tôt n’y figure pas.
+                  </p>
+                )}
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-muted text-muted-foreground">
+                        <th className="px-2 py-1.5 text-left font-medium">Période</th>
+                        {canAchat && <th className="px-2 py-1.5 text-right font-medium">Prix achat</th>}
+                        <th className="px-2 py-1.5 text-right font-medium">Prix revendeur</th>
+                        {canAchat && <th className="px-2 py-1.5 text-right font-medium">Marge</th>}
+                        <th className="px-2 py-1.5 text-left font-medium">Changement</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periodes.map((p, i) => {
+                        const enCours = !p.fin;
+                        const marge = p.prixAchat != null && p.prixVente != null
+                          ? p.prixVente - p.prixAchat : null;
+                        return (
+                          <tr key={i} className={`border-t border-border ${enCours ? 'bg-primary/5 font-medium' : ''}`}>
+                            <td className="px-2 py-1.5 whitespace-nowrap">
+                              {p.debut ? `du ${dateCourte(p.debut)}` : 'avant le journal'}
+                              {p.fin ? ` au ${dateCourte(p.fin)}` : (p.debut ? ' — en cours' : '')}
+                            </td>
+                            {canAchat && (
+                              <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                                {p.prixAchat != null ? `${formatMontant(p.prixAchat)} €` : '—'}
+                              </td>
+                            )}
+                            <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap">
+                              {p.prixVente != null ? `${formatMontant(p.prixVente)} €` : '—'}
+                            </td>
+                            {canAchat && (
+                              <td className="px-2 py-1.5 text-right tabular-nums whitespace-nowrap text-muted-foreground">
+                                {marge != null ? `${formatMontant(marge)} €` : '—'}
+                              </td>
+                            )}
+                            <td className="px-2 py-1.5">
+                              {p.changement === 'origine'
+                                ? <span className="text-muted-foreground">—</span>
+                                : <span className="capitalize">{p.changement}</span>}
+                              {p.ecartAvecFiche && (
+                                <span className="ml-1.5 text-warning" title="La fiche porte d’autres prix que le dernier mouvement enregistré : un changement a échappé au journal. Ce sont les prix de la fiche qui sont affichés.">
+                                  · fiche
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Chaque changement de prix d’achat ou de vente ouvre une
+                  nouvelle période. La période en cours porte les prix de la
+                  fiche.
+                </p>
               </div>
             );
           })()}
