@@ -1,17 +1,12 @@
-import { useState, useCallback, useRef, useMemo, Fragment, lazy, Suspense } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { calculerTotalDevis, formatMontant, formatDate, calculerDateEcheance, useCrmActions, formatDateISO, getPrixPourQuantite, TYPE_CRM_ACTION, STATUT_CRM_ACTION } from '@/lib/store';
 import { exportToExcel } from '@/lib/exportExcel';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, CartesianGrid } from 'recharts';
-import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, ScanText, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
+import { Users, Package, FileText, AlertTriangle, TrendingUp, Truck, Clock, Upload, ArrowDownCircle, ArrowUpCircle, ShoppingCart, Bell, Phone, Mail, MapPin, CheckSquare, Calendar, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-/* Chargé à la demande. Cet écran pèse 188 ko à lui seul, sans compter les
-   alphabets de signalisation et le barème plastique qu'il entraîne : tant que
-   personne n'analyse de document, rien de tout cela n'a à être téléchargé ni
-   exécuté au rendu du tableau de bord. */
-const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
 import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
@@ -31,48 +26,9 @@ export default function Dashboard() {
     try { return (localStorage.getItem('dashboard_tab') as 'overview' | 'previsionnel') || 'overview'; } catch { return 'overview'; }
   });
   const setDashTabPersist = (t: 'overview' | 'previsionnel') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
-  const [analyseOpen, setAnalyseOpen] = useState(false);
-  /* Vrai dès la première ouverture : l'écran d'analyse reste alors monté,
-     pour que le refermer ne perde pas le travail en cours. */
-  const analyseDejaOuvert = useRef(false);
-  if (analyseOpen) analyseDejaOuvert.current = true;
-  const [droppedFiles, setDroppedFiles] = useState<File[]>([]);
-  const [droppedText, setDroppedText] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
-  const dragCounter = useRef(0); // compteur pour ignorer les dragenter/leave des enfants
-
-  const handlePageDragEnter = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current++;
-    if (e.dataTransfer.types.some(t => t === 'Files' || t === 'text/plain')) setIsDragging(true);
-  }, []);
-
-  const handlePageDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
-
-  const handlePageDragLeave = useCallback((e: React.DragEvent) => {
-    dragCounter.current--;
-    if (dragCounter.current <= 0) { dragCounter.current = 0; setIsDragging(false); }
-  }, []);
-
-  const handlePageDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    dragCounter.current = 0;
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      setDroppedFiles(files);
-      setAnalyseOpen(true);
-      return;
-    }
-    // Detect text drop → open analyse dialog with text pre-filled
-    const text = e.dataTransfer.getData('text/plain');
-    if (text?.trim()) {
-      setDroppedText(text.trim());
-      setAnalyseOpen(true);
-    }
-  }, []);
+  /* Le glisser-déposer d'un document vit desormais dans CRMLayout : il
+     fonctionne sur TOUTES les pages, et la fenêtre d'analyse y est déjà
+     montée. En garder une copie ici en ouvrirait deux. */
 
   const produitsStockBas = produits.filter(p => p.stock < p.stockMin);
   const devisAcceptes = devis.filter(d => d.statut === 'accepté');
@@ -183,27 +139,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div
-      className="space-y-6 relative"
-      onDragEnter={handlePageDragEnter}
-      onDragOver={handlePageDragOver}
-      onDragLeave={handlePageDragLeave}
-      onDrop={handlePageDrop}
-    >
-      {/* ── Overlay drag-and-drop plein écran ── */}
-      {isDragging && (
-        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-5 pointer-events-none"
-          style={{ background: 'rgba(var(--primary-rgb, 59 130 246) / 0.08)', backdropFilter: 'blur(2px)' }}>
-          <div className="rounded-3xl border-4 border-dashed border-primary bg-background/80 px-16 py-12 flex flex-col items-center gap-4 shadow-2xl">
-            <div className="w-20 h-20 rounded-2xl bg-primary/15 flex items-center justify-center">
-              <Upload className="w-10 h-10 text-primary animate-bounce" />
-            </div>
-            <p className="text-2xl font-bold text-primary">Déposer pour analyser</p>
-            <p className="text-sm text-muted-foreground text-center">PDF · Excel · Email (.eml / .msg) · Texte d'email</p>
-          </div>
-        </div>
-      )}
-
+    <div className="space-y-6 relative">
       {/* ── Onglets tableau de bord ── */}
       <div className="flex gap-1 border-b border-border">
         <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
@@ -318,21 +254,6 @@ export default function Dashboard() {
           </Link>
         ))}
       </div>
-
-      {/* Une fois ouvert, il RESTE monté : le refermer ne doit pas jeter
-          l'analyse en cours, comme c'était le cas quand il vivait ici en
-          permanence. Avant la première ouverture, en revanche, il ne coûte
-          rien. */}
-      {(analyseOpen || analyseDejaOuvert.current) && (
-        <Suspense fallback={null}>
-          <AnalyseDocumentDialog
-            open={analyseOpen}
-            onOpenChange={(v) => { setAnalyseOpen(v); if (!v) { setDroppedFiles([]); setDroppedText(''); } }}
-            initialFiles={droppedFiles.length > 0 ? droppedFiles : undefined}
-            initialText={droppedText || undefined}
-          />
-        </Suspense>
-      )}
 
       {/* ── Encours fin de mois (admin uniquement) ── */}
       {isAdmin && ((totalFournFDM > 0 && !hidden.has('encours-fourn-fdm')) || (totalClientFDM > 0 && !hidden.has('encours-client-fdm'))) && (

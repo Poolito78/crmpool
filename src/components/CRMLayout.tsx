@@ -64,6 +64,82 @@ export default function CRMLayout() {
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const analyseDejaOuvert = useRef(false);
   if (analyseOpen) analyseDejaOuvert.current = true;
+
+  /* ── Glisser-déposer d'un document, sur TOUTE l'application ─────────────
+   *
+   * Le tableau de bord savait le faire, et lui seul. Or on ne se trouve
+   * presque jamais sur le tableau de bord quand un fournisseur envoie son
+   * tarif : on est dans les produits, dans les devis, dans la page qui a
+   * motivé la question. Poser le déposé ICI, dans la coquille, le rend
+   * disponible partout — et il n'y a qu'une fenêtre d'analyse, celle que
+   * cette coquille montait déjà.
+   *
+   * UN GLISSER INTERNE N'EST PAS UN DOCUMENT. Réordonner les colonnes d'un
+   * tableau ou déplacer une ligne de devis déclenche les mêmes événements ;
+   * les intercepter ouvrirait la fenêtre d'analyse au milieu d'un tri. On
+   * repère donc les glissers nés dans la page — eux seuls émettent
+   * `dragstart` — et on les laisse tranquilles. */
+  const [fichiersDeposes, setFichiersDeposes] = useState<File[]>([]);
+  const [texteDepose, setTexteDepose] = useState('');
+  const [survolDepot, setSurvolDepot] = useState(false);
+  /** Compteur : les enfants émettent leurs propres dragenter/dragleave. */
+  const compteurDepot = useRef(0);
+  const glisserInterne = useRef(false);
+
+  useEffect(() => {
+    const debut = () => { glisserInterne.current = true; };
+    const fin = () => { glisserInterne.current = false; };
+    document.addEventListener('dragstart', debut, true);
+    document.addEventListener('dragend', fin, true);
+    document.addEventListener('drop', fin, true);
+    return () => {
+      document.removeEventListener('dragstart', debut, true);
+      document.removeEventListener('dragend', fin, true);
+      document.removeEventListener('drop', fin, true);
+    };
+  }, []);
+
+  const depotDragEnter = (e: React.DragEvent) => {
+    if (glisserInterne.current) return;
+    compteurDepot.current++;
+    if (e.dataTransfer.types.some(t => t === 'Files' || t === 'text/plain')) {
+      e.preventDefault();
+      setSurvolDepot(true);
+    }
+  };
+
+  const depotDragOver = (e: React.DragEvent) => {
+    if (glisserInterne.current || !survolDepot) return;
+    e.preventDefault();
+  };
+
+  const depotDragLeave = () => {
+    if (glisserInterne.current) return;
+    compteurDepot.current--;
+    if (compteurDepot.current <= 0) { compteurDepot.current = 0; setSurvolDepot(false); }
+  };
+
+  const depotDrop = (e: React.DragEvent) => {
+    compteurDepot.current = 0;
+    setSurvolDepot(false);
+    if (glisserInterne.current) return;
+
+    const fichiers = Array.from(e.dataTransfer.files);
+    if (fichiers.length) {
+      e.preventDefault();
+      setTexteDepose('');
+      setFichiersDeposes(fichiers);
+      setAnalyseOpen(true);
+      return;
+    }
+    const texte = e.dataTransfer.getData('text/plain');
+    if (texte?.trim()) {
+      e.preventDefault();
+      setFichiersDeposes([]);
+      setTexteDepose(texte.trim());
+      setAnalyseOpen(true);
+    }
+  };
   // Sidebar desktop repliée (icônes seules) — persistée
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     try { return localStorage.getItem('crm_sidebar_collapsed') === '1'; } catch { return false; }
@@ -216,7 +292,32 @@ export default function CRMLayout() {
   const currentShort = currentNav?.shortLabel ?? currentLabel;
 
   return (
-    <div className="h-screen overflow-hidden flex bg-background">
+    <div
+      className="h-screen overflow-hidden flex bg-background"
+      onDragEnter={depotDragEnter}
+      onDragOver={depotDragOver}
+      onDragLeave={depotDragLeave}
+      onDrop={depotDrop}
+    >
+      {/* Voile de dépôt, au-dessus de tout et transparent au pointeur : c'est
+          le conteneur en dessous qui reçoit le drop. */}
+      {survolDepot && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center pointer-events-none bg-primary/10"
+          style={{ backdropFilter: 'blur(2px)' }}
+        >
+          <div className="rounded-3xl border-4 border-dashed border-primary bg-background/85 px-10 py-8 sm:px-16 sm:py-12 flex flex-col items-center gap-4 shadow-2xl">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-primary/15 flex items-center justify-center">
+              <ScanText className="w-8 h-8 sm:w-10 sm:h-10 text-primary animate-bounce" />
+            </div>
+            <p className="text-lg sm:text-xl font-heading font-bold">Déposez pour analyser</p>
+            <p className="text-xs sm:text-sm text-muted-foreground text-center max-w-xs">
+              PDF, e-mail, Excel ou simple texte — devis, commande, bon de livraison
+              ou tarif fournisseur.
+            </p>
+          </div>
+        </div>
+      )}
       {/* Desktop Sidebar */}
       <aside className={cn(
         'hidden md:flex md:flex-col md:fixed md:inset-y-0 bg-sidebar text-sidebar-foreground z-30 transition-[width] duration-200',
@@ -336,7 +437,17 @@ export default function CRMLayout() {
           fenêtre ne doit pas jeter l'analyse en cours. */}
       {(analyseOpen || analyseDejaOuvert.current) && (
         <Suspense fallback={null}>
-          <AnalyseDocumentDialog open={analyseOpen} onOpenChange={setAnalyseOpen} />
+          <AnalyseDocumentDialog
+            open={analyseOpen}
+            onOpenChange={(v) => {
+              setAnalyseOpen(v);
+              /* Ce qui a été déposé n'a de sens que pour l'analyse en cours :
+                 le garder rouvrirait la fenêtre sur le document précédent. */
+              if (!v) { setFichiersDeposes([]); setTexteDepose(''); }
+            }}
+            initialFiles={fichiersDeposes.length ? fichiersDeposes : undefined}
+            initialText={texteDepose || undefined}
+          />
         </Suspense>
       )}
 

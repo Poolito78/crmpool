@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
+  appliquerPrix,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -196,5 +197,72 @@ describe('proposition par ligne', () => {
     });
     expect(p.coefficient?.categorie).toBe('EPOXY');
     expect(p.coefficient?.fiable).toBe(true);
+  });
+});
+
+describe('application des prix', () => {
+  const PRODUITS = [
+    produit({ id: 'p1', prixAchat: 80, prixAchatMaj: '2026-01-01T00:00:00Z' }),
+    produit({ id: 'p2', prixAchat: 50 }),
+  ];
+  const LIENS = [lien({ produitId: 'p1', fournisseurId: 'f1', prixAchat: 80, referenceFournisseur: 'ANCIENNE' })];
+  const commun = { fournisseurId: 'f1', horodate: '2026-09-02T10:00:00Z', nouvelId: () => 'neuf' };
+
+  it('met à jour le lien existant sans écraser sa référence', () => {
+    const r = appliquerPrix({
+      ...commun, liens: LIENS, produits: PRODUITS,
+      cibles: [{ produitId: 'p1', prix: 92.5, reference: 'LUE-SUR-PDF', versLien: true, versArticle: false }],
+    });
+    expect(r.liens).toHaveLength(1);
+    expect(r.liens[0].prixAchat).toBe(92.5);
+    // La référence saisie à la main vaut mieux que celle lue sur un PDF.
+    expect(r.liens[0].referenceFournisseur).toBe('ANCIENNE');
+    // La fiche article n'a pas bougé : la case n'était pas cochée.
+    expect(r.produits.find(p => p.id === 'p1')!.prixAchat).toBe(80);
+    expect(r.nbLiens).toBe(1);
+    expect(r.nbArticles).toBe(0);
+  });
+
+  it('crée le lien quand il n’existe pas, avec la référence lue', () => {
+    const r = appliquerPrix({
+      ...commun, liens: LIENS, produits: PRODUITS,
+      cibles: [{ produitId: 'p2', prix: 55, reference: 'REF-F', versLien: true, versArticle: false }],
+    });
+    expect(r.liens).toHaveLength(2);
+    const neuf = r.liens.find(l => l.produitId === 'p2')!;
+    expect(neuf.referenceFournisseur).toBe('REF-F');
+    expect(neuf.conditionnementMin).toBe(1);
+  });
+
+  it('date le prix d’achat de la fiche article quand il change', () => {
+    const r = appliquerPrix({
+      ...commun, liens: LIENS, produits: PRODUITS,
+      cibles: [{ produitId: 'p1', prix: 92.5, versLien: false, versArticle: true }],
+    });
+    const p = r.produits.find(x => x.id === 'p1')!;
+    expect(p.prixAchat).toBe(92.5);
+    expect(p.prixAchatMaj).toBe('2026-09-02T10:00:00Z');
+  });
+
+  /* Réécrire un prix identique redaterait le changement et ferait apparaître
+     un mouvement dans l'historique là où rien n'a bougé. */
+  it('ne touche pas une fiche article dont le prix est déjà le bon', () => {
+    const r = appliquerPrix({
+      ...commun, liens: LIENS, produits: PRODUITS,
+      cibles: [{ produitId: 'p1', prix: 80.002, versLien: false, versArticle: true }],
+    });
+    const p = r.produits.find(x => x.id === 'p1')!;
+    expect(p.prixAchatMaj).toBe('2026-01-01T00:00:00Z');
+    expect(p).toBe(PRODUITS[0]);   // objet inchangé, pas même recopié
+  });
+
+  it('ne renvoie que des copies : les tableaux d’origine sont intacts', () => {
+    const liensAvant = JSON.parse(JSON.stringify(LIENS));
+    appliquerPrix({
+      ...commun, liens: LIENS, produits: PRODUITS,
+      cibles: [{ produitId: 'p1', prix: 92.5, versLien: true, versArticle: true }],
+    });
+    expect(LIENS).toEqual(liensAvant);
+    expect(PRODUITS[0].prixAchat).toBe(80);
   });
 });

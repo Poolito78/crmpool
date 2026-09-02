@@ -282,3 +282,80 @@ export function prixVenteDepuisAchat(
   if (!coefficient?.fiable || !(prixAchat > 0)) return undefined;
   return Math.round(prixAchat * coefficient.coef * 100) / 100;
 }
+
+/* ── L'écriture ──────────────────────────────────────────────────────────── */
+
+/** Une ligne dont on a décidé le sort. */
+export interface CibleEcriture {
+  produitId: string;
+  prix: number;
+  /** Référence sous laquelle le fournisseur vend cet article. */
+  reference?: string;
+  /** Écrire sur la fiche fournisseur (`produit_fournisseurs`). */
+  versLien: boolean;
+  /** Écrire sur le `prixAchat` de la fiche article. */
+  versArticle: boolean;
+}
+
+/**
+ * Les collections telles qu'elles seront après application.
+ *
+ * Fonction PURE : elle ne parle ni à Supabase ni au store, elle rend les deux
+ * tableaux mis à jour. C'est ce qui permet à l'analyse de document et à la
+ * page « Devis Fournisseurs » d'appliquer un prix exactement de la même
+ * façon — un prix appliqué depuis l'écran de lecture et le même prix appliqué
+ * six mois plus tard depuis la fiche du devis doivent produire le même
+ * résultat, sans quoi il faudrait se demander lequel des deux fait foi.
+ */
+export function appliquerPrix(args: {
+  cibles: CibleEcriture[];
+  fournisseurId: string;
+  liens: ProduitFournisseur[];
+  produits: Produit[];
+  horodate: string;
+  nouvelId: () => string;
+}): { liens: ProduitFournisseur[]; produits: Produit[]; nbLiens: number; nbArticles: number } {
+  const { cibles, fournisseurId, horodate, nouvelId } = args;
+
+  const versArticle = new Map<string, number>();
+  for (const c of cibles) if (c.versArticle) versArticle.set(c.produitId, c.prix);
+
+  const produits = versArticle.size
+    ? args.produits.map(p => {
+        const prix = versArticle.get(p.id);
+        if (prix == null || memePrix(prix, p.prixAchat)) return p;
+        return { ...p, prixAchat: prix, prixAchatMaj: horodate };
+      })
+    : args.produits;
+
+  const liens = [...args.liens];
+  let nbLiens = 0;
+  for (const c of cibles) {
+    if (!c.versLien) continue;
+    const idx = liens.findIndex(pf =>
+      pf.produitId === c.produitId && pf.fournisseurId === fournisseurId);
+    if (idx >= 0) {
+      liens[idx] = {
+        ...liens[idx],
+        prixAchat: c.prix,
+        /* La référence n'est complétée que si elle manquait : celle saisie à
+           la main vaut mieux que celle lue sur un PDF. */
+        referenceFournisseur: liens[idx].referenceFournisseur || (c.reference || ''),
+      };
+    } else {
+      liens.push({
+        id: nouvelId(),
+        produitId: c.produitId,
+        fournisseurId,
+        prixAchat: c.prix,
+        referenceFournisseur: c.reference || '',
+        delaiLivraison: 0,
+        conditionnementMin: 1,
+        estPrioritaire: false,
+      });
+    }
+    nbLiens++;
+  }
+
+  return { liens, produits, nbLiens, nbArticles: versArticle.size };
+}

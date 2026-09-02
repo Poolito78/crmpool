@@ -39,7 +39,7 @@ import { portGammes, type LigneGamme } from '@/lib/transportGammes';
 import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat,
-  type PropositionPrix,
+  appliquerPrix, type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
@@ -925,8 +925,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
     const horodate = new Date().toISOString();
     const nouveauxArticles: Produit[] = [];
-    const majArticles = new Map<string, number>();     // produitId → prix d'achat
-    const liensAEcrire: { produitId: string; prix: number; reference: string }[] = [];
+    const cibles: CibleEcriture[] = [];
     const lignesDevis: DevisFournisseur['lignes'] = [];
     const devisId = generateId();
 
@@ -954,9 +953,11 @@ const [contratOdoo, setContratOdoo] = useState<
         produitId = neuf.id;
       }
 
-      if (produitId && prix != null) {
-        if (dfVersLien[i]) liensAEcrire.push({ produitId, prix, reference: refFournisseur });
-        if (dfVersArticle[i]) majArticles.set(produitId, prix);
+      if (produitId && prix != null && (dfVersLien[i] || dfVersArticle[i])) {
+        cibles.push({
+          produitId, prix, reference: refFournisseur,
+          versLien: !!dfVersLien[i], versArticle: !!dfVersArticle[i],
+        });
       }
 
       lignesDevis.push({
@@ -976,46 +977,21 @@ const [contratOdoo, setContratOdoo] = useState<
 
     /* Les articles d'abord : un lien fournisseur qui pointe vers un produit
        pas encore écrit serait orphelin. */
-    if (nouveauxArticles.length || majArticles.size) {
-      updateProduits(prev => {
-        const modifies = prev.map(p => {
-          const prix = majArticles.get(p.id);
-          if (prix == null) return p;
-          return { ...p, prixAchat: prix, prixAchatMaj: horodate };
-        });
-        return [...nouveauxArticles, ...modifies];
-      });
+    if (nouveauxArticles.length || cibles.some(c => c.versArticle)) {
+      updateProduits(prev => [
+        ...nouveauxArticles,
+        ...appliquerPrix({
+          cibles, fournisseurId: dfFournisseurId, liens: produitFournisseurs,
+          produits: prev, horodate, nouvelId: generateId,
+        }).produits,
+      ]);
     }
 
-    if (liensAEcrire.length) {
-      updateProduitFournisseurs(prev => {
-        const suite = [...prev];
-        for (const { produitId, prix, reference } of liensAEcrire) {
-          const idx = suite.findIndex(pf =>
-            pf.produitId === produitId && pf.fournisseurId === dfFournisseurId);
-          if (idx >= 0) {
-            suite[idx] = {
-              ...suite[idx],
-              prixAchat: prix,
-              /* La référence n'est complétée que si elle manquait : celle
-                 saisie à la main vaut mieux que celle lue sur un PDF. */
-              referenceFournisseur: suite[idx].referenceFournisseur || reference,
-            };
-          } else {
-            suite.push({
-              id: generateId(),
-              produitId,
-              fournisseurId: dfFournisseurId,
-              prixAchat: prix,
-              referenceFournisseur: reference,
-              delaiLivraison: 0,
-              conditionnementMin: 1,
-              estPrioritaire: false,
-            });
-          }
-        }
-        return suite;
-      });
+    if (cibles.some(c => c.versLien)) {
+      updateProduitFournisseurs(prev => appliquerPrix({
+        cibles, fournisseurId: dfFournisseurId, liens: prev,
+        produits: [], horodate, nouvelId: generateId,
+      }).liens);
     }
 
     const fournisseur = fournisseurs.find(f => f.id === dfFournisseurId);
