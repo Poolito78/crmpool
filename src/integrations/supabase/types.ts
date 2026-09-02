@@ -709,6 +709,114 @@ export type Database = {
           },
         ]
       }
+      devis_fournisseur: {
+        Row: {
+          created_at: string
+          date_document: string | null
+          date_validite: string | null
+          devise: string
+          fournisseur_id: string | null
+          fournisseur_nom: string | null
+          id: string
+          notes: string | null
+          numero: string | null
+          reference: string | null
+          source_fichier: string | null
+          source_texte: string | null
+          statut: string
+          total_ht: number | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_document?: string | null
+          date_validite?: string | null
+          devise?: string
+          fournisseur_id?: string | null
+          fournisseur_nom?: string | null
+          id?: string
+          notes?: string | null
+          numero?: string | null
+          reference?: string | null
+          source_fichier?: string | null
+          source_texte?: string | null
+          statut?: string
+          total_ht?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          created_at?: string
+          date_document?: string | null
+          date_validite?: string | null
+          devise?: string
+          fournisseur_id?: string | null
+          fournisseur_nom?: string | null
+          id?: string
+          notes?: string | null
+          numero?: string | null
+          reference?: string | null
+          source_fichier?: string | null
+          source_texte?: string | null
+          statut?: string
+          total_ht?: number | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      devis_fournisseur_lignes: {
+        Row: {
+          action: string | null
+          applique: boolean
+          applique_le: string | null
+          created_at: string
+          designation: string | null
+          devis_id: string
+          id: string
+          ordre: number
+          prix_achat: number | null
+          produit_id: string | null
+          quantite: number | null
+          reference: string | null
+          unite: string | null
+          user_id: string
+        }
+        Insert: {
+          action?: string | null
+          applique?: boolean
+          applique_le?: string | null
+          created_at?: string
+          designation?: string | null
+          devis_id: string
+          id?: string
+          ordre?: number
+          prix_achat?: number | null
+          produit_id?: string | null
+          quantite?: number | null
+          reference?: string | null
+          unite?: string | null
+          user_id?: string
+        }
+        Update: {
+          action?: string | null
+          applique?: boolean
+          applique_le?: string | null
+          created_at?: string
+          designation?: string | null
+          devis_id?: string
+          id?: string
+          ordre?: number
+          prix_achat?: number | null
+          produit_id?: string | null
+          quantite?: number | null
+          reference?: string | null
+          unite?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       devis_message_templates: {
         Row: {
           contenu: string

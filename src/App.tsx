@@ -86,6 +86,7 @@ const Dashboard = lazy(() => import("@/pages/Dashboard"));
 const Clients = lazy(() => import("@/pages/Clients"));
 const Produits = lazy(() => import("@/pages/Produits"));
 const Fournisseurs = lazy(() => import("@/pages/Fournisseurs"));
+const DevisFournisseurs = lazy(() => import("@/pages/DevisFournisseurs"));
 const Stock = lazy(() => import("@/pages/Stock"));
 const Commandes = lazy(() => import("@/pages/Commandes"));
 const CommandesClient = lazy(() => import("@/pages/CommandesClient"));
@@ -172,6 +173,7 @@ function AppRoutes() {
             <Route path="/clients" element={<Clients />} />
             <Route path="/produits" element={<Produits />} />
             <Route path="/fournisseurs" element={canAchat ? <Fournisseurs /> : <Navigate to="/" replace />} />
+            <Route path="/devis-fournisseurs" element={canAchat ? <DevisFournisseurs /> : <Navigate to="/" replace />} />
             <Route path="/stock" element={<Stock />} />
             <Route path="/devis" element={<Devis />} />
             <Route path="/commandes" element={canAchat ? <Commandes /> : <Navigate to="/" replace />} />

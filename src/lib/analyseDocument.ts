@@ -14,6 +14,13 @@ export type TypeDocument =
   | 'facture_client'
   /** Un client demande un prix : ni numéro, ni total, ni référence. */
   | 'demande_devis'
+  /**
+   * Un FOURNISSEUR nous fait une offre de prix. Le symétrique de
+   * `devis_client`, et longtemps confondu avec lui : les deux portent le mot
+   * « devis », un numéro et des prix. Ce qui les sépare est le sens de la
+   * flèche — ici les prix sont ceux qu'on PAIE, pas ceux qu'on demande.
+   */
+  | 'devis_fournisseur'
   | 'autre';
 
 export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
@@ -24,6 +31,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   facture_fournisseur:  { label: 'Facture fournisseur',   color: 'bg-warning/10 text-warning' },
   facture_client:       { label: 'Facture client',        color: 'bg-warning/10 text-warning' },
   demande_devis:        { label: 'Demande de devis',      color: 'bg-primary/10 text-primary' },
+  devis_fournisseur:    { label: 'Devis fournisseur',     color: 'bg-info/10 text-info' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
 };
 
@@ -67,7 +75,7 @@ const PROMPT = `Tu es un assistant spécialisé dans l'extraction de données de
 Identifie le type de document et extrait les informations. Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour :
 
 {
-  "typeDocument": "demande_devis | commande_fournisseur | bon_livraison | devis_client | commande_client | facture_fournisseur | facture_client | autre",
+  "typeDocument": "demande_devis | commande_fournisseur | bon_livraison | devis_client | devis_fournisseur | commande_client | facture_fournisseur | facture_client | autre",
   "numeroDocument": "numéro du document ou null",
   "nomPartenaire": "nom du fournisseur OU du client selon le type, ou null",
   "referencePartenaire": "référence interne du partenaire (leur propre n° de commande/devis) ou null",
@@ -94,10 +102,22 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
 Règles de classification :
 - commande_fournisseur : bon de commande envoyé à un fournisseur, arc de commande, confirmation d'achat
 - bon_livraison : bon de livraison, avis d'expédition
-- devis_client : devis, offre de prix adressé à un client
+- devis_client : devis, offre de prix ÉMIS PAR ISOSIGN et adressé à un client
+- devis_fournisseur : devis, offre de prix, proposition tarifaire ou tarif
+  REÇU D'UN FOURNISSEUR, où ISOSIGN est le destinataire. Ce sont les prix
+  qu'ISOSIGN paierait, pas ceux qu'elle demande.
 - commande_client : bon de commande reçu d'un client
 - facture_fournisseur : facture reçue d'un fournisseur
 - facture_client : facture envoyée à un client
+
+Devis client ou devis fournisseur ? Les deux portent le mot « devis », un
+numéro et des prix ; seul le SENS du document les sépare. Cherche qui l'émet :
+- L'en-tête, le logo et le pied de page portent ISOSIGN (ZA du Monay,
+  71210 Saint-Eusèbe, isosign.fr) → ISOSIGN émet → devis_client.
+- L'en-tête porte une AUTRE société et ISOSIGN figure en destinataire, en
+  « client », en « livré à » ou en « facturé à » → devis_fournisseur.
+Dans ce dernier cas « nomPartenaire » est la société ÉMETTRICE — le
+fournisseur — jamais ISOSIGN.
 - demande_devis : un CLIENT demande un prix ou un devis, le plus souvent par
   courriel. Pas de numéro, pas de prix, pas de total : c'est une demande, pas
   un document comptable. Exemple : « Pouvez-vous nous faire un devis pour 14u

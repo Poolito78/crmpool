@@ -37,6 +37,11 @@ import {
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
 import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
+import {
+  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat,
+  type PropositionPrix,
+} from '@/lib/prixAchatFournisseur';
+import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -134,8 +139,9 @@ interface PartenaireOdoo {
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
     commandesFournisseur, fournisseurs, produits, produitsCharges, clients, devis,
+    produitFournisseurs,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
-    updateProduits,
+    updateProduits, updateProduitFournisseurs,
   } = useCRM();
 
   /* ── état analyse ── */
@@ -419,6 +425,21 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [surfaceSysteme, setSurfaceSysteme] = useState<Record<number, number>>({});
   /** Composants facultatifs cochés. Clé : « <indice>:<id du composant> ». */
   const [optionsSysteme, setOptionsSysteme] = useState<Record<string, boolean>>({});
+
+  /* ── Devis fournisseur : reprise des prix d'achat ──────────────────────── */
+  /** Fournisseur auquel rattacher l'offre. */
+  const [dfFournisseurId, setDfFournisseurId] = useState('');
+  /** Prix d'achat corrigé à la main. Clé : indice de ligne. */
+  const [dfPrix, setDfPrix] = useState<Record<number, number>>({});
+  /** Lignes dont le prix ira sur la FICHE FOURNISSEUR du produit. */
+  const [dfVersLien, setDfVersLien] = useState<Record<number, boolean>>({});
+  /** Lignes dont le prix ira aussi sur le PRIX D'ACHAT de la fiche article. */
+  const [dfVersArticle, setDfVersArticle] = useState<Record<number, boolean>>({});
+  /** Lignes hors catalogue dont on veut créer l'article. */
+  const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
+  const [dfEnCours, setDfEnCours] = useState(false);
+  const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
+
   const { systemes } = useSystemes();
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
@@ -462,6 +483,9 @@ const [contratOdoo, setContratOdoo] = useState<
   /* ── helpers ── */
   const isFournisseurDoc = (t?: TypeDocument) =>
     t === 'commande_fournisseur' || t === 'bon_livraison' || t === 'facture_fournisseur';
+  /* Un devis fournisseur ne se réceptionne pas : il n'y a pas de marchandise.
+     Il vaut par ses PRIX, et suit donc son propre chemin. */
+  const isDevisFourn = (t?: TypeDocument) => t === 'devis_fournisseur';
   const isClientDoc = (t?: TypeDocument) =>
     t === 'commande_client' || t === 'devis_client' || t === 'facture_client'
     // Une demande de devis reçue par courriel mène au même endroit : un devis.
@@ -486,6 +510,18 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerCFDateLivraison(result.dateLivraisonPrevue || '');
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
   }, [result, matchedCF]);
+
+  /* ── pré-remplissage devis fournisseur ──────────────────────────────────
+   *
+   * Les cases sont cochées d'office là où l'intention ne fait pas de doute :
+   * la fiche fournisseur, qui n'est que le prix de CE fournisseur pour CET
+   * article. La fiche article, elle, commande toutes les marges de
+   * l'application — elle reste décochée, à cocher en connaissance de cause. */
+  useEffect(() => {
+    if (!result || !isDevisFourn(result.typeDocument)) return;
+    const trouve = rapprocherFournisseur(result.nomPartenaire, fournisseurs);
+    setDfFournisseurId(prev => prev || trouve?.id || '');
+  }, [result, fournisseurs]);
 
   /* ── pré-remplissage formulaire CC / Devis ── */
   useEffect(() => {
@@ -585,6 +621,9 @@ const [contratOdoo, setContratOdoo] = useState<
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
+    setDfFournisseurId(''); setDfPrix({});
+    setDfVersLien({}); setDfVersArticle({}); setDfCreer({});
+    dfTouche.current = false;
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -856,6 +895,165 @@ const [contratOdoo, setContratOdoo] = useState<
   }
 
   /* ── créer commande client ── */
+  /**
+   * Applique les prix d'achat lus sur un devis fournisseur.
+   *
+   * Trois écritures, et un enregistrement.
+   *
+   * — La FICHE FOURNISSEUR (`produit_fournisseurs`) reçoit le prix de ce
+   *   fournisseur pour cet article, avec la référence sous laquelle il le
+   *   vend : c'est elle qui permettra de le retrouver la prochaine fois sans
+   *   deviner.
+   * — La FICHE ARTICLE ne bouge que si la case est cochée. Son `prixAchat`
+   *   commande toutes les marges de l'application ; le déclencheur
+   *   `trg_noter_prix` en garde d'ailleurs l'historique, visible dans l'onglet
+   *   « Prix ». On date le changement pour que la synchronisation Odoo ne le
+   *   défasse pas au prochain passage.
+   * — Un ARTICLE ABSENT n'est créé que sur demande, et son prix de vente n'est
+   *   proposé que si le catalogue fournit un coefficient fiable pour sa
+   *   famille. Sinon il reste à zéro : un prix de vente vide saute aux yeux au
+   *   premier devis, un prix plausible et faux part chez le client.
+   *
+   * L'offre elle-même est enregistrée dans tous les cas, appliquée ou non.
+   * C'est ce qui manquait : un tarif reçu et non répercuté ne se voyait nulle
+   * part.
+   */
+  async function handleAppliquerPrixAchat() {
+    if (!result) return;
+    if (!dfFournisseurId) { toast.error('Choisissez le fournisseur'); return; }
+    setDfEnCours(true);
+
+    const horodate = new Date().toISOString();
+    const nouveauxArticles: Produit[] = [];
+    const majArticles = new Map<string, number>();     // produitId → prix d'achat
+    const liensAEcrire: { produitId: string; prix: number; reference: string }[] = [];
+    const lignesDevis: DevisFournisseur['lignes'] = [];
+    const devisId = generateId();
+
+    (result.lignes || []).forEach((l, i) => {
+      const prop = propositionsFournisseur.get(i);
+      const prix = dfPrixDeLigne(i);
+      const refFournisseur = (l.reference || '').trim();
+      let produitId = prop?.produit?.id;
+
+      /* Article absent qu'on demande à créer. */
+      if (prop?.action === 'absent' && dfCreer[i] && prix != null) {
+        const neuf: Produit = {
+          id: generateId(),
+          reference: refFournisseur || (l.description || '').slice(0, 40) || 'NOUVEAU',
+          description: l.description || '',
+          prixAchat: prix, coefficient: 1,
+          /* Sans coefficient fiable, pas de prix de vente inventé. */
+          prixHT: prixVenteDepuisAchat(prix, prop.coefficient) ?? 0,
+          coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
+          tva: l.tva ?? 20, unite: 'u', stock: 0, stockMin: 0,
+          prixAchatMaj: horodate,
+          dateCreation: today(),
+        };
+        nouveauxArticles.push(neuf);
+        produitId = neuf.id;
+      }
+
+      if (produitId && prix != null) {
+        if (dfVersLien[i]) liensAEcrire.push({ produitId, prix, reference: refFournisseur });
+        if (dfVersArticle[i]) majArticles.set(produitId, prix);
+      }
+
+      lignesDevis.push({
+        id: generateId(),
+        devisId,
+        ordre: i,
+        reference: refFournisseur || undefined,
+        designation: l.description || undefined,
+        quantite: l.quantite,
+        prixAchat: prix,
+        produitId,
+        action: prop?.action,
+        applique: !!(produitId && prix != null && (dfVersLien[i] || dfVersArticle[i])),
+        appliqueLe: (dfVersLien[i] || dfVersArticle[i]) ? horodate : undefined,
+      });
+    });
+
+    /* Les articles d'abord : un lien fournisseur qui pointe vers un produit
+       pas encore écrit serait orphelin. */
+    if (nouveauxArticles.length || majArticles.size) {
+      updateProduits(prev => {
+        const modifies = prev.map(p => {
+          const prix = majArticles.get(p.id);
+          if (prix == null) return p;
+          return { ...p, prixAchat: prix, prixAchatMaj: horodate };
+        });
+        return [...nouveauxArticles, ...modifies];
+      });
+    }
+
+    if (liensAEcrire.length) {
+      updateProduitFournisseurs(prev => {
+        const suite = [...prev];
+        for (const { produitId, prix, reference } of liensAEcrire) {
+          const idx = suite.findIndex(pf =>
+            pf.produitId === produitId && pf.fournisseurId === dfFournisseurId);
+          if (idx >= 0) {
+            suite[idx] = {
+              ...suite[idx],
+              prixAchat: prix,
+              /* La référence n'est complétée que si elle manquait : celle
+                 saisie à la main vaut mieux que celle lue sur un PDF. */
+              referenceFournisseur: suite[idx].referenceFournisseur || reference,
+            };
+          } else {
+            suite.push({
+              id: generateId(),
+              produitId,
+              fournisseurId: dfFournisseurId,
+              prixAchat: prix,
+              referenceFournisseur: reference,
+              delaiLivraison: 0,
+              conditionnementMin: 1,
+              estPrioritaire: false,
+            });
+          }
+        }
+        return suite;
+      });
+    }
+
+    const fournisseur = fournisseurs.find(f => f.id === dfFournisseurId);
+    const appliquees = lignesDevis.filter(l => l.applique).length;
+
+    const erreur = await enregistrerDevisFournisseur({
+      id: devisId,
+      fournisseurId: dfFournisseurId,
+      fournisseurNom: result.nomPartenaire || fournisseur?.nom,
+      numero: result.numeroDocument,
+      dateDocument: result.dateDocument,
+      reference: result.referencePartenaire,
+      totalHT: result.totalHT,
+      devise: 'EUR',
+      statut: appliquees ? 'applique' : 'recu',
+      notes: result.notes,
+      sourceFichier: fichier?.name,
+      createdAt: horodate,
+      lignes: lignesDevis,
+    }, analyseTexteRef.current);
+
+    setDfEnCours(false);
+
+    if (erreur) {
+      /* Les prix sont écrits, le devis non : le dire plutôt que d'afficher un
+         succès qui laisserait croire que tout est en place. */
+      toast.error(`Prix appliqués, mais le devis fournisseur n'a pas pu être enregistré : ${erreur}`);
+      return;
+    }
+
+    const quoi = [
+      appliquees ? `${appliquees} prix appliqué${appliquees > 1 ? 's' : ''}` : null,
+      nouveauxArticles.length ? `${nouveauxArticles.length} article${nouveauxArticles.length > 1 ? 's' : ''} créé${nouveauxArticles.length > 1 ? 's' : ''}` : null,
+    ].filter(Boolean).join(', ');
+    toast.success(quoi ? `Devis fournisseur enregistré — ${quoi}` : 'Devis fournisseur enregistré');
+    onOpenChange(false);
+  }
+
   function handleCreerCC() {
     if (!creerCCClientId) { toast.error('Veuillez sélectionner un client'); return; }
     if (!creerCCNumero.trim()) { toast.error('Veuillez saisir un numéro'); return; }
@@ -1139,6 +1337,72 @@ const [contratOdoo, setContratOdoo] = useState<
     if (choisi) return produitParId(produits, choisi);
     return rapprochements.get(i)?.meilleur;
   }, [choixProduit, produits, rapprochements]);
+
+  /* ── Devis fournisseur ─────────────────────────────────────────────────── */
+
+  /**
+   * L'article visé par une ligne de devis FOURNISSEUR.
+   *
+   * La référence portée sur le document est celle du fournisseur, pas la
+   * nôtre : « 30021504 » chez Tremco est « HYDRASEAL DPM 12KG » chez nous.
+   * Quand ce fournisseur a déjà été rattaché à cet article, la table le sait —
+   * `reference_fournisseur` a justement été remplie pour ça. C'est un lien
+   * exact, bien plus sûr qu'une ressemblance de libellé, et il passe donc
+   * d'abord. Le rapprochement par le texte ne sert qu'à la première fois.
+   */
+  const produitDeLigneFournisseur = useCallback((i: number) => {
+    const choisi = choixProduit[i];
+    if (choisi) return produitParId(produits, choisi);
+
+    const ref = (result?.lignes?.[i]?.reference || '').trim().toUpperCase();
+    if (ref && dfFournisseurId) {
+      const lien = produitFournisseurs.find(pf =>
+        pf.fournisseurId === dfFournisseurId &&
+        (pf.referenceFournisseur || '').trim().toUpperCase() === ref);
+      if (lien) {
+        const p = produitParId(produits, lien.produitId);
+        if (p) return p;
+      }
+    }
+    return rapprochements.get(i)?.meilleur;
+  }, [choixProduit, produits, rapprochements, result, dfFournisseurId, produitFournisseurs]);
+
+  /** Le prix d'achat retenu pour une ligne : celui lu, ou celui corrigé. */
+  const dfPrixDeLigne = useCallback((i: number) =>
+    dfPrix[i] ?? result?.lignes?.[i]?.prixUnitaireHT ?? undefined,
+  [dfPrix, result]);
+
+  /** Ce qu'il faut faire de chaque ligne, en l'état des choix de l'écran. */
+  const propositionsFournisseur = useMemo<Map<number, PropositionPrix>>(() => {
+    const m = new Map<number, PropositionPrix>();
+    if (!result?.lignes?.length || !isDevisFourn(result.typeDocument)) return m;
+    result.lignes.forEach((_, i) => {
+      m.set(i, proposerPrix({
+        indice: i,
+        prixLu: dfPrixDeLigne(i),
+        produit: produitDeLigneFournisseur(i),
+        fournisseurId: dfFournisseurId || undefined,
+        liens: produitFournisseurs,
+        produits,
+      }));
+    });
+    return m;
+  }, [result, dfPrixDeLigne, produitDeLigneFournisseur, dfFournisseurId, produitFournisseurs, produits]);
+
+  /* Les cases sont cochées d'office là où l'intention ne fait pas de doute :
+     la fiche fournisseur, qui n'est que le prix de CE fournisseur pour CET
+     article. La fiche article, elle, commande toutes les marges — elle reste
+     décochée, à cocher en connaissance de cause. Une fois que l'utilisateur a
+     touché une case, on ne repropose plus rien. */
+  const dfTouche = useRef(false);
+  useEffect(() => {
+    if (!result || !isDevisFourn(result.typeDocument) || dfTouche.current) return;
+    const versLien: Record<number, boolean> = {};
+    propositionsFournisseur.forEach((p, i) => {
+      if (p.action === 'actualiser' || p.action === 'rattacher') versLien[i] = true;
+    });
+    setDfVersLien(versLien);
+  }, [propositionsFournisseur, result]);
 
   /**
    * Articles ajoutés d'office par les règles d'accompagnement.
@@ -2017,6 +2281,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const isCC = result && result.typeDocument === 'commande_client';
   const isFact = result && (result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client');
   const isAutre = result && result.typeDocument === 'autre';
+  const isDevisFournisseur = result && isDevisFourn(result.typeDocument);
 
   const typeMeta = result ? TYPE_LABELS[result.typeDocument] : null;
 
@@ -2095,6 +2360,12 @@ const [contratOdoo, setContratOdoo] = useState<
     setMatchedCF(null);
     setShowCreerCF(false);
     setShowCreerCC(false);
+    /* Les cases cochées valaient pour le type précédent : les garder ferait
+       appliquer des prix qu'on n'a plus sous les yeux. */
+    setDfVersLien({});
+    setDfVersArticle({});
+    setDfCreer({});
+    dfTouche.current = false;
   }
 
   // Panneau d'aperçu (un seul rendu à la fois : sous la zone d'import avant
@@ -3692,6 +3963,221 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
 
                 {/* ═══ Facture ═══ */}
+                {/* ═══ Devis fournisseur → reprise des prix d'achat ═══ */}
+                {isDevisFournisseur && (
+                  <div className="rounded-xl border border-info/30 bg-info/5 p-3 sm:p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-info/15 flex items-center justify-center shrink-0">
+                        <Truck className="w-4 h-4 text-info" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">Offre de prix reçue</p>
+                        <p className="text-xs text-muted-foreground">
+                          Ces prix sont ceux qu'on paie. Cochez ce qui doit être repris.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Fournisseur</Label>
+                      <Select value={dfFournisseurId} onValueChange={setDfFournisseurId}>
+                        <SelectTrigger className="h-9 mt-1">
+                          <SelectValue placeholder="Choisir le fournisseur…" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fournisseurs.map(f => (
+                            <SelectItem key={f.id} value={f.id}>{f.nom}{f.societe ? ` — ${f.societe}` : ''}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {!dfFournisseurId && result?.nomPartenaire && (
+                        <p className="text-xs text-warning mt-1 flex items-center gap-1">
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          « {result.nomPartenaire} » n'a pas été reconnu parmi vos fournisseurs.
+                        </p>
+                      )}
+                    </div>
+
+                    {!dfFournisseurId ? (
+                      <p className="text-xs text-muted-foreground">
+                        Le fournisseur décide de quelle fiche de prix il s'agit : rien ne peut
+                        être proposé avant qu'il soit choisi.
+                      </p>
+                    ) : (
+                      <div className="overflow-x-auto -mx-1">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="text-muted-foreground border-b">
+                              <th className="text-left font-medium py-1.5 px-1">Ligne du document</th>
+                              <th className="text-right font-medium py-1.5 px-1 w-24">Prix lu</th>
+                              <th className="text-right font-medium py-1.5 px-1 w-28 hidden sm:table-cell">Aujourd'hui</th>
+                              <th className="text-center font-medium py-1.5 px-1 w-20">Fiche fourn.</th>
+                              <th className="text-center font-medium py-1.5 px-1 w-20">Fiche article</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(result?.lignes ?? []).map((l, i) => {
+                              const prop = propositionsFournisseur.get(i);
+                              const article = prop?.produit;
+                              const prix = dfPrixDeLigne(i);
+                              const ecart = prop?.ecartLien ?? prop?.ecartArticle;
+                              const referenceActuelle = prop?.prixLien ?? prop?.prixArticle;
+                              const applicable = !!article && prix != null;
+
+                              return (
+                                <tr key={i} className="border-b border-border/50 align-top">
+                                  <td className="py-1.5 px-1">
+                                    <p className="font-medium break-words">
+                                      {l.reference ? <span className="font-mono">{l.reference}</span> : null}
+                                      {l.reference && l.description ? ' · ' : ''}
+                                      {l.description}
+                                    </p>
+                                    {article ? (
+                                      <div className="mt-1">
+                                        <ProduitCombobox
+                                          produits={
+                                            candidatsPour(i).length
+                                              ? candidatsPour(i)
+                                              : produits
+                                          }
+                                          value={article.id}
+                                          onSelect={(id) => {
+                                            dfTouche.current = true;
+                                            setChoixProduit(prev => ({ ...prev, [i]: id }));
+                                          }}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="mt-1 space-y-1">
+                                        <p className="text-destructive">Aucun article du catalogue ne correspond.</p>
+                                        <ProduitCombobox
+                                          produits={candidatsPour(i).length ? candidatsPour(i) : produits}
+                                          value=""
+                                          onSelect={(id) => {
+                                            dfTouche.current = true;
+                                            setChoixProduit(prev => ({ ...prev, [i]: id }));
+                                            setDfVersLien(prev => ({ ...prev, [i]: true }));
+                                          }}
+                                        />
+                                        {prix != null && (
+                                          <label className="flex items-center gap-1.5 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              className="rounded"
+                                              checked={!!dfCreer[i]}
+                                              onChange={e => {
+                                                dfTouche.current = true;
+                                                setDfCreer(prev => ({ ...prev, [i]: e.target.checked }));
+                                                setDfVersLien(prev => ({ ...prev, [i]: e.target.checked }));
+                                              }}
+                                            />
+                                            <span>
+                                              Créer l'article
+                                              {(() => {
+                                                const vente = prixVenteDepuisAchat(prix, prop?.coefficient);
+                                                return vente
+                                                  ? <> — vente proposée à {formatMontant(vente)} (coef. {prop!.coefficient!.coef.toFixed(2)} mesuré sur {prop!.coefficient!.effectif} articles « {prop!.coefficient!.categorie} »)</>
+                                                  : <span className="text-muted-foreground"> — prix de vente à compléter : le catalogue ne donne pas de coefficient fiable ici</span>;
+                                              })()}
+                                            </span>
+                                          </label>
+                                        )}
+                                      </div>
+                                    )}
+                                  </td>
+
+                                  <td className="py-1.5 px-1 text-right">
+                                    <Input
+                                      type="number"
+                                      step="0.01"
+                                      className="h-7 text-xs text-right tabular-nums"
+                                      value={prix ?? ''}
+                                      onChange={e => {
+                                        dfTouche.current = true;
+                                        const v = parseFloat(e.target.value);
+                                        setDfPrix(prev => ({ ...prev, [i]: isNaN(v) ? 0 : v }));
+                                      }}
+                                    />
+                                  </td>
+
+                                  <td className="py-1.5 px-1 text-right tabular-nums hidden sm:table-cell">
+                                    {referenceActuelle != null ? (
+                                      <>
+                                        <div>{formatMontant(referenceActuelle)}</div>
+                                        {ecart != null && Math.abs(ecart) >= 0.5 && (
+                                          <div className={ecart > 0 ? 'text-destructive' : 'text-success'}>
+                                            {ecart > 0 ? '+' : ''}{ecart.toFixed(1)} %
+                                          </div>
+                                        )}
+                                        {prop?.action === 'inchange' && (
+                                          <div className="text-muted-foreground">inchangé</div>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-muted-foreground">
+                                        {article ? 'jamais acheté ici' : '—'}
+                                      </span>
+                                    )}
+                                  </td>
+
+                                  <td className="py-1.5 px-1 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="rounded"
+                                      disabled={!applicable && !dfCreer[i]}
+                                      checked={!!dfVersLien[i]}
+                                      onChange={e => {
+                                        dfTouche.current = true;
+                                        setDfVersLien(prev => ({ ...prev, [i]: e.target.checked }));
+                                      }}
+                                    />
+                                  </td>
+
+                                  <td className="py-1.5 px-1 text-center">
+                                    <input
+                                      type="checkbox"
+                                      className="rounded"
+                                      disabled={!applicable && !dfCreer[i]}
+                                      checked={!!dfVersArticle[i]}
+                                      onChange={e => {
+                                        dfTouche.current = true;
+                                        setDfVersArticle(prev => ({ ...prev, [i]: e.target.checked }));
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      <strong>Fiche fournisseur</strong> : le prix de ce fournisseur pour cet
+                      article, sans effet sur les devis. <strong>Fiche article</strong> : le prix
+                      d'achat qui commande toutes les marges de l'application — son historique
+                      est conservé dans l'onglet « Prix » du produit.
+                    </p>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => void handleAppliquerPrixAchat()}
+                        disabled={dfEnCours || !dfFournisseurId}
+                        className="flex-1"
+                      >
+                        {dfEnCours
+                          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enregistrement…</>
+                          : <><Check className="w-4 h-4 mr-2" />Enregistrer le devis et appliquer</>}
+                      </Button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Le devis est conservé dans Achat → Devis Fournisseurs, même si aucun prix
+                      n'est appliqué.
+                    </p>
+                  </div>
+                )}
+
                 {isFact && (
                   <div className="rounded-xl border border-border bg-muted/30 p-4 flex items-start gap-3">
                     <div className="w-7 h-7 rounded-lg bg-muted flex items-center justify-center shrink-0">

@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -37,6 +37,7 @@ const NAV: NavEntry[] = [
     type: 'group', label: 'Achat', icon: TrendingDown,
     items: [
       { type: 'link', label: 'Fournisseurs',       icon: Truck,       path: '/fournisseurs' },
+      { type: 'link', label: 'Devis Fournisseurs', icon: FileSearch,  path: '/devis-fournisseurs' },
       { type: 'link', label: 'Cmd Fournisseur',    icon: ShoppingCart, path: '/commandes' },
       { type: 'link', label: 'Factures Fourn.',    icon: Receipt,     path: '/factures-fournisseur' },
     ],
