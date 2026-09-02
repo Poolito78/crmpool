@@ -46,7 +46,7 @@ import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
 import {
-  type Client, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
+  type Client, type Fournisseur, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   type Produit,
   generateId, calculerDateEcheance, formatDateISO, formatMontant,
 } from '@/lib/store';
@@ -251,15 +251,17 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      fichier Odoo, et la fiche retenue est recopiée dans MonCRM.
      `odooCible` retient LEQUEL des deux formulaires a demandé la recherche —
      le devis ou la commande client — pour y reporter le client créé. */
-  const [odooCible, setOdooCible] = useState<'devis' | 'commande' | null>(null);
+  const [odooCible, setOdooCible] = useState<'devis' | 'commande' | 'fournisseur' | null>(null);
   const [odooTerme, setOdooTerme] = useState('');
   const [odooEnCours, setOdooEnCours] = useState(false);
   const [odooResultats, setOdooResultats] = useState<PartenaireOdoo[] | null>(null);
 
-  /** Interroge le fichier client d'Odoo sur la raison sociale, la ville, le
-      courriel ou le numéro de TVA. */
-  const chercherClientOdoo = useCallback(async () => {
-    const terme = odooTerme.trim();
+  /**
+   * Interroge le fichier PARTENAIRES d'Odoo — clients et fournisseurs y
+   * cohabitent — sur la raison sociale, la ville, le courriel ou la TVA.
+   */
+  const chercherPartenaireOdoo = useCallback(async (termeImpose?: string) => {
+    const terme = (termeImpose ?? odooTerme).trim();
     if (terme.length < 3) {
       toast.error('Trois caractères au minimum pour chercher.');
       return;
@@ -323,8 +325,79 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       : `${societe} repris d'Odoo et ajouté à MonCRM.`);
   }, [clients, updateClients, odooCible]);
 
-  /** Le bloc de recherche, partagé par les deux formulaires. */
-  const rechercheOdoo = (cible: 'devis' | 'commande') => (
+  /**
+   * Recopie une fiche Odoo dans la liste des FOURNISSEURS.
+   *
+   * Le fichier partenaires d'Odoo ne sépare pas clients et fournisseurs : la
+   * même fiche AFC COMMUNICATION y sert aux deux sens. C'est pourquoi la
+   * recherche est commune et seule la destination change.
+   *
+   * Les conditions commerciales — franco de port, coût de transport, délai de
+   * règlement — ne se lisent pas sur une fiche partenaire. Elles restent donc
+   * à zéro, à compléter dans la fiche fournisseur : les inventer fausserait
+   * les comparatifs d'achat sans que personne ne s'en aperçoive.
+   */
+  const importerFournisseurOdoo = useCallback((p: PartenaireOdoo) => {
+    const societe = p.estSociete ? p.nom : (p.societeMere || p.nom);
+    /* Déjà présent ? On le réutilise plutôt que d'en créer un doublon. */
+    const existant = fournisseurs.find(f =>
+      (p.email && f.email && f.email.toLowerCase() === p.email.toLowerCase())
+      || (f.societe || f.nom || '').toLowerCase() === societe.toLowerCase());
+
+    const fournisseur: Fournisseur = existant ?? {
+      id: generateId(),
+      nom: p.nom,
+      societe,
+      email: p.email,
+      telephone: p.telephone || p.mobile,
+      telephoneMobile: p.mobile,
+      adresse: p.adresse,
+      ville: p.ville,
+      codePostal: p.codePostal,
+      notes: `Fiche reprise du fichier Odoo (partenaire #${p.id}).`,
+      francoPort: 0,
+      coutTransport: 0,
+      delaiReglement: '',
+      dateCreation: new Date().toISOString().split('T')[0],
+    };
+    if (!existant) updateFournisseurs(prev => [...prev, fournisseur]);
+
+    setDfFournisseurId(fournisseur.id);
+    setOdooCible(null);
+    setOdooResultats(null);
+    setOdooTerme('');
+    toast.success(existant
+      ? `${societe} était déjà dans MonCRM : fournisseur rattaché.`
+      : `${societe} repris d'Odoo et ajouté aux fournisseurs.`);
+  }, [fournisseurs, updateFournisseurs]);
+
+  /**
+   * Crée le fournisseur avec le seul nom lu sur le document.
+   *
+   * Le repli quand Odoo ne connaît pas la société — ou ne répond pas. La
+   * fiche est volontairement nue : mieux vaut un fournisseur sans
+   * coordonnées, qu'on complétera, qu'un devis bloqué faute de pouvoir
+   * rattacher ses prix à quelqu'un.
+   */
+  const creerFournisseurDepuisDocument = useCallback((nom: string) => {
+    const fournisseur: Fournisseur = {
+      id: generateId(),
+      nom,
+      societe: nom,
+      email: '', telephone: '', adresse: '', ville: '', codePostal: '',
+      notes: "Créé depuis l'analyse d'un devis fournisseur — coordonnées à compléter.",
+      francoPort: 0,
+      coutTransport: 0,
+      delaiReglement: '',
+      dateCreation: new Date().toISOString().split('T')[0],
+    };
+    updateFournisseurs(prev => [...prev, fournisseur]);
+    setDfFournisseurId(fournisseur.id);
+    toast.success(`${nom} ajouté aux fournisseurs — pensez à compléter sa fiche.`);
+  }, [updateFournisseurs]);
+
+  /** Le bloc de recherche, partagé par les trois formulaires. */
+  const rechercheOdoo = (cible: 'devis' | 'commande' | 'fournisseur') => (
     <div className="col-span-2 space-y-1">
       {odooCible !== cible ? (
         <button
@@ -332,7 +405,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           className="text-[11px] text-primary underline underline-offset-2"
           onClick={() => { setOdooCible(cible); setOdooResultats(null); }}
         >
-          Le client n’est pas dans la liste ? Chercher dans Odoo
+          {cible === 'fournisseur'
+            ? 'Le fournisseur n’est pas dans la liste ? Chercher dans Odoo'
+            : 'Le client n’est pas dans la liste ? Chercher dans Odoo'}
         </button>
       ) : (
         <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5">
@@ -343,11 +418,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
               placeholder="Raison sociale, ville, courriel ou n° TVA…"
               value={odooTerme}
               onChange={e => setOdooTerme(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); chercherClientOdoo(); } }}
+              onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); chercherPartenaireOdoo(); } }}
             />
             <Button
               type="button" size="sm" className="h-7 text-[11px]"
-              disabled={odooEnCours} onClick={chercherClientOdoo}
+              disabled={odooEnCours} onClick={() => chercherPartenaireOdoo()}
             >
               {odooEnCours ? <Loader2 className="h-3 w-3 animate-spin" /> : 'Chercher'}
             </Button>
@@ -366,7 +441,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
                   type="button"
                   key={p.id}
                   className="flex w-full flex-col items-start rounded px-1.5 py-1 text-left text-[11px] hover:bg-primary/10"
-                  onClick={() => importerClientOdoo(p)}
+                  onClick={() => cible === 'fournisseur'
+                    ? importerFournisseurOdoo(p)
+                    : importerClientOdoo(p)}
                 >
                   <span className="font-medium">
                     {p.nom}
@@ -438,6 +515,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /** Lignes hors catalogue dont on veut créer l'article. */
   const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
   const [dfEnCours, setDfEnCours] = useState(false);
+  /** Nom déjà cherché chez Odoo : l'effet se rejoue, pas la requête. */
+  const chercheFaitePour = useRef<string | null>(null);
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
 
   const { systemes } = useSystemes();
@@ -486,6 +565,21 @@ const [contratOdoo, setContratOdoo] = useState<
   /* Un devis fournisseur ne se réceptionne pas : il n'y a pas de marchandise.
      Il vaut par ses PRIX, et suit donc son propre chemin. */
   const isDevisFourn = (t?: TypeDocument) => t === 'devis_fournisseur';
+
+  /**
+   * Le nom du fournisseur lu sur un devis fournisseur.
+   *
+   * NOTRE PROPRE SOCIÉTÉ N'EST JAMAIS LE FOURNISSEUR. Sur un devis reçu,
+   * ISOSIGN figure en destinataire, souvent en gros et plusieurs fois ; il
+   * arrive que l'extraction la retienne comme partenaire. La proposer
+   * ensuite comme fournisseur enverrait chercher ISOSIGN dans Odoo, et
+   * finirait par créer un fournisseur « ISOSIGN » dans notre propre liste.
+   */
+  const nomDuFournisseur = (r: DocumentAnalysis): string | undefined => {
+    const nom = (r.nomPartenaire || '').trim();
+    if (!nom || /\bisosign\b/i.test(nom)) return undefined;
+    return nom;
+  };
   const isClientDoc = (t?: TypeDocument) =>
     t === 'commande_client' || t === 'devis_client' || t === 'facture_client'
     // Une demande de devis reçue par courriel mène au même endroit : un devis.
@@ -519,9 +613,20 @@ const [contratOdoo, setContratOdoo] = useState<
    * l'application — elle reste décochée, à cocher en connaissance de cause. */
   useEffect(() => {
     if (!result || !isDevisFourn(result.typeDocument)) return;
-    const trouve = rapprocherFournisseur(result.nomPartenaire, fournisseurs);
+    const nom = nomDuFournisseur(result);
+    const trouve = rapprocherFournisseur(nom, fournisseurs);
     setDfFournisseurId(prev => prev || trouve?.id || '');
-  }, [result, fournisseurs]);
+    /* PAS RECONNU : ON VA VOIR CHEZ ODOO, SANS ATTENDRE QU'ON LE DEMANDE.
+       Le fichier partenaires en sait plus que notre liste de fournisseurs —
+       AFC COMMUNICATION peut n'avoir jamais été saisie ici tout en y ayant
+       sa fiche. Une recherche par analyse, au moment précis où elle sert. */
+    if (!trouve && nom && chercheFaitePour.current !== nom) {
+      chercheFaitePour.current = nom;
+      setOdooTerme(nom);
+      setOdooCible('fournisseur');
+      void chercherPartenaireOdoo(nom);
+    }
+  }, [result, fournisseurs, chercherPartenaireOdoo]);
 
   /* ── pré-remplissage formulaire CC / Devis ── */
   useEffect(() => {
@@ -624,6 +729,8 @@ const [contratOdoo, setContratOdoo] = useState<
     setDfFournisseurId(''); setDfPrix({});
     setDfVersLien({}); setDfVersArticle({}); setDfCreer({});
     dfTouche.current = false;
+    chercheFaitePour.current = null;
+    setOdooCible(null); setOdooResultats(null); setOdooTerme('');
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -3966,12 +4073,31 @@ const [contratOdoo, setContratOdoo] = useState<
                           ))}
                         </SelectContent>
                       </Select>
-                      {!dfFournisseurId && result?.nomPartenaire && (
-                        <p className="text-xs text-warning mt-1 flex items-center gap-1">
-                          <AlertTriangle className="w-3 h-3 shrink-0" />
-                          « {result.nomPartenaire} » n'a pas été reconnu parmi vos fournisseurs.
-                        </p>
-                      )}
+                      {!dfFournisseurId && (() => {
+                        const nomLu = result ? nomDuFournisseur(result) : undefined;
+                        return (
+                          <div className="mt-1.5 space-y-1.5">
+                            {nomLu && (
+                              <p className="text-xs text-warning flex items-center gap-1">
+                                <AlertTriangle className="w-3 h-3 shrink-0" />
+                                « {nomLu} » n'est pas dans vos fournisseurs.
+                              </p>
+                            )}
+                            {/* Le fichier partenaires d'Odoo en sait plus que
+                                notre liste : la fiche y existe souvent déjà. */}
+                            <div className="grid grid-cols-2">{rechercheOdoo('fournisseur')}</div>
+                            {nomLu && odooCible !== 'fournisseur' && (
+                              <button
+                                type="button"
+                                className="text-[11px] text-primary underline underline-offset-2"
+                                onClick={() => creerFournisseurDepuisDocument(nomLu)}
+                              >
+                                Ou créer « {nomLu} » directement, sans passer par Odoo
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
 
                     {!dfFournisseurId ? (
