@@ -2,10 +2,14 @@ import { useState, useRef, useEffect, useMemo, useCallback, memo, Fragment, clon
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { useJournalPrix, periodesDePrix } from '@/lib/journalPrix';
+import {
+  useProduitImages, occupation, formatOctets, estImageAcceptee,
+  COTE_MAX, type ImageProduit,
+} from '@/lib/produitImages';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
-import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle } from 'lucide-react';
+import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -288,10 +292,21 @@ export default function Produits() {
      l'historique de tous pour en afficher un. */
   const { mouvements: mvtsPrix, chargement: prixChargement, erreur: prixErreur } =
     useJournalPrix(editing?.id);
+  /* Les images du catalogue : une ligne par image réellement ajoutée, pas une
+     par article — la table reste petite, on la lit d'un bloc. */
+  const {
+    imagesDe, principaleDe, deposer: deposerImage, ajouterLien: ajouterLienImage,
+    supprimer: supprimerImage, rendrePrincipale, images: toutesImages,
+    erreur: imagesErreur,
+  } = useProduitImages();
+  const [imgEnCours, setImgEnCours] = useState(false);
+  const [imgSurvol, setImgSurvol] = useState(false);
+  const [imgLien, setImgLien] = useState('');
+
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [achatsManuel, setAchatsManuel] = useState<AchatDate[]>([]);
   const [variantes, setVariantes] = useState<VarianteDimension[]>([]);
-  const [produitTab, setProduitTab] = useState<'infos' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation' | 'prix'>('infos');
+  const [produitTab, setProduitTab] = useState<'infos' | 'images' | 'stock' | 'fournisseurs' | 'devis' | 'commandes' | 'commandesF' | 'valorisation' | 'prix'>('infos');
   const [entrepotStockEdit, setEntrepotStockEdit] = useState<{ id: string; value: string } | null>(null);
 
   // Hook entrepôts (chargé une seule fois)
@@ -1448,6 +1463,19 @@ export default function Produits() {
                 const renderCell = (key: ColKey) => {
                   switch (key) {
                     case 'reference':    return <td className="px-2 py-2.5 font-mono text-xs" title={p.reference}>
+                      {/* La vignette est ce qui rend les photos utiles : on
+                          reconnaît un article ici, pas en ouvrant sa fiche. */}
+                      {(() => {
+                        const vignette = principaleDe(p.id);
+                        return vignette ? (
+                          <img
+                            src={vignette.url}
+                            alt=""
+                            loading="lazy"
+                            className="inline-block w-6 h-6 mr-1.5 rounded object-contain bg-muted/40 align-text-bottom"
+                          />
+                        ) : null;
+                      })()}
                       {p.reference}
                       {isCompose && <span className="ml-1 text-xs bg-primary/10 text-primary px-1.5 py-0.5 rounded-full font-sans">Composé</span>}
                       {/* Un modèle à déclinaisons s'ouvre, comme dans Odoo. */}
@@ -1739,6 +1767,7 @@ export default function Produits() {
           <div className="flex gap-1 bg-muted/50 rounded-xl p-1 mt-1 mb-2">
             {([
               { id: 'infos',       label: 'Informations', icon: Package },
+              { id: 'images',      label: 'Images', icon: ImageIcon },
               { id: 'stock',       label: 'Stock & entrepôts', icon: Warehouse },
               { id: 'fournisseurs', label: 'Fournisseurs', icon: Truck },
               { id: 'devis',       label: 'Devis', icon: FileText },
@@ -2817,6 +2846,187 @@ export default function Produits() {
           </div>)} {/* fin onglet Infos */}
 
           {/* ══ Onglet Stock & Entrepôts ═══════════════════════════════════ */}
+          {/* ══ Onglet Images ══════════════════════════════════════════════ */}
+          {produitTab === 'images' && (() => {
+            if (!editing?.id) {
+              return (
+                <p className="py-6 text-sm text-muted-foreground text-center">
+                  Enregistrez d'abord l'article : une image se range sous une fiche existante.
+                </p>
+              );
+            }
+            const mesImages = imagesDe(editing.id);
+            const place = occupation(toutesImages);
+            const part = Math.min(100, (place.octets / place.quota) * 100);
+
+            const traiter = async (fichiers: File[]) => {
+              const images = fichiers.filter(estImageAcceptee);
+              const rejetes = fichiers.length - images.length;
+              if (rejetes) toast.error(`${rejetes} fichier(s) ignoré(s) : ce ne sont pas des images.`);
+              if (!images.length) return;
+              setImgEnCours(true);
+              let ok = 0;
+              for (const f of images) {
+                const err = await deposerImage(editing.id!, f);
+                if (err) toast.error(err); else ok++;
+              }
+              setImgEnCours(false);
+              if (ok) toast.success(`${ok} image${ok > 1 ? 's' : ''} ajoutée${ok > 1 ? 's' : ''}.`);
+            };
+
+            return (
+              <div className="py-2 space-y-3">
+                {imagesErreur && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    Les images n'ont pas pu être lues : {imagesErreur}
+                  </p>
+                )}
+
+                {/* Zone de dépôt. Le glisser-déposer de la coquille est
+                    neutralisé ici par stopPropagation : sur cet onglet, une
+                    image tombe dans la fiche, pas dans l'analyse de document. */}
+                <div
+                  onDragEnter={e => { e.preventDefault(); e.stopPropagation(); setImgSurvol(true); }}
+                  onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+                  onDragLeave={e => { e.stopPropagation(); setImgSurvol(false); }}
+                  onDrop={e => {
+                    e.preventDefault(); e.stopPropagation(); setImgSurvol(false);
+                    void traiter(Array.from(e.dataTransfer.files));
+                  }}
+                  className={`rounded-xl border-2 border-dashed p-5 text-center transition-colors ${
+                    imgSurvol ? 'border-primary bg-primary/10' : 'border-border bg-muted/20'}`}
+                >
+                  {imgEnCours ? (
+                    <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Compression et envoi…
+                    </p>
+                  ) : (
+                    <>
+                      <ImageIcon className="w-7 h-7 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm font-medium">Glissez vos images ici</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        PNG, JPG ou WebP — réduites à {COTE_MAX} px et converties avant l'envoi.
+                      </p>
+                      <label className="mt-2 inline-block">
+                        <input
+                          type="file" accept="image/*" multiple className="hidden"
+                          onChange={e => {
+                            void traiter(Array.from(e.target.files || []));
+                            e.target.value = '';
+                          }}
+                        />
+                        <span className="text-xs text-primary underline underline-offset-2 cursor-pointer">
+                          ou choisir des fichiers
+                        </span>
+                      </label>
+                    </>
+                  )}
+                </div>
+
+                {/* Image hébergée ailleurs : rien n'est déposé, rien ne pèse. */}
+                <div className="flex items-center gap-2">
+                  <Link2 className="w-4 h-4 text-muted-foreground shrink-0" />
+                  <Input
+                    className="h-8 text-xs flex-1"
+                    placeholder="…ou coller l'adresse d'une image déjà en ligne (https://…)"
+                    value={imgLien}
+                    onChange={e => setImgLien(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') e.preventDefault(); }}
+                  />
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-8 text-xs"
+                    disabled={!imgLien.trim()}
+                    onClick={async () => {
+                      const err = await ajouterLienImage(editing.id!, imgLien);
+                      if (err) toast.error(err);
+                      else { setImgLien(''); toast.success('Image liée ajoutée.'); }
+                    }}
+                  >
+                    Ajouter
+                  </Button>
+                </div>
+
+                {mesImages.length > 0 && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                    {mesImages.map((img: ImageProduit, rang: number) => (
+                      <div key={img.id} className="relative group rounded-lg border overflow-hidden bg-muted/30">
+                        <img
+                          src={img.url}
+                          alt={img.nom || editing.description || ''}
+                          loading="lazy"
+                          className="w-full aspect-square object-contain bg-background"
+                        />
+                        {rang === 0 && (
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-primary text-primary-foreground text-[10px] font-medium">
+                            Principale
+                          </span>
+                        )}
+                        {!img.chemin && (
+                          <span className="absolute top-1 right-1 px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px]"
+                                title="Hébergée ailleurs : ne pèse pas sur votre espace">
+                            lien
+                          </span>
+                        )}
+                        <div className="absolute inset-x-0 bottom-0 flex items-center justify-between gap-1 bg-background/90 px-1.5 py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <span className="text-[10px] text-muted-foreground truncate">
+                            {img.octets ? formatOctets(img.octets) : 'externe'}
+                          </span>
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {rang !== 0 && (
+                              <button
+                                type="button" title="Faire de cette image la principale"
+                                className="p-1 rounded hover:bg-muted"
+                                onClick={() => void rendrePrincipale(img)}
+                              >
+                                <Star className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                            <button
+                              type="button" title="Supprimer"
+                              className="p-1 rounded hover:bg-destructive/10 text-destructive"
+                              onClick={async () => {
+                                if (!confirm('Supprimer cette image ?')) return;
+                                const err = await supprimerImage(img);
+                                if (err) toast.error(err);
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* La place restante, pour qu'elle ne se découvre pas le jour
+                    où le dépôt échoue. */}
+                <div className="pt-1">
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                    <span>Espace images du catalogue</span>
+                    <span>
+                      {formatOctets(place.octets)} sur {formatOctets(place.quota)}
+                      {' · '}{place.fichiers} image{place.fichiers > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full rounded-full ${part > 85 ? 'bg-destructive' : 'bg-primary'}`}
+                      style={{ width: `${Math.max(part, 0.5)}%` }}
+                    />
+                  </div>
+                  {part > 85 && (
+                    <p className="text-[11px] text-destructive mt-1">
+                      Il reste peu de place. Les images liées, elles, ne pèsent pas ici.
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
           {produitTab === 'stock' && (() => {
             const reserve = editing ? (stockReserveParProduit[editing.id] || 0) : 0;
             const stockActuel = form.stock;

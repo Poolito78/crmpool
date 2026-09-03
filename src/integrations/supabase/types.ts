@@ -1337,6 +1337,48 @@ export type Database = {
         }
         Relationships: []
       }
+      produit_images: {
+        Row: {
+          chemin: string | null
+          created_at: string
+          hauteur: number | null
+          id: string
+          largeur: number | null
+          nom: string | null
+          octets: number | null
+          ordre: number
+          produit_id: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          chemin?: string | null
+          created_at?: string
+          hauteur?: number | null
+          id?: string
+          largeur?: number | null
+          nom?: string | null
+          octets?: number | null
+          ordre?: number
+          produit_id: string
+          url: string
+          user_id?: string
+        }
+        Update: {
+          chemin?: string | null
+          created_at?: string
+          hauteur?: number | null
+          id?: string
+          largeur?: number | null
+          nom?: string | null
+          octets?: number | null
+          ordre?: number
+          produit_id?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       produit_fournisseurs: {
         Row: {
           conditionnement_min: number | null
