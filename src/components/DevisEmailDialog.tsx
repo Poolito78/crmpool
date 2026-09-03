@@ -3,11 +3,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
+import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from '@/lib/liensProduit';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 
 interface PjFichier {
@@ -250,7 +251,12 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
-  const [ficheLinks, setFicheLinks] = useState<Array<{ label: string; url: string }>>([]);
+  // Liens d'article proposés pour ce devis (fiche technique / photo / fiche
+  // publique du CRM). `selectedLiensIds` dit lesquels partent dans le mail :
+  // proposer les trois et n'en cocher que deux vaut mieux que d'en imposer un.
+  const [liensProduit, setLiensProduit] = useState<LienProduit[]>([]);
+  const [selectedLiensIds, setSelectedLiensIds] = useState<Set<string>>(new Set());
+  const [copie, setCopie] = useState(false);
   const [dateEnvoi, setDateEnvoi] = useState(new Date().toISOString().split('T')[0]);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
@@ -328,17 +334,6 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setTo(client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
 
-    // Fiches produit : uniquement en HTML dans le .eml (pas dans le textarea → évite les doublons)
-    const fichesLignes = devis.lignes
-      .map(l => produits.find(p => p.id === l.produitId))
-      .filter((p): p is NonNullable<typeof p> => !!p?.ficheUrl)
-      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
-
-    setFicheLinks(fichesLignes.map(p => ({
-      label: p.ficheLinkLabel?.trim() || `${p.reference} — ${p.description}`,
-      url: p.ficheUrl!,
-    })));
-
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
@@ -355,6 +350,78 @@ Restant à ta disposition pour tout complément d'information.`
       setTimeout(() => generatePdf(), 600);
     }
   }, [devis, client, open, produits]);
+
+  /* ── Liens d'article ──────────────────────────────────────────────────────
+     On ne lit QUE les photos des articles du devis, pas la table entière : le
+     dialogue s'ouvre souvent, et une requête bornée par une poignée d'UUID
+     coûte le même aller-retour qu'un `select *` mais ne ramène rien d'inutile.
+     Sélection par défaut : fiche technique et photo cochées (ce que le client
+     attend de voir), fiche publique du CRM décochée — elle est là pour les cas
+     où l'on veut un seul lien qui rassemble tout. */
+  useEffect(() => {
+    if (!devis || !open) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
+    let annule = false;
+
+    const articles = devis.lignes
+      .map(l => produits.find(p => p.id === l.produitId))
+      .filter((p): p is Produit => !!p)
+      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
+
+    if (articles.length === 0) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
+
+    supabase
+      .from('produit_images')
+      .select('produit_id, url, ordre')
+      .in('produit_id', articles.map(p => p.id))
+      .order('ordre', { ascending: true })
+      .then(({ data }) => {
+        if (annule) return;
+        // `ordre = 0` désigne la principale ; le premier arrivé gagne.
+        const parProduit: Record<string, string | undefined> = {};
+        for (const r of data ?? []) {
+          if (r.produit_id && r.url && !parProduit[r.produit_id]) parProduit[r.produit_id] = r.url;
+        }
+        const liens = liensDesProduits(articles, parProduit);
+        setLiensProduit(liens);
+        setSelectedLiensIds(new Set(liens.filter(l => l.cible !== 'page').map(l => l.id)));
+      });
+
+    return () => { annule = true; };
+  }, [devis, open, produits]);
+
+  const liensChoisis = liensProduit.filter(l => selectedLiensIds.has(l.id));
+
+  function basculerLien(id: string, coche: boolean) {
+    setSelectedLiensIds(prev => {
+      const next = new Set(prev);
+      if (coche) next.add(id); else next.delete(id);
+      return next;
+    });
+  }
+
+  function renommerLien(id: string, label: string) {
+    setLiensProduit(prev => prev.map(l => (l.id === id ? { ...l, label } : l)));
+  }
+
+  /** Tout cocher / tout décocher pour une destination (fiche, photo, page). */
+  function basculerCible(cible: CibleLien, coche: boolean) {
+    const ids = liensProduit.filter(l => l.cible === cible).map(l => l.id);
+    setSelectedLiensIds(prev => {
+      const next = new Set(prev);
+      for (const id of ids) { if (coche) next.add(id); else next.delete(id); }
+      return next;
+    });
+  }
+
+  async function handleCopierLiens() {
+    const ok = await copierLiens(liensChoisis);
+    if (!ok) { toast.error('Copie impossible — le navigateur a refusé l’accès au presse-papiers'); return; }
+    setCopie(true);
+    setTimeout(() => setCopie(false), 2000);
+    toast.success(`${liensChoisis.length} lien${liensChoisis.length > 1 ? 's' : ''} copié${liensChoisis.length > 1 ? 's' : ''}`, {
+      description: 'Collez dans le mail : le texte affiché est la désignation, le lien est derrière.',
+    });
+  }
 
   // Génère le PDF Mise en œuvre depuis moContent (si présent et pas déjà joint)
   useEffect(() => {
@@ -465,7 +532,10 @@ Restant à ta disposition pour tout complément d'information.`
 
     // 3. Générer le .eml avec PDF + PJs et l'ouvrir dans Outlook
     // Liens partageables sélectionnés ajoutés comme liens cliquables (avec les fiches produit)
-    const allLinks = [...ficheLinks, ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url }))];
+    const allLinks = [
+      ...liensChoisis.map(l => ({ label: l.label, url: l.url })),
+      ...pjLinks.filter(l => selectedLinkIds.has(l.id)).map(l => ({ label: l.label, url: l.url })),
+    ];
     try {
       const emlContent = generateEml({
         from: 'f.mouhot@isosign.fr',
@@ -543,19 +613,80 @@ Restant à ta disposition pour tout complément d'information.`
             />
           </div>
 
-          {/* ── Fiches produit (liens hypertexte dans le HTML du mail) ── */}
-          {ficheLinks.length > 0 && (
-            <div className="rounded-md border px-3 py-2 space-y-1">
-              <div className="flex items-center gap-2 text-sm font-medium">
+          {/* ── Liens produit (hypertextes courts : le texte affiché est la désignation) ── */}
+          {liensProduit.length > 0 && (
+            <div className="rounded-md border px-3 py-2 space-y-2">
+              <div className="flex items-center gap-2 text-sm font-medium flex-wrap">
                 <ExternalLink className="w-4 h-4 text-primary" />
-                Fiches produit ajoutées au mail
-                <span className="text-xs font-normal text-muted-foreground">(liens cliquables dans Outlook)</span>
+                Liens produit
+                <span className="text-xs font-normal text-muted-foreground">
+                  ({liensChoisis.length}/{liensProduit.length} — le mail n'affiche que la désignation)
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="ml-auto h-7"
+                  disabled={liensChoisis.length === 0}
+                  onClick={handleCopierLiens}
+                >
+                  {copie ? <Check className="w-3.5 h-3.5 mr-1.5 text-green-600" /> : <Copy className="w-3.5 h-3.5 mr-1.5" />}
+                  {copie ? 'Copié' : 'Copier les liens'}
+                </Button>
               </div>
-              {ficheLinks.map((f, i) => (
-                <div key={i} className="flex items-center gap-2 pl-6 text-sm">
-                  <span className="text-primary underline truncate">{f.label}</span>
-                </div>
-              ))}
+
+              {/* Cocher/décocher une destination d'un coup — trois articles font
+                  déjà neuf lignes, et on veut rarement les neuf. */}
+              <div className="flex items-center gap-1.5 flex-wrap pl-6">
+                {(['fiche', 'image', 'page'] as CibleLien[]).map(cible => {
+                  const total = liensProduit.filter(l => l.cible === cible).length;
+                  if (total === 0) return null;
+                  const pris = liensChoisis.filter(l => l.cible === cible).length;
+                  const tout = pris === total;
+                  return (
+                    <button
+                      key={cible}
+                      type="button"
+                      onClick={() => basculerCible(cible, !tout)}
+                      className={`text-xs rounded-full border px-2.5 py-0.5 transition-colors ${tout ? 'bg-primary/10 border-primary/40 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
+                    >
+                      {cible === 'fiche' ? 'Fiches techniques' : cible === 'image' ? 'Photos' : 'Fiches CRM'} ({pris}/{total})
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="space-y-1">
+                {liensProduit.map(l => (
+                  <div key={l.id} className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted/50 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="rounded shrink-0"
+                      checked={selectedLiensIds.has(l.id)}
+                      onChange={e => basculerLien(l.id, e.target.checked)}
+                    />
+                    {l.cible === 'fiche' && <FileText className="w-4 h-4 text-red-500 shrink-0" />}
+                    {l.cible === 'image' && <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />}
+                    {l.cible === 'page' && <Globe className="w-4 h-4 text-violet-500 shrink-0" />}
+                    {/* Le libellé est modifiable ici : c'est le seul texte que le
+                        client lira, et il n'a pas à être celui du catalogue. */}
+                    <Input
+                      value={l.label}
+                      onChange={e => renommerLien(l.id, e.target.value)}
+                      className="h-7 text-sm flex-1 min-w-0"
+                    />
+                    <a
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title={l.url}
+                      className="shrink-0 text-muted-foreground hover:text-primary"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </a>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 

@@ -73,7 +73,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
     return this.props.children;
   }
 }
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { StoreProvider } from "@/lib/StoreContext";
 import { AuthProvider, useCurrentUser } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
@@ -100,11 +100,35 @@ const StatsVariantes = lazy(() => import("@/pages/StatsVariantes"));
 const VeilleConcurrence = lazy(() => import("@/pages/VeilleConcurrence"));
 const Parametres = lazy(() => import("@/pages/Parametres"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+// Fiche produit publique : ouverte depuis un lien de mail, par quelqu'un qui
+// n'a pas de compte. Elle doit donc être servie AVANT toute garde de session.
+const FichePublique = lazy(() => import("@/pages/FichePublique"));
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { session, loading, authEvent, active, canCrm, canAchat } = useCurrentUser();
+  const { pathname } = useLocation();
+
+  // ── Fiche produit publique ────────────────────────────────────────────────
+  // Sortie de route délibérée, placée avant TOUTE garde (chargement, session,
+  // compte actif) : le destinataire d'un devis n'a pas de compte, et un lien
+  // de mail qui atterrit sur l'écran de connexion est un lien mort. La page ne
+  // lit qu'une fonction Postgres ouverte à `anon`, sans prix.
+  if (pathname.startsWith('/p/')) {
+    return (
+      <Suspense fallback={
+        <div className="min-h-screen flex items-center justify-center bg-white">
+          <div className="animate-spin w-8 h-8 border-4 border-[#FF2E17] border-t-transparent rounded-full" />
+        </div>
+      }>
+        <Routes>
+          <Route path="/p/:id" element={<FichePublique />} />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    );
+  }
 
   if (loading) {
     return (
