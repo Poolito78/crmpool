@@ -42,6 +42,9 @@ import {
   appliquerPrix, type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
+import {
+  rapprocherClient, motsFrequentsDuCatalogue, type CandidatClient,
+} from '@/lib/rapprochementClient';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
 import { useCRM } from '@/lib/StoreContext';
@@ -396,6 +399,36 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     toast.success(`${nom} ajouté aux fournisseurs — pensez à compléter sa fiche.`);
   }, [updateFournisseurs]);
 
+  /**
+   * Les clients que le texte pourrait désigner, quand aucun ne s'impose.
+   *
+   * Cinq sociétés portent « AGILIS » : le rapprochement s'abstient, à juste
+   * titre. Mais s'abstenir en silence oblige à parcourir une liste de
+   * cinquante clients pour retrouver ceux-là mêmes qu'on venait d'écarter.
+   */
+  const suggestionsClient = (choisir: (id: string) => void) => (
+    clientsProposes.length > 0 ? (
+      <div className="col-span-2 rounded border border-primary/30 bg-primary/5 p-1.5">
+        <p className="text-[11px] text-muted-foreground mb-1">
+          Le texte ne désigne pas un client avec certitude. Peut-être :
+        </p>
+        <div className="flex flex-wrap gap-1">
+          {clientsProposes.map(({ client, mots }) => (
+            <button
+              key={client.id}
+              type="button"
+              title={`retrouvé sur « ${mots.join(' ')} »`}
+              className="px-1.5 py-0.5 rounded bg-background border text-[11px] hover:bg-primary/10"
+              onClick={() => { choisir(client.id); setClientsProposes([]); }}
+            >
+              {client.societe || client.nom}
+            </button>
+          ))}
+        </div>
+      </div>
+    ) : null
+  );
+
   /** Le bloc de recherche, partagé par les trois formulaires. */
   const rechercheOdoo = (cible: 'devis' | 'commande' | 'fournisseur') => (
     <div className="col-span-2 space-y-1">
@@ -515,6 +548,13 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /** Lignes hors catalogue dont on veut créer l'article. */
   const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
   const [dfEnCours, setDfEnCours] = useState(false);
+  /* Le vocabulaire du catalogue sert de contre-épreuve au rapprochement du
+     client : 22 508 désignations à parcourir, une seule fois. */
+  const motsMetier = useMemo(
+    () => (produitsCharges ? motsFrequentsDuCatalogue(produits) : new Set<string>()),
+    [produits, produitsCharges]);
+  /** Clients proposés quand le texte n'en désigne pas un seul avec certitude. */
+  const [clientsProposes, setClientsProposes] = useState<CandidatClient<Client>[]>([]);
   /** Nom déjà cherché chez Odoo : l'effet se rejoue, pas la requête. */
   const chercheFaitePour = useRef<string | null>(null);
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
@@ -661,6 +701,9 @@ const [contratOdoo, setContratOdoo] = useState<
       .map(e => e!.toLowerCase().split('@')[1])
       .filter(Boolean);
 
+    const rapprochementTexte = rapprocherClient(
+      analyseTexteRef.current || '', result.nomPartenaire, clients, motsMetier);
+
     const foundClient =
       clients.find(c => assezLong(c.email)
         && indicesTexte.emails.includes(c.email!.toLowerCase()))
@@ -670,13 +713,15 @@ const [contratOdoo, setContratOdoo] = useState<
         ? clients.find(c => contient(c.societe, societeMail)
                          || contient(c.nom, societeMail))
         : undefined)
-      || (result.nomPartenaire
-        ? clients.find(c =>
-            contient(c.nom, result.nomPartenaire) ||
-            contient(c.societe, result.nomPartenaire) ||
-            contient(result.nomPartenaire, c.nom) ||
-            contient(result.nomPartenaire, c.societe))
-        : undefined);
+      /* DERNIER RECOURS, ET LE SEUL QUI SERVE SUR UN TEXTE TAPÉ. Sans adresse
+         e-mail, il ne reste que les mots. `rapprocherClient` fouille le texte
+         ENTIER — pas seulement le nom que le modèle a bien voulu extraire —
+         pèse chaque mot par sa rareté dans le fichier client, écarte le
+         vocabulaire du catalogue, et s'abstient quand plusieurs sociétés
+         répondent aussi bien. L'ancienne inclusion de chaîne faisait le
+         contraire : elle retenait le premier client venu dont la raison
+         sociale contenait le mot cherché. */
+      || rapprochementTexte.retenu;
 
     /* Une proposition ne doit jamais écraser une décision.
      *
@@ -685,6 +730,12 @@ const [contratOdoo, setContratOdoo] = useState<
      * effaçant celui qu'on venait de désigner à la main. On ne renseigne donc
      * que ce qui est encore vide. */
     const garder = (actuel: string, propose?: string) => actuel || propose || '';
+
+    /* Rien de sûr : plutôt que le silence, on rend la liste. Cinq sociétés
+       portent « AGILIS » — c'est une question à poser, pas à trancher. */
+    setClientsProposes(foundClient || rapprochementTexte.retenu
+      ? []
+      : rapprochementTexte.candidats.slice(0, 5));
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
@@ -703,8 +754,10 @@ const [contratOdoo, setContratOdoo] = useState<
       setCreerCCNotes(result.notes || result.referencePartenaire || '');
     }
     // `signature` en dépendance : la lecture de l'image arrive après l'analyse
-    // du texte, et doit pouvoir corriger le client déjà choisi.
-  }, [result, signature]);
+    // du texte, et doit pouvoir corriger le client déjà choisi. `motsMetier`
+    // aussi : le catalogue finit de charger en arrière-plan, et le
+    // rapprochement devient alors plus sûr.
+  }, [result, signature, clients, motsMetier]);
 
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
@@ -726,6 +779,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
+    setClientsProposes([]);
     setDfFournisseurId(''); setDfPrix({});
     setDfVersLien({}); setDfVersArticle({}); setDfCreer({});
     dfTouche.current = false;
@@ -2906,6 +2960,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
+                          {suggestionsClient(setCreerDevisClientId)}
                           {rechercheOdoo('devis')}
                           <div className="space-y-1"><Label className="text-xs">N° devis *</Label><Input className="h-8 text-xs" value={creerDevisNumero} onChange={e => setCreerDevisNumero(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerDevisDate} onChange={e => setCreerDevisDate(e.target.value)} /></div>
@@ -4031,6 +4086,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               <SelectContent>{clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}</SelectContent>
                             </Select>
                           </div>
+                          {suggestionsClient(setCreerCCClientId)}
                           {rechercheOdoo('commande')}
                           <div className="space-y-1"><Label className="text-xs">N° commande *</Label><Input className="h-8 text-xs" value={creerCCNumero} onChange={e => setCreerCCNumero(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerCCDate} onChange={e => setCreerCCDate(e.target.value)} /></div>
