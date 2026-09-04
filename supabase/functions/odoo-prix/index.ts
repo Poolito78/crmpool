@@ -1198,6 +1198,25 @@ export function normaliserFamilles(texte: string): string {
   return t;
 }
 
+/**
+ * Ce mot est-il un CODE D'ARTICLE ? Une lettre à trois, puis un chiffre :
+ * `kc1`, `ak5`, `b14`, `d60`, `l1014`.
+ *
+ * Un tel code désigne la marchandise à lui seul, là où les mots de la phrase
+ * ne font que la décrire. Deux mécanismes doivent le savoir : le plafond du
+ * nombre de mots, et le relâchement — sans quoi l'un le garde et l'autre le
+ * jette, ce qui revient au même.
+ */
+export function estCodeArticle(m: string): boolean {
+  const t = String(m || "").toLowerCase();
+  /* La CLASSE n'en est pas un. « C2 » a bien la forme d'un code, mais elle
+     qualifie un panneau sans en nommer aucun — et le relâchement doit
+     pouvoir s'en défaire, sinon « pot de primaire flowfast » finit sur le
+     seul « C2 » et reçoit un panneau « INTERDICTION DE FUMER ». */
+  if (/^(c\d(?:fj)?|3430)$/.test(t)) return false;
+  return /^[a-z]{1,3}\d/.test(t);
+}
+
 export function motsDeRecherche(texte: string): string[] {
   const t = normaliserFamilles(String(texte || ""))
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -1272,32 +1291,7 @@ export function motsDeRecherche(texte: string): string[] {
      couper coûte un critère — et la coupe frappait justement les cotes, que
      l'on sépare désormais en deux nombres. « support ou mât 80×40 en 2 m »
      perdait ainsi son 40. */
-
-  /* LE CODE D'ARTICLE ÉCHAPPE AU PLAFOND, COMME LA CLASSE.
-   *
-   * Le plafond gardait les sept PREMIERS mots. Il suppose donc que l'article
-   * est nommé en tête — vrai sur « panneaux AK5 en 1000 mm », faux dès que le
-   * client décrit d'abord et qualifie ensuite : « panneau personnalisé
-   * "Déviation cyclistes vers la chaussée" avec le style des panneaux KC1 »
-   * compte huit mots, et le huitième — `kc1`, le seul qui désigne quoi que ce
-   * soit — tombait. La demande partait chez Odoo amputée de son code, avec
-   * sept mots de prose qui ne figurent dans aucun libellé, et ne ramenait
-   * rien : ni proposition, ni rapprochement.
-   *
-   * Une lettre ou trois suivies d'un chiffre — `kc1`, `ak5`, `b14`, `d60` —
-   * valent mieux que n'importe quel mot de la phrase. On les met de côté
-   * avant la coupe, puis on les remet À LEUR PLACE : les avancer en tête
-   * changerait le pivot du classement, et le relâchement sacrifie par la fin.
-   */
-  const estCode = (m: string) => /^[a-z]{1,3}\d/.test(m);
-  const codes = sansClasse.filter(estCode);
-  const gardes = sansClasse.length <= 7
-    ? sansClasse
-    : sansClasse.filter((m, i) =>
-        estCode(m)
-        || sansClasse.filter((x, j) => j < i && !estCode(x)).length
-             < Math.max(0, 7 - codes.length));
-
+  const gardes = sansClasse.slice(0, 7);
   return classe ? [...gardes, classe] : gardes;
 }
 
@@ -1867,6 +1861,20 @@ serve(async (req) => {
            là qu'un tri par longueur aurait sacrifié le 24 avant le 80. */
         for (let i = mots.length - 1; i >= 0; i--) {
           if (!gardes.has(mots[i]) || gardes.size <= 1) continue;
+          /* LE CODE NE SE SACRIFIE PAS.
+           *
+           * « panneau personnalisé "Déviation cyclistes vers la chaussée" avec
+           * le style des panneaux KC1 » écrit son code EN DERNIER — et le
+           * relâchement retire par la fin. `kc1` partait donc au premier
+           * palier, et l'on continuait à exiger « personnalise », « cyclistes »
+           * ou « chaussee », des mots qui ne figurent dans aucun libellé. Tous
+           * les paliers rendaient zéro article.
+           *
+           * On garde le code jusqu'au bout : au pire, l'échelle finit sur lui
+           * seul et ramène la gamme KC1 du catalogue. C'est ce que le client
+           * demandait — le style de ces panneaux — et c'est une base de prix,
+           * là où une liste vide n'est rien. */
+          if (estCodeArticle(mots[i])) continue;
           gardes.delete(mots[i]);
           /* Inutile d'interroger Odoo pour un jeu de critères qui ne désigne
              plus rien : on s'arrête là et la ligne ressort sans proposition,
@@ -1904,17 +1912,10 @@ serve(async (req) => {
             /* Le même critère que le domaine Odoo, appliqué ici : un mot vaut
                pour l'un de ses équivalents, cherché dans le libellé ou dans
                la référence, sans distinction de casse. */
-            /* SANS LES ACCENTS, DES DEUX CÔTÉS.
-               Comparer en minuscules ne suffit pas : « ÉPI » ne contient pas
-               « epi » pour JavaScript, alors qu'Odoo les rapproche. Onze
-               articles avaient ainsi disparu d'une demande d'EPI, et le
-               premier proposé n'était plus le même. */
-            const aplati = (v: string) => String(v)
-              .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
             const porte = (x: any, gardes: string[]) => {
-              const texte = aplati(`${x.default_code || ""} ${x.name || ""}`);
+              const texte = `${x.default_code || ""} ${x.name || ""}`.toLowerCase();
               return gardes.every((m) =>
-                motsEquivalents(m).some((v) => texte.includes(aplati(v))));
+                motsEquivalents(m).some((v) => texte.includes(String(v).toLowerCase())));
             };
             for (const pal of paliers) {
               const sous = vaste.filter((x) => porte(x, pal.gardes));
