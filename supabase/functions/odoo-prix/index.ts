@@ -163,6 +163,8 @@ class Tarificateur {
   private od: Odoo;
   private regles = new Map<number, Regle[]>();
   private ascendance = new Map<number, number[]>();
+  /* L'arbre des catégories, chargé d'un seul coup. Voir `chargerArbre`. */
+  private parents: Map<number, number | null> | null = null;
   private ids: number[];
   private tmpls: number[];
   private categs: number[] = [];
@@ -208,16 +210,44 @@ class Tarificateur {
    * Une catégorie et toutes ses ascendantes : une règle posée sur une
    * catégorie mère s'applique aux articles de ses sous-catégories.
    */
+  /**
+   * L'arbre des catégories, en une seule lecture.
+   *
+   * CE QUI COÛTAIT CHER : la remontée se faisait un niveau à la fois, une
+   * requête par palier — « Panneaux » puis « Signalisation » puis « Tous ».
+   * Sur un lot d'une trentaine de catégories distinctes, à quatre niveaux
+   * chacune, cela faisait plus de cent allers-retours ENCHAÎNÉS, pour lire
+   * un champ que tout le catalogue tient en quelques centaines de lignes.
+   *
+   * Odoo compte peu de catégories. On les prend toutes d'un coup, et la
+   * remontée devient un parcours en mémoire.
+   */
+  private async chargerArbre(): Promise<Map<number, number | null>> {
+    if (this.parents) return this.parents;
+    const lignes = (await this.od.kw(
+      "product.category",
+      "search_read",
+      [[], ["id", "parent_id"]],
+      { limit: 5000 },
+    )) as { id: number; parent_id?: [number, string] | false }[];
+    this.parents = new Map(
+      lignes.map((c) => [Number(c.id), c.parent_id ? Number(c.parent_id[0]) : null]),
+    );
+    console.log(`[categories] arbre chargé : ${this.parents.size} catégorie(s)`);
+    return this.parents;
+  }
+
   private async categories(categ_id: number): Promise<number[]> {
     const connu = this.ascendance.get(categ_id);
     if (connu) return connu;
+    const parents = await this.chargerArbre();
     const chaine: number[] = [];
     let cur: number | null = categ_id;
+    /* Le plafond de dix reste : une donnée abîmée peut boucler sur
+       elle-même, et on ne veut pas d'un tour de piste infini. */
     while (cur && chaine.length < 10) {
       chaine.push(cur);
-      const res = await this.od.kw("product.category", "read", [[cur], ["parent_id"]]);
-      const par = res?.[0]?.parent_id;
-      cur = par ? par[0] : null;
+      cur = parents.get(cur) ?? null;
     }
     this.ascendance.set(categ_id, chaine);
     return chaine;
@@ -1425,8 +1455,17 @@ serve(async (req) => {
       return repondre({ prix: {}, contrat: null, partenaire: null });
     }
 
+    /* UN CHRONOMÈTRE, PARCE QU'ON NE CORRIGE PAS CE QU'ON NE MESURE PAS.
+       Chaque étape dit ce qu'elle a coûté depuis le début de l'appel. Sans
+       cela, « c'est lent » ne désigne rien : on optimise au jugé, et on
+       découvre après coup que le vrai gouffre était ailleurs. */
+    const depart = Date.now();
+    const chrono = (etape: string) =>
+      console.log(`[temps] ${etape} : ${Date.now() - depart} ms`);
+
     const od = new Odoo();
     const partenaire = await trouverPartenaire(od, client);
+    chrono("partenaire trouvé");
     if (!partenaire) {
       return repondre({
         prix: {},
@@ -1482,6 +1521,7 @@ serve(async (req) => {
        article, son prix l'emporte sur tout calcul de liste de prix. */
     const cadre = new ContratCadre(od);
     await cadre.charger(porteur.id, partenaire.id);
+    chrono("contrat cadre chargé");
     /* Le niveau imposé REMPLACE le contrat du client : c'est tout l'intérêt
        du forçage. S'il n'aboutit pas — intitulé introuvable, grille vide —
        on garde le contrat rattaché plutôt que de perdre toute tarification,
@@ -1594,6 +1634,7 @@ serve(async (req) => {
        la recherche libre plus bas : standard_price d'Odoo est souvent à 0
        sur ce catalogue (non renseigné, pas gratuit). */
     const coutsDirects = await coutsLocaux(references);
+    chrono("références tarifées");
 
     /* Le contrat-cadre prime : on va chercher d'un coup le tarif de toutes
        les références demandées avant d'entrer dans la boucle. */
@@ -1671,7 +1712,49 @@ serve(async (req) => {
        contrat cadre qu'il vient d'obtenir. */
     try {
     console.log(`[recherche] ${aChercher.length} ligne(s) à chercher`);
-    for (const r of aChercher) {
+    /* LES RECHERCHES PARTAIENT L'UNE APRÈS L'AUTRE.
+     *
+     * Chaque ligne coûte au moins un aller-retour, et le relâchement
+     * progressif en ajoute un par mot sacrifié : dix lignes bavardes
+     * faisaient trente interrogations enchaînées bout à bout, chacune
+     * attendant la fin de la précédente. C'est ce qui rendait l'analyse
+     * longue, et c'est ce qui avait obligé à plafonner à douze lignes.
+     *
+     * Une recherche ne dépend d'aucune autre : on les mène de front, par
+     * petits paquets. Pas toutes à la fois — Odoo est une base de
+     * production, et lui envoyer quarante requêtes simultanées le
+     * ralentirait pour tout le monde.
+     */
+    const PAQUET_RECHERCHE = 4;
+
+    interface LignePreparee {
+      q: string;
+      qte: number;
+      // deno-lint-ignore no-explicit-any
+      retenus: any[];
+      classeDemandee: string;
+      /* La classe portée par une référence. Elle se lit au classement et se
+         relit au chiffrage : elle voyage donc avec la ligne, plutôt que
+         d'être redéfinie deux fois et de diverger. */
+      classeDe: (code: string) => string;
+      // deno-lint-ignore no-explicit-any
+      points: (x: any) => number;
+      maxPoints: number;
+    }
+
+    /* CE QUI PEUT SE FAIRE DE FRONT, ET CE QUI NE LE PEUT PAS.
+     *
+     * Ici : interroger Odoo et classer les réponses. Rien n'y touche aux
+     * caches partagés — ni le tarif, ni le contrat cadre — et deux lignes
+     * peuvent donc travailler en même temps sans se marcher dessus.
+     *
+     * Le chiffrage, lui, reste en file plus bas : `tarif.preparer` vide le
+     * cache des règles quand le lot d'articles s'élargit, et le faire
+     * pendant qu'un autre calcul le lit ferait retomber ce calcul sur le
+     * prix de fiche — à 1 € sur la quasi-totalité du catalogue.
+     */
+    // deno-lint-ignore no-explicit-any
+    const preparerLigne = async (r: any): Promise<LignePreparee> => {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
       const CHAMPS_ART = ["id", "default_code", "name", "lst_price", "standard_price",
@@ -2097,34 +2180,92 @@ serve(async (req) => {
       console.log(`[recherche] « ${q} » → meilleur ${res[0]?.default_code || "-"}`
         + ` certitude ${(certitude * 100).toFixed(0)} %`);
       const retenus = res.slice(0, 8);
+      return { q, qte, retenus, classeDemandee, classeDe, points, maxPoints };
+    };
 
-      /* LE STOCK, LU SEULEMENT SUR LES ARTICLES RETENUS.
-       *
-       * `qty_available` et `virtual_available` sont des champs CALCULÉS :
-       * Odoo les reconstruit à chaque lecture en parcourant les mouvements.
-       * Les demander sur les 500 articles de la recherche coûterait des
-       * secondes pour huit valeurs affichées. On les lit donc après le
-       * classement, sur les huit qui remontent.
-       *
-       * « Disponible » est le stock constaté ; « prévu » ajoute les
-       * réceptions attendues et retire les sorties déjà réservées — c'est
-       * lui qui dit si l'on peut promettre une date. */
-      const stocks = new Map<number, { dispo: number; prevu: number }>();
-      if (retenus.length) {
-        try {
-          const lus = await odoo.kw("product.product", "read",
-            [retenus.map((x: any) => x.id),
-             ["id", "qty_available", "virtual_available"]]) as any[];
-          for (const l of lus) {
-            stocks.set(l.id, {
-              dispo: Number(l.qty_available) || 0,
-              prevu: Number(l.virtual_available) || 0,
-            });
-          }
-        } catch (e) {
-          console.log(`[stock] lecture impossible : ${(e as Error).message}`);
+    const avantRecherches = Date.now();
+    const preparees: LignePreparee[] = [];
+    for (let debut = 0; debut < aChercher.length; debut += PAQUET_RECHERCHE) {
+      const lot = aChercher.slice(debut, debut + PAQUET_RECHERCHE);
+      preparees.push(...(await Promise.all(lot.map(preparerLigne))));
+    }
+    console.log(`[temps] recherches (${preparees.length} ligne(s), par `
+      + `${PAQUET_RECHERCHE}) : ${Date.now() - avantRecherches} ms`);
+    chrono("recherches terminées");
+
+    /* UN SEUL PRÉCHARGEMENT POUR TOUTES LES LIGNES.
+     *
+     * `tarif.preparer` était appelé par ligne. Or il VIDE le cache des
+     * règles dès que le lot d'articles s'élargit — ce qui arrivait à chaque
+     * ligne, puisque chacune apporte les siens. La liste de prix, jusqu'à
+     * deux mille règles, était donc rechargée depuis Odoo autant de fois
+     * qu'il y avait de lignes. C'était le vrai gouffre, bien plus que les
+     * recherches elles-mêmes. Un seul lot, un seul chargement.
+     */
+    // deno-lint-ignore no-explicit-any
+    const tousRetenus: any[] = preparees.flatMap((l) => l.retenus);
+    const toutesRefs = tousRetenus.map((x) => x.default_code || "");
+    if (tousRetenus.length) {
+      await tarif.preparer(tousRetenus.map((x) => ({
+        id: x.id,
+        tmpl_id: x.product_tmpl_id ? x.product_tmpl_id[0] : null,
+        categ_id: x.categ_id ? x.categ_id[0] : null,
+        name: x.name,
+        lst_price: x.lst_price || 0,
+        standard_price: x.standard_price || 0,
+      })));
+    }
+
+    /* Coût de secours : la moitié des fiches Odoo n'ont pas de
+       standard_price renseigné (0, pas « gratuit ») — c'est justement le
+       cas du B14 BRUT. On va chercher son coût dans la base article de
+       MonCRM avant de conclure qu'aucun coût n'est connu. */
+    const coutsBase = await coutsLocaux(toutesRefs);
+
+    /* Même règle que pour les références explicites : le contrat-cadre
+       prime sur la liste de prix quand il couvre l'article. */
+    await cadre.precharger(toutesRefs);
+    chrono("préchargement des propositions");
+
+    /* LE STOCK, LU SEULEMENT SUR LES ARTICLES RETENUS, ET EN UNE FOIS.
+     *
+     * `qty_available` et `virtual_available` sont des champs CALCULÉS :
+     * Odoo les reconstruit à chaque lecture en parcourant les mouvements.
+     * Les demander sur les 500 articles de la recherche coûterait des
+     * secondes pour huit valeurs affichées. On les lit donc après le
+     * classement, sur ceux qui remontent — et pour toutes les lignes d'un
+     * coup, au lieu d'une lecture par ligne.
+     *
+     * « Disponible » est le stock constaté ; « prévu » ajoute les
+     * réceptions attendues et retire les sorties déjà réservées — c'est
+     * lui qui dit si l'on peut promettre une date.
+     *
+     * Cette lecture ne marchait pas : elle appelait `odoo`, un nom qui
+     * n'existe nulle part dans ce fichier. L'erreur tombait dans le `catch`
+     * ci-dessous et le stock restait vide sans que rien ne le dise. Le
+     * client Odoo s'appelle `od`.
+     */
+    const stocks = new Map<number, { dispo: number; prevu: number }>();
+    if (tousRetenus.length) {
+      try {
+        const ids = [...new Set(tousRetenus.map((x) => x.id))];
+        const lus = await od.kw("product.product", "read",
+          [ids, ["id", "qty_available", "virtual_available"]]) as Record<string, unknown>[];
+        for (const l of lus) {
+          stocks.set(Number(l.id), {
+            dispo: Number(l.qty_available) || 0,
+            prevu: Number(l.virtual_available) || 0,
+          });
         }
+      } catch (e) {
+        console.log(`[stock] lecture impossible : ${(e as Error).message}`);
       }
+    }
+
+    /* Le chiffrage, ligne par ligne : il lit les caches que les lignes
+       précédentes ont pu enrichir, et ne doit donc pas s'entrelacer. */
+    for (const { q, qte, retenus, classeDemandee, classeDe, points, maxPoints } of preparees) {
+
 
       const arts: Article[] = retenus.map((x) => ({
         id: x.id,
@@ -2134,17 +2275,8 @@ serve(async (req) => {
         lst_price: x.lst_price || 0,
         standard_price: x.standard_price || 0,
       }));
-      if (arts.length) await tarif.preparer(arts);
 
-      /* Coût de secours : la moitié des fiches Odoo n'ont pas de
-         standard_price renseigné (0, pas « gratuit ») — c'est justement le
-         cas du B14 BRUT. On va chercher son coût dans la base article de
-         MonCRM avant de conclure qu'aucun coût n'est connu. */
-      const coutsBase = await coutsLocaux(retenus.map((x) => x.default_code || ""));
 
-      /* Même règle que pour les références explicites : le contrat-cadre
-         prime sur la liste de prix quand il couvre l'article. */
-      await cadre.precharger(retenus.map((x) => x.default_code || ""));
 
       trouvailles[q] = (await Promise.all(retenus.map(async (x, i) => {
         let p: number | null = null;
@@ -2208,6 +2340,7 @@ serve(async (req) => {
         };
       }))).filter((v) => v !== null);
     }
+    chrono("propositions chiffrées");
     } catch (e) {
       console.warn("[recherche catalogue]", (e as Error).message);
     }
