@@ -18,6 +18,7 @@ import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId } from '@/lib/indexProduits';
 import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
+import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
   codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
@@ -207,6 +208,15 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      dossier : c'est un choix, pas une déduction. */
   const [contactsOdoo, setContactsOdoo] = useState<ContactOdoo[]>([]);
   const [contactRetenu, setContactRetenu] = useState<string>('');
+  /* La dernière demande RÉELLEMENT posée à Odoo, et ses réponses.
+     L'effet se rejoue à chaque correction d'article et à chaque écriture dans
+     `clients` ; la demande, elle, est presque toujours la même. On compare ce
+     qu'on s'apprête à envoyer plutôt que ce qui a bougé dans React. */
+  const cleOdooRef = useRef<string>('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cacheOdooRef = useRef<Map<string, any>>(new Map());
+  /* La demande actuellement en vol, avec de quoi l'abandonner. */
+  const demandeOdooRef = useRef<{ cle: string; controleur: AbortController } | null>(null);
   /* Gamme et classe demandées, communes à l'analyse : un client commande
      rarement du B14 en petite et du C18 en normale sur la même affaire. */
   const [gammePanneau, setGammePanneau] = useState<Taille>('P');
@@ -1876,27 +1886,79 @@ const [contratOdoo, setContratOdoo] = useState<
     const aTarifer = referencesDuDevis.length || aChercher.length
       || systemesDetectes.size;
     if (!critere || !aTarifer) {
+      /* L'écran est vidé : la demande précédente n'est plus « appliquée ».
+         Sans cet oubli, y revenir — retirer un article puis le remettre —
+         serait pris pour un état déjà à l'écran, et rien ne se rechargerait. */
+      cleOdooRef.current = '';
+      demandeOdooRef.current?.controleur.abort();
+      demandeOdooRef.current = null;
       setContratOdoo(null); setTrouvaillesOdoo({}); return;
     }
-    let annule = false;
-    (async () => {
+    const corps: CorpsAppelOdoo = {
+      client: critere,
+      lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
+      recherches: aChercher,
+      /* Niveau imposé : Odoo ira lire la grille de CE niveau au lieu de
+         celle rattachée au client. Rien n'est copié en local. */
+      niveau: niveauForce || undefined,
+      /* Niveau affiché, envoyé comme FILET : il ne sert que si le client
+         n'a aucun contrat rattaché. Sans lui, l'absence de rattachement
+         faisait retomber la tarification sur la liste de prix, qui
+         recalcule depuis des fiches à 1 €. */
+      niveauDefaut: niveauRemise,
+    };
+    const cle = cleAppelOdoo(corps);
+
+    /* RIEN N'A CHANGÉ POUR ODOO : on ne redemande pas.
+       C'est le cas de loin le plus fréquent — une écriture dans `clients`, un
+       article corrigé qui porte la même référence Odoo, une variante de
+       système cochée. L'état affiché est déjà le bon ; le reconstruire à
+       l'identique ferait clignoter l'écran pour rien. */
+    if (cle === cleOdooRef.current) return;
+
+    /* DÉJÀ EN ROUTE. L'effet se rejoue pendant que la réponse se fait
+       attendre — il suffit d'une écriture dans `clients`. Relancer la MÊME
+       demande la ferait repartir de zéro à chaque fois, et sur un document
+       qui met dix secondes elle ne serait jamais arrivée au bout. */
+    if (demandeOdooRef.current?.cle === cle) return;
+
+    /* La demande précédente ne sert plus à personne : on l'abandonne pour de
+       bon. Sans ce signal, un drapeau local se contentait d'ignorer la
+       réponse pendant qu'Odoo continuait de travailler, et les appels
+       s'empilaient derrière celui dont on avait besoin. */
+    demandeOdooRef.current?.controleur.abort();
+    demandeOdooRef.current = null;
+
+    /* La réponse déjà obtenue pour cette demande. Revenir sur un choix — le
+       défaire puis le refaire — retombe sur une demande déjà posée, et
+       l'attente était alors intégralement rejouée. */
+    const enCache = cacheOdooRef.current.get(cle);
+
+    /* DÉLAI DE GRÂCE. Corriger trois articles de suite lançait trois appels,
+       dont les deux premiers ne servaient à rien mais occupaient Odoo — et la
+       réponse utile arrivait derrière eux. On attend que la main s'arrête.
+       Une demande déjà en cache n'attend pas : il n'y a rien à ménager. */
+    const minuteur = setTimeout(() => { void lancer(); }, enCache ? 0 : 500);
+
+    async function lancer() {
+      const controleur = new AbortController();
+      demandeOdooRef.current = { cle, controleur };
+      /* Cette réponse est-elle encore celle qu'on attend ? Le drapeau local
+         d'autrefois était propre à UN passage de l'effet ; il retombait donc
+         sur une demande identique relancée entre-temps, dont le résultat
+         n'était plus appliqué. La demande en cours fait seule autorité. */
+      const caduque = () => demandeOdooRef.current?.controleur !== controleur;
       try {
-        const { data } = await supabase.functions.invoke('odoo-prix', {
-          body: {
-            client: critere,
-            lignes: referencesDuDevis.map(r => ({ reference: r, quantite: 1 })),
-            recherches: aChercher,
-            /* Niveau imposé : Odoo ira lire la grille de CE niveau au lieu de
-               celle rattachée au client. Rien n'est copié en local. */
-            niveau: niveauForce || undefined,
-            /* Niveau affiché, envoyé comme FILET : il ne sert que si le client
-               n'a aucun contrat rattaché. Sans lui, l'absence de rattachement
-               faisait retomber la tarification sur la liste de prix, qui
-               recalcule depuis des fiches à 1 €. */
-            niveauDefaut: niveauRemise,
-          },
-        });
-        if (annule) return;
+        const data = enCache ?? await (async () => {
+          const { data: recu } = await supabase.functions.invoke('odoo-prix', {
+            body: corps,
+            signal: controleur.signal,
+          });
+          if (recu) cacheOdooRef.current.set(cle, recu);
+          return recu;
+        })();
+        if (caduque()) return;
+        cleOdooRef.current = cle;
         setTrouvaillesOdoo((data?.trouvailles || {}) as Record<string, TrouvailleOdoo[]>);
         /* Les fiches lues par référence exacte, gardées entières : le panneau
            Odoo doit pouvoir les proposer comme n'importe quelle trouvaille. */
@@ -1962,9 +2024,19 @@ const [contratOdoo, setContratOdoo] = useState<
             niveauParDefaut: !!data.niveauParDefaut,
           });
         } else setContratOdoo(null);
-      } catch { if (!annule) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); } }
-    })();
-    return () => { annule = true; };
+      } catch {
+        /* Un abandon volontaire n'est pas une panne : vider l'écran effacerait
+           le contrat cadre affiché au profit d'une demande qu'on vient
+           soi-même d'annuler. */
+        if (!caduque()) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); }
+      }
+    }
+
+    /* On n'annule PAS la demande en cours au démontage de l'effet : il se
+       rejoue à tout propos, et l'abandonner à chaque fois revenait à ne
+       jamais la laisser aboutir. Elle est abandonnée au passage suivant, et
+       seulement si la demande a réellement changé. */
+    return () => { clearTimeout(minuteur); };
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
