@@ -24,7 +24,9 @@ export default defineConfig(({ mode }) => ({
     react(),
     mode === "development" && componentTagger(),
     VitePWA({
-      registerType: "autoUpdate",
+      // « prompt » et non « autoUpdate » : c'est nous qui décidons quand la
+      // nouvelle version s'applique (bannière dans src/main.tsx).
+      registerType: "prompt",
       // Le SW ne s'active qu'en build (pas en dev) pour ne pas gêner le HMR.
       devOptions: { enabled: false },
       includeAssets: ["favicon.ico", "logo-isofloor.png"],
@@ -47,21 +49,47 @@ export default defineConfig(({ mode }) => ({
       workbox: {
         // Précache les chunks JS/CSS/HTML (les gros chunks PDF/Excel inclus → 2e ouverture instantanée)
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Les nuanciers (ral 215 fichiers, quartz 4,9 Mo, paillettes 9,2 Mo ≈ 16 Mo
+        // au total) sont HORS précache : les précacher faisait durer l'installation
+        // du service worker 10 à 20 s à chaque première ouverture. Ils sont mis en
+        // cache à l'usage (runtimeCaching « nuanciers » ci-dessous).
+        globIgnores: [
+          "**/ral/**",
+          "**/quartz/**",
+          "**/paillettes/**",
+          "**/CRM.xlsx",
+        ],
         maximumFileSizeToCacheInBytes: 4 * 1024 * 1024, // pdf.worker ~2,1 Mo
         navigateFallback: "/index.html",
-        // CRUCIAL après un déploiement : le nouveau SW prend le contrôle immédiatement
-        // et purge les anciens caches. Sans ça, le navigateur peut mélanger d'anciens
-        // et de nouveaux chunks (bindings déplacés entre chunks → « Cannot access 'X'
-        // before initialization »).
-        skipWaiting: true,
-        clientsClaim: true,
+        // PAS de skipWaiting/clientsClaim : sinon le nouveau service worker prend la
+        // main sur l'onglet déjà ouvert (controllerchange) et « virtual:pwa-register »
+        // recharge la page sans prévenir. La nouvelle version est désormais proposée
+        // par une bannière (voir src/main.tsx) et appliquée seulement sur clic.
+        // Corollaire : l'ancien SW continue de servir un jeu de chunks COHÉRENT
+        // jusqu'au rechargement → plus de mélange ancien/nouveau chunk.
         cleanupOutdatedCaches: true,
         // Ne jamais mettre en cache les appels Supabase (données toujours fraîches)
-        navigateFallbackDenylist: [/^\/anthropic/, /supabase\.co/],
+        navigateFallbackDenylist: [
+          /^\/anthropic/,
+          /supabase\.co/,
+          /^\/(ral|quartz|paillettes)\//,
+        ],
         runtimeCaching: [
           {
             urlPattern: ({ url }) => url.origin.includes("supabase.co"),
             handler: "NetworkOnly",
+          },
+          {
+            // Nuanciers : téléchargés à la première consultation, puis servis
+            // depuis le cache. Rien n'est téléchargé tant qu'on ne les ouvre pas.
+            urlPattern: ({ url, sameOrigin }) =>
+              sameOrigin && /^\/(ral|quartz|paillettes)\//.test(url.pathname),
+            handler: "CacheFirst",
+            options: {
+              cacheName: "nuanciers",
+              expiration: { maxEntries: 320, maxAgeSeconds: 60 * 60 * 24 * 90 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
           },
         ],
       },
