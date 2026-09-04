@@ -17,6 +17,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId } from '@/lib/indexProduits';
+import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
   codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
@@ -315,7 +316,28 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
       dateCreation: new Date().toISOString().split('T')[0],
       adressesLivraison: [],
     };
-    if (!existant) updateClients(prev => [...prev, client]);
+    /* UNE FICHE ODOO RATTACHÉE EST UNE PERSONNE, PAS UNE SOCIÉTÉ.
+     *
+     * `societe` prenait déjà la société mère — c'est elle qui doit figurer sur
+     * le devis — mais la personne, elle, disparaissait : elle ne servait qu'à
+     * remplir le champ `nom` du client, où aucune liste de contacts ne va la
+     * chercher. On l'inscrit donc aussi comme contact, seul endroit d'où le
+     * devis sait la reprendre. */
+    const source: ContactSource | null = p.estSociete ? null : {
+      nom: p.nom,
+      email: p.email,
+      telephone: p.telephone,
+      mobile: p.mobile,
+    };
+    const rattachement = rattacherContact(client.contacts, source, generateId);
+    const clientFinal: Client = rattachement.modifie
+      ? { ...client, contacts: rattachement.contacts }
+      : client;
+
+    if (!existant) updateClients(prev => [...prev, clientFinal]);
+    else if (rattachement.modifie) {
+      updateClients(prev => prev.map(c => (c.id === clientFinal.id ? clientFinal : c)));
+    }
 
     if (odooCible === 'commande') setCreerCCClientId(client.id);
     else setCreerDevisClientId(client.id);
@@ -2357,6 +2379,19 @@ const [contratOdoo, setContratOdoo] = useState<
       });
     }
 
+    /* L'interlocuteur retenu à l'écran, rattaché au fichier client sans y
+       créer de doublon. Sans contact désigné, `rattachement` ne change rien. */
+    const ctOdoo = contactsOdoo.find(c => String(c.id) === contactRetenu);
+    const clientDuDevis = clients.find(c => c.id === creerDevisClientId);
+    const rattachement = rattacherContact(
+      clientDuDevis?.contacts,
+      ctOdoo
+        ? { nom: ctOdoo.nom, fonction: ctOdoo.fonction, email: ctOdoo.email,
+            telephone: ctOdoo.telephone, mobile: ctOdoo.mobile }
+        : null,
+      generateId,
+    );
+
     const validite = creerDevisValidite || (() => {
       const d = new Date(creerDevisDate);
       d.setDate(d.getDate() + 30);
@@ -2380,7 +2415,21 @@ const [contratOdoo, setContratOdoo] = useState<
        * ressaisir à la main, ou l'oublier. */
       fraisPortHT: transport?.total || undefined,
       fraisPortTVA: transport?.total ? 20 : undefined,
+      /* L'INTERLOCUTEUR SUIT LE DEVIS.
+       *
+       * L'écran désignait déjà la bonne personne dans « Contact de l'affaire »
+       * — présélectionnée sur le nom du signataire — puis la perdait : le devis
+       * créé n'avait pas de contact et la fiche client n'en gardait rien. Il
+       * fallait rouvrir le devis et ressaisir quelqu'un qui était à l'écran une
+       * seconde plus tôt. */
+      contactId: rattachement.contactId,
     };
+    /* Le contact appartient au client : on l'y inscrit avant le devis, qui n'en
+       retient que l'identifiant. */
+    if (rattachement.modifie) {
+      updateClients(prev => prev.map(c =>
+        c.id === creerDevisClientId ? { ...c, contacts: rattachement.contacts } : c));
+    }
     /* Le catalogue d'abord, le devis ensuite : les lignes désignent ces
        articles, ils doivent exister quand l'écran Devis les relit. */
     if (aEcrire.size) {
