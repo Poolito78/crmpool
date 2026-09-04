@@ -1870,7 +1870,19 @@ const [contratOdoo, setContratOdoo] = useState<
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
-      .slice(0, 12);   // au-delà, l'appel s'éternise pour un gain nul
+      /* PLAFOND DES LIGNES ENVOYÉES À ODOO.
+       *
+       * Il était à douze parce que les recherches partaient l'une après
+       * l'autre, chacune redemandant jusqu'à sept fois la même chose en
+       * relâchant ses critères un par un : une treizième ligne, c'était dix
+       * secondes de plus. Elles partent désormais par paquets de huit, et une
+       * échelle de relâchement tient en une seule requête. Le coût d'une
+       * ligne supplémentaire a été divisé par sept.
+       *
+       * Vingt, pas l'infini : une demande qui en compte davantage n'est plus
+       * un devis mais un bordereau, et il vaut mieux la traiter en plusieurs
+       * fois que de faire attendre une minute. */
+      .slice(0, 20);
 
     /* Sans critère, Odoo n'est pas interrogé du tout — et l'utilisateur n'en
        savait rien. Un copier-coller sans adresse ni raison sociale donnait une
