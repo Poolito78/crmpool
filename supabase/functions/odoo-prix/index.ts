@@ -735,15 +735,32 @@ class ContratCadre {
       );
       const m = new Map<string, { prix: number; prio: number }>();
       const PAS = 1000;
-      for (let debut = 0; ; debut += PAS) {
-        const { data, error } = await sb
-          .from("grille_contrat")
+
+      /* LES PAGES SE LISAIENT L'UNE APRÈS L'AUTRE.
+       *
+       * La grille de ce client compte plus de neuf mille codifications, soit
+       * dix pages : dix requêtes enchaînées, douze secondes d'attente avant
+       * que la moindre recherche n'ait commencé. Or PostgREST sait dire
+       * combien il y a de lignes AVANT de les lire. On demande donc le
+       * compte, puis toutes les pages de front. */
+      const { count, error: erreurCompte } = await sb
+        .from("grille_contrat")
+        .select("codification", { count: "exact", head: true })
+        .in("contrat_id", this.ids);
+      if (erreurCompte) throw new Error(erreurCompte.message);
+
+      const departs: number[] = [];
+      for (let debut = 0; debut < (count || 0); debut += PAS) departs.push(debut);
+
+      const pages = await Promise.all(departs.map((debut) =>
+        sb.from("grille_contrat")
           .select("codification, prix, priorite")
           .in("contrat_id", this.ids)
-          .range(debut, debut + PAS - 1);
+          .range(debut, debut + PAS - 1)));
+
+      for (const { data, error } of pages) {
         if (error) throw new Error(error.message);
-        if (!data?.length) break;
-        for (const l of data) {
+        for (const l of data || []) {
           const k = String(l.codification || "").toUpperCase();
           const prix = Number(l.prix) || 0;
           const prio = Number(l.priorite) || 0;
@@ -755,7 +772,6 @@ class ContratCadre {
             m.set(k, { prix, prio });
           }
         }
-        if (data.length < PAS) break;
       }
       if (!m.size) {
         console.log(`[grille] copie locale vide pour #${this.ids.join(",")} : `
@@ -1725,7 +1741,7 @@ serve(async (req) => {
      * production, et lui envoyer quarante requêtes simultanées le
      * ralentirait pour tout le monde.
      */
-    const PAQUET_RECHERCHE = 4;
+    const PAQUET_RECHERCHE = 8;
 
     interface LignePreparee {
       q: string;
@@ -1783,14 +1799,6 @@ serve(async (req) => {
        * en premier, et c'est presque toujours le nom de l'article. */
       if (!res.length) {
         const mots = motsDeRecherche(q);
-        /* On sacrifie EN PARTANT DE LA FIN. Une demande française nomme
-           l'article d'abord, le qualifie ensuite, et finit par le contexte :
-           « plato bloc 24 kg pour mat 80 × 40 » — le bloc, son poids, puis ce
-           qu'il leste. Retirer les derniers mots d'abord retient donc
-           « plastobloc 24 », c'est-à-dire précisément la référence cherchée,
-           là qu'un tri par longueur ou par nature aurait sacrifié le 24 avant
-           le 80 et rendu les quatre PLASTOBLOC au lieu du bon. */
-        const gardes = new Set(mots);
         /* Un critère DÉSIGNE quelque chose : ni un nom de catégorie, ni une
            classe de film. La classe qualifie un panneau, elle n'en nomme
            aucun — et depuis qu'elle échappe au plafond et accompagne toutes
@@ -1799,21 +1807,20 @@ serve(async (req) => {
            recevait un panneau « INTERDICTION DE FUMER ET VAPOTER », qui le
            porte comme des milliers d'autres. */
         const designe = (m: string) => !motGenerique(m) && !/^(c\d(?:fj)?|3430)$/i.test(m);
-        const essayer = async (raison: string) => {
-          if (!gardes.size) return false;
-          if (![...gardes].some(designe)) {
-            console.log(`[recherche] « ${q} » : relâchement interrompu, il ne `
-              + `resterait que ${JSON.stringify([...gardes])} — aucun mot ne `
-              + `désigne d'article`);
-            return false;
-          }
-          res = await chercher(domaineDepuisMots([...gardes], q));
-          if (!res.length) return false;
-          console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
-            + ` ${res.length} article(s) en relâchant à ${JSON.stringify([...gardes])}`
-            + ` (${raison})`);
-          return true;
-        };
+
+        /* LES PALIERS SE CONSTRUISENT SANS RIEN DEMANDER À ODOO.
+         *
+         * Ils ne dépendent que des mots de la demande : on peut donc les
+         * dresser tous d'avance, puis les essayer de front. C'est ce qui
+         * coûtait le plus cher — « ensembles plot PVC + Mât + Brides 80x40
+         * en 2.50M » sacrifiait ses huit mots un par un, un aller-retour à
+         * chaque fois, dix secondes pour une seule ligne.
+         *
+         * L'ORDRE RESTE LA RÈGLE : du plus précis au plus lâche. On retient
+         * le premier palier qui ramène quelque chose, exactement comme
+         * avant. Seule l'attente change, pas le résultat. */
+        const paliers: { gardes: string[]; raison: string }[] = [];
+        const gardes = new Set(mots);
 
         /* D'ABORD les noms de catégorie. Ils ne désignent pas l'article, et
            les garder revenait à sacrifier ceux qui le désignent : « panneaux
@@ -1821,10 +1828,11 @@ serve(async (req) => {
            arceau proposé pour un panneau AK5. On ne les retire qu'ici, au
            relâchement : tant que la première passe trouve, ils affinent. */
         const generiques = mots.filter(motGenerique);
-        let relache = false;
         if (generiques.length && generiques.length < mots.length) {
           for (const g of generiques) gardes.delete(g);
-          relache = await essayer("noms de catégorie écartés");
+          if (gardes.size && [...gardes].some(designe)) {
+            paliers.push({ gardes: [...gardes], raison: "noms de catégorie écartés" });
+          }
         }
 
         /* Ensuite seulement, on sacrifie EN PARTANT DE LA FIN. Une demande
@@ -1832,15 +1840,34 @@ serve(async (req) => {
            « plato bloc 24 kg pour mat 80 × 40 » — le bloc, son poids, puis ce
            qu'il leste. Retirer les derniers d'abord retient « plastobloc 24 »,
            là qu'un tri par longueur aurait sacrifié le 24 avant le 80. */
-        if (!relache) {
-          for (let i = mots.length - 1; i >= 0; i--) {
-            if (!gardes.has(mots[i]) || gardes.size <= 1) continue;
-            gardes.delete(mots[i]);
-            /* Inutile d'interroger Odoo pour un jeu de critères qui ne
-               désigne plus rien : on s'arrête là et la ligne ressort sans
-               proposition, ce qui est le bon aveu. */
-            if (![...gardes].some(designe)) break;
-            if (await essayer("mots de fin écartés")) break;
+        for (let i = mots.length - 1; i >= 0; i--) {
+          if (!gardes.has(mots[i]) || gardes.size <= 1) continue;
+          gardes.delete(mots[i]);
+          /* Inutile d'interroger Odoo pour un jeu de critères qui ne désigne
+             plus rien : on s'arrête là et la ligne ressort sans proposition,
+             ce qui est le bon aveu. */
+          if (![...gardes].some(designe)) break;
+          paliers.push({ gardes: [...gardes], raison: "mots de fin écartés" });
+        }
+
+        /* Par vagues, et non tous d'un coup : un palier qui aboutit rend les
+           suivants inutiles, et les lancer quand même chargerait Odoo pour
+           rien. Quatre à la fois suffisent — la bonne réponse arrive presque
+           toujours dans la première vague. */
+        const VAGUE = 4;
+        for (let d = 0; d < paliers.length && !res.length; d += VAGUE) {
+          const essais = await Promise.all(
+            paliers.slice(d, d + VAGUE).map((pal) =>
+              chercher(domaineDepuisMots(pal.gardes, q)).catch(() => [] as any[])),
+          );
+          for (let k = 0; k < essais.length; k++) {
+            if (!essais[k].length) continue;
+            res = essais[k];
+            const pal = paliers[d + k];
+            console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+              + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
+              + ` (${pal.raison})`);
+            break;
           }
         }
       }
