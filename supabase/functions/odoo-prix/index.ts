@@ -1775,9 +1775,9 @@ serve(async (req) => {
       const qte = Number(r.quantite) || 1;
       const CHAMPS_ART = ["id", "default_code", "name", "lst_price", "standard_price",
                           "categ_id", "product_tmpl_id", "uom_id", "write_date", "create_date"];
-      const chercher = (domaine: unknown[]) => od.kw(
+      const chercher = (domaine: unknown[], plafond = 40) => od.kw(
         "product.product", "search_read", [domaine, CHAMPS_ART],
-        { limit: 40, order: "default_code, name" },
+        { limit: plafond, order: "default_code, name" },
       ) as Promise<any[]>;
 
       let res = await chercher(domaineRecherche(q));
@@ -1850,24 +1850,60 @@ serve(async (req) => {
           paliers.push({ gardes: [...gardes], raison: "mots de fin écartés" });
         }
 
-        /* Par vagues, et non tous d'un coup : un palier qui aboutit rend les
-           suivants inutiles, et les lancer quand même chargerait Odoo pour
-           rien. Quatre à la fois suffisent — la bonne réponse arrive presque
-           toujours dans la première vague. */
-        const VAGUE = 4;
-        for (let d = 0; d < paliers.length && !res.length; d += VAGUE) {
-          const essais = await Promise.all(
-            paliers.slice(d, d + VAGUE).map((pal) =>
-              chercher(domaineDepuisMots(pal.gardes, q)).catch(() => [] as any[])),
-          );
-          for (let k = 0; k < essais.length; k++) {
-            if (!essais[k].length) continue;
-            res = essais[k];
-            const pal = paliers[d + k];
-            console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
-              + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
-              + ` (${pal.raison})`);
-            break;
+        /* UNE SEULE REQUÊTE POUR TOUTE L'ÉCHELLE.
+         *
+         * Odoo ne traite pas nos requêtes de front : qu'on en lance quatre ou
+         * huit à la fois, elles se mettent en file de l'autre côté. Les
+         * recouvrir ne servait donc à rien, et les mesures l'ont montré —
+         * 41 s à quatre, 40 s à huit. Ce qui compte n'est pas l'ordre des
+         * requêtes mais leur NOMBRE.
+         *
+         * Or les paliers sont emboîtés : tout article qui satisfait un palier
+         * précis satisfait aussi tous les plus lâches. Le palier le plus
+         * lâche contient donc la réponse de tous les autres. On l'interroge
+         * une fois, largement, et on redescend l'échelle EN MÉMOIRE — même
+         * ordre de priorité, même résultat, un aller-retour au lieu de sept.
+         */
+        if (paliers.length) {
+          const LARGE = 400;
+          const lache = paliers[paliers.length - 1];
+          const vaste = await chercher(domaineDepuisMots(lache.gardes, q), LARGE)
+            .catch(() => [] as any[]);
+
+          /* SAUF SI LA LISTE A ÉTÉ COUPÉE. Au plafond, on ne sait pas ce
+             qu'Odoo n'a pas renvoyé : un palier précis pourrait n'avoir de
+             réponse que dans la partie manquante. Trier en mémoire une liste
+             tronquée donnerait un « aucun article » qui serait un mensonge.
+             Ce cas est rare ; on y reprend l'échelle requête par requête. */
+          if (vaste.length < LARGE) {
+            /* Le même critère que le domaine Odoo, appliqué ici : un mot vaut
+               pour l'un de ses équivalents, cherché dans le libellé ou dans
+               la référence, sans distinction de casse. */
+            const porte = (x: any, gardes: string[]) => {
+              const texte = `${x.default_code || ""} ${x.name || ""}`.toLowerCase();
+              return gardes.every((m) =>
+                motsEquivalents(m).some((v) => texte.includes(String(v).toLowerCase())));
+            };
+            for (const pal of paliers) {
+              const sous = vaste.filter((x) => porte(x, pal.gardes));
+              if (!sous.length) continue;
+              res = sous;
+              console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+                + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
+                + ` (${pal.raison}, échelle décidée en mémoire)`);
+              break;
+            }
+          } else {
+            console.log(`[recherche] « ${q} » : ${LARGE} articles au palier le plus `
+              + `lâche, liste tronquée — reprise de l'échelle requête par requête`);
+            for (const pal of paliers) {
+              res = await chercher(domaineDepuisMots(pal.gardes, q)).catch(() => [] as any[]);
+              if (!res.length) continue;
+              console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+                + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
+                + ` (${pal.raison})`);
+              break;
+            }
           }
         }
       }
