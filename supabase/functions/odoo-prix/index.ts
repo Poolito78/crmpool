@@ -1924,50 +1924,84 @@ serve(async (req) => {
          */
         if (paliers.length) {
           const LARGE = 400;
-          const lache = paliers[paliers.length - 1];
-          const vaste = await chercher(domaineDepuisMots(lache.gardes, q), LARGE)
-            .catch(() => [] as any[]);
 
-          /* SAUF SI LA LISTE A ÉTÉ COUPÉE. Au plafond, on ne sait pas ce
-             qu'Odoo n'a pas renvoyé : un palier précis pourrait n'avoir de
-             réponse que dans la partie manquante. Trier en mémoire une liste
-             tronquée donnerait un « aucun article » qui serait un mensonge.
-             Ce cas est rare ; on y reprend l'échelle requête par requête. */
-          if (vaste.length < LARGE) {
-            /* Le même critère que le domaine Odoo, appliqué ici : un mot vaut
-               pour l'un de ses équivalents, cherché dans le libellé ou dans
-               la référence, sans distinction de casse. */
-            /* SANS LES ACCENTS, DES DEUX CÔTÉS.
-               Comparer en minuscules ne suffit pas : « ÉPI » ne contient pas
-               « epi » pour JavaScript, alors qu'Odoo les rapproche. Onze
-               articles avaient ainsi disparu d'une demande d'EPI, et le
-               premier proposé n'était plus le même. */
-            const aplati = (v: string) => String(v)
-              .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-            const porte = (x: any, gardes: string[]) => {
-              const texte = aplati(`${x.default_code || ""} ${x.name || ""}`);
-              return gardes.every((m) =>
-                motsEquivalents(m).some((v) => texte.includes(aplati(v))));
-            };
-            for (const pal of paliers) {
-              const sous = vaste.filter((x) => porte(x, pal.gardes));
-              if (!sous.length) continue;
-              res = sous;
+          /* SANS LES ACCENTS, DES DEUX CÔTÉS.
+             Comparer en minuscules ne suffit pas : « ÉPI » ne contient pas
+             « epi » pour JavaScript, alors qu'Odoo les rapproche. Onze
+             articles avaient ainsi disparu d'une demande d'EPI, et le
+             premier proposé n'était plus le même. */
+          const aplati = (v: string) => String(v)
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          /* Le même critère que le domaine Odoo, appliqué ici : un mot vaut
+             pour l'un de ses équivalents, cherché dans le libellé ou dans la
+             référence. */
+          const porte = (x: any, gardes: string[]) => {
+            const texte = aplati(`${x.default_code || ""} ${x.name || ""}`);
+            return gardes.every((m) =>
+              motsEquivalents(m).some((v) => texte.includes(aplati(v))));
+          };
+
+          /* DESCENDRE JUSQU'À UNE LISTE COMPLÈTE.
+           *
+           * Interroger le palier le plus lâche suffit d'ordinaire : il
+           * contient les réponses de tous les autres, qu'on trie ensuite en
+           * mémoire. Mais « ensembles plot PVC + Mât + Brides 80×40 en
+           * 2.50M » finit sur le seul « 2500 », et « mâts 1.50M » sur le seul
+           * « 1500 » : des milliers d'articles portent ces cotes. La liste
+           * revenait coupée au plafond, on ne pouvait plus rien en conclure,
+           * et l'on reprenait l'échelle requête par requête — sept
+           * aller-retours pour ces deux lignes.
+           *
+           * Les paliers étant emboîtés, il suffit de RESSERRER d'un cran tant
+           * que la liste déborde. Deux choses peuvent arriver, et toutes deux
+           * concluent :
+           *
+           * — le palier tient sous le plafond : la liste est complète, on
+           *   redescend l'échelle en mémoire à partir d'elle ;
+           * — le palier ne rend rien : alors aucun palier plus précis n'en
+           *   rendra non plus, puisqu'ils exigent davantage. La réponse est
+           *   le palier précédent, dont on a déjà les articles.
+           *
+           * En pratique deux requêtes au lieu de sept, et jamais plus que
+           * l'ancienne échelle. */
+          // deno-lint-ignore no-explicit-any
+          let base: any[] | null = null;
+          let iBase = -1;
+          let coupee = false;
+          for (let i = paliers.length - 1; i >= 0; i--) {
+            const lot = await chercher(domaineDepuisMots(paliers[i].gardes, q), LARGE)
+              .catch(() => [] as any[]);
+            /* Vide : ce palier et tous les plus précis le sont. On garde le
+               précédent, plus lâche, qu'on a déjà en main. */
+            if (!lot.length) break;
+            base = lot;
+            iBase = i;
+            coupee = lot.length >= LARGE;
+            if (!coupee) break;
+          }
+
+          if (base && base.length) {
+            if (!coupee) {
+              /* Liste complète : l'échelle se tranche sans redemander. */
+              for (let i = 0; i <= iBase; i++) {
+                const sous = base.filter((x) => porte(x, paliers[i].gardes));
+                if (!sous.length) continue;
+                res = sous;
+                console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
+                  + ` ${res.length} article(s) en relâchant à`
+                  + ` ${JSON.stringify(paliers[i].gardes)}`
+                  + ` (${paliers[i].raison}, échelle décidée en mémoire)`);
+                break;
+              }
+            } else {
+              /* Liste coupée, mais le palier d'après ne rendait rien : c'est
+                 donc bien celui-ci la réponse, et le classement fera le tri
+                 parmi ce qu'on en connaît. */
+              res = base;
               console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
-                + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
-                + ` (${pal.raison}, échelle décidée en mémoire)`);
-              break;
-            }
-          } else {
-            console.log(`[recherche] « ${q} » : ${LARGE} articles au palier le plus `
-              + `lâche, liste tronquée — reprise de l'échelle requête par requête`);
-            for (const pal of paliers) {
-              res = await chercher(domaineDepuisMots(pal.gardes, q)).catch(() => [] as any[]);
-              if (!res.length) continue;
-              console.log(`[recherche] « ${q} » : rien avec ${JSON.stringify(mots)},`
-                + ` ${res.length} article(s) en relâchant à ${JSON.stringify(pal.gardes)}`
-                + ` (${pal.raison})`);
-              break;
+                + ` ${res.length} article(s) (plafond) en relâchant à`
+                + ` ${JSON.stringify(paliers[iBase].gardes)}`
+                + ` (${paliers[iBase].raison}, palier le plus précis qui réponde)`);
             }
           }
         }
