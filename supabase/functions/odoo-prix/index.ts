@@ -1272,7 +1272,32 @@ export function motsDeRecherche(texte: string): string[] {
      couper coûte un critère — et la coupe frappait justement les cotes, que
      l'on sépare désormais en deux nombres. « support ou mât 80×40 en 2 m »
      perdait ainsi son 40. */
-  const gardes = sansClasse.slice(0, 7);
+
+  /* LE CODE D'ARTICLE ÉCHAPPE AU PLAFOND, COMME LA CLASSE.
+   *
+   * Le plafond gardait les sept PREMIERS mots. Il suppose donc que l'article
+   * est nommé en tête — vrai sur « panneaux AK5 en 1000 mm », faux dès que le
+   * client décrit d'abord et qualifie ensuite : « panneau personnalisé
+   * "Déviation cyclistes vers la chaussée" avec le style des panneaux KC1 »
+   * compte huit mots, et le huitième — `kc1`, le seul qui désigne quoi que ce
+   * soit — tombait. La demande partait chez Odoo amputée de son code, avec
+   * sept mots de prose qui ne figurent dans aucun libellé, et ne ramenait
+   * rien : ni proposition, ni rapprochement.
+   *
+   * Une lettre ou trois suivies d'un chiffre — `kc1`, `ak5`, `b14`, `d60` —
+   * valent mieux que n'importe quel mot de la phrase. On les met de côté
+   * avant la coupe, puis on les remet À LEUR PLACE : les avancer en tête
+   * changerait le pivot du classement, et le relâchement sacrifie par la fin.
+   */
+  const estCode = (m: string) => /^[a-z]{1,3}\d/.test(m);
+  const codes = sansClasse.filter(estCode);
+  const gardes = sansClasse.length <= 7
+    ? sansClasse
+    : sansClasse.filter((m, i) =>
+        estCode(m)
+        || sansClasse.filter((x, j) => j < i && !estCode(x)).length
+             < Math.max(0, 7 - codes.length));
+
   return classe ? [...gardes, classe] : gardes;
 }
 
@@ -1879,10 +1904,17 @@ serve(async (req) => {
             /* Le même critère que le domaine Odoo, appliqué ici : un mot vaut
                pour l'un de ses équivalents, cherché dans le libellé ou dans
                la référence, sans distinction de casse. */
+            /* SANS LES ACCENTS, DES DEUX CÔTÉS.
+               Comparer en minuscules ne suffit pas : « ÉPI » ne contient pas
+               « epi » pour JavaScript, alors qu'Odoo les rapproche. Onze
+               articles avaient ainsi disparu d'une demande d'EPI, et le
+               premier proposé n'était plus le même. */
+            const aplati = (v: string) => String(v)
+              .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
             const porte = (x: any, gardes: string[]) => {
-              const texte = `${x.default_code || ""} ${x.name || ""}`.toLowerCase();
+              const texte = aplati(`${x.default_code || ""} ${x.name || ""}`);
               return gardes.every((m) =>
-                motsEquivalents(m).some((v) => texte.includes(String(v).toLowerCase())));
+                motsEquivalents(m).some((v) => texte.includes(aplati(v))));
             };
             for (const pal of paliers) {
               const sous = vaste.filter((x) => porte(x, pal.gardes));
