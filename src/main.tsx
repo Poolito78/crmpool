@@ -3,17 +3,25 @@ import App from "./App.tsx";
 import "./index.css";
 import { registerSW } from "virtual:pwa-register";
 
-/* Enregistre le service worker (mise à jour auto en arrière-plan).
+/* Service worker : mise à jour PROPOSÉE, jamais imposée.
  *
- * Sur un téléphone, l'application installée reste ouverte des heures : le
- * navigateur ne va chercher une nouvelle version qu'au démarrage, si bien
- * qu'un déploiement pouvait rester invisible toute la journée. D'où ces deux
- * relances : au retour au premier plan — le geste le plus courant sur mobile —
- * et toutes les cinq minutes. `registerType: "autoUpdate"` fait le reste :
- * dès qu'une version est trouvée, elle prend la main et la page se recharge.
+ * Avant, la config était `registerType: "autoUpdate"` + `skipWaiting` +
+ * `clientsClaim`. Conséquence : dès que le nouveau service worker prenait le
+ * contrôle de l'onglet déjà ouvert, « virtual:pwa-register » rechargeait la
+ * page tout seul — d'où le CRM qui se rafraîchissait 10 à 20 s après chaque
+ * ouverture (le temps que le service worker finisse de s'installer).
+ *
+ * Désormais : la nouvelle version attend sagement, une bannière discrète
+ * apparaît en bas de l'écran, et la page ne se recharge QUE sur clic.
+ * On garde les deux relances de vérification (retour au premier plan et toutes
+ * les cinq minutes) : sur un téléphone l'app installée reste ouverte des
+ * heures, sans ça un déploiement resterait invisible toute la journée.
  */
-registerSW({
+const appliquerMiseAJour = registerSW({
   immediate: true,
+  onNeedRefresh() {
+    afficherBanniereMiseAJour();
+  },
   onRegisteredSW(_url, registration) {
     if (!registration) return;
     const verifier = () => { registration.update().catch(() => { /* hors ligne */ }); };
@@ -23,6 +31,44 @@ registerSW({
     setInterval(verifier, 5 * 60 * 1000);
   },
 });
+
+// Bannière en DOM pur (et non en React) : elle doit pouvoir s'afficher même si
+// l'application n'est pas montée, par exemple pendant une erreur de rendu.
+function afficherBanniereMiseAJour() {
+  if (document.getElementById('maj-banniere')) return;
+  const barre = document.createElement('div');
+  barre.id = 'maj-banniere';
+  barre.setAttribute('role', 'status');
+  barre.style.cssText = [
+    'position:fixed', 'left:50%', 'transform:translateX(-50%)',
+    'bottom:max(16px, env(safe-area-inset-bottom))', 'z-index:2147483647',
+    'display:flex', 'align-items:center', 'gap:12px',
+    'padding:10px 12px 10px 16px', 'border-radius:12px',
+    'background:#1f2937', 'color:#fff',
+    'font:500 14px/1.3 system-ui, -apple-system, sans-serif',
+    'box-shadow:0 8px 24px rgba(0,0,0,.28)', 'max-width:calc(100vw - 24px)',
+  ].join(';');
+
+  const texte = document.createElement('span');
+  texte.textContent = 'Nouvelle version disponible';
+
+  const recharger = document.createElement('button');
+  recharger.type = 'button';
+  recharger.textContent = 'Recharger';
+  recharger.style.cssText = 'padding:6px 12px;border:0;border-radius:8px;background:#cc0000;color:#fff;font:600 14px system-ui;cursor:pointer';
+  // `true` → on demande au nouveau SW de prendre la main, puis la page recharge.
+  recharger.onclick = () => { appliquerMiseAJour(true); };
+
+  const plusTard = document.createElement('button');
+  plusTard.type = 'button';
+  plusTard.setAttribute('aria-label', 'Plus tard');
+  plusTard.textContent = '✕';
+  plusTard.style.cssText = 'padding:6px 8px;border:0;border-radius:8px;background:transparent;color:#9ca3af;font:600 14px system-ui;cursor:pointer';
+  plusTard.onclick = () => { barre.remove(); };
+
+  barre.append(texte, recharger, plusTard);
+  document.body.appendChild(barre);
+}
 
 // Repère de version, lisible dans Paramètres et dans la console : sans lui,
 // « ça ne marche pas sur mon téléphone » et « mon téléphone a une vieille
