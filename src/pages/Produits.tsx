@@ -3042,10 +3042,12 @@ export default function Produits() {
                     messagerie en texte brut. */}
                 {(() => {
                   const principale = principaleDe(editing.id);
-                  const liens = liensDuProduit(editing, {
-                    imageUrl: principale?.url,
-                    imageLibelle: principale?.libelle,
-                  });
+                  /* On part du formulaire, pas de l'article enregistré : un
+                     libellé qu'on vient de taper doit se voir tout de suite. */
+                  const liens = liensDuProduit(
+                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel },
+                    { imageUrl: principale?.url, imageLibelle: principale?.libelle },
+                  );
                   return (
                     <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
@@ -3062,16 +3064,51 @@ export default function Produits() {
                           <Copy className="w-3.5 h-3.5 mr-1" />Copier
                         </Button>
                       </div>
-                      <ul className="space-y-0.5">
+                      {/* LE LIBELLE SE CORRIGE ICI, LA OU ON LE LIT. Il se
+                          saisissait ailleurs — celui de la fiche technique dans
+                          l'onglet Informations, celui de la photo sous sa
+                          vignette — donc jamais sous les yeux au moment ou on
+                          juge le resultat. */}
+                      <ul className="space-y-1">
                         {liens.map(l => (
-                          <li key={l.id} className="text-[11px] flex items-baseline gap-1.5">
-                            <span className="text-muted-foreground shrink-0">•</span>
+                          <li key={l.id} className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground w-24 shrink-0">
+                              {LIBELLE_CIBLE[l.cible]}
+                            </span>
+                            {l.cible === 'page' ? (
+                              <a href={l.url} target="_blank" rel="noreferrer"
+                                 className="text-[11px] text-primary hover:underline truncate flex-1"
+                                 title="Le libellé de la fiche publique suit la désignation de l'article.">
+                                {l.label}
+                              </a>
+                            ) : (
+                              <Input
+                                className="h-7 text-[11px] flex-1"
+                                defaultValue={l.label}
+                                placeholder={l.label}
+                                onBlur={async e => {
+                                  const v = e.target.value.trim();
+                                  if (v === l.label) return;
+                                  if (l.cible === 'fiche') {
+                                    setForm(prev => ({ ...prev, ficheLinkLabel: v }));
+                                    toast.success("Libellé de la fiche technique modifié — pensez à enregistrer l'article.");
+                                  } else if (principale) {
+                                    const err = await renommerImage(principale, v);
+                                    if (err) toast.error(err);
+                                    else toast.success('Libellé de la photo modifié.');
+                                  }
+                                }}
+                              />
+                            )}
                             <a href={l.url} target="_blank" rel="noreferrer"
-                               className="text-primary hover:underline truncate">{l.label}</a>
+                               className="text-muted-foreground hover:text-primary shrink-0"
+                               title="Ouvrir">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
                           </li>
                         ))}
                       </ul>
-                      {!editing.ficheUrl?.trim() && (
+                      {!form.ficheUrl?.trim() && (
                         <p className="text-[11px] text-muted-foreground">
                           Aucune fiche technique sur cet article : renseignez son adresse dans
                           l'onglet Informations pour qu'elle rejoigne ces liens.

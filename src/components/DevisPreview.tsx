@@ -1353,7 +1353,23 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             }).filter(x => x.cible !== 'page');
             if (liens.length) parArticle.push({ nom: p.description || p.reference, liens });
           }
-          if (!parArticle.length) return null;
+          /* UNE OPTION QUI NE PRODUIT RIEN DOIT DIRE POURQUOI. Cochee sur un
+             devis dont aucun article ne porte de fiche ni de photo, elle
+             restait sans effet — on croyait a une panne. Le message ne part
+             evidemment pas au client : il disparait a l'impression. */
+          if (!parArticle.length) {
+            if (printing || pdfMode) return null;
+            return (
+              <div className="border-t border-border pt-4">
+                <p className="text-xs text-muted-foreground">
+                  Aucun article de ce devis n'a de fiche technique ni de photo :
+                  il n'y a donc pas de lien à afficher. Renseignez l'adresse de la
+                  fiche dans l'onglet Informations d'un article, ou déposez-lui une
+                  photo dans son onglet Images.
+                </p>
+              </div>
+            );
+          }
           return (
             <div className="border-t border-border pt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">

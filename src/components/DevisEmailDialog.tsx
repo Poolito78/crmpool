@@ -233,6 +233,8 @@ export interface PreviewOptions {
   showRemise: boolean;
   showComposants: boolean;
   showKgRecap: boolean;
+  /** Bloc « Fiches techniques et photos » en bas du devis. */
+  showLiens?: boolean;
 }
 
 interface Props {

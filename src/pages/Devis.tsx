@@ -145,9 +145,9 @@ export default function Devis() {
   const [previewOptions, setPreviewOptions] = useState<PreviewOptions>(() => {
     try {
       const saved = localStorage.getItem('crm_devis_preview_opts');
-      if (saved) return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true, ...JSON.parse(saved) };
+      if (saved) return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true, showLiens: false, ...JSON.parse(saved) };
     } catch {}
-    return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true };
+    return { showConso: false, showRemise: false, showComposants: false, showKgRecap: true, showLiens: false };
   });
   useEffect(() => { try { localStorage.setItem('crm_devis_preview_opts', JSON.stringify(previewOptions)); } catch {} }, [previewOptions]);
   const [commandeDevis, setCommandeDevis] = useState<DevisType | null>(null);
@@ -3989,7 +3989,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-[98vw] md:max-w-[960px] max-h-[95vh] overflow-y-auto p-0 bg-muted/30">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} initialShowLiens={previewOptions.showLiens} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
           </DialogContent>
         </Dialog>
       )}
@@ -4015,7 +4015,7 @@ export default function Devis() {
           aria-hidden="true"
         >
           <DevisPreview
-            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}`}
+            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}`}
             devis={{ ...emailDevis, statut: 'envoyé' }}
             client={clients.find(c => c.id === emailDevis.clientId)}
             produits={produits}
@@ -4025,6 +4025,7 @@ export default function Devis() {
             initialShowRemise={previewOptions.showRemise}
             initialShowComposants={previewOptions.showComposants}
             initialShowKgRecap={previewOptions.showKgRecap}
+            initialShowLiens={previewOptions.showLiens}
           />
         </div>
       )}
