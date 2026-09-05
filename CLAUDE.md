@@ -146,7 +146,7 @@ Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern 
 
 ### Key components (`src/components/`)
 
-- `DevisPreview.tsx` — Read-only devis renderer for on-screen preview and PDF generation.
+- `DevisPreview.tsx` — Read-only devis renderer for on-screen preview and PDF generation. Option **Fiches & photos** (`showLiens`) : ajoute en bas du devis, par article, sa fiche technique et sa photo. ⚠️ **Les liens y sont cliquables DANS LE PDF** grâce à l'attribut `data-pdf-href` : le PDF étant une capture d'écran, un `<a href>` n'y serait qu'une image de texte — `generatePdfFromElement` relève ces éléments, mesure leur position et pose une annotation jsPDF par-dessus. Porter l'attribut sur le texte du lien, jamais sur la ligne entière, sinon toute la largeur devient cliquable.
 - `DevisArchiveDialog.tsx` — Dialog for archiving a devis: raison select, pre-filled editable comment, competitor entries (nom/prix/délai), saveable message templates.
 - `CRMActionDialog.tsx` — Create/edit CRM action with collapsible "Infos concurrence" section (competitor name, product ref, tarif, délai, note). Auto-opens for Visite/Appel/RDV types. Accepts optional `produits` prop for product dropdown.
 - `ConcurrentDialog.tsx` — Create/edit competitor fiche: 3 tabs (Infos / Produits / Notes). Passes `clients` prop for "client source" tracking on product entries.
@@ -186,6 +186,7 @@ Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern 
 
 ### PDF generation (`src/lib/pdfFolder.ts`)
 
+- `zoneLienSurPage(lien, page)` — fonction **pure** : où poser l'annotation de lien sur une page donnée, ou `null` si le lien n'y est pas. Le HAUT du lien décide de sa page (un lien à cheval reste cliquable là où il commence) et la hauteur est bornée au bas de page — une annotation qui déborde est perdue sans rien signaler. Tests : `pdfLiens.test.ts`.
 - `generatePdfFromElement(element, opts)` — renders a DOM element to multi-page PDF via `html2canvas` + `jsPDF`. Smart page-break detection on `<tr>` boundaries with repeating headers.
 - `savePdfFromElement(...)` — wraps above + saves via File System Access API (persisted in IndexedDB).
 - `writeFileToSubfolder(subfolderName, fileName, content)` — saves to a named subfolder within the memorised directory.

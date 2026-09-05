@@ -122,6 +122,36 @@ export async function writeFileToSubfolder(
   }
 }
 
+/**
+ * Où poser l'annotation de lien d'un élément, sur une page donnée.
+ *
+ * LE PDF EST UNE IMAGE. `generatePdfFromElement` capture la page en pixels
+ * (html2canvas) : un `<a href>` n'y survit que comme du texte souligné, pas
+ * comme un lien. jsPDF sait en revanche poser une ANNOTATION par-dessus
+ * l'image — un rectangle cliquable — à condition de lui donner la bonne
+ * position, page par page.
+ *
+ * D'où ce calcul, isolé parce qu'une erreur y est invisible : un rectangle
+ * décalé de deux millimètres ne se voit pas, il envoie simplement le lecteur
+ * ailleurs, ou nulle part. On rend `null` quand le lien n'est pas sur cette
+ * page-là, et on borne la hauteur au bas de page — une annotation qui déborde
+ * est perdue sans que rien ne le signale.
+ */
+export function zoneLienSurPage(
+  lien: { yMm: number; hMm: number },
+  page: { debutMm: number; hauteurTrancheMm: number; yContenuMm: number; hauteurPageMm: number },
+): { yMm: number; hMm: number } | null {
+  const finTranche = page.debutMm + page.hauteurTrancheMm;
+  /* Le HAUT du lien décide de sa page : un lien coupé par un saut reste
+     cliquable sur la page où il commence, là où le lecteur le voit entier. */
+  if (lien.yMm < page.debutMm || lien.yMm >= finTranche) return null;
+
+  const y = (lien.yMm - page.debutMm) + page.yContenuMm;
+  const hDispo = page.hauteurPageMm - y;
+  if (hDispo <= 0) return null;
+  return { yMm: y, hMm: Math.min(lien.hMm, hDispo) };
+}
+
 export async function generatePdfFromElement(
   element: HTMLElement,
   opts?: { devisNumero?: string; devisDate?: string; logoDataUrl?: string; docTitle?: string },
@@ -531,9 +561,11 @@ export async function generatePdfFromElement(
 
       // Liens sur cette page
       for (const lk of pdfLinks) {
-        if (lk.yMm >= yOffsetMm && lk.yMm < yOffsetMm + sliceH) {
-          pdf.link(lk.xMm, (lk.yMm - yOffsetMm) + yContent, lk.wMm, lk.hMm, { url: lk.url });
-        }
+        const zone = zoneLienSurPage(lk, {
+          debutMm: yOffsetMm, hauteurTrancheMm: sliceH,
+          yContenuMm: yContent, hauteurPageMm: ph - footerH,
+        });
+        if (zone) pdf.link(lk.xMm, zone.yMm, lk.wMm, zone.hMm, { url: lk.url });
       }
       yOffsetMm += sliceH; page++;
     }

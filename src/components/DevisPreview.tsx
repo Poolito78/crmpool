@@ -11,6 +11,8 @@ import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
+import { liensDuProduit, type LienProduit } from '@/lib/liensProduit';
+import { useProduitImages } from '@/lib/produitImages';
 
 // ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
 const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
@@ -97,7 +99,8 @@ interface Props {
   initialShowComposants?: boolean;
   initialShowKgRecap?: boolean;
   initialShowCoutChantier?: boolean;
-  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean }) => void;
+  initialShowLiens?: boolean;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean; showLiens?: boolean }) => void;
   onPrint?: () => void;
   lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
@@ -113,12 +116,14 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
   const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
+  const [showLiens, setShowLiens] = useState(initialShowLiens);
+  const { principaleDe } = useProduitImages();
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -530,6 +535,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
               Remise
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+                   title="Ajoute en bas du devis les fiches techniques et photos des articles. Les liens restent cliquables dans le PDF.">
+              <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showLiens: e.target.checked }); }} className="rounded" />
+              Fiches &amp; photos
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier }); }} className="rounded" />
@@ -1314,6 +1324,65 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             </div>
           </div>
         </div>
+
+        {/* ── Fiches et photos des articles ────────────────────────────────
+            LE LIEN DOIT ÊTRE CLIQUABLE DANS LE PDF, et c'est tout l'enjeu :
+            le PDF est produit par capture d'écran (html2canvas), donc un
+            `<a href>` n'y est qu'une image de texte. `data-pdf-href` fait le
+            reste — `generatePdfFromElement` relève ces éléments, mesure leur
+            position et pose une annotation de lien jsPDF par-dessus l'image.
+            L'attribut est porté par le SPAN du libellé, pas par la ligne
+            entière : l'annotation doit épouser le texte, sinon toute la
+            largeur de la page devient cliquable. */}
+        {showLiens && (() => {
+          const vus = new Set<string>();
+          const parArticle: { nom: string; liens: LienProduit[] }[] = [];
+          for (const l of devis.lignes) {
+            if (l.type !== 'ligne' || !l.produitId || vus.has(l.produitId)) continue;
+            const p = produits.find(x => x.id === l.produitId);
+            if (!p) continue;
+            vus.add(p.id);
+            const photo = principaleDe(p.id);
+            /* La fiche publique seule n'apprend rien au client qui a déjà le
+               devis sous les yeux : on ne liste l'article que s'il a une
+               fiche technique ou une photo à montrer. */
+            if (!p.ficheUrl?.trim() && !photo) continue;
+            const liens = liensDuProduit(p, {
+              imageUrl: photo?.url,
+              imageLibelle: photo?.libelle,
+            }).filter(x => x.cible !== 'page');
+            if (liens.length) parArticle.push({ nom: p.description || p.reference, liens });
+          }
+          if (!parArticle.length) return null;
+          return (
+            <div className="border-t border-border pt-4">
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+                Fiches techniques et photos
+              </p>
+              <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                {parArticle.map(a => (
+                  <li key={a.nom} className="text-xs" style={{ lineHeight: 1.5 }}>
+                    <span className="text-muted-foreground">{a.nom} — </span>
+                    {a.liens.map((lien, i) => (
+                      <span key={lien.id}>
+                        {i > 0 && <span className="text-muted-foreground"> · </span>}
+                        <a
+                          href={lien.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          data-pdf-href={lien.url}
+                          style={{ color: '#0563C1', textDecoration: 'underline' }}
+                        >
+                          {lien.label}
+                        </a>
+                      </span>
+                    ))}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })()}
 
         {/* Conditions — priorité : délai règlement client → devis.conditions */}
         {(() => {
