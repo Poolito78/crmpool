@@ -36,3 +36,7 @@ vitest.*.config.ts.timestamp-*
 
 # Cache du CLI Supabase : reecrit a chaque deploiement, sans valeur.
 supabase/.temp/
+
+# Les patchs ne sont que le transport d un commit : une fois celui-ci
+# dans l historique, le fichier ne sert plus a rien.
+*.patch
