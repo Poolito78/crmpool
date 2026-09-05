@@ -1337,6 +1337,39 @@ export type Database = {
         }
         Relationships: []
       }
+      categorie_documents: {
+        Row: {
+          categorie: string
+          created_at: string
+          genre: string
+          id: string
+          libelle: string
+          ordre: number
+          url: string
+          user_id: string
+        }
+        Insert: {
+          categorie: string
+          created_at?: string
+          genre?: string
+          id?: string
+          libelle: string
+          ordre?: number
+          url: string
+          user_id?: string
+        }
+        Update: {
+          categorie?: string
+          created_at?: string
+          genre?: string
+          id?: string
+          libelle?: string
+          ordre?: number
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       produit_images: {
         Row: {
           chemin: string | null

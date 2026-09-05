@@ -25,7 +25,7 @@
  *    C'est le seul lien qui reste juste quand la photo change.
  */
 
-export type CibleLien = 'fiche' | 'image' | 'page';
+export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie';
 
 export interface LienProduit {
   /** `${produitId}:${cible}` — stable, sert de clé de sélection. */
@@ -50,6 +50,12 @@ export const LIBELLE_CIBLE: Record<CibleLien, string> = {
   fiche: 'Fiche technique',
   image: 'Photo',
   page: 'Fiche produit',
+  /* Quatrième destination : un document attaché à la FAMILLE de l'article
+     (voir `categorieDocuments.ts`) — homologation, fiche commune, photos de
+     pose. Il n'appartient à aucun article en particulier, donc ni
+     `liensDuProduit` ni `articlesLiesDuDevis` ne le produisent ; il est ajouté
+     par l'écran qui connaît les catégories du devis. */
+  categorie: 'Document de la famille',
 };
 
 /**

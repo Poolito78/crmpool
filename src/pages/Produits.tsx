@@ -7,6 +7,10 @@ import {
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
 import { liensDuProduit, copierLiens, LIBELLE_CIBLE } from '@/lib/liensProduit';
+import {
+  useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
+  LIBELLE_GENRE, GENRES, type GenreDocument,
+} from '@/lib/categorieDocuments';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
@@ -303,6 +307,21 @@ export default function Produits() {
   const [imgEnCours, setImgEnCours] = useState(false);
   const [imgSurvol, setImgSurvol] = useState(false);
   const [imgLien, setImgLien] = useState('');
+
+  /* Les documents attachés à une CATÉGORIE : la fiche que tous les prefabriqués
+     thermoplastiques partagent, leur masque d'homologation, leurs photos de
+     pose. Quelques dizaines de lignes en tout — une par document réellement
+     attaché, pas une par article. */
+  const {
+    documents: docsCategorie, ajouter: ajouterDocCategorie,
+    modifier: modifierDocCategorie, supprimer: supprimerDocCategorie,
+    erreur: docsCategorieErreur,
+  } = useCategorieDocuments();
+  const [docNiveau, setDocNiveau] = useState('');
+  const [docGenre, setDocGenre] = useState<GenreDocument>('fiche');
+  const [docLibelle, setDocLibelle] = useState('');
+  const [docUrl, setDocUrl] = useState('');
+  const [docFormOuvert, setDocFormOuvert] = useState(false);
 
   const [paliersPrix, setPaliersPrix] = useState<PrixPalier[]>([]);
   const [achatsManuel, setAchatsManuel] = useState<AchatDate[]>([]);
@@ -2864,10 +2883,201 @@ export default function Produits() {
               </div>
             );
 
+            /* ── Documents de la CATÉGORIE ────────────────────────────────
+               Les 29 prefabriqués thermoplastiques partagent la même fiche, le
+               même masque d'homologation, les mêmes photos de pose. Attachés à
+               la catégorie, ces documents s'affichent sur chaque article sans
+               qu'on recopie l'adresse vingt-neuf fois.
+
+               ON ATTACHE DEPUIS L'ARTICLE, MAIS ON CHOISIT LE NIVEAU. La
+               catégorie est un chemin : le sélecteur propose toute la chaîne,
+               de la plus précise à la plus générale, avec LE NOMBRE D'ARTICLES
+               que chacune toucherait. Sans ce chiffre on poserait un masque
+               d'homologation sur 13 163 fiches en croyant en viser trente.
+               Certains niveaux n'ont aucun article en propre (« ISOMARK » n'est
+               la catégorie de personne, mais couvre 985 articles) : ils sont
+               proposés quand même, c'est souvent le bon endroit. */
+            const chaine = chaineCategories(form.categorie);
+            const docsApplicables = documentsPourCategorie(docsCategorie, form.categorie);
+            const niveauRetenu = chaine.includes(docNiveau) ? docNiveau : (chaine[0] || '');
+            const blocDocsCategorie = (
+              <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                    <Layers className="w-3.5 h-3.5" />
+                    Documents de la catégorie
+                    <span className="font-normal">(communs à tous les articles de la famille)</span>
+                  </p>
+                  {!!chaine.length && (
+                    <Button
+                      type="button" size="sm" variant="outline" className="h-7 text-xs"
+                      onClick={() => setDocFormOuvert(o => !o)}
+                    >
+                      {docFormOuvert ? <X className="w-3.5 h-3.5 mr-1" /> : <Plus className="w-3.5 h-3.5 mr-1" />}
+                      {docFormOuvert ? 'Annuler' : 'Ajouter'}
+                    </Button>
+                  )}
+                </div>
+
+                {docsCategorieErreur && (
+                  <p className="text-xs text-destructive flex items-center gap-1.5">
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                    Les documents de catégorie n'ont pas pu être lus : {docsCategorieErreur}
+                  </p>
+                )}
+
+                {!chaine.length ? (
+                  <p className="text-[11px] text-muted-foreground">
+                    Cet article n'est rangé dans aucune catégorie : renseignez-la dans
+                    l'onglet Informations pour lui attacher des documents de famille.
+                  </p>
+                ) : (
+                  <>
+                    {docsApplicables.length === 0 && !docFormOuvert && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Aucun document sur « {chaine[0]} » ni sur les familles au-dessus.
+                      </p>
+                    )}
+                    {docsApplicables.length > 0 && (
+                      <ul className="space-y-1">
+                        {docsApplicables.map(d => (
+                          <li key={d.id} className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-muted-foreground w-24 shrink-0">
+                              {LIBELLE_GENRE[d.genre]}
+                            </span>
+                            <Input
+                              className="h-7 text-[11px] flex-1"
+                              defaultValue={d.libelle}
+                              onBlur={async e => {
+                                const v = e.target.value.trim();
+                                if (!v || v === d.libelle) return;
+                                const err = await modifierDocCategorie(d.id, { libelle: v });
+                                if (err) toast.error(err); else toast.success('Libellé modifié.');
+                              }}
+                            />
+                            {/* D'OÙ VIENT CE DOCUMENT : sans cette mention, on
+                                supprimerait depuis un article une ligne posée
+                                trois niveaux plus haut, pour des milliers
+                                d'autres. */}
+                            {d.herite && (
+                              <span className="text-[10px] text-muted-foreground shrink-0 max-w-[10rem] truncate"
+                                    title={`Attaché à « ${d.categorie} »`}>
+                                hérité de {d.categorie}
+                              </span>
+                            )}
+                            <a href={d.url} target="_blank" rel="noreferrer"
+                               className="text-muted-foreground hover:text-primary shrink-0" title="Ouvrir">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </a>
+                            <button
+                              type="button"
+                              className="text-muted-foreground hover:text-destructive shrink-0"
+                              title="Détacher de la catégorie"
+                              onClick={async () => {
+                                const n = articlesConcernes(produits, d.categorie);
+                                if (!window.confirm(
+                                  `Détacher « ${d.libelle} » de « ${d.categorie} » ?\n\n`
+                                  + `Ce document disparaîtra des ${n} article${n > 1 ? 's' : ''} de cette famille.`)) return;
+                                const err = await supprimerDocCategorie(d.id);
+                                if (err) toast.error(err); else toast.success('Document détaché.');
+                              }}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+
+                    {docFormOuvert && (
+                      <div className="space-y-2 border-t border-border pt-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Attacher à</Label>
+                            <select
+                              className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs"
+                              value={niveauRetenu}
+                              onChange={e => setDocNiveau(e.target.value)}
+                            >
+                              {chaine.map(niveau => {
+                                const n = articlesConcernes(produits, niveau);
+                                return (
+                                  <option key={niveau} value={niveau}>
+                                    {niveau} — {n} article{n > 1 ? 's' : ''}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          </div>
+                          <div>
+                            <Label className="text-xs">Nature</Label>
+                            <select
+                              className="w-full h-9 rounded-md border border-input bg-background px-2 text-xs"
+                              value={docGenre}
+                              onChange={e => setDocGenre(e.target.value as GenreDocument)}
+                            >
+                              {GENRES.map(g => (
+                                <option key={g} value={g}>{LIBELLE_GENRE[g]}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-xs">Texte affiché</Label>
+                            <Input
+                              className="h-9 text-xs"
+                              value={docLibelle}
+                              onChange={e => setDocLibelle(e.target.value)}
+                              placeholder="Ex : Masque d'homologation B14"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">URL (lien)</Label>
+                            <Input
+                              className="h-9 text-xs"
+                              type="url"
+                              value={docUrl}
+                              onChange={e => setDocUrl(e.target.value)}
+                              placeholder="https://..."
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-[11px] text-muted-foreground">
+                            S'affichera sur les{' '}
+                            <span className="font-medium text-foreground">
+                              {articlesConcernes(produits, niveauRetenu)}
+                            </span>{' '}
+                            articles de « {niveauRetenu} ».
+                          </p>
+                          <Button
+                            type="button" size="sm" className="h-7 text-xs"
+                            onClick={async () => {
+                              const err = await ajouterDocCategorie({
+                                categorie: niveauRetenu, genre: docGenre,
+                                libelle: docLibelle, url: docUrl,
+                              });
+                              if (err) { toast.error(err); return; }
+                              setDocLibelle(''); setDocUrl(''); setDocFormOuvert(false);
+                              toast.success('Document attaché à la catégorie.');
+                            }}
+                          >
+                            Attacher
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+
             if (!editing?.id) {
               return (
                 <div className="py-2 space-y-3">
                   {blocFiche}
+                  {blocDocsCategorie}
                   <p className="py-4 text-sm text-muted-foreground text-center">
                     Enregistrez d'abord l'article : une photo se range sous une fiche existante.
                   </p>
@@ -2896,6 +3106,7 @@ export default function Produits() {
             return (
               <div className="py-2 space-y-3">
                 {blocFiche}
+                {blocDocsCategorie}
 
                 {imagesErreur && (
                   <p className="text-xs text-destructive flex items-center gap-1.5">

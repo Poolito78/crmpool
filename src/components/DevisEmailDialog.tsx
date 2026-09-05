@@ -3,13 +3,24 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe } from 'lucide-react';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers } from 'lucide-react';
 import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
 import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from '@/lib/liensProduit';
+import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import logoIsofloor from '@/assets/logo-isofloor.png';
+
+/* Nom de la pastille « tout cocher » par destination. « Documents de la
+   famille » : ceux attachés à la CATÉGORIE de l'article — homologation, fiche
+   commune, photos de pose — communs à tous les articles d'une même famille. */
+const LIBELLE_PASTILLE: Record<CibleLien, string> = {
+  fiche: 'Fiches techniques',
+  image: 'Photos',
+  categorie: 'Documents de la famille',
+  page: 'Fiches CRM',
+};
 
 interface PjFichier {
   id: string;
@@ -371,15 +382,22 @@ Restant à ta disposition pour tout complément d'information.`
 
     if (articles.length === 0) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
 
-    supabase
-      .from('produit_images')
-      /* `libelle` EST LU ICI, sans quoi le texte saisi sur la photo dans la
-         fiche produit ne servait à rien : la colonne absente de la sélection,
-         le lien retombait toujours sur « Photo — <désignation> ». */
-      .select('produit_id, url, ordre, libelle')
-      .in('produit_id', articles.map(p => p.id))
-      .order('ordre', { ascending: true })
-      .then(({ data }) => {
+    /* Les photos sont bornées aux articles du devis. Les documents de FAMILLE
+       sont lus en entier : la table n'a qu'une ligne par document réellement
+       attaché — quelques dizaines — là où les borner exigerait de calculer
+       d'abord toute la chaîne des catégories parentes en SQL. */
+    Promise.all([
+      supabase
+        .from('produit_images')
+        /* `libelle` EST LU ICI, sans quoi le texte saisi sur la photo dans la
+           fiche produit ne servait à rien : la colonne absente de la sélection,
+           le lien retombait toujours sur « Photo — <désignation> ». */
+        .select('produit_id, url, ordre, libelle')
+        .in('produit_id', articles.map(p => p.id))
+        .order('ordre', { ascending: true }),
+      supabase.from('categorie_documents').select('*').order('categorie').order('ordre'),
+    ])
+      .then(([{ data }, { data: docs }]) => {
         if (annule) return;
         // `ordre = 0` désigne la principale ; le premier arrivé gagne.
         const parProduit: Record<string, string | undefined> = {};
@@ -392,8 +410,15 @@ Restant à ta disposition pour tout complément d'information.`
           }
         }
         const liens = liensDesProduits(articles, parProduit, undefined, libelleParProduit);
-        setLiensProduit(liens);
-        setSelectedLiensIds(new Set(liens.filter(l => l.cible !== 'page').map(l => l.id)));
+        const liensFamille = liensDocumentsCategorie(articles, (docs ?? []).map(dbToDocumentCategorie));
+        setLiensProduit([...liens, ...liensFamille]);
+        /* Fiches techniques et photos cochées ; fiche publique du CRM et
+           DOCUMENTS DE FAMILLE décochés. Une homologation ne s'invite pas
+           d'elle-même dans tous les devis — elle se joint quand elle est
+           demandée. */
+        setSelectedLiensIds(new Set(
+          liens.filter(l => l.cible !== 'page' && l.cible !== 'categorie').map(l => l.id),
+        ));
       });
 
     return () => { annule = true; };
@@ -648,7 +673,7 @@ Restant à ta disposition pour tout complément d'information.`
               {/* Cocher/décocher une destination d'un coup — trois articles font
                   déjà neuf lignes, et on veut rarement les neuf. */}
               <div className="flex items-center gap-1.5 flex-wrap pl-6">
-                {(['fiche', 'image', 'page'] as CibleLien[]).map(cible => {
+                {(['fiche', 'image', 'categorie', 'page'] as CibleLien[]).map(cible => {
                   const total = liensProduit.filter(l => l.cible === cible).length;
                   if (total === 0) return null;
                   const pris = liensChoisis.filter(l => l.cible === cible).length;
@@ -660,7 +685,7 @@ Restant à ta disposition pour tout complément d'information.`
                       onClick={() => basculerCible(cible, !tout)}
                       className={`text-xs rounded-full border px-2.5 py-0.5 transition-colors ${tout ? 'bg-primary/10 border-primary/40 text-primary' : 'text-muted-foreground hover:bg-muted'}`}
                     >
-                      {cible === 'fiche' ? 'Fiches techniques' : cible === 'image' ? 'Photos' : 'Fiches CRM'} ({pris}/{total})
+                      {LIBELLE_PASTILLE[cible]} ({pris}/{total})
                     </button>
                   );
                 })}
@@ -678,6 +703,7 @@ Restant à ta disposition pour tout complément d'information.`
                     {l.cible === 'fiche' && <FileText className="w-4 h-4 text-red-500 shrink-0" />}
                     {l.cible === 'image' && <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />}
                     {l.cible === 'page' && <Globe className="w-4 h-4 text-violet-500 shrink-0" />}
+                    {l.cible === 'categorie' && <Layers className="w-4 h-4 text-amber-500 shrink-0" />}
                     {/* Le libellé est modifiable ici : c'est le seul texte que le
                         client lira, et il n'a pas à être celui du catalogue. */}
                     <Input
