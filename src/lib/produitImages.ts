@@ -168,6 +168,11 @@ function dbToImage(r: Row): ImageProduit {
 
 /* ── Hook ────────────────────────────────────────────────────────────────── */
 
+/* La dernière liste lue, partagée par toutes les instances du hook, et la
+   lecture en cours quand plusieurs rendus démarrent en même temps. */
+let cacheImages: ImageProduit[] | null = null;
+let lectureEnCours: PromiseLike<{ data: unknown[] | null; error: { message: string } | null }> | null = null;
+
 /**
  * Les images du catalogue.
  *
@@ -177,22 +182,38 @@ function dbToImage(r: Row): ImageProduit {
  * imposeraient une lecture à la demande.
  */
 export function useProduitImages() {
-  const [images, setImages] = useState<ImageProduit[]>([]);
-  const [chargement, setChargement] = useState(true);
+  /* On DÉMARRE SUR CE QUI EST DÉJÀ CONNU, et c'est ce qui sauve le PDF.
+     Le devis envoyé par mail est capturé depuis un second rendu, monté à part
+     et photographié une demi-seconde plus tard. Une instance qui repartait de
+     zéro n'avait pas toujours reçu ses photos à cet instant : l'article que sa
+     seule photo qualifiait disparaissait du PDF, sans rien signaler. */
+  const [images, setImages] = useState<ImageProduit[]>(() => cacheImages ?? []);
+  const [chargement, setChargement] = useState(cacheImages === null);
   const [erreur, setErreur] = useState<string | null>(null);
+
+  /* Toute retouche locale met aussi le cache à jour : sans cela, un rendu qui
+     monte juste après une suppression repartirait sur une liste périmée. */
+  const majImages = useCallback((f: (prev: ImageProduit[]) => ImageProduit[]) => {
+    setImages(prev => { const suivant = f(prev); cacheImages = suivant; return suivant; });
+  }, []);
 
   const recharger = useCallback(async () => {
     setChargement(true);
     setErreur(null);
-    const { data, error } = await supabase
+    /* Deux rendus qui montent ensemble partagent la même requête au lieu d'en
+       lancer deux, et se retrouvent donc garnis au même instant. */
+    lectureEnCours ??= supabase
       .from('produit_images').select('*')
-      .order('produit_id').order('ordre');
+      .order('produit_id').order('ordre')
+      .then(r => { lectureEnCours = null; return r; });
+    const { data, error } = await lectureEnCours;
     if (error) {
       console.error('[produit_images]', error.message);
       setErreur(error.message);
       setImages([]);
     } else {
-      setImages((data || []).map(dbToImage));
+      cacheImages = (data || []).map(dbToImage);
+      setImages(cacheImages);
     }
     setChargement(false);
   }, []);
@@ -250,9 +271,9 @@ export function useProduitImages() {
       await supabase.storage.from(SEAU).remove([chemin]);
       return error.message;
     }
-    setImages(prev => [...prev, dbToImage(data as Row)]);
+    majImages(prev => [...prev, dbToImage(data as Row)]);
     return null;
-  }, [imagesDe]);
+  }, [imagesDe, majImages]);
 
   /** Enregistre une image hébergée ailleurs : rien n'est déposé. */
   const ajouterLien = useCallback(async (produitId: string, url: string): Promise<string | null> => {
@@ -262,9 +283,9 @@ export function useProduitImages() {
     const { data, error } = await supabase
       .from('produit_images').insert(ligne as never).select().single();
     if (error) return error.message;
-    setImages(prev => [...prev, dbToImage(data as Row)]);
+    majImages(prev => [...prev, dbToImage(data as Row)]);
     return null;
-  }, [imagesDe]);
+  }, [imagesDe, majImages]);
 
   /** Change le texte affiché du lien de cette image. */
   const renommer = useCallback(async (image: ImageProduit, libelle: string): Promise<string | null> => {
@@ -272,10 +293,10 @@ export function useProduitImages() {
     const { error } = await supabase.from('produit_images')
       .update({ libelle: propre || null } as never).eq('id', image.id);
     if (error) return error.message;
-    setImages(prev => prev.map(i =>
+    majImages(prev => prev.map(i =>
       i.id === image.id ? { ...i, libelle: propre || undefined } : i));
     return null;
-  }, []);
+  }, [majImages]);
 
   const supprimer = useCallback(async (image: ImageProduit): Promise<string | null> => {
     const { error } = await supabase.from('produit_images').delete().eq('id', image.id);
@@ -287,13 +308,13 @@ export function useProduitImages() {
     const restantes = imagesDe(image.produitId)
       .filter(i => i.id !== image.id)
       .map((i, rang) => ({ ...i, ordre: rang }));
-    setImages(prev => [
+    majImages(prev => [
       ...prev.filter(i => i.produitId !== image.produitId),
       ...restantes,
     ]);
     await renumeroter(restantes);
     return null;
-  }, [imagesDe]);
+  }, [imagesDe, majImages]);
 
   /** Promeut une image en principale ; les autres se décalent. */
   const rendrePrincipale = useCallback(async (image: ImageProduit) => {
@@ -301,12 +322,12 @@ export function useProduitImages() {
       image,
       ...imagesDe(image.produitId).filter(i => i.id !== image.id),
     ].map((i, rang) => ({ ...i, ordre: rang }));
-    setImages(prev => [
+    majImages(prev => [
       ...prev.filter(i => i.produitId !== image.produitId),
       ...suite,
     ]);
     await renumeroter(suite);
-  }, [imagesDe]);
+  }, [imagesDe, majImages]);
 
   return {
     images, chargement, erreur, recharger,

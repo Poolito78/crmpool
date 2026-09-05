@@ -373,7 +373,10 @@ Restant à ta disposition pour tout complément d'information.`
 
     supabase
       .from('produit_images')
-      .select('produit_id, url, ordre')
+      /* `libelle` EST LU ICI, sans quoi le texte saisi sur la photo dans la
+         fiche produit ne servait à rien : la colonne absente de la sélection,
+         le lien retombait toujours sur « Photo — <désignation> ». */
+      .select('produit_id, url, ordre, libelle')
       .in('produit_id', articles.map(p => p.id))
       .order('ordre', { ascending: true })
       .then(({ data }) => {

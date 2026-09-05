@@ -121,6 +121,48 @@ export function liensDuProduit(
   return liens;
 }
 
+/** Une ligne de devis, réduite à ce qui sert à retrouver son article. */
+export interface LigneLiable {
+  /** `undefined` DÉSIGNE UNE LIGNE D'ARTICLE — c'est la valeur par défaut. */
+  type?: 'ligne' | 'groupe' | 'soustotal' | 'texte';
+  produitId?: string;
+}
+
+/**
+ * Les articles d'un devis qui ont quelque chose à montrer, avec leurs liens.
+ *
+ * ON RECONNAÎT UNE LIGNE D'ARTICLE PAR EXCLUSION, jamais par `type === 'ligne'`.
+ * Le type est optionnel et vaut « ligne » par défaut : dans la base, les 410
+ * lignes d'article portent `type: null`, et pas une seule la chaîne `'ligne'`.
+ * Un test positif ne reconnaît donc AUCUN article — c'est exactement ce qui
+ * vidait le bloc « Fiches et photos » de tous les devis.
+ *
+ * Un article n'est retenu que s'il a une fiche technique ou une photo : la
+ * fiche publique du CRM n'apprend rien au client qui a déjà le devis sous les
+ * yeux. Une même référence sur deux lignes ne donne qu'une entrée.
+ */
+export function articlesLiesDuDevis<P extends ProduitLiable>(
+  lignes: LigneLiable[],
+  produits: P[],
+  photoDe: (produitId: string) => { url?: string; libelle?: string } | undefined,
+): { nom: string; liens: LienProduit[] }[] {
+  const vus = new Set<string>();
+  const out: { nom: string; liens: LienProduit[] }[] = [];
+  for (const l of lignes) {
+    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+    if (!l.produitId || vus.has(l.produitId)) continue;
+    const p = produits.find(x => x.id === l.produitId);
+    if (!p) continue;
+    vus.add(p.id);
+    const photo = photoDe(p.id);
+    if (!p.ficheUrl?.trim() && !photo?.url?.trim()) continue;
+    const liens = liensDuProduit(p, { imageUrl: photo?.url, imageLibelle: photo?.libelle })
+      .filter(x => x.cible !== 'page');
+    if (liens.length) out.push({ nom: designation(p), liens });
+  }
+  return out;
+}
+
 /**
  * Les liens de tous les articles d'un devis, sans doublon.
  *

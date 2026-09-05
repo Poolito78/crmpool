@@ -11,7 +11,7 @@ import { toast } from 'sonner';
 import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
-import { liensDuProduit, type LienProduit } from '@/lib/liensProduit';
+import { articlesLiesDuDevis } from '@/lib/liensProduit';
 import { useProduitImages } from '@/lib/produitImages';
 
 // ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
@@ -123,7 +123,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
   const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
   const [showLiens, setShowLiens] = useState(initialShowLiens);
-  const { principaleDe } = useProduitImages();
+  const { principaleDe, chargement: chargementImages } = useProduitImages();
   const [printing, setPrinting] = useState(false);
   const [pdfMode, setPdfMode] = useState(false);
   const printAreaRef = useRef<HTMLDivElement>(null);
@@ -1335,30 +1335,20 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             entière : l'annotation doit épouser le texte, sinon toute la
             largeur de la page devient cliquable. */}
         {showLiens && (() => {
-          const vus = new Set<string>();
-          const parArticle: { nom: string; liens: LienProduit[] }[] = [];
-          for (const l of devis.lignes) {
-            if (l.type !== 'ligne' || !l.produitId || vus.has(l.produitId)) continue;
-            const p = produits.find(x => x.id === l.produitId);
-            if (!p) continue;
-            vus.add(p.id);
-            const photo = principaleDe(p.id);
-            /* La fiche publique seule n'apprend rien au client qui a déjà le
-               devis sous les yeux : on ne liste l'article que s'il a une
-               fiche technique ou une photo à montrer. */
-            if (!p.ficheUrl?.trim() && !photo) continue;
-            const liens = liensDuProduit(p, {
-              imageUrl: photo?.url,
-              imageLibelle: photo?.libelle,
-            }).filter(x => x.cible !== 'page');
-            if (liens.length) parArticle.push({ nom: p.description || p.reference, liens });
-          }
+          const parArticle = articlesLiesDuDevis(devis.lignes, produits, principaleDe);
           /* UNE OPTION QUI NE PRODUIT RIEN DOIT DIRE POURQUOI. Cochee sur un
              devis dont aucun article ne porte de fiche ni de photo, elle
-             restait sans effet — on croyait a une panne. Le message ne part
-             evidemment pas au client : il disparait a l'impression. */
+             restait sans effet — on croyait a une panne.
+             CE MESSAGE EST INTERNE ET NE DOIT JAMAIS PARTIR AU CLIENT : il
+             disparaît dès que le rendu sert à produire un document. `printing`
+             et `pdfMode` ne suffisaient pas — le rendu caché qui fabrique le
+             PDF de l'e-mail ne pose ni l'un ni l'autre, seulement
+             `hideControls`, et emportait donc la note dans le devis envoyé.
+             Les photos arrivent par une requête : tant qu'elle court, un
+             article que sa seule photo qualifie manque encore à l'appel et
+             l'absence n'est pas concluante. */
           if (!parArticle.length) {
-            if (printing || pdfMode) return null;
+            if (printing || pdfMode || hideControls || chargementImages) return null;
             return (
               <div className="border-t border-border pt-4">
                 <p className="text-xs text-muted-foreground">

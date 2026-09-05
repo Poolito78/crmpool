@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  designation, urlFichePublique, liensDuProduit, liensDesProduits,
+  designation, urlFichePublique, liensDuProduit, liensDesProduits, articlesLiesDuDevis,
   liensHtml, liensTexte, echapperHtml, type ProduitLiable,
 } from './liensProduit';
 
@@ -172,5 +172,59 @@ describe('libellé de la photo', () => {
       { p1: 'Plot D100 blanc' },
     );
     expect(liens.find(l => l.cible === 'image')!.label).toBe('Plot D100 blanc');
+  });
+});
+
+describe('articles d’un devis qui ont un lien à montrer', () => {
+  const AVEC_FICHE = produit({ id: 'p1', description: 'Flowfresh MF', ficheUrl: 'https://ex/fiche.pdf' });
+  const NU = produit({ id: 'p2', description: 'Sable de quartz' });
+  const sansPhoto = () => undefined;
+
+  /* LE DÉFAUT QUI VIDAIT LE BLOC DE TOUS LES DEVIS. `type` est optionnel et
+     vaut « ligne » par défaut : dans la base, aucune ligne d'article ne porte
+     la chaîne 'ligne'. Un test positif n'en reconnaissait donc pas une seule. */
+  it('reconnaît une ligne d’article dont le type n’est pas renseigné', () => {
+    const r = articlesLiesDuDevis([{ produitId: 'p1' }], [AVEC_FICHE], sansPhoto);
+    expect(r.map(a => a.nom)).toEqual(['Flowfresh MF']);
+  });
+
+  it('accepte aussi le type explicite', () => {
+    const r = articlesLiesDuDevis([{ type: 'ligne', produitId: 'p1' }], [AVEC_FICHE], sansPhoto);
+    expect(r).toHaveLength(1);
+  });
+
+  it('écarte les en-têtes, sous-totaux et lignes de texte', () => {
+    const r = articlesLiesDuDevis(
+      [{ type: 'groupe', produitId: 'p1' }, { type: 'soustotal', produitId: 'p1' },
+       { type: 'texte', produitId: 'p1' }],
+      [AVEC_FICHE], sansPhoto);
+    expect(r).toEqual([]);
+  });
+
+  /* La fiche publique du CRM n'apprend rien au client qui a le devis sous les
+     yeux : un article sans fiche technique ni photo n'a rien à montrer. */
+  it('écarte un article qui n’a ni fiche ni photo', () => {
+    expect(articlesLiesDuDevis([{ produitId: 'p2' }], [NU], sansPhoto)).toEqual([]);
+  });
+
+  it('retient un article que sa seule photo qualifie', () => {
+    const r = articlesLiesDuDevis([{ produitId: 'p2' }], [NU],
+      id => (id === 'p2' ? { url: 'https://ex/photo.webp', libelle: 'Vue de dessus' } : undefined));
+    expect(r).toHaveLength(1);
+    expect(r[0].liens.map(l => l.label)).toEqual(['Vue de dessus']);
+  });
+
+  it('ne propose jamais la fiche publique du CRM', () => {
+    const r = articlesLiesDuDevis([{ produitId: 'p1' }], [AVEC_FICHE], sansPhoto);
+    expect(r[0].liens.some(l => l.cible === 'page')).toBe(false);
+  });
+
+  it('ne compte qu’une fois une référence posée sur deux lignes', () => {
+    const r = articlesLiesDuDevis([{ produitId: 'p1' }, { produitId: 'p1' }], [AVEC_FICHE], sansPhoto);
+    expect(r).toHaveLength(1);
+  });
+
+  it('ignore une ligne dont l’article a disparu du catalogue', () => {
+    expect(articlesLiesDuDevis([{ produitId: 'inconnu' }], [AVEC_FICHE], sansPhoto)).toEqual([]);
   });
 });
