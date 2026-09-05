@@ -33,6 +33,14 @@ export interface ImageProduit {
   /** Chemin dans le seau. Absent pour une image externe. */
   chemin?: string;
   nom?: string;
+  /**
+   * Texte affiché du lien quand on colle la photo dans un mail ou un devis.
+   *
+   * Vide, le lien porte « Photo — <désignation> ». Renseigné, c'est ce
+   * libellé qui s'affiche : une URL de photo fait cent caractères et ne dit
+   * rien, alors que « Plot de route blanc D100 » se lit.
+   */
+  libelle?: string;
   octets?: number;
   largeur?: number;
   hauteur?: number;
@@ -149,6 +157,7 @@ function dbToImage(r: Row): ImageProduit {
     url: String(r.url),
     chemin: txt(r.chemin),
     nom: txt(r.nom),
+    libelle: txt(r.libelle),
     octets: nb(r.octets),
     largeur: nb(r.largeur),
     hauteur: nb(r.hauteur),
@@ -257,6 +266,17 @@ export function useProduitImages() {
     return null;
   }, [imagesDe]);
 
+  /** Change le texte affiché du lien de cette image. */
+  const renommer = useCallback(async (image: ImageProduit, libelle: string): Promise<string | null> => {
+    const propre = libelle.trim();
+    const { error } = await supabase.from('produit_images')
+      .update({ libelle: propre || null } as never).eq('id', image.id);
+    if (error) return error.message;
+    setImages(prev => prev.map(i =>
+      i.id === image.id ? { ...i, libelle: propre || undefined } : i));
+    return null;
+  }, []);
+
   const supprimer = useCallback(async (image: ImageProduit): Promise<string | null> => {
     const { error } = await supabase.from('produit_images').delete().eq('id', image.id);
     if (error) return error.message;
@@ -290,7 +310,7 @@ export function useProduitImages() {
 
   return {
     images, chargement, erreur, recharger,
-    imagesDe, principaleDe, deposer, ajouterLien, supprimer, rendrePrincipale,
+    imagesDe, principaleDe, deposer, ajouterLien, supprimer, rendrePrincipale, renommer,
   };
 }
 

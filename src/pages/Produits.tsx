@@ -6,6 +6,7 @@ import {
   useProduitImages, occupation, formatOctets, estImageAcceptee,
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
+import { liensDuProduit, copierLiens, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
@@ -297,7 +298,7 @@ export default function Produits() {
   const {
     imagesDe, principaleDe, deposer: deposerImage, ajouterLien: ajouterLienImage,
     supprimer: supprimerImage, rendrePrincipale, images: toutesImages,
-    erreur: imagesErreur,
+    renommer: renommerImage, erreur: imagesErreur,
   } = useProduitImages();
   const [imgEnCours, setImgEnCours] = useState(false);
   const [imgSurvol, setImgSurvol] = useState(false);
@@ -2984,6 +2985,23 @@ export default function Produits() {
                               </button>
                             )}
                             <button
+                              type="button" title="Copier le lien de cette photo"
+                              className="p-1 rounded hover:bg-muted"
+                              onClick={async () => {
+                                const ok = await copierLiens([{
+                                  id: img.id, produitId: editing.id!, cible: 'image',
+                                  label: img.libelle?.trim()
+                                    || `${LIBELLE_CIBLE.image} — ${editing.description || editing.reference}`,
+                                  url: img.url,
+                                }], '');
+                                toast[ok ? 'success' : 'error'](ok
+                                  ? 'Lien copié — collez-le dans un mail ou un devis.'
+                                  : "Le presse-papiers a refusé la copie.");
+                              }}
+                            >
+                              <Link2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
                               type="button" title="Supprimer"
                               className="p-1 rounded hover:bg-destructive/10 text-destructive"
                               onClick={async () => {
@@ -2996,10 +3014,72 @@ export default function Produits() {
                             </button>
                           </div>
                         </div>
+
+                        {/* LE TEXTE QU'ON LIRA DANS LE MAIL. L'URL d'une photo
+                            fait cent caractères et ne dit rien ; c'est ce
+                            libellé qui s'affiche à sa place. */}
+                        <input
+                          className="w-full border-t px-1.5 py-1 text-[11px] bg-background outline-none focus:bg-muted/40"
+                          placeholder={`${LIBELLE_CIBLE.image} — ${editing.description || editing.reference || ''}`}
+                          defaultValue={img.libelle || ''}
+                          onBlur={async e => {
+                            const v = e.target.value;
+                            if ((img.libelle || '') === v.trim()) return;
+                            const err = await renommerImage(img, v);
+                            if (err) toast.error(err);
+                          }}
+                        />
                       </div>
                     ))}
                   </div>
                 )}
+
+                {/* TOUS LES LIENS DE L'ARTICLE, D'UN COUP.
+                    Fiche technique, photo principale et fiche publique : c'est
+                    ce bloc qu'on colle dans un mail ou dans les notes d'un
+                    devis. Le presse-papiers porte les deux formes — du HTML
+                    cliquable pour Outlook et Gmail, « libellé : url » pour une
+                    messagerie en texte brut. */}
+                {(() => {
+                  const principale = principaleDe(editing.id);
+                  const liens = liensDuProduit(editing, {
+                    imageUrl: principale?.url,
+                    imageLibelle: principale?.libelle,
+                  });
+                  return (
+                    <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-medium">Liens à coller dans un mail ou un devis</p>
+                        <Button
+                          type="button" size="sm" variant="outline" className="h-7 text-xs"
+                          onClick={async () => {
+                            const ok = await copierLiens(liens);
+                            toast[ok ? 'success' : 'error'](ok
+                              ? `${liens.length} lien${liens.length > 1 ? 's' : ''} copié${liens.length > 1 ? 's' : ''}.`
+                              : "Le presse-papiers a refusé la copie.");
+                          }}
+                        >
+                          <Copy className="w-3.5 h-3.5 mr-1" />Copier
+                        </Button>
+                      </div>
+                      <ul className="space-y-0.5">
+                        {liens.map(l => (
+                          <li key={l.id} className="text-[11px] flex items-baseline gap-1.5">
+                            <span className="text-muted-foreground shrink-0">•</span>
+                            <a href={l.url} target="_blank" rel="noreferrer"
+                               className="text-primary hover:underline truncate">{l.label}</a>
+                          </li>
+                        ))}
+                      </ul>
+                      {!editing.ficheUrl?.trim() && (
+                        <p className="text-[11px] text-muted-foreground">
+                          Aucune fiche technique sur cet article : renseignez son adresse dans
+                          l'onglet Informations pour qu'elle rejoigne ces liens.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* La place restante, pour qu'elle ne se découvre pas le jour
                     où le dépôt échoue. */}

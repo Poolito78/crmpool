@@ -1344,6 +1344,7 @@ export type Database = {
           hauteur: number | null
           id: string
           largeur: number | null
+          libelle: string | null
           nom: string | null
           octets: number | null
           ordre: number
@@ -1357,6 +1358,7 @@ export type Database = {
           hauteur?: number | null
           id?: string
           largeur?: number | null
+          libelle?: string | null
           nom?: string | null
           octets?: number | null
           ordre?: number
@@ -1370,6 +1372,7 @@ export type Database = {
           hauteur?: number | null
           id?: string
           largeur?: number | null
+          libelle?: string | null
           nom?: string | null
           octets?: number | null
           ordre?: number

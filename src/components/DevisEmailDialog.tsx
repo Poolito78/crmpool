@@ -378,10 +378,15 @@ Restant à ta disposition pour tout complément d'information.`
         if (annule) return;
         // `ordre = 0` désigne la principale ; le premier arrivé gagne.
         const parProduit: Record<string, string | undefined> = {};
+        const libelleParProduit: Record<string, string | undefined> = {};
         for (const r of data ?? []) {
-          if (r.produit_id && r.url && !parProduit[r.produit_id]) parProduit[r.produit_id] = r.url;
+          if (r.produit_id && r.url && !parProduit[r.produit_id]) {
+            parProduit[r.produit_id] = r.url;
+            // Le libellé saisi sur la photo, quand il y en a un.
+            libelleParProduit[r.produit_id] = (r as { libelle?: string }).libelle || undefined;
+          }
         }
-        const liens = liensDesProduits(articles, parProduit);
+        const liens = liensDesProduits(articles, parProduit, undefined, libelleParProduit);
         setLiensProduit(liens);
         setSelectedLiensIds(new Set(liens.filter(l => l.cible !== 'page').map(l => l.id)));
       });

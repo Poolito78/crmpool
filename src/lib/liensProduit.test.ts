@@ -135,3 +135,42 @@ describe('rendu', () => {
       .toBe('&lt;a href=&quot;x&quot;&gt;&amp; fin&lt;/a&gt;');
   });
 });
+
+describe('libellé de la photo', () => {
+  /* L'URL d'une photo fait cent caractères et ne dit rien. Le libellé saisi
+     sur l'image est ce qu'on veut lire dans le mail. */
+  it('préfère le libellé saisi sur la photo', () => {
+    const liens = liensDuProduit(
+      produit({ id: 'p1', description: 'Plot de route blanc' }),
+      { imageUrl: 'https://exemple/photo.webp', imageLibelle: 'Plot D100 blanc — vue de dessus' },
+    );
+    const image = liens.find(l => l.cible === 'image')!;
+    expect(image.label).toBe('Plot D100 blanc — vue de dessus');
+  });
+
+  it('retombe sur la désignation quand la photo n’a pas de libellé', () => {
+    const liens = liensDuProduit(
+      produit({ id: 'p1', description: 'Plot de route blanc' }),
+      { imageUrl: 'https://exemple/photo.webp' },
+    );
+    expect(liens.find(l => l.cible === 'image')!.label).toBe('Photo — Plot de route blanc');
+  });
+
+  it('ignore un libellé qui n’est que des espaces', () => {
+    const liens = liensDuProduit(
+      produit({ id: 'p1', description: 'Plot de route blanc' }),
+      { imageUrl: 'https://exemple/photo.webp', imageLibelle: '   ' },
+    );
+    expect(liens.find(l => l.cible === 'image')!.label).toBe('Photo — Plot de route blanc');
+  });
+
+  it('porte le libellé jusqu’aux liens de tout un devis', () => {
+    const liens = liensDesProduits(
+      [produit({ id: 'p1', description: 'Plot de route blanc' })],
+      { p1: 'https://exemple/photo.webp' },
+      'https://crm.exemple',
+      { p1: 'Plot D100 blanc' },
+    );
+    expect(liens.find(l => l.cible === 'image')!.label).toBe('Plot D100 blanc');
+  });
+});

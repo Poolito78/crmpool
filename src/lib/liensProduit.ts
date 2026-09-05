@@ -80,7 +80,7 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  */
 export function liensDuProduit(
   p: ProduitLiable,
-  opts?: { imageUrl?: string; origine?: string },
+  opts?: { imageUrl?: string; imageLibelle?: string; origine?: string },
 ): LienProduit[] {
   const nom = designation(p);
   const liens: LienProduit[] = [];
@@ -103,7 +103,9 @@ export function liensDuProduit(
       id: `${p.id}:image`,
       produitId: p.id,
       cible: 'image',
-      label: `${LIBELLE_CIBLE.image} — ${nom}`,
+      /* Le libellé saisi sur la photo gagne, comme celui de la fiche
+         technique : il a été écrit pour être lu par le client. */
+      label: opts?.imageLibelle?.trim() || `${LIBELLE_CIBLE.image} — ${nom}`,
       url: image,
     });
   }
@@ -129,13 +131,18 @@ export function liensDesProduits(
   produits: ProduitLiable[],
   imageParProduit: Record<string, string | undefined> = {},
   origine?: string,
+  libelleParProduit: Record<string, string | undefined> = {},
 ): LienProduit[] {
   const vus = new Set<string>();
   const out: LienProduit[] = [];
   for (const p of produits) {
     if (!p || vus.has(p.id)) continue;
     vus.add(p.id);
-    out.push(...liensDuProduit(p, { imageUrl: imageParProduit[p.id], origine }));
+    out.push(...liensDuProduit(p, {
+      imageUrl: imageParProduit[p.id],
+      imageLibelle: libelleParProduit[p.id],
+      origine,
+    }));
   }
   return out;
 }
