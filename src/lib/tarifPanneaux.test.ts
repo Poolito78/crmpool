@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   prixPanneau, panonceauPour, supportPour, formeDeCode, codeDansTexte,
-  hauteurDeDimension, groupePanonceau, niveauDepuisContrat,
+  hauteurDeDimension, groupePanonceau, niveauDepuisContrat, estCodeChantier,
 } from './tarifPanneaux';
 
 describe('niveau de tarif lu dans le contrat cadre', () => {
@@ -191,5 +191,49 @@ describe('hauteur d’une dimension', () => {
   it('lit la hauteur des deux écritures du tarif', () => {
     expect(hauteurDeDimension('650 (P)')).toBeCloseTo(0.65);
     expect(hauteurDeDimension('500x150')).toBeCloseTo(0.15);
+  });
+});
+
+describe('gamme chantier', () => {
+  /* « 2 AK3 1000 C2 » ressortait en CARRÉ C2 : aucune branche ne mordait sur
+     AK3, mais « C\d » mordait sur le segment de classe. Mauvaise forme,
+     mauvaise grille, et le sélecteur de gamme s'affichait pour un panneau
+     qui n'en relève pas. */
+  it('reconnaît le code chantier plutôt que la classe qui le suit', () => {
+    expect(codeDansTexte('2 AK3 1000 C2')?.code).toBe('AK3');
+    expect(codeDansTexte('AK5.1000.C2.BTR.R.IS.BRUT')?.code).toBe('AK5');
+    expect(codeDansTexte('panneaux KC1 chantier interdit au public')?.code).toBe('KC1');
+    expect(codeDansTexte('BK14 50')?.code).toBe('BK14');
+  });
+
+  it('ne prend pas un mot ordinaire pour un code', () => {
+    expect(codeDansTexte('OK2 pour moi')).toBeNull();
+  });
+
+  it('laisse la gamme police intacte', () => {
+    expect(codeDansTexte('A13b')?.code).toBe('A13B');
+    expect(codeDansTexte('B21a2')?.code).toBe('B21A2');
+    expect(codeDansTexte('EB10')?.code).toBe('EB10');
+    expect(codeDansTexte('CE1 300')?.code).toBe('CE1');
+    expect(codeDansTexte('M9z1 rappel')?.code).toBe('M9Z1');
+    expect(codeDansTexte('panneau C2 carre')?.code).toBe('C2');
+  });
+
+  it('distingue le chantier de la police', () => {
+    expect(estCodeChantier('AK3')).toBe(true);
+    expect(estCodeChantier('KC1')).toBe(true);
+    expect(estCodeChantier('BK14')).toBe(true);
+    expect(estCodeChantier('A3')).toBe(false);
+    expect(estCodeChantier('B14')).toBe(false);
+    expect(estCodeChantier('C2')).toBe(false);
+  });
+
+  /* Les barèmes de ce fichier sont ceux des panneaux de police. Un triangle
+     de chantier ne s'y facture pas : sans son tarif, pas de forme, donc pas
+     de prix local — c'est Odoo qui le chiffre. */
+  it('ne donne aucune forme au chantier, faute de grille', () => {
+    expect(formeDeCode('AK3')).toBeNull();
+    expect(formeDeCode('KC1')).toBeNull();
+    expect(formeDeCode('A3')).toBe(formeDeCode('A13'));
   });
 });

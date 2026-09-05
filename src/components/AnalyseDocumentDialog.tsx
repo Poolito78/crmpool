@@ -21,7 +21,7 @@ import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
 import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
-  codeDansTexte, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
+  codeDansTexte, estCodeChantier, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
   formeDeCode, niveauDepuisContrat, FORME_PANONCEAU, type Taille,
 } from '@/lib/tarifPanneaux';
 import {
@@ -1467,6 +1467,20 @@ const [contratOdoo, setContratOdoo] = useState<
       }) : null;
       return p ? `DR ${p.largeur} ${p.hauteur} C${classePanneau}` : brut;
     }
+
+    /* LA GAMME CHANTIER GARDE SA CLASSE.
+     *
+     * Elle se reconnaît maintenant — mais elle n'a pas de forme, faute de
+     * grille locale. Or la sortie « pas de forme » ci-dessous rend le texte
+     * BRUT, sans le `C${classe}`. Tant qu'AK3 n'était reconnu par personne,
+     * la ligne partait par le chemin « aucun code » quelques lignes plus
+     * haut, qui lui, ajoute la classe. La reconnaître sans traiter ce cas
+     * l'aurait donc privée de sa classe et fait retomber Odoo sur la
+     * première variante venue — un C1 pour une demande de C2, l'écart que le
+     * commentaire du haut décrit déjà.
+     *
+     * Odoo la chiffre seul, et il a besoin de la classe pour cela. */
+    if (estCodeChantier(trouve.code)) return `${brut} C${classePanneau}`;
 
     const forme = formeDeCode(trouve.code);
     if (!forme) return brut;

@@ -58,9 +58,27 @@ export const FORME_PANONCEAU = 'Panonceau';
  * générale des « A », sans quoi un STOP serait facturé comme un triangle de
  * danger.
  */
+/**
+ * Ce code relève-t-il de la SIGNALISATION TEMPORAIRE ? `AK3`, `AK5`, `BK14`,
+ * `KC1`, `KD22`.
+ *
+ * Elle se reconnaît désormais, pour que la gamme police ne se l'approprie
+ * plus. Mais elle n'a AUCUNE grille dans ce fichier : les barèmes ici sont
+ * ceux des panneaux de police, et un triangle de chantier — fond jaune,
+ * classe T — ne s'y facture pas. Tant qu'on n'a pas son tarif, elle n'a ni
+ * forme ni prix local : c'est Odoo qui la chiffre, et c'est honnête.
+ */
+export function estCodeChantier(code: string): boolean {
+  const t = String(code || '').toUpperCase().replace(/\s+/g, '');
+  return /^([ABC]K\d|K[A-Z]{0,2}\d)/.test(t);
+}
+
 export function formeDeCode(code: string): string | null {
   const t = String(code || '').toUpperCase().replace(/\s+/g, '');
   if (!t) return null;
+  /* Avant tout le reste : sans cela « AK3 » tomberait sur « A\d » et
+     ressortirait en triangle de police, avec le barème qui va avec. */
+  if (estCodeChantier(t)) return null;
   if (/^M\d/.test(t)) return FORME_PANONCEAU;
   if (/^AB4/.test(t) || /^STOP/.test(t)) return FORME_OCTOGONE;
   if (/^AB3/.test(t)) return FORME_TRIANGLE;
@@ -304,7 +322,13 @@ export function codeDansTexte(texte: string): { code: string; valeur?: string } 
      d'agglomération ne recevaient donc ni forme, ni tarif, ni recherche
      Odoo. Les placer d'abord évite aussi qu'une autre branche ne morde
      dessus. */
-  const m = t.match(/\b(EB\d{1,2}|AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
+  /* LA GAMME CHANTIER EN TÊTE, AVANT TOUT LE RESTE.
+     L'alternance ne la connaissait pas. Sur « 2 AK3 1000 C2 », aucune branche
+     ne mordait sur AK3 — « A\d » réclame un chiffre juste après le A — mais
+     « C\d » mordait sur le segment de CLASSE, et l'AK3 ressortait en carré
+     C2 : mauvaise forme, mauvaise grille, et le sélecteur de gamme s'affichait
+     pour un panneau qui n'en relève pas. La placer d'abord règle les deux. */
+  const m = t.match(/\b([ABC]K\d{1,2}[A-Z]?\d?|K[A-Z]{0,2}\d{1,3}[A-Z]?\d?|EB\d{1,2}|AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
   if (!m) return null;
   const code = m[1];
   // Une valeur entre guillemets ou juste après : « B14 « 30 » ».
