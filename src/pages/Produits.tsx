@@ -1768,7 +1768,7 @@ export default function Produits() {
           <div className="flex gap-1 bg-muted/50 rounded-xl p-1 mt-1 mb-2">
             {([
               { id: 'infos',       label: 'Informations', icon: Package },
-              { id: 'images',      label: 'Images', icon: ImageIcon },
+              { id: 'images',      label: 'Images & fiches techniques', icon: ImageIcon },
               { id: 'stock',       label: 'Stock & entrepôts', icon: Warehouse },
               { id: 'fournisseurs', label: 'Fournisseurs', icon: Truck },
               { id: 'devis',       label: 'Devis', icon: FileText },
@@ -1784,7 +1784,7 @@ export default function Produits() {
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all flex-1 justify-center ${produitTab === t.id ? 'bg-background shadow-sm text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 <t.icon className="w-3.5 h-3.5 shrink-0" />
-                <span className="hidden sm:inline">{t.label}</span>
+                <span className="hidden sm:inline whitespace-nowrap">{t.label}</span>
               </button>
             ))}
           </div>
@@ -2232,45 +2232,12 @@ export default function Produits() {
               Stock, propriétaire et entrepôts disponibles dans l'onglet <button type="button" onClick={() => setProduitTab('stock')} className="underline text-primary hover:opacity-80">Stock &amp; entrepôts</button>
             </div>
 
-            <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
-              <p className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
-                <ExternalLink className="w-3.5 h-3.5" />
-                Lien fiche produit
-                <span className="font-normal">(inclus dans les mails devis)</span>
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <Label className="text-xs">Texte affiché dans le mail</Label>
-                  <Input
-                    value={form.ficheLinkLabel || ''}
-                    onChange={e => setForm(p => ({ ...p, ficheLinkLabel: e.target.value }))}
-                    placeholder="Ex : ISOSIGN Tarif Public 2025.pdf"
-                  />
-                </div>
-                <div className="flex items-end gap-2">
-                  <div className="flex-1">
-                    <Label className="text-xs">URL (lien)</Label>
-                    <Input
-                      type="url"
-                      value={form.ficheUrl || ''}
-                      onChange={e => setForm(p => ({ ...p, ficheUrl: e.target.value }))}
-                      placeholder="https://..."
-                    />
-                  </div>
-                  {form.ficheUrl && (
-                    <a href={form.ficheUrl} target="_blank" rel="noopener noreferrer"
-                      className="p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0 mb-0.5"
-                      title="Tester le lien">
-                      <ExternalLink className="w-4 h-4" />
-                    </a>
-                  )}
-                </div>
-              </div>
-              {form.ficheUrl && form.ficheLinkLabel && (
-                <p className="text-xs text-muted-foreground">
-                  Aperçu dans le mail : <span className="text-primary underline">{form.ficheLinkLabel}</span>
-                </p>
-              )}
+            {/* La fiche technique a rejoint l'onglet « Images et fiches
+                techniques » : c'est là que se trouvent l'autre document de
+                l'article et les liens qu'on colle dans un mail, donc là qu'on
+                juge le résultat. */}
+            <div className="text-xs text-muted-foreground border border-dashed border-border rounded-md p-2">
+              Fiche technique et photos dans l'onglet <button type="button" onClick={() => setProduitTab('images')} className="underline text-primary hover:opacity-80">Images &amp; fiches techniques</button>
             </div>
 
             {/* Composition */}
@@ -2847,13 +2814,64 @@ export default function Produits() {
           </div>)} {/* fin onglet Infos */}
 
           {/* ══ Onglet Stock & Entrepôts ═══════════════════════════════════ */}
-          {/* ══ Onglet Images ══════════════════════════════════════════════ */}
+          {/* ══ Onglet Images & fiches techniques ══════════════════════════ */}
           {produitTab === 'images' && (() => {
+            /* LA FICHE TECHNIQUE EST UN CHAMP DU FORMULAIRE, PAS UNE PIÈCE
+               JOINTE : elle part avec l'article à l'enregistrement. Elle est
+               donc rendue AVANT le garde-fou ci-dessous — sinon on ne pourrait
+               plus la renseigner à la création d'un article, alors qu'on le
+               pouvait dans l'onglet Informations d'où elle vient. */
+            const blocFiche = (
+              <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
+                <p className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  Fiche technique
+                  <span className="font-normal">(incluse dans les mails et les devis)</span>
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <Label className="text-xs">Texte affiché dans le mail</Label>
+                    <Input
+                      value={form.ficheLinkLabel || ''}
+                      onChange={e => setForm(p => ({ ...p, ficheLinkLabel: e.target.value }))}
+                      placeholder="Ex : ISOSIGN Tarif Public 2025.pdf"
+                    />
+                  </div>
+                  <div className="flex items-end gap-2">
+                    <div className="flex-1">
+                      <Label className="text-xs">URL (lien)</Label>
+                      <Input
+                        type="url"
+                        value={form.ficheUrl || ''}
+                        onChange={e => setForm(p => ({ ...p, ficheUrl: e.target.value }))}
+                        placeholder="https://..."
+                      />
+                    </div>
+                    {form.ficheUrl && (
+                      <a href={form.ficheUrl} target="_blank" rel="noopener noreferrer"
+                        className="p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0 mb-0.5"
+                        title="Tester le lien">
+                        <ExternalLink className="w-4 h-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {form.ficheUrl && form.ficheLinkLabel && (
+                  <p className="text-xs text-muted-foreground">
+                    Aperçu dans le mail : <span className="text-primary underline">{form.ficheLinkLabel}</span>
+                  </p>
+                )}
+              </div>
+            );
+
             if (!editing?.id) {
               return (
-                <p className="py-6 text-sm text-muted-foreground text-center">
-                  Enregistrez d'abord l'article : une image se range sous une fiche existante.
-                </p>
+                <div className="py-2 space-y-3">
+                  {blocFiche}
+                  <p className="py-4 text-sm text-muted-foreground text-center">
+                    Enregistrez d'abord l'article : une photo se range sous une fiche existante.
+                  </p>
+                </div>
               );
             }
             const mesImages = imagesDe(editing.id);
@@ -2877,6 +2895,8 @@ export default function Produits() {
 
             return (
               <div className="py-2 space-y-3">
+                {blocFiche}
+
                 {imagesErreur && (
                   <p className="text-xs text-destructive flex items-center gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
@@ -3065,10 +3085,9 @@ export default function Produits() {
                         </Button>
                       </div>
                       {/* LE LIBELLE SE CORRIGE ICI, LA OU ON LE LIT. Il se
-                          saisissait ailleurs — celui de la fiche technique dans
-                          l'onglet Informations, celui de la photo sous sa
-                          vignette — donc jamais sous les yeux au moment ou on
-                          juge le resultat. */}
+                          saisit aussi plus haut — celui de la fiche technique
+                          dans son bloc, celui de la photo sous sa vignette —
+                          mais c'est ici qu'on voit ce que le client lira. */}
                       <ul className="space-y-1">
                         {liens.map(l => (
                           <li key={l.id} className="flex items-center gap-1.5">
@@ -3110,8 +3129,9 @@ export default function Produits() {
                       </ul>
                       {!form.ficheUrl?.trim() && (
                         <p className="text-[11px] text-muted-foreground">
-                          Aucune fiche technique sur cet article : renseignez son adresse dans
-                          l'onglet Informations pour qu'elle rejoigne ces liens.
+                          Aucune fiche technique sur cet article : renseignez son adresse
+                          dans le bloc « Fiche technique » en haut de cet onglet pour
+                          qu'elle rejoigne ces liens.
                         </p>
                       )}
                     </div>

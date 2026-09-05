@@ -1353,9 +1353,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               <div className="border-t border-border pt-4">
                 <p className="text-xs text-muted-foreground">
                   Aucun article de ce devis n'a de fiche technique ni de photo :
-                  il n'y a donc pas de lien à afficher. Renseignez l'adresse de la
-                  fiche dans l'onglet Informations d'un article, ou déposez-lui une
-                  photo dans son onglet Images.
+                  il n'y a donc pas de lien à afficher. Ouvrez un article, onglet
+                  « Images &amp; fiches techniques », pour y renseigner l'adresse de
+                  sa fiche ou lui déposer une photo.
                 </p>
               </div>
             );
