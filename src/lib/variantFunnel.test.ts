@@ -75,6 +75,34 @@ describe("entonnoir — équipement de la signalisation temporaire", () => {
   });
 });
 
+/** Famille sans kit rail : seulement le nu et le support. */
+const ISOTEXTE = [
+  'ISOTEXTE.1200.1600.C1.50.IS',
+  'ISOTEXTE.1200.1600.C1.50.P.IS',
+  'ISOTEXTE.1200.1600.C2.50.IS',
+  'ISOTEXTE.1200.1600.C2.50.P.IS',
+];
+
+describe("entonnoir — repli quand la famille n'a pas de kit rail", () => {
+  it('retombe sur « sans rail » plutôt que de poser la question', () => {
+    const r = funnel(ISOTEXTE, '1200 1600 c2');
+    expect(r.matches).toEqual(['ISOTEXTE.1200.1600.C2.50.IS']);
+    expect(r.resolved.equipement).toBe('AUCUN');
+    expect(r.pending.map((p) => p.category)).not.toContain('equipement');
+  });
+
+  it('ne laisse alors que le choix avec ou sans pied', () => {
+    const r = funnel(ISOTEXTE, '1200 1600 c2');
+    const opts = r.defaultOptions.find((o) => o.category === 'equipement');
+    expect(opts?.options.sort()).toEqual(['AUCUN', 'P']);
+  });
+
+  it('rend la variante support quand on le demande', () => {
+    const r = funnel(ISOTEXTE, '1200 1600 c2', { equipement: 'P' });
+    expect(r.matches).toEqual(['ISOTEXTE.1200.1600.C2.50.P.IS']);
+  });
+});
+
 describe('entonnoir — les panneaux permanents ne bougent pas', () => {
   it("ne demande ni n'applique d'équipement là où la notion n'existe pas", () => {
     const r = funnel(A13A, '700 c2');

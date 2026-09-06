@@ -86,11 +86,17 @@ const FILM_DEFAULT = 'C2';
  */
 const EQUIPEMENT_AUCUN = 'AUCUN';
 
-/** Kit rail retenu quand rien n'est précisé ; « sans rail » et « avec support »
- *  se demandent. Sur une famille qui n'a pas de variante rail (l'ISOTEXTE n'a
- *  que le nu et le support), le défaut ne s'applique pas et la question est
- *  posée — la boucle des défauts saute ce qui viderait le lot. */
-const EQUIPEMENT_DEFAULT = 'R';
+/** Kit rail. */
+const EQUIPEMENT_RAIL = 'R';
+
+/**
+ * Équipement retenu quand rien n'est précisé, PAR ORDRE DE REPLI : kit rail,
+ * sinon rien. Une famille sans variante rail existe (l'ISOTEXTE n'a que le nu
+ * et le support) ; là, le devis retombe sur « sans rail » et la seule question
+ * qui reste est avec ou sans pied. « Avec support » se demande dans les deux
+ * cas — il reste proposé en puce.
+ */
+const EQUIPEMENT_DEFAUTS = [EQUIPEMENT_RAIL, EQUIPEMENT_AUCUN];
 
 /**
  * Libellés des VALEURS, là où le jeton de référence ne se lit pas.
@@ -196,18 +202,24 @@ const IMPLICITES: [SegmentCategory, string][] = [
 ];
 
 /**
+ * Un défaut : la valeur retenue, ou plusieurs essayées dans l'ordre quand la
+ * première peut manquer à la famille (voir EQUIPEMENT_DEFAUTS).
+ */
+type DefautCategorie = [SegmentCategory, string | string[]];
+
+/**
  * Valeurs retenues quand l'utilisateur ne précise rien.
  *
  * Ces attributs ne sont donc pas demandés, mais restent modifiables : ils
  * ressortent dans `defaultOptions` avec les valeurs réellement disponibles.
  * L'ordre suit celui de l'entonnoir.
  */
-const DEFAUTS: [SegmentCategory, string][] = [
+const DEFAUTS: DefautCategorie[] = [
   ['film', FILM_DEFAULT],
   ['dos', DOS_DEFAULT],
   ['profil', PROFIL_DEFAULT],
   ['face', FACE_DEFAULT],
-  ['equipement', EQUIPEMENT_DEFAULT],
+  ['equipement', EQUIPEMENT_DEFAUTS],
   ['ral', RAL_DEFAULT],
 ];
 
@@ -218,8 +230,8 @@ const DEFAUTS: [SegmentCategory, string][] = [
  * variantes plutôt que fixée : l'échelle est une propriété du modèle, pas du
  * sous-ensemble déjà filtré.
  */
-function defautsPour(toutes: ParsedReference[]): [SegmentCategory, string][] {
-  const liste: [SegmentCategory, string][] = [];
+function defautsPour(toutes: ParsedReference[]): DefautCategorie[] {
+  const liste: DefautCategorie[] = [];
 
   const cotes = Array.from(
     new Set(toutes.map((p) => p.byCategory.dimension).filter(Boolean) as string[])
@@ -427,12 +439,21 @@ export function buildFunnel({
   const defaultsApplied: SegmentCategory[] = [];
   const defaultOptions: PendingCategory[] = [];
   const defautsAppliques = new Map<SegmentCategory, string>();
-  for (const [category, valeur] of defautsPour(parsed)) {
+  for (const [category, valeurs] of defautsPour(parsed)) {
     if (constraints[category]) continue;
-    const restreint = pool.filter(
-      (p) => (p.byCategory[category] ?? '').toUpperCase() === valeur
-    );
-    if (restreint.length === 0) continue; // ce défaut n'existe pas ici : on ne force rien
+    /* Plusieurs valeurs = ordre de repli : on retient la première que la
+       famille propose réellement. Aucune ne convient (dos sur une résine,
+       rail sur un panneau permanent) : on ne force rien. */
+    const candidats = Array.isArray(valeurs) ? valeurs : [valeurs];
+    let valeur: string | undefined;
+    let restreint: ParsedReference[] = [];
+    for (const candidat of candidats) {
+      const essai = pool.filter(
+        (p) => (p.byCategory[category] ?? '').toUpperCase() === candidat
+      );
+      if (essai.length) { valeur = candidat; restreint = essai; break; }
+    }
+    if (!valeur) continue;
     const options = trierValeurs(
       Array.from(new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[]))
     );
