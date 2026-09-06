@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, type LigneDevis, type Devis as DevisType } from '@/lib/store';
+import { designationProduit, generateId, type LigneDevis, type Devis as DevisType } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { Mail, Loader2, Check, AlertTriangle, X, Sparkles, Trash2, Plus } from 'lucide-react';
 import ClientCombobox from '@/components/ClientCombobox';
@@ -381,7 +381,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
         return {
           id: generateId(),
           produitId: l.produitId,
-          description: p?.description || l.produitMatch,
+          description: (p ? designationProduit(p) : '') || l.produitMatch,
           quantite: l.quantite,
           unite: p?.unite || 'pièce',
           prixUnitaireHT: pu,

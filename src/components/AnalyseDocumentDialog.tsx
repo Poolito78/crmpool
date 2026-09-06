@@ -2390,7 +2390,7 @@ const [contratOdoo, setContratOdoo] = useState<
         return {
           id: generateId(),
           produitId: p?.id,
-          description: p?.description || ls.composant.libelle,
+          description: (p ? designationProduit(p) : '') || ls.composant.libelle,
           quantite,
           unite: p?.unite || (ls.contenants ? 'u' : 'kg'),
           prixUnitaireHT: prixDe(p, undefined, cle),
@@ -2477,7 +2477,7 @@ const [contratOdoo, setContratOdoo] = useState<
       lignes.push({
         id: generateId(),
         produitId: a.produitId,
-        description: p?.description || a.produitMatch,
+        description: (p ? designationProduit(p) : '') || a.produitMatch,
         quantite: quantiteDe(cle, a.quantite),
         unite: p?.unite || 'u',
         prixUnitaireHT: prixDe(p, a.prixImpose, cle),

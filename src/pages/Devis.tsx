@@ -702,20 +702,37 @@ export default function Devis() {
     setProbabiliteReussite(d.probabiliteReussite ?? 0);
     setDateRealisation(d.dateRealisation || '');
     setLignes(d.lignes.map(l => {
-      // Recalculer le prix des lignes dont la variante choisie a un prixDiff
-      // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
-      if ((!l.type || l.type === 'ligne') && l.produitId && l.variantesChoisies) {
-        const prod = produitParId(produits, l.produitId);
-        if (prod) {
-          const diff = getVarianteDiff(prod, l.variantesChoisies);
-          if (diff !== 0) {
-            const cl = clients.find(c => c.id === d.clientId);
-            const prixUnitaireHT = getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur);
-            return { ...l, prixUnitaireHT };
-          }
+      const estArticle = (!l.type || l.type === 'ligne') && !!l.produitId;
+      const prod = estArticle ? produitParId(produits, l.produitId) : undefined;
+      let maj: Partial<LigneDevis> = {};
+
+      /* LES DEVIS D'AVANT L'IMPORT DES DÉSIGNATIONS.
+         Leurs lignes portent « IS KC1M », « IS POINT DE RASSEMBLEMENT » — la
+         désignation du MODÈLE, la même pour toutes les déclinaisons — parce
+         que c'est tout ce qu'on avait à l'époque. On la remplace par celle de
+         la déclinaison, mais SEULEMENT si le libellé enregistré est
+         exactement celui du modèle : c'est la preuve qu'il a été posé
+         automatiquement et jamais retouché. Un libellé écrit ou corrigé à la
+         main ne bouge pas. */
+      if (prod) {
+        const voulue = designationProduit(prod);
+        if (voulue && (l.description || '').trim() === (prod.description || '').trim()
+            && voulue !== (prod.description || '').trim()) {
+          maj = { ...maj, description: voulue };
         }
       }
-      return { ...l, id: l.id };
+
+      // Recalculer le prix des lignes dont la variante choisie a un prixDiff
+      // (corrige les valeurs sauvées avant l'implémentation du +prixDiff)
+      if (prod && l.variantesChoisies) {
+        const diff = getVarianteDiff(prod, l.variantesChoisies);
+        if (diff !== 0) {
+          const cl = clients.find(c => c.id === d.clientId);
+          maj = { ...maj, prixUnitaireHT: getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur) };
+        }
+      }
+
+      return { ...l, ...maj, id: l.id };
     }));
     setFraisPortHT(d.fraisPortHT || 0);
     setFraisPortTVA(d.fraisPortTVA ?? 20);

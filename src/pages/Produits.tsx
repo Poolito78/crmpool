@@ -2682,7 +2682,7 @@ export default function Produits() {
                               setLignesKit(prev => prev.map((l, i) => i !== idx ? l : {
                                 ...l,
                                 produitId: produitId || undefined,
-                                description: p ? p.description : l.description,
+                                description: p ? designationProduit(p) : l.description,
                                 unite: p ? p.unite : l.unite,
                                 prixUnitaireHT: p ? p.prixHT : l.prixUnitaireHT,
                                 consommation: p?.consommation ?? l.consommation,
