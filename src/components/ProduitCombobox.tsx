@@ -5,7 +5,7 @@ import type { Produit } from '@/lib/store';
 import { chercherProduits, produitParId } from '@/lib/indexProduits';
 import TruncTooltip from '@/components/TruncTooltip';
 import {
-  buildFunnel, parseReference, CATEGORY_LABELS,
+  buildFunnel, CATEGORY_LABELS,
   type SegmentCategory,
 } from '@/lib/variantFunnel';
 
@@ -75,22 +75,6 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
       : null),
     [variantes, query, chips],
   );
-
-  /* Le module retient BRUT par défaut et retire donc le RAL des attributs à
-     trancher. On recalcule les RAL réellement disponibles pour que ce choix
-     par défaut reste modifiable, comme prévu par le module. */
-  const ralOptions = useMemo(() => {
-    if (!funnel || chips.ral) return [] as string[];
-    const autres = (Object.entries(funnel.resolved) as [SegmentCategory, string][])
-      .filter(([k]) => k !== 'ral');
-    const set = new Set<string>();
-    for (const p of variantes) {
-      const pr = parseReference(p.reference);
-      const ok = autres.every(([k, v]) => (pr.byCategory[k] ?? '').toUpperCase() === v.toUpperCase());
-      if (ok && pr.byCategory.ral) set.add(pr.byCategory.ral);
-    }
-    return Array.from(set).sort();
-  }, [funnel, variantes, chips.ral]);
 
   // Liste affichée : résultats du catalogue, ou variantes encore possibles.
   const liste = useMemo<Produit[]>(() => {
@@ -284,23 +268,27 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
                 </div>
               ))}
 
-              {/* RAL : BRUT est retenu par défaut, mais reste modifiable */}
-              {ralOptions.length > 1 && (
-                <div className="flex flex-wrap items-center gap-1">
-                  <span className="w-[68px] shrink-0 text-[10px] text-muted-foreground">{CATEGORY_LABELS.ral}</span>
-                  {ralOptions.map(o => (
+              {/* Attributs tranchés par défaut (dos ouvert, RAL brut) : non
+                  demandés, mais on peut en changer. */}
+              {funnel.defaultOptions.map(pc => (
+                <div key={pc.category} className="flex flex-wrap items-center gap-1">
+                  <span className="w-[68px] shrink-0 text-[10px] text-muted-foreground">{pc.label}</span>
+                  {pc.options.map(o => (
                     <button
                       key={o}
                       type="button"
-                      onClick={() => setChips(c => ({ ...c, ral: o }))}
+                      onClick={() => setChips(c => ({ ...c, [pc.category]: o }))}
+                      title={o === funnel.resolved[pc.category] ? 'Retenu par défaut' : undefined}
                       className={cn(
                         'rounded border px-1.5 py-0.5 text-[11px] hover:border-primary hover:bg-primary/10 hover:text-primary',
-                        funnel.resolved.ral === o ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background',
+                        funnel.resolved[pc.category] === o
+                          ? 'border-primary/40 bg-primary/10 text-primary'
+                          : 'border-border bg-background',
                       )}
                     >{o}</button>
                   ))}
                 </div>
-              )}
+              ))}
             </div>
           )}
           <div ref={listRef} className="max-h-48 overflow-y-auto p-1">

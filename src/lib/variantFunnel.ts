@@ -53,6 +53,21 @@ export const CATEGORY_LABELS: Record<SegmentCategory, string> = {
 };
 
 const RAL_DEFAULT = 'BRUT';
+/** Dos ouvert : c'est le cas courant, et il ne porte aucun segment — seul le
+ *  dos fermé est marqué (`F`). Voir DEFAUTS ci-dessous. */
+const DOS_DEFAULT = 'O';
+
+/**
+ * Valeurs retenues quand l'utilisateur ne précise rien.
+ *
+ * Ces attributs ne sont donc pas demandés, mais restent modifiables : ils
+ * ressortent dans `defaultOptions` avec les valeurs réellement disponibles.
+ * L'ordre suit celui de l'entonnoir (le dos avant le RAL).
+ */
+const DEFAUTS: [SegmentCategory, string][] = [
+  ['dos', DOS_DEFAULT],
+  ['ral', RAL_DEFAULT],
+];
 
 /**
  * Classe un segment brut de référence (ex: "C2", "700", "ST", "L7002", "BRUT").
@@ -126,6 +141,12 @@ export interface FunnelResult {
   resolved: Partial<Record<SegmentCategory, string>>;
   /** Attributs encore ambigus : à proposer sous forme de chips à l'utilisateur. */
   pending: PendingCategory[];
+  /** Attributs tranchés par un défaut métier (dos ouvert, RAL brut) : ils ne
+   *  sont pas demandés, mais restent modifiables. */
+  defaultsApplied: SegmentCategory[];
+  /** Valeurs disponibles pour ces attributs à défaut, relevées avant que le
+   *  défaut ne restreigne — de quoi proposer d'en changer. */
+  defaultOptions: PendingCategory[];
   /** Référence unique si l'entonnoir est totalement résolu. */
   exact?: string;
 }
@@ -144,7 +165,21 @@ export function buildFunnel({
   query,
   chipOverrides = {},
 }: FunnelInput): FunnelResult {
-  const parsed = candidates.map((c) => parseReference(c.reference));
+  const brut = candidates.map((c) => parseReference(c.reference));
+
+  /* Le dos ouvert ne porte aucun segment : seul le fermé est marqué `F`.
+     Sans le matérialiser, « ouvert » ne serait jamais proposable et un modèle
+     à deux dos resterait à deux candidats indiscernables. On ne le fait que si
+     le modèle déclare effectivement un dos, pour ne pas afficher cet attribut
+     sur des articles où il n'a aucun sens (résines, films, consommables). */
+  const dosDeclare = brut.some((p) => p.byCategory.dos);
+  const parsed = dosDeclare
+    ? brut.map((p) =>
+        p.byCategory.dos
+          ? p
+          : { ...p, byCategory: { ...p.byCategory, dos: DOS_DEFAULT } }
+      )
+    : brut;
 
   const tokens = query
     .trim()
@@ -172,25 +207,36 @@ export function buildFunnel({
     );
   }
 
-  // Défaut RAL = BRUT si non précisé et qu'un BRUT existe encore dans le pool.
-  let ralAutoApplied = false;
-  if (!constraints.ral) {
-    const brutPool = pool.filter(
-      (p) => (p.byCategory.ral ?? '').toUpperCase() === RAL_DEFAULT
+  /* Application des défauts (dos ouvert, RAL brut).
+     Les options sont relevées AVANT de restreindre, sinon le défaut masquerait
+     les autres valeurs et on ne pourrait plus en changer. */
+  const defaultsApplied: SegmentCategory[] = [];
+  const defaultOptions: PendingCategory[] = [];
+  for (const [category, valeur] of DEFAUTS) {
+    if (constraints[category]) continue;
+    const restreint = pool.filter(
+      (p) => (p.byCategory[category] ?? '').toUpperCase() === valeur
     );
-    if (brutPool.length > 0) {
-      pool = brutPool;
-      ralAutoApplied = true;
+    if (restreint.length === 0) continue; // ce défaut n'existe pas ici : on ne force rien
+    const options = Array.from(
+      new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[])
+    ).sort();
+    if (options.length > 1) {
+      defaultOptions.push({ category, label: CATEGORY_LABELS[category], options });
     }
+    pool = restreint;
+    defaultsApplied.push(category);
   }
 
   const resolved: Partial<Record<SegmentCategory, string>> = { ...constraints };
-  if (ralAutoApplied) resolved.ral = RAL_DEFAULT;
+  for (const category of defaultsApplied) {
+    resolved[category] = DEFAUTS.find(([c]) => c === category)![1];
+  }
 
   const pending: PendingCategory[] = [];
   for (const category of FUNNEL_ORDER) {
     if (constraints[category]) continue;
-    if (category === 'ral' && ralAutoApplied) continue; // résolu par défaut, modifiable via chip
+    if (defaultsApplied.includes(category)) continue; // résolu par défaut, modifiable via chip
     const values = Array.from(
       new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[])
     ).sort();
@@ -203,6 +249,8 @@ export function buildFunnel({
     matches: pool.map((p) => p.reference),
     resolved,
     pending,
+    defaultsApplied,
+    defaultOptions,
     exact: pool.length === 1 ? pool[0].reference : undefined,
   };
 }
