@@ -11,7 +11,7 @@ import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
 } from '@/lib/categorieDocuments';
-import { generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
+import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
@@ -625,10 +625,14 @@ export default function Produits() {
   const filtered = useMemo(() => modeServeur ? [] : safeProduits.filter(p => {
     // Global search
     if (search) {
-      const q = search.toLowerCase();
-      const matchBase = [p.description, p.reference, p.categorie].some(v => v?.toLowerCase().includes(q));
-      const matchVariante = p.variantes?.some(dim => dim.options.some(opt => opt.label.toLowerCase().includes(q)));
-      if (!matchBase && !matchVariante) return false;
+      /* Mot à mot, comme la recherche serveur : « A13A 700 » doit trouver
+         A13A.700.C1.BTR.IS.BRUT, où les deux morceaux ne se suivent pas. */
+      const champs = [p.reference, p.description, p.descriptionVariante, p.categorie]
+        .filter(Boolean).join(' ').toLowerCase();
+      const mots = search.toLowerCase().split(/\s+/).filter(Boolean);
+      const manque = mots.some(m => !champs.includes(m)
+        && !p.variantes?.some(dim => dim.options.some(opt => opt.label.toLowerCase().includes(m))));
+      if (manque) return false;
     }
     // Column filters (supports !empty sentinel for "non vide")
     for (const [key, val] of Object.entries(columnFilters)) {
@@ -639,7 +643,7 @@ export default function Produits() {
       const fournNames = key === 'fournisseur' ? pfsF.map(pf => fournisseurs.find(f => f.id === pf.fournisseurId)?.societe || '').join(' ') : '';
       switch (key) {
         case 'reference':    if (isNonVide ? !p.reference?.trim() : !p.reference?.toLowerCase().includes(v)) return false; break;
-        case 'description':  if (isNonVide ? !p.description?.trim() : !p.description?.toLowerCase().includes(v)) return false; break;
+        case 'description':  if (isNonVide ? !designationProduit(p).trim() : !designationProduit(p).toLowerCase().includes(v)) return false; break;
         case 'categorie':    if (isNonVide ? !p.categorie?.trim() : !p.categorie?.toLowerCase().includes(v)) return false; break;
         case 'fournisseur':  if (isNonVide ? (!fournNames.trim() && !p.fournisseurId) : !fournNames.toLowerCase().includes(v)) return false; break;
         case 'prixAchat':    if (isNonVide ? p.prixAchat === 0 : (!formatMontant(p.prixAchat).toLowerCase().includes(v) && !String(p.prixAchat).includes(v))) return false; break;
@@ -1507,7 +1511,7 @@ export default function Produits() {
                         >{p.nbVariantes} décl.</button>
                       )}
                     </td>;
-                    case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${p.description}`}>{p.description}</td>;
+                    case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${designationProduit(p)}`}>{designationProduit(p)}</td>;
                     case 'categorie':    return <td className="px-2 py-2.5 text-muted-foreground max-w-[110px] truncate" title={p.categorie || ''}>{p.categorie || '—'}</td>;
                     case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
                     case 'prixAchat':    return <td className="px-2 py-2.5 text-right">{formatMontant(p.prixAchat)}</td>;

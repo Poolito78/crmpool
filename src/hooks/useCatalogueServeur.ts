@@ -140,15 +140,27 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
         /* Odoo ne propose pas les déclinaisons dans la liste de vente : il
            montre le modèle, et n'ouvre ses variantes qu'une fois celui-ci
            choisi. Le catalogue passe ainsi de 22 634 lignes à 7 782. */
+        const termes = mots(rechercheDifferee);
+
+        /* CHERCHER, C'EST CHERCHER PARTOUT — Y COMPRIS DANS LES DÉCLINAISONS.
+           La vue « modèles » cache les variantes, et le modèle des A13A est
+           A13A.500 : chercher « A13A 700 » ne rendait donc RIEN, alors que
+           le catalogue porte trente A13A en 700. Dès qu'on tape quelque
+           chose, on lève la restriction et la liste montre les articles qui
+           répondent ; sans saisie, elle reste la liste de vente d'Odoo. */
         if (o.modeleCle) q = q.eq('modele_cle', o.modeleCle);
-        else if (o.seulementModeles) q = q.eq('est_modele', true);
+        else if (o.seulementModeles && termes.length === 0) q = q.eq('est_modele', true);
 
         /* Un `or` par mot. PostgREST assemble les appels successifs avec ET :
            chaque mot doit se trouver quelque part, mais pas forcément dans
-           le même champ ni dans l'ordre saisi. */
-        for (const m of mots(rechercheDifferee)) {
+           le même champ ni dans l'ordre saisi.
+
+           `description_variante` en fait partie : c'est la désignation
+           qu'Odoo vend (« A11 1000 C1 BTR ST BRUT (MAGELLAN) »), la seule
+           qui distingue une déclinaison d'une autre. */
+        for (const m of termes) {
           q = q.or(
-            `reference.ilike.%${m}%,description.ilike.%${m}%,categorie.ilike.%${m}%`,
+            `reference.ilike.%${m}%,description.ilike.%${m}%,description_variante.ilike.%${m}%,categorie.ilike.%${m}%`,
           );
         }
 

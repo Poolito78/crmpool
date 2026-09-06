@@ -108,6 +108,14 @@ export function chercherProduits(
     return { resultats: produits.slice(0, limite), total: produits.length };
   }
 
+  /* Mot à mot. « A13A 700 » cherché d'un bloc ne trouve rien : dans
+     A13A.700.C1.BTR.IS.BRUT les deux morceaux sont séparés par un point, pas
+     par l'espace tapé. On coupe donc la saisie, et on ne garde que les
+     articles qui portent TOUS les mots, où qu'ils soient. Le point est un
+     séparateur comme l'espace : coller la référence entière revient à taper
+     ses segments. */
+  const termes = q.split(/[\s.]+/).filter(Boolean);
+
   /* Six seaux : trois rangs de pertinence × deux finitions (brut d'abord).
      Chaque seau est plafonné séparément — plafonner AVANT de trier ferait
      disparaître les BRUT quand soixante laquées les précèdent au catalogue. */
@@ -117,15 +125,25 @@ export function chercherProduits(
   for (let i = 0; i < entrees.length; i++) {
     const e = entrees[i];
 
+    /* Trois rangs, du plus précis au plus large : la référence commence par
+       la saisie, la référence la porte entière, ou elle se retrouve éparpillée
+       entre référence, désignation et catégorie. */
     let rang = -1;
-    if (e.ref.startsWith(q)) rang = 0;
-    else if (e.ref.includes(q)) rang = 1;
-    else if (e.desc.includes(q) || e.cat.includes(q)) rang = 2;
+    if (termes.every(t => e.ref.includes(t))) rang = e.ref.startsWith(termes[0]) ? 0 : 1;
+    else {
+      const tout = `${e.ref} ${e.desc} ${e.cat}`;
+      if (termes.every(t => tout.includes(t))) rang = 2;
+    }
     if (rang < 0) continue;
 
     total++;
     // Une laquée ne recule que si la saisie ne la nomme pas.
-    const laquee = e.ral !== '' && e.ral !== 'brut' && !q.includes(e.ral);
+    /* Le RAL n'est « demandé » que si un mot le nomme : il commence par L
+       (L7016, L70…) ou vaut BRUT. Sans cette précaution, chercher la cote
+       « A11 1000 » ferait passer le laquage L1000 pour une demande de RAL et
+       le hisserait à côté de la brute. */
+    const nomme = termes.some(t => (t === 'brut' || t.startsWith('l')) && e.ral.startsWith(t));
+    const laquee = e.ral !== '' && e.ral !== 'brut' && !nomme;
     const seau = seaux[rang * 2 + (laquee ? 1 : 0)];
     if (seau.length < limite) seau.push(e.p);
   }

@@ -3,8 +3,8 @@ import { chercherProduits } from '@/lib/indexProduits';
 import type { Produit } from '@/lib/store';
 
 /** Article minimal : la recherche ne lit que ces quatre champs. */
-function art(reference: string, description = '', categorie = ''): Produit {
-  return { id: reference, reference, description, categorie } as Produit;
+function art(reference: string, description = '', categorie = '', descriptionVariante = ''): Produit {
+  return { id: reference, reference, description, categorie, descriptionVariante } as Produit;
 }
 
 const RALS = ['L7003', 'L5010', 'L7016', 'L7012', 'L3020'];
@@ -54,6 +54,33 @@ describe('chercherProduits — classement des finitions', () => {
     const { resultats, total } = chercherProduits(plasto, 'PLASTO');
     expect(resultats.map(p => p.reference)).toEqual(plasto.map(p => p.reference));
     expect(total).toBe(3);
+  });
+
+  it('trouve une declinaison quand les mots sont separes par des points', () => {
+    const a13a: Produit[] = [
+      art('A13A.500.C1.BTR.IS.BRUT', 'IS A13A', '', 'A13A 500 C1 BTR BRUT (MAGELLAN)'),
+      art('A13A.700.C1.BTR.IS.BRUT', 'IS A13A', '', 'A13A 700 C1 BTR BRUT (MAGELLAN)'),
+      art('A13A.700.C2.BTR.IS.BRUT', 'IS A13A', '', 'A13A 700 C2 BTR BRUT (MAGELLAN)'),
+    ];
+    const { resultats } = chercherProduits(a13a, 'A13A 700');
+    expect(resultats.map(p => p.reference)).toEqual([
+      'A13A.700.C1.BTR.IS.BRUT', 'A13A.700.C2.BTR.IS.BRUT',
+    ]);
+  });
+
+  it('cherche aussi dans la designation de la declinaison', () => {
+    const p = [art('X.1.IS.BRUT', 'IS X', '', 'X 700 C2 BTR BRUT (MAGELLAN)')];
+    expect(chercherProduits(p, 'MAGELLAN').resultats).toHaveLength(1);
+  });
+
+  it('ne prend pas une cote pour un RAL', () => {
+    // « 1000 » est la dimension ; L1000 est un laquage, il reste derriere.
+    const a11: Produit[] = [
+      art('A11.1000.C1.BTR.IS.L1000', 'IS A11'),
+      art('A11.1000.C1.BTR.IS.BRUT', 'IS A11'),
+    ];
+    const { resultats } = chercherProduits(a11, 'A11 1000');
+    expect(resultats[0].reference).toBe('A11.1000.C1.BTR.IS.BRUT');
   });
 
   it('garde la priorité de la référence sur la description', () => {
