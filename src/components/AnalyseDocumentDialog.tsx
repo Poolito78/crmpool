@@ -1230,7 +1230,8 @@ const [contratOdoo, setContratOdoo] = useState<
     const lignes = (result?.lignes ?? []).map(l => {
       const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase());
       return {
-        id: generateId(), produitId: p?.id, description: l.description || (p ? designationProduit(p) : '') || '',
+        // L'ARTICLE NOMME LA LIGNE, PAS LA DEMANDE. Voir handleCreerDevis.
+        id: generateId(), produitId: p?.id, description: (p ? designationProduit(p) : '') || l.description || '',
         // « prixVente » n'existe pas sur Produit : le champ s'appelle prixHT.
         // La faute passait inaperçue — quand le document n'annonçait pas de
         // prix, la ligne partait à 0,00 € au lieu du tarif catalogue.
@@ -2450,10 +2451,18 @@ const [contratOdoo, setContratOdoo] = useState<
       return {
         id: generateId(),
         produitId: p?.id,
-        /* Le libellé corrigé à l'écran est celui qui part au devis : le
-           laisser de côté remettrait sous les yeux du client le texte qu'on
-           venait justement de rectifier. */
-        description: libelleManuel[i] || l.description || (p ? designationProduit(p) : '') || '',
+        /* L'ARTICLE NOMME LA LIGNE, PAS LA DEMANDE.
+           « mât 1.50M », « plot PVC », « ensemble plot PVC + Mât + Brides
+           80×40 en 2.50M » : c'est ainsi que le client écrit, et c'est ce qui
+           partait sur le devis alors que l'article, lui, était reconnu. On
+           renvoyait donc au client sa propre approximation en guise de
+           désignation — et deux lignes rattachées au même article pouvaient
+           porter deux noms différents. Dès qu'un article est retenu, sa
+           désignation Odoo fait foi.
+
+           Le libellé corrigé à la main garde la priorité : le rectifier à
+           l'écran n'aurait aucun sens s'il ne partait pas au devis. */
+        description: libelleManuel[i] || (p ? designationProduit(p) : '') || l.description || '',
         quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
         prixUnitaireHT: puDeLigne(i),
@@ -3285,21 +3294,33 @@ const [contratOdoo, setContratOdoo] = useState<
                                 sur le devis AF035816. */}
                             <div className="flex items-center gap-2 pb-1.5 text-[11px]">
                               <span className="text-muted-foreground">grille ISOSIGN 2026, tarif</span>
-                              <select
-                                className="rounded border px-1 py-0.5 text-[11px]"
-                                value={niveauForce}
-                                onChange={e => setNiveauForce(e.target.value as '' | 'R1' | 'R2' | 'R3' | 'R4')}
+                              {/* Le même sélecteur que Gamme et Classe, et pour
+                                  une raison de fond : un <select> natif ouvre une
+                                  liste hors du DOM, que le dialogue Radix prend
+                                  pour un clic « en dehors » — il reprend le focus
+                                  et le choix est annulé avant d'être enregistré.
+                                  Le niveau restait donc bloqué sur R4.
+
+                                  « auto » plutôt que la chaîne vide : Radix
+                                  refuse une valeur vide sur un SelectItem. Et
+                                  cette entrée « automatique » explicite est
+                                  nécessaire — sans elle, le sélecteur affichait
+                                  déjà « R4 » et choisir R4 ne changeait rien,
+                                  donc on ne pouvait pas forcer le niveau qui se
+                                  trouvait être le défaut. */}
+                              <Select
+                                value={niveauForce || 'auto'}
+                                onValueChange={v => setNiveauForce(v === 'auto' ? '' : v as 'R1' | 'R2' | 'R3' | 'R4')}
                               >
-                                {/* Une entrée « automatique » explicite : sans elle,
-                                    le sélecteur affichait déjà « R4 » et choisir R4
-                                    ne déclenchait aucun changement — impossible de
-                                    forcer le niveau qui se trouvait être le défaut. */}
-                                <option value="">{niveauRemise} — automatique</option>
-                                <option value="R1">R1 — 20 %</option>
-                                <option value="R2">R2 — 25 %</option>
-                                <option value="R3">R3 — 30 %</option>
-                                <option value="R4">R4 — 35 %</option>
-                              </select>
+                                <SelectTrigger className="h-7 w-44 text-[11px]"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="auto">{niveauRemise} — automatique</SelectItem>
+                                  <SelectItem value="R1">R1 — 20 %</SelectItem>
+                                  <SelectItem value="R2">R2 — 25 %</SelectItem>
+                                  <SelectItem value="R3">R3 — 30 %</SelectItem>
+                                  <SelectItem value="R4">R4 — 35 %</SelectItem>
+                                </SelectContent>
+                              </Select>
                               <span className={niveauForce ? 'text-warning' : 'text-muted-foreground'}>
                                 {niveauForce
                                   ? 'forcé à la main'
@@ -3309,6 +3330,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               </span>
                               {niveauForce && (
                                 <button
+                                  type="button"
                                   onClick={() => setNiveauForce('')}
                                   className="text-warning hover:underline"
                                   title="Revenir au niveau du contrat cadre"
