@@ -10,10 +10,43 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.4"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
+      categorie_documents: {
+        Row: {
+          categorie: string
+          created_at: string
+          genre: string
+          id: string
+          libelle: string
+          ordre: number
+          url: string
+          user_id: string
+        }
+        Insert: {
+          categorie: string
+          created_at?: string
+          genre?: string
+          id?: string
+          libelle: string
+          ordre?: number
+          url: string
+          user_id?: string
+        }
+        Update: {
+          categorie?: string
+          created_at?: string
+          genre?: string
+          id?: string
+          libelle?: string
+          ordre?: number
+          url?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       client_contacts: {
         Row: {
           client_id: string | null
@@ -764,7 +797,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "devis_fournisseur_fournisseur_id_fkey"
+            columns: ["fournisseur_id"]
+            isOneToOne: false
+            referencedRelation: "fournisseurs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       devis_fournisseur_lignes: {
         Row: {
@@ -815,7 +856,22 @@ export type Database = {
           unite?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "devis_fournisseur_lignes_devis_id_fkey"
+            columns: ["devis_id"]
+            isOneToOne: false
+            referencedRelation: "devis_fournisseur"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "devis_fournisseur_lignes_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       devis_message_templates: {
         Row: {
@@ -1232,6 +1288,39 @@ export type Database = {
         }
         Relationships: []
       }
+      grille_contrat: {
+        Row: {
+          codification: string
+          contrat_id: number
+          contrat_nom: string
+          id: number
+          maj: string
+          niveau: string | null
+          priorite: number
+          prix: number
+        }
+        Insert: {
+          codification: string
+          contrat_id: number
+          contrat_nom: string
+          id?: number
+          maj?: string
+          niveau?: string | null
+          priorite?: number
+          prix: number
+        }
+        Update: {
+          codification?: string
+          contrat_id?: number
+          contrat_nom?: string
+          id?: number
+          maj?: string
+          niveau?: string | null
+          priorite?: number
+          prix?: number
+        }
+        Relationships: []
+      }
       grille_synchro: {
         Row: {
           contrat_id: number
@@ -1337,84 +1426,6 @@ export type Database = {
         }
         Relationships: []
       }
-      categorie_documents: {
-        Row: {
-          categorie: string
-          created_at: string
-          genre: string
-          id: string
-          libelle: string
-          ordre: number
-          url: string
-          user_id: string
-        }
-        Insert: {
-          categorie: string
-          created_at?: string
-          genre?: string
-          id?: string
-          libelle: string
-          ordre?: number
-          url: string
-          user_id?: string
-        }
-        Update: {
-          categorie?: string
-          created_at?: string
-          genre?: string
-          id?: string
-          libelle?: string
-          ordre?: number
-          url?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      produit_images: {
-        Row: {
-          chemin: string | null
-          created_at: string
-          hauteur: number | null
-          id: string
-          largeur: number | null
-          libelle: string | null
-          nom: string | null
-          octets: number | null
-          ordre: number
-          produit_id: string
-          url: string
-          user_id: string
-        }
-        Insert: {
-          chemin?: string | null
-          created_at?: string
-          hauteur?: number | null
-          id?: string
-          largeur?: number | null
-          libelle?: string | null
-          nom?: string | null
-          octets?: number | null
-          ordre?: number
-          produit_id: string
-          url: string
-          user_id?: string
-        }
-        Update: {
-          chemin?: string | null
-          created_at?: string
-          hauteur?: number | null
-          id?: string
-          largeur?: number | null
-          libelle?: string | null
-          nom?: string | null
-          octets?: number | null
-          ordre?: number
-          produit_id?: string
-          url?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       produit_fournisseurs: {
         Row: {
           conditionnement_min: number | null
@@ -1472,6 +1483,59 @@ export type Database = {
           },
         ]
       }
+      produit_images: {
+        Row: {
+          chemin: string | null
+          created_at: string
+          hauteur: number | null
+          id: string
+          largeur: number | null
+          libelle: string | null
+          nom: string | null
+          octets: number | null
+          ordre: number
+          produit_id: string
+          url: string
+          user_id: string
+        }
+        Insert: {
+          chemin?: string | null
+          created_at?: string
+          hauteur?: number | null
+          id?: string
+          largeur?: number | null
+          libelle?: string | null
+          nom?: string | null
+          octets?: number | null
+          ordre?: number
+          produit_id: string
+          url: string
+          user_id?: string
+        }
+        Update: {
+          chemin?: string | null
+          created_at?: string
+          hauteur?: number | null
+          id?: string
+          largeur?: number | null
+          libelle?: string | null
+          nom?: string | null
+          octets?: number | null
+          ordre?: number
+          produit_id?: string
+          url?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produit_images_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produits: {
         Row: {
           achats_historique: Json | null
@@ -1498,9 +1562,11 @@ export type Database = {
           paliers_prix: Json | null
           poids: number | null
           prix_achat: number
+          prix_achat_maj: string | null
           prix_ht: number
           prix_revendeur: number
           prix_tarif: number | null
+          prix_vente_maj: string | null
           proprietaire: string | null
           proprietaire_fournisseur_id: string | null
           reference: string
@@ -1509,6 +1575,9 @@ export type Database = {
           source_tarif: string | null
           stock: number
           stock_min: number
+          stock_odoo: number | null
+          stock_odoo_maj: string | null
+          stock_odoo_prevu: number | null
           tva: number
           type_kit: boolean | null
           unite: string
@@ -1540,9 +1609,11 @@ export type Database = {
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
+          prix_achat_maj?: string | null
           prix_ht?: number
           prix_revendeur?: number
           prix_tarif?: number | null
+          prix_vente_maj?: string | null
           proprietaire?: string | null
           proprietaire_fournisseur_id?: string | null
           reference?: string
@@ -1551,6 +1622,9 @@ export type Database = {
           source_tarif?: string | null
           stock?: number
           stock_min?: number
+          stock_odoo?: number | null
+          stock_odoo_maj?: string | null
+          stock_odoo_prevu?: number | null
           tva?: number
           type_kit?: boolean | null
           unite?: string
@@ -1582,9 +1656,11 @@ export type Database = {
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
+          prix_achat_maj?: string | null
           prix_ht?: number
           prix_revendeur?: number
           prix_tarif?: number | null
+          prix_vente_maj?: string | null
           proprietaire?: string | null
           proprietaire_fournisseur_id?: string | null
           reference?: string
@@ -1593,6 +1669,9 @@ export type Database = {
           source_tarif?: string | null
           stock?: number
           stock_min?: number
+          stock_odoo?: number | null
+          stock_odoo_maj?: string | null
+          stock_odoo_prevu?: number | null
           tva?: number
           type_kit?: boolean | null
           unite?: string
@@ -1608,6 +1687,201 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      produits_modeles_retires: {
+        Row: {
+          achats_historique: Json | null
+          catalogue: string | null
+          categorie: string | null
+          code_tarif: string | null
+          coeff_revendeur: number | null
+          coefficient: number | null
+          composants: Json | null
+          consommation: number | null
+          created_at: string | null
+          date_creation: string | null
+          description: string | null
+          description_detaillee: string | null
+          disponible_vente: boolean | null
+          est_modele: boolean | null
+          fiche_link_label: string | null
+          fiche_url: string | null
+          fournisseur_id: string | null
+          id: string | null
+          lignes_kit: Json | null
+          modele_cle: string | null
+          nb_variantes: number | null
+          paliers_prix: Json | null
+          poids: number | null
+          prix_achat: number | null
+          prix_achat_maj: string | null
+          prix_ht: number | null
+          prix_revendeur: number | null
+          prix_tarif: number | null
+          prix_vente_maj: string | null
+          proprietaire: string | null
+          proprietaire_fournisseur_id: string | null
+          reference: string | null
+          reference_odoo: string | null
+          remise_revendeur: number | null
+          retire_le: string | null
+          source_tarif: string | null
+          stock: number | null
+          stock_min: number | null
+          stock_odoo: number | null
+          stock_odoo_maj: string | null
+          stock_odoo_prevu: number | null
+          tva: number | null
+          type_kit: boolean | null
+          unite: string | null
+          user_id: string | null
+          variantes: Json | null
+        }
+        Insert: {
+          achats_historique?: Json | null
+          catalogue?: string | null
+          categorie?: string | null
+          code_tarif?: string | null
+          coeff_revendeur?: number | null
+          coefficient?: number | null
+          composants?: Json | null
+          consommation?: number | null
+          created_at?: string | null
+          date_creation?: string | null
+          description?: string | null
+          description_detaillee?: string | null
+          disponible_vente?: boolean | null
+          est_modele?: boolean | null
+          fiche_link_label?: string | null
+          fiche_url?: string | null
+          fournisseur_id?: string | null
+          id?: string | null
+          lignes_kit?: Json | null
+          modele_cle?: string | null
+          nb_variantes?: number | null
+          paliers_prix?: Json | null
+          poids?: number | null
+          prix_achat?: number | null
+          prix_achat_maj?: string | null
+          prix_ht?: number | null
+          prix_revendeur?: number | null
+          prix_tarif?: number | null
+          prix_vente_maj?: string | null
+          proprietaire?: string | null
+          proprietaire_fournisseur_id?: string | null
+          reference?: string | null
+          reference_odoo?: string | null
+          remise_revendeur?: number | null
+          retire_le?: string | null
+          source_tarif?: string | null
+          stock?: number | null
+          stock_min?: number | null
+          stock_odoo?: number | null
+          stock_odoo_maj?: string | null
+          stock_odoo_prevu?: number | null
+          tva?: number | null
+          type_kit?: boolean | null
+          unite?: string | null
+          user_id?: string | null
+          variantes?: Json | null
+        }
+        Update: {
+          achats_historique?: Json | null
+          catalogue?: string | null
+          categorie?: string | null
+          code_tarif?: string | null
+          coeff_revendeur?: number | null
+          coefficient?: number | null
+          composants?: Json | null
+          consommation?: number | null
+          created_at?: string | null
+          date_creation?: string | null
+          description?: string | null
+          description_detaillee?: string | null
+          disponible_vente?: boolean | null
+          est_modele?: boolean | null
+          fiche_link_label?: string | null
+          fiche_url?: string | null
+          fournisseur_id?: string | null
+          id?: string | null
+          lignes_kit?: Json | null
+          modele_cle?: string | null
+          nb_variantes?: number | null
+          paliers_prix?: Json | null
+          poids?: number | null
+          prix_achat?: number | null
+          prix_achat_maj?: string | null
+          prix_ht?: number | null
+          prix_revendeur?: number | null
+          prix_tarif?: number | null
+          prix_vente_maj?: string | null
+          proprietaire?: string | null
+          proprietaire_fournisseur_id?: string | null
+          reference?: string | null
+          reference_odoo?: string | null
+          remise_revendeur?: number | null
+          retire_le?: string | null
+          source_tarif?: string | null
+          stock?: number | null
+          stock_min?: number | null
+          stock_odoo?: number | null
+          stock_odoo_maj?: string | null
+          stock_odoo_prevu?: number | null
+          tva?: number | null
+          type_kit?: boolean | null
+          unite?: string | null
+          user_id?: string | null
+          variantes?: Json | null
+        }
+        Relationships: []
+      }
+      produits_prix_backup_20260829: {
+        Row: {
+          code_tarif: string | null
+          coefficient: number | null
+          description: string | null
+          id: string | null
+          motif: string | null
+          poids: number | null
+          prix_achat: number | null
+          prix_achat_maj: string | null
+          prix_ht: number | null
+          prix_tarif: number | null
+          reference: string | null
+          sauvegarde_le: string | null
+          source_tarif: string | null
+        }
+        Insert: {
+          code_tarif?: string | null
+          coefficient?: number | null
+          description?: string | null
+          id?: string | null
+          motif?: string | null
+          poids?: number | null
+          prix_achat?: number | null
+          prix_achat_maj?: string | null
+          prix_ht?: number | null
+          prix_tarif?: number | null
+          reference?: string | null
+          sauvegarde_le?: string | null
+          source_tarif?: string | null
+        }
+        Update: {
+          code_tarif?: string | null
+          coefficient?: number | null
+          description?: string | null
+          id?: string | null
+          motif?: string | null
+          poids?: number | null
+          prix_achat?: number | null
+          prix_achat_maj?: string | null
+          prix_ht?: number | null
+          prix_tarif?: number | null
+          reference?: string | null
+          sauvegarde_le?: string | null
+          source_tarif?: string | null
+        }
+        Relationships: []
       }
       regles_accompagnement: {
         Row: {
@@ -1889,7 +2163,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      fiche_publique: { Args: { p_id: string }; Returns: Json }
       get_my_veille_role: { Args: never; Returns: string }
+      lancer_stock_odoo: { Args: never; Returns: undefined }
+      lancer_synchro_grilles: { Args: never; Returns: undefined }
       next_devis_numero: { Args: never; Returns: string }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -1911,12 +2188,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1940,11 +2217,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1965,11 +2242,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1990,11 +2267,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -2007,11 +2284,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
