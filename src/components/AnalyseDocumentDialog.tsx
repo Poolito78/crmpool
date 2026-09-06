@@ -53,7 +53,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   type Client, type Fournisseur, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   type Produit,
-  generateId, calculerDateEcheance, formatDateISO, formatMontant,
+  designationProduit, generateId, calculerDateEcheance, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -1230,7 +1230,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const lignes = (result?.lignes ?? []).map(l => {
       const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase());
       return {
-        id: generateId(), produitId: p?.id, description: l.description || p?.description || '',
+        id: generateId(), produitId: p?.id, description: l.description || (p ? designationProduit(p) : '') || '',
         // « prixVente » n'existe pas sur Produit : le champ s'appelle prixHT.
         // La faute passait inaperçue — quand le document n'annonçait pas de
         // prix, la ligne partait à 0,00 € au lieu du tarif catalogue.
@@ -1613,7 +1613,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!demandees.length) return [];
 
     const referentiel = produits.map(p => ({
-      id: p.id, reference: p.reference, description: p.description,
+      id: p.id, reference: p.reference, description: designationProduit(p),
     }));
     return appliquerAccompagnements(demandees, regles, referentiel)
       .filter(l => l.auto);
@@ -1707,7 +1707,7 @@ const [contratOdoo, setContratOdoo] = useState<
       const ref = odoo?.reference || local?.referenceOdoo || local?.reference || '';
       if (!ref || articlePlastique(ref)) return;   // le plastique a son barème
       const qte = quantiteManuelle[cle] ?? (l.quantite || 1);
-      const designation = odoo?.designation || local?.description || '';
+      const designation = odoo?.designation || (local ? designationProduit(local) : '') || '';
       const categorie = odoo?.categorie || local?.categorie || '';
       const niveau = niveauGamme(categorie, local?.catalogue);
       const gamme = niveau !== null || estGamme(local?.catalogue);
@@ -2453,7 +2453,7 @@ const [contratOdoo, setContratOdoo] = useState<
         /* Le libellé corrigé à l'écran est celui qui part au devis : le
            laisser de côté remettrait sous les yeux du client le texte qu'on
            venait justement de rectifier. */
-        description: libelleManuel[i] || l.description || p?.description || '',
+        description: libelleManuel[i] || l.description || (p ? designationProduit(p) : '') || '',
         quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
         prixUnitaireHT: puDeLigne(i),

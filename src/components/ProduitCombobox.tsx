@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { Produit } from '@/lib/store';
+import { designationProduit, type Produit } from '@/lib/store';
 import { chercherProduits, produitParId } from '@/lib/indexProduits';
 import TruncTooltip from '@/components/TruncTooltip';
 import {
@@ -207,10 +207,10 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
         type="button"
         onClick={() => { setOpen(!open); setTimeout(() => inputRef.current?.focus(), 50); }}
         className="flex w-full items-center justify-between rounded border border-input bg-background px-2 py-1.5 text-sm hover:bg-accent/50 transition-colors"
-        title={selected ? `${selected.reference} — ${selected.description}` : ''}
+        title={selected ? `${selected.reference} — ${designationProduit(selected)}` : ''}
       >
         <TruncTooltip
-          content={selected ? `${selected.reference} — ${selected.description}` : ''}
+          content={selected ? `${selected.reference} — ${designationProduit(selected)}` : ''}
           className="truncate flex-1 text-left"
           side="bottom"
         >
@@ -333,7 +333,7 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
                 <button
                   key={p.id}
                   type="button"
-                  title={`${p.reference} — ${p.description}${p.categorie ? ` (${p.categorie})` : ''}${estModeleADeclinaisons ? ` — ${p.nbVariantes} déclinaisons` : ''}`}
+                  title={`${p.reference} — ${designationProduit(p)}${p.categorie ? ` (${p.categorie})` : ''}${estModeleADeclinaisons ? ` — ${p.nbVariantes} déclinaisons` : ''}`}
                   className={cn(
                     'flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors',
                     highlightIndex === i + 1 ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
@@ -353,7 +353,7 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
                         distingue rien de ses voisines — c'est elle qui dit ce
                         qu'on vend, la référence ne fait que le coder. */}
                     <span className="block break-words text-xs text-muted-foreground">
-                      {p.description}
+                      {designationProduit(p)}
                       {p.categorie && <span className="text-muted-foreground/70"> · {p.categorie}</span>}
                     </span>
                   </span>

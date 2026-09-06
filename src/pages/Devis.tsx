@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, type OdooPayload } from '@/lib/odooSync';
 import { Button } from '@/components/ui/button';
@@ -101,7 +101,7 @@ export default function Devis() {
      caractère tapé dans n'importe quel champ du devis, alors que le dialogue
      CRM est le plus souvent fermé et la liste des kits repliée. */
   const produitsPourCrm = useMemo(
-    () => produits.map(p => ({ id: p.id, reference: p.reference, description: p.description })),
+    () => produits.map(p => ({ id: p.id, reference: p.reference, description: designationProduit(p) })),
     [produits],
   );
   const kitsDisponibles = useMemo(
@@ -1204,7 +1204,7 @@ export default function Devis() {
             if (dim.options.length > 0) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
-        return { ...l, produitId: p.id, description: p.description, prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: 0, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
+        return { ...l, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: 0, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
       // Initialise le fournisseur prioritaire pour cette ligne dans le comparatif
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
@@ -4212,7 +4212,7 @@ export default function Devis() {
             return {
               id: generateId(),
               produitId: s.produitId || undefined,
-              description: s.description || prod?.description || '',
+              description: s.description || (prod ? designationProduit(prod) : '') || '',
               quantite: s.quantite || 1,
               unite: s.unite || prod?.unite || 'U',
               prixUnitaireHT: s.prixUnitaireHT != null && s.prixUnitaireHT > 0 ? s.prixUnitaireHT : (prod?.prixHT ?? 0),

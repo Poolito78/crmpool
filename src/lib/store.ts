@@ -162,7 +162,18 @@ export interface VarianteDimension {
 export interface Produit {
   id: string;
   reference: string;
+  /** Désignation du MODÈLE, la même pour toutes ses déclinaisons (« IS KC1 »). */
   description: string;
+  /**
+   * Désignation de la DÉCLINAISON, telle qu'Odoo la vend
+   * (« KC1 800 600 C1 BRUT (MARCO POLO) »).
+   *
+   * `description` ne distingue pas les douze KC1 les unes des autres : elle
+   * vaut « IS KC1 » pour toutes. C'est cette ligne-ci qui dit ce qu'on vend,
+   * et c'est donc elle qu'il faut afficher et chercher quand elle existe.
+   * Absente sur les articles hors catalogue Odoo — d'où `designationProduit`.
+   */
+  descriptionVariante?: string;
   descriptionDetaillee?: string;
   prixAchat: number;
   coefficient: number;
@@ -641,6 +652,18 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
 }
 
 /** Même conversion, exposée pour la lecture à la demande du catalogue. */
+/**
+ * Ce qu'on montre et ce qu'on cherche : la désignation de la déclinaison
+ * quand Odoo en donne une, sinon celle du modèle.
+ *
+ * Un seul point de vérité — l'écran, la ligne de devis et le référentiel
+ * envoyé au rapprochement doivent nommer l'article de la même façon, faute
+ * de quoi on cherche « KC1 800 600 C1 BRUT » et on imprime « IS KC1 ».
+ */
+export function designationProduit(p: { description?: string; descriptionVariante?: string }): string {
+  return (p.descriptionVariante || p.description || '').trim();
+}
+
 export function dbToProduitPublic(r: any): Produit { return dbToProduit(r); }
 
 function dbToProduit(r: any): Produit {
@@ -648,6 +671,7 @@ function dbToProduit(r: any): Produit {
     id: r.id,
     reference: r.reference,
     description: r.description,
+    descriptionVariante: r.description_variante || undefined,
     descriptionDetaillee: r.description_detaillee || undefined,
     prixAchat: Number(r.prix_achat) || 0,
     coefficient: Number(r.coefficient) || 1,
@@ -731,6 +755,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
     ...(p.disponibleVente !== undefined ? { disponible_vente: p.disponibleVente } : {}),
     ...(p.achatsHistorique !== undefined ? { achats_historique: p.achatsHistorique && p.achatsHistorique.length > 0 ? p.achatsHistorique : null } : {}),
+    ...(p.descriptionVariante !== undefined ? { description_variante: p.descriptionVariante || null } : {}),
   };
 }
 

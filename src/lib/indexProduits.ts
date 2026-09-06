@@ -59,7 +59,9 @@ export function indexProduits(produits: Produit[]): IndexProduits {
     entrees[i] = {
       p,
       ref: (p.reference || '').toLowerCase(),
-      desc: (p.description || '').toLowerCase(),
+      // Les deux désignations sont cherchées : « IS KC1 » reste tapable, et
+      // « KC1 800 600 C1 BRUT (MARCO POLO) » le devient.
+      desc: `${p.description || ''} ${p.descriptionVariante || ''}`.toLowerCase(),
       cat: (p.categorie || '').toLowerCase(),
       ral: finitionDeReference(p.reference || ''),
     };
