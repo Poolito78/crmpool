@@ -5,7 +5,7 @@ import type { Produit } from '@/lib/store';
 import { chercherProduits, produitParId } from '@/lib/indexProduits';
 import TruncTooltip from '@/components/TruncTooltip';
 import {
-  buildFunnel, CATEGORY_LABELS,
+  buildFunnel, CATEGORY_LABELS, labelValeur,
   type SegmentCategory,
 } from '@/lib/variantFunnel';
 
@@ -248,7 +248,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
                           ? 'border-primary/40 bg-primary/10 text-primary hover:bg-primary/20'
                           : 'border-border bg-background text-muted-foreground cursor-default',
                       )}
-                    >{CATEGORY_LABELS[cat]} : {val}{chips[cat] ? ' ×' : ''}</button>
+                    >{CATEGORY_LABELS[cat]} : {labelValeur(cat, val)}{chips[cat] ? ' ×' : ''}</button>
                   ))}
                 </div>
               )}
@@ -263,7 +263,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
                       type="button"
                       onClick={() => setChips(c => ({ ...c, [pc.category]: o }))}
                       className="rounded border border-border bg-background px-1.5 py-0.5 text-[11px] hover:border-primary hover:bg-primary/10 hover:text-primary"
-                    >{o}</button>
+                    >{labelValeur(pc.category, o)}</button>
                   ))}
                 </div>
               ))}
@@ -285,7 +285,7 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
                           ? 'border-primary/40 bg-primary/10 text-primary'
                           : 'border-border bg-background',
                       )}
-                    >{o}</button>
+                    >{labelValeur(pc.category, o)}</button>
                   ))}
                 </div>
               ))}

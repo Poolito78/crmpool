@@ -28,6 +28,7 @@ export type SegmentCategory =
   | 'dos'
   | 'profil'
   | 'face'
+  | 'equipement'
   | 'marque'
   | 'ral'
   | 'autre';
@@ -41,6 +42,7 @@ export const FUNNEL_ORDER: SegmentCategory[] = [
   'dos',
   'profil',
   'face',
+  'equipement',
   'ral',
 ];
 
@@ -53,10 +55,12 @@ export const CATEGORY_LABELS: Record<SegmentCategory, string> = {
   dos: 'Dos',
   profil: 'Profil',
   face: 'Face',
+  equipement: 'Équipement',
   marque: 'Marque',
   ral: 'RAL',
   autre: 'Autre',
 };
+
 
 const RAL_DEFAULT = 'BRUT';
 /** Dos ouvert : le cas courant, jamais écrit — seul le fermé est marqué `F`. */
@@ -67,6 +71,47 @@ const FACE_DEFAULT = 'ST';
 const PROFIL_DEFAULT = 'BTR';
 /** Classe 2 par défaut. */
 const FILM_DEFAULT = 'C2';
+
+/**
+ * Équipement de pose de la signalisation TEMPORAIRE : `P` = support / pieds
+ * (le configurateur choisit le support incliné ou le TS29 selon la taille),
+ * `R` = kit rail. Les deux ne coexistent JAMAIS sur une référence (vérifié :
+ * 0 sur les 635 du catalogue qui en portent un), et le panneau nu — sans
+ * aucun des deux — est une troisième possibilité bien réelle : KD22 en 1000×300
+ * vaut 226,29 € nu, 274,01 € avec kit rail, 321,57 € avec support.
+ *
+ * D'où ce jeton pour « rien » : sans lui, les variantes nues n'auraient pas de
+ * valeur à opposer et resteraient inatteignables. Il ne sort jamais dans une
+ * référence — c'est l'article retenu qui la porte.
+ */
+const EQUIPEMENT_AUCUN = 'AUCUN';
+
+/** Kit rail retenu quand rien n'est précisé ; « sans rail » et « avec support »
+ *  se demandent. Sur une famille qui n'a pas de variante rail (l'ISOTEXTE n'a
+ *  que le nu et le support), le défaut ne s'applique pas et la question est
+ *  posée — la boucle des défauts saute ce qui viderait le lot. */
+const EQUIPEMENT_DEFAULT = 'R';
+
+/**
+ * Libellés des VALEURS, là où le jeton de référence ne se lit pas.
+ *
+ * On ne traduit que ce qui est illisible : « P » et « R » ne disent rien à un
+ * commercial, alors que 700, C2 ou BTR sont le vocabulaire de la maison et
+ * doivent rester tels quels — les remplacer rendrait la puce méconnaissable
+ * face à la référence affichée juste à côté.
+ */
+const VALUE_LABELS: Partial<Record<SegmentCategory, Record<string, string>>> = {
+  equipement: {
+    [EQUIPEMENT_AUCUN]: 'Sans rail',
+    P: 'Avec support',
+    R: 'Kit rail',
+  },
+};
+
+/** Libellé lisible d'une valeur d'attribut ; la valeur brute à défaut. */
+export function labelValeur(category: SegmentCategory, valeur: string): string {
+  return VALUE_LABELS[category]?.[valeur.toUpperCase()] ?? valeur;
+}
 
 /**
  * Gamme retenue quand rien n'est précisé : « Petite ».
@@ -137,7 +182,8 @@ function gammeStandard(cotes: number[]): string | undefined {
 /**
  * Attributs dont l'ABSENCE de segment vaut la valeur par défaut : dos ouvert,
  * face standard et bord tombé rebordé ne s'écrivent pas ; seuls le fermé (F),
- * l'occultant (OV) et le bord plié (BP) le sont.
+ * l'occultant (OV) et le bord plié (BP) le sont. L'équipement suit la même
+ * mécanique : l'absence de segment vaut EQUIPEMENT_AUCUN.
  *
  * Le RAL n'y figure pas : BRUT est toujours écrit. L'inventer sur un article
  * qui n'en porte pas (résine, consommable) serait faux.
@@ -146,6 +192,7 @@ const IMPLICITES: [SegmentCategory, string][] = [
   ['dos', DOS_DEFAULT],
   ['face', FACE_DEFAULT],
   ['profil', PROFIL_DEFAULT],
+  ['equipement', EQUIPEMENT_AUCUN],
 ];
 
 /**
@@ -160,6 +207,7 @@ const DEFAUTS: [SegmentCategory, string][] = [
   ['dos', DOS_DEFAULT],
   ['profil', PROFIL_DEFAULT],
   ['face', FACE_DEFAULT],
+  ['equipement', EQUIPEMENT_DEFAULT],
   ['ral', RAL_DEFAULT],
 ];
 
@@ -219,6 +267,7 @@ export function classifySegment(segmentRaw: string): SegmentCategory {
   // BTR = bord tombé rebordé, BP = bord plié (gamme « Bords Pliés »).
   if (s === 'BP' || /^BT[A-Z0-9]*$/.test(s)) return 'profil';
   if (s === 'ST' || s === 'OV') return 'face'; // Standard / Occultant
+  if (s === 'P' || s === 'R') return 'equipement'; // pieds/support ou kit rail
   if (s === 'IS') return 'marque'; // marqueur constant ISOSIGN
   if (s === RAL_DEFAULT || /^L[A-Z0-9]+$/.test(s)) return 'ral'; // BRUT, L1001, LCHAMP...
 
