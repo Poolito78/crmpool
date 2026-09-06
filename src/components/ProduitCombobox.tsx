@@ -10,7 +10,14 @@ import {
 } from '@/lib/variantFunnel';
 
 interface ProduitComboboxProps {
+  /** Catalogue COMPLET. C'est lui qu'on fouille dès qu'on tape : restreindre
+      ce tableau à une pré-sélection rendait la recherche manuelle aveugle
+      (taper « PLASTO » ne trouvait rien alors que le catalogue en a trois). */
   produits: Produit[];
+  /** Pré-sélection affichée à l'ouverture, liste vierge (candidats d'un
+      rapprochement, par ex.). Dès la première frappe, on cherche dans
+      `produits` — la pré-sélection ne borne jamais la recherche. */
+  suggestions?: Produit[];
   value: string;
   onSelect: (produitId: string) => void;
   autoFocus?: boolean;
@@ -27,7 +34,7 @@ interface ProduitComboboxProps {
  */
 const MAX_AFFICHE = 60;
 
-export default function ProduitCombobox({ produits, value, onSelect, autoFocus }: ProduitComboboxProps) {
+export default function ProduitCombobox({ produits, suggestions, value, onSelect, autoFocus }: ProduitComboboxProps) {
   const [open, setOpen] = useState(!!autoFocus);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
@@ -47,10 +54,18 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
   // La liste fermée ne cherche rien : un devis de trente lignes ne doit pas
   // balayer trente fois le catalogue à chaque rendu du formulaire.
   // En entonnoir non plus : la liste vient alors des variantes du modèle.
+  // Liste vierge : on montre la pré-sélection s'il y en a une, sinon le début
+  // du catalogue. Dès qu'on tape, c'est le catalogue entier qui répond.
+  const surSuggestions = !query.trim() && !!suggestions && suggestions.length > 0;
   const { resultats: filtered, total } = useMemo(
-    () => (open && !enEntonnoir ? chercherProduits(produits, query, MAX_AFFICHE)
-                                : { resultats: [] as Produit[], total: 0 }),
-    [produits, query, open, enEntonnoir],
+    () => {
+      if (!open || enEntonnoir) return { resultats: [] as Produit[], total: 0 };
+      if (surSuggestions) {
+        return { resultats: suggestions!.slice(0, MAX_AFFICHE), total: suggestions!.length };
+      }
+      return chercherProduits(produits, query, MAX_AFFICHE);
+    },
+    [produits, suggestions, surSuggestions, query, open, enEntonnoir],
   );
 
   /* Variantes du modèle ouvert. Le catalogue entier est en mémoire, donc pas
@@ -348,7 +363,13 @@ export default function ProduitCombobox({ produits, value, onSelect, autoFocus }
             )}
           </div>
 
-          {!enEntonnoir && total > liste.length && (
+          {!enEntonnoir && surSuggestions && (
+            <p className="border-t border-border px-2 py-1.5 text-center text-[11px] text-muted-foreground">
+              {total} proposition{total > 1 ? 's' : ''} — tapez pour chercher dans tout le catalogue
+            </p>
+          )}
+
+          {!enEntonnoir && !surSuggestions && total > liste.length && (
             <p className="border-t border-border px-2 py-1.5 text-center text-[11px] text-muted-foreground">
               {liste.length} sur {total.toLocaleString('fr-FR')} — précisez la recherche
             </p>

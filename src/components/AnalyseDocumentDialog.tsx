@@ -3682,7 +3682,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                       chiffre, composant par composant. */}
                                   {!sysRap && (
                                     <ProduitCombobox
-                                      produits={candidats.length ? candidats : produits}
+                                      produits={produits}
+                                      suggestions={candidats}
                                       value={retenu?.id ?? ''}
                                       onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
                                     />
@@ -4340,11 +4341,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                     {article ? (
                                       <div className="mt-1">
                                         <ProduitCombobox
-                                          produits={
-                                            candidatsPour(i).length
-                                              ? candidatsPour(i)
-                                              : produits
-                                          }
+                                          produits={produits}
+                                          suggestions={candidatsPour(i)}
                                           value={article.id}
                                           onSelect={(id) => {
                                             dfTouche.current = true;
@@ -4356,7 +4354,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                       <div className="mt-1 space-y-1">
                                         <p className="text-destructive">Aucun article du catalogue ne correspond.</p>
                                         <ProduitCombobox
-                                          produits={candidatsPour(i).length ? candidatsPour(i) : produits}
+                                          produits={produits}
+                                          suggestions={candidatsPour(i)}
                                           value=""
                                           onSelect={(id) => {
                                             dfTouche.current = true;
