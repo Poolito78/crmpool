@@ -306,7 +306,7 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
               ))}
             </div>
           )}
-          <div ref={listRef} className="max-h-64 overflow-y-auto p-1">
+          <div ref={listRef} className="max-h-72 overflow-y-auto p-1">
             {/* Première ligne : retour au catalogue en entonnoir, sinon ligne libre */}
             <button
               type="button"
@@ -347,8 +347,12 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
                       la largeur et la désignation tombait dans les points de
                       suspension — on choisissait un article sans le lire. */}
                   <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate font-medium">{p.reference}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
+                    <span className="block break-words font-medium">{p.reference}</span>
+                    {/* La désignation ne se tronque pas : « C DECOR SPECIFIQUE
+                        600 C1 BTR ST BRUT (MAGELLAN) » se lit en entier ou ne
+                        distingue rien de ses voisines — c'est elle qui dit ce
+                        qu'on vend, la référence ne fait que le coder. */}
+                    <span className="block break-words text-xs text-muted-foreground">
                       {p.description}
                       {p.categorie && <span className="text-muted-foreground/70"> · {p.categorie}</span>}
                     </span>
