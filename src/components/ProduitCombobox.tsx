@@ -222,7 +222,7 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
       </button>
 
       {open && (
-        <div className="absolute z-50 mt-1 min-w-full w-80 rounded-md border border-border bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-50 mt-1 min-w-full w-96 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover shadow-md animate-in fade-in-0 zoom-in-95">
           <div className="flex items-center border-b border-border px-2">
             <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
             <input
@@ -306,7 +306,7 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
               ))}
             </div>
           )}
-          <div ref={listRef} className="max-h-48 overflow-y-auto p-1">
+          <div ref={listRef} className="max-h-64 overflow-y-auto p-1">
             {/* Première ligne : retour au catalogue en entonnoir, sinon ligne libre */}
             <button
               type="button"
@@ -335,20 +335,26 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
                   type="button"
                   title={`${p.reference} — ${p.description}${p.categorie ? ` (${p.categorie})` : ''}${estModeleADeclinaisons ? ` — ${p.nbVariantes} déclinaisons` : ''}`}
                   className={cn(
-                    'flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors',
+                    'flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-sm cursor-pointer transition-colors',
                     highlightIndex === i + 1 ? 'bg-accent text-accent-foreground' : 'hover:bg-accent/50'
                   )}
                   onMouseEnter={() => setHighlightIndex(i + 1)}
                   onClick={() => activer(p)}
                 >
-                  <Check className={cn('h-3.5 w-3.5 shrink-0', value === p.id ? 'opacity-100' : 'opacity-0')} />
-                  <span className="truncate flex-1 text-left">
-                    <span className="font-medium">{p.reference}</span>
-                    <span className="text-muted-foreground"> - {p.description}</span>
-                    {p.categorie && <span className="text-xs text-muted-foreground/70 ml-1">({p.categorie})</span>}
+                  <Check className={cn('h-3.5 w-3.5 shrink-0 mt-0.5', value === p.id ? 'opacity-100' : 'opacity-0')} />
+                  {/* Désignation sur sa PROPRE ligne. Sur une seule, une
+                      référence Odoo (BSP.650.C2.BTR.ST.IS.L7003) mangeait toute
+                      la largeur et la désignation tombait dans les points de
+                      suspension — on choisissait un article sans le lire. */}
+                  <span className="min-w-0 flex-1 text-left">
+                    <span className="block truncate font-medium">{p.reference}</span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {p.description}
+                      {p.categorie && <span className="text-muted-foreground/70"> · {p.categorie}</span>}
+                    </span>
                   </span>
                   {estModeleADeclinaisons && (
-                    <span className="shrink-0 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                    <span className="shrink-0 mt-0.5 rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
                       {p.nbVariantes} décl.
                     </span>
                   )}
