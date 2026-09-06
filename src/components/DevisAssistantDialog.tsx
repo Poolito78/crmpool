@@ -186,8 +186,18 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
         content: clean,
         suggestedLignes: lignes ?? undefined,
       }]);
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: "⚠️ Erreur lors de la communication avec l'IA." }]);
+    } catch (e) {
+      /* DIRE CE QUI A ÉCHOUÉ. « Erreur lors de la communication avec l'IA »
+         ne distingue pas une clé absente d'un modèle retiré, d'un dépassement
+         de quota ou d'une simple coupure réseau — et sans le message, il n'y
+         a rien à chercher dans les journaux. */
+      const detail = (e as Error)?.message?.trim();
+      setMessages(prev => [...prev, {
+        role: 'assistant',
+        content: detail
+          ? `⚠️ Erreur lors de la communication avec l'IA — ${detail}`
+          : "⚠️ Erreur lors de la communication avec l'IA.",
+      }]);
     } finally {
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
