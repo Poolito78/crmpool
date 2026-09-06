@@ -22,6 +22,8 @@
 
 export type SegmentCategory =
   | 'dimension'
+  | 'largeur'
+  | 'hauteur'
   | 'film'
   | 'dos'
   | 'profil'
@@ -33,6 +35,8 @@ export type SegmentCategory =
 /** Ordre d'affichage de l'entonnoir, calqué sur le popup de variantes Odoo. */
 export const FUNNEL_ORDER: SegmentCategory[] = [
   'dimension',
+  'largeur',
+  'hauteur',
   'film',
   'dos',
   'profil',
@@ -43,6 +47,8 @@ export const FUNNEL_ORDER: SegmentCategory[] = [
 /** Libellés FR pour l'UI. */
 export const CATEGORY_LABELS: Record<SegmentCategory, string> = {
   dimension: 'Dimension',
+  largeur: 'Largeur',
+  hauteur: 'Hauteur',
   film: 'Film / Classe',
   dos: 'Dos',
   profil: 'Profil',
@@ -105,6 +111,19 @@ export function parseReference(reference: string): ParsedReference {
     raw,
     category: classifySegment(raw),
   }));
+
+  /* Deux cotes = un panonceau, coté largeur × hauteur dans cet ordre
+     (M9Z1LM#1PLACE.500.150 = 500 de large, 150 de haut). Une seule cote = la
+     taille du panneau, laissée en « dimension ». Au-delà de deux, on ne devine
+     pas : 15 références au catalogue, aux formats hétérogènes.
+     Sans cette distinction, `byCategory` ne gardait que le premier nombre et
+     deux variantes ne différant que par la hauteur étaient indiscernables. */
+  const cotes = segments.filter((s) => s.category === 'dimension');
+  if (cotes.length === 2) {
+    cotes[0].category = 'largeur';
+    cotes[1].category = 'hauteur';
+  }
+
   const byCategory: Partial<Record<SegmentCategory, string>> = {};
   for (const seg of segments) {
     // En cas de collision de catégorie sur un même segment (rare), le premier
@@ -187,10 +206,23 @@ export function buildFunnel({
     .split(/\s+/)
     .filter(Boolean);
 
+  /* Un nombre tapé n'a pas le même sens selon la famille : sur un panonceau
+     (deux cotes), le premier est la largeur et le second la hauteur ; sur un
+     panneau, c'est sa dimension. On le déduit des candidats plutôt que de
+     l'imposer, car `classifySegment` ne voit qu'un segment isolé. */
+  const estPanonceau = parsed.some((p) => p.byCategory.largeur);
+  const nombres: string[] = [];
   const typedByCategory: Partial<Record<SegmentCategory, string>> = {};
   for (const token of tokens) {
     const category = classifySegment(token);
+    if (category === 'dimension') { nombres.push(token); continue; }
     if (category !== 'autre') typedByCategory[category] = token;
+  }
+  if (estPanonceau) {
+    if (nombres[0]) typedByCategory.largeur = nombres[0];
+    if (nombres[1]) typedByCategory.hauteur = nombres[1];
+  } else if (nombres[0]) {
+    typedByCategory.dimension = nombres[0];
   }
 
   // Les chips explicites priment sur le texte tapé.
