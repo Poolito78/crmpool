@@ -59,19 +59,38 @@ export const CATEGORY_LABELS: Record<SegmentCategory, string> = {
 };
 
 const RAL_DEFAULT = 'BRUT';
-/** Dos ouvert : c'est le cas courant, et il ne porte aucun segment — seul le
- *  dos fermé est marqué (`F`). Voir DEFAUTS ci-dessous. */
+/** Dos ouvert : le cas courant, jamais écrit — seul le fermé est marqué `F`. */
 const DOS_DEFAULT = 'O';
+/** Face standard ; l'occultant `OV` n'apparaît que s'il est demandé. */
+const FACE_DEFAULT = 'ST';
+/** Bord tombé rebordé ; le bord plié `BP` n'apparaît que s'il est demandé. */
+const PROFIL_DEFAULT = 'BTR';
+
+/**
+ * Attributs dont l'ABSENCE de segment vaut la valeur par défaut : dos ouvert,
+ * face standard et bord tombé rebordé ne s'écrivent pas ; seuls le fermé (F),
+ * l'occultant (OV) et le bord plié (BP) le sont.
+ *
+ * Le RAL n'y figure pas : BRUT est toujours écrit. L'inventer sur un article
+ * qui n'en porte pas (résine, consommable) serait faux.
+ */
+const IMPLICITES: [SegmentCategory, string][] = [
+  ['dos', DOS_DEFAULT],
+  ['face', FACE_DEFAULT],
+  ['profil', PROFIL_DEFAULT],
+];
 
 /**
  * Valeurs retenues quand l'utilisateur ne précise rien.
  *
  * Ces attributs ne sont donc pas demandés, mais restent modifiables : ils
  * ressortent dans `defaultOptions` avec les valeurs réellement disponibles.
- * L'ordre suit celui de l'entonnoir (le dos avant le RAL).
+ * L'ordre suit celui de l'entonnoir.
  */
 const DEFAUTS: [SegmentCategory, string][] = [
   ['dos', DOS_DEFAULT],
+  ['profil', PROFIL_DEFAULT],
+  ['face', FACE_DEFAULT],
   ['ral', RAL_DEFAULT],
 ];
 
@@ -92,8 +111,9 @@ export function classifySegment(segmentRaw: string): SegmentCategory {
   if (/^C\d+V?$/.test(s) || s === '3430') return 'film'; // C1, C2, C1V, C2V, C3, 3430
   if (/^\d{3,4}$/.test(s)) return 'dimension'; // 500, 700, 1000, 1250, 1500
   if (s === 'O' || s === 'F') return 'dos'; // Ouvert / Fermé
-  if (/^BT[A-Z0-9]*$/.test(s)) return 'profil'; // BTR, et variantes de profil futures
-  if (s === 'ST' || s === 'OV') return 'face'; // Standard / Ovale (ou équivalent fiche)
+  // BTR = bord tombé rebordé, BP = bord plié (gamme « Bords Pliés »).
+  if (s === 'BP' || /^BT[A-Z0-9]*$/.test(s)) return 'profil';
+  if (s === 'ST' || s === 'OV') return 'face'; // Standard / Occultant
   if (s === 'IS') return 'marque'; // marqueur constant ISOSIGN
   if (s === RAL_DEFAULT || /^L[A-Z0-9]+$/.test(s)) return 'ral'; // BRUT, L1001, LCHAMP...
 
@@ -186,18 +206,26 @@ export function buildFunnel({
 }: FunnelInput): FunnelResult {
   const brut = candidates.map((c) => parseReference(c.reference));
 
-  /* Le dos ouvert ne porte aucun segment : seul le fermé est marqué `F`.
-     Sans le matérialiser, « ouvert » ne serait jamais proposable et un modèle
-     à deux dos resterait à deux candidats indiscernables. On ne le fait que si
-     le modèle déclare effectivement un dos, pour ne pas afficher cet attribut
-     sur des articles où il n'a aucun sens (résines, films, consommables). */
-  const dosDeclare = brut.some((p) => p.byCategory.dos);
-  const parsed = dosDeclare
-    ? brut.map((p) =>
-        p.byCategory.dos
-          ? p
-          : { ...p, byCategory: { ...p.byCategory, dos: DOS_DEFAULT } }
-      )
+  /* Les attributs implicites (dos ouvert, face standard, bord tombé rebordé) ne
+     portent aucun segment : seuls F, OV et BP sont écrits. Sans les
+     matérialiser, la valeur courante ne serait jamais proposable, et surtout
+     appliquer le défaut EXCLURAIT les variantes qui ne l'écrivent pas — c'est-
+     à-dire la majorité.
+
+     On ne le fait que sur les familles qui déclarent l'attribut au moins une
+     fois : inutile d'inventer un dos ou un profil sur une résine ou un
+     consommable, où la notion n'existe pas. */
+  const declares = IMPLICITES.filter(([categorie]) =>
+    brut.some((p) => p.byCategory[categorie])
+  );
+  const parsed = declares.length
+    ? brut.map((p) => {
+        const manquants = declares.filter(([categorie]) => !p.byCategory[categorie]);
+        if (!manquants.length) return p;
+        const byCategory = { ...p.byCategory };
+        for (const [categorie, valeur] of manquants) byCategory[categorie] = valeur;
+        return { ...p, byCategory };
+      })
     : brut;
 
   const tokens = query
