@@ -65,6 +65,25 @@ const DOS_DEFAULT = 'O';
 const FACE_DEFAULT = 'ST';
 /** Bord tombé rebordé ; le bord plié `BP` n'apparaît que s'il est demandé. */
 const PROFIL_DEFAULT = 'BTR';
+/** Classe 2 par défaut. */
+const FILM_DEFAULT = 'C2';
+
+/**
+ * Gamme retenue quand rien n'est précisé : « Petite ».
+ *
+ * Elle ne se traduit pas par la même cote partout :
+ * - Panneaux : c'est un RANG dans l'échelle de tailles du modèle, car la gamme
+ *   dépend de la forme — Petite vaut 700 en triangle, 650 en cercle, 500 en
+ *   carré, 600 en octogone. Échelles vérifiées sur le catalogue (IS AB3A
+ *   500/700/1000/1250/1500, IS B1 450/650/850/1050/1250, IS C20A
+ *   350/500/700/900/1050, IS AB4 400/600/800).
+ * - Panonceaux : leur largeur reprend celle du panneau qu'ils accompagnent,
+ *   c'est donc une cote absolue (Petite = 700).
+ *
+ * Si la valeur n'existe pas pour le modèle, aucun défaut n'est appliqué.
+ */
+const GAMME_RANG = 1; // 0 Miniature, 1 Petite, 2 Normale, 3 Grande
+const GAMME_LARGEUR = '700';
 
 /**
  * Attributs dont l'ABSENCE de segment vaut la valeur par défaut : dos ouvert,
@@ -88,11 +107,49 @@ const IMPLICITES: [SegmentCategory, string][] = [
  * L'ordre suit celui de l'entonnoir.
  */
 const DEFAUTS: [SegmentCategory, string][] = [
+  ['film', FILM_DEFAULT],
   ['dos', DOS_DEFAULT],
   ['profil', PROFIL_DEFAULT],
   ['face', FACE_DEFAULT],
   ['ral', RAL_DEFAULT],
 ];
+
+/**
+ * Défauts complets pour un modèle donné, dans l'ordre de l'entonnoir.
+ *
+ * La gamme dépend du modèle (voir GAMME_RANG), elle est donc calculée sur ses
+ * variantes plutôt que fixée : l'échelle est une propriété du modèle, pas du
+ * sous-ensemble déjà filtré.
+ */
+function defautsPour(toutes: ParsedReference[]): [SegmentCategory, string][] {
+  const liste: [SegmentCategory, string][] = [];
+
+  const echelle = Array.from(
+    new Set(toutes.map((p) => p.byCategory.dimension).filter(Boolean) as string[])
+  )
+    .map(Number)
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => a - b);
+  if (echelle.length > GAMME_RANG) {
+    liste.push(['dimension', String(echelle[GAMME_RANG])]);
+  }
+  liste.push(['largeur', GAMME_LARGEUR]);
+
+  return [...liste, ...DEFAUTS];
+}
+
+/**
+ * Tri des valeurs proposées. Les cotes sont numériques : un tri alphabétique
+ * placerait 1050 avant 450, ce qui rend la rangée de tailles illisible.
+ */
+function trierValeurs(valeurs: string[]): string[] {
+  return [...valeurs].sort((a, b) => {
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+    return a.localeCompare(b, 'fr');
+  });
+}
 
 /**
  * Classe un segment brut de référence (ex: "C2", "700", "ST", "L7002", "BRUT").
@@ -272,34 +329,36 @@ export function buildFunnel({
      les autres valeurs et on ne pourrait plus en changer. */
   const defaultsApplied: SegmentCategory[] = [];
   const defaultOptions: PendingCategory[] = [];
-  for (const [category, valeur] of DEFAUTS) {
+  const defautsAppliques = new Map<SegmentCategory, string>();
+  for (const [category, valeur] of defautsPour(parsed)) {
     if (constraints[category]) continue;
     const restreint = pool.filter(
       (p) => (p.byCategory[category] ?? '').toUpperCase() === valeur
     );
     if (restreint.length === 0) continue; // ce défaut n'existe pas ici : on ne force rien
-    const options = Array.from(
-      new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[])
-    ).sort();
+    const options = trierValeurs(
+      Array.from(new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[]))
+    );
     if (options.length > 1) {
       defaultOptions.push({ category, label: CATEGORY_LABELS[category], options });
     }
     pool = restreint;
     defaultsApplied.push(category);
+    defautsAppliques.set(category, valeur);
   }
 
   const resolved: Partial<Record<SegmentCategory, string>> = { ...constraints };
   for (const category of defaultsApplied) {
-    resolved[category] = DEFAUTS.find(([c]) => c === category)![1];
+    resolved[category] = defautsAppliques.get(category)!;
   }
 
   const pending: PendingCategory[] = [];
   for (const category of FUNNEL_ORDER) {
     if (constraints[category]) continue;
     if (defaultsApplied.includes(category)) continue; // résolu par défaut, modifiable via chip
-    const values = Array.from(
-      new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[])
-    ).sort();
+    const values = trierValeurs(
+      Array.from(new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[]))
+    );
     if (values.length > 1) {
       pending.push({ category, label: CATEGORY_LABELS[category], options: values });
     }
