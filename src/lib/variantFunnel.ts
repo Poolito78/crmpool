@@ -86,6 +86,55 @@ const GAMME_RANG = 1; // 0 Miniature, 1 Petite, 2 Normale, 3 Grande
 const GAMME_LARGEUR = '700';
 
 /**
+ * Échelles de tailles standard, par forme.
+ *
+ * On ne peut pas prendre le rang dans les tailles du modèle lui-même, pour deux
+ * raisons vérifiées sur le catalogue :
+ * - un panneau peut porter des tailles SPÉCIALES hors échelle (un carré en 400) ;
+ *   elles décaleraient le rang ;
+ * - les familles chantier sont tronquées par le bas (IS BK1 650/850/1050/1250,
+ *   IS AK17 700/1000/1250) : leur première taille EST déjà la gamme Petite.
+ *
+ * On rattache donc le modèle à l'échelle qui couvre le mieux ses tailles, puis
+ * on lit la gamme dans cette échelle. Relevé : 350/500/700/900/1050 est partagée
+ * par 106 modèles (carrés C, CE, B50…), 450/650/850/1050(/1250) par 75 (cercles
+ * B), 500/700/1000(/1250/1500) par 35 (triangles A, AB), 400/600/800(/1000) par
+ * les octogones AB4.
+ */
+const ECHELLES_STANDARD: number[][] = [
+  [350, 500, 700, 900, 1050, 1200], // carré
+  [450, 650, 850, 1050, 1250],      // cercle
+  [500, 700, 1000, 1250, 1500],     // triangle
+  [400, 600, 800, 1000],            // octogone
+];
+
+/**
+ * Taille correspondant à la gamme par défaut pour ce jeu de cotes.
+ *
+ * Rien n'est retenu si le rattachement est douteux (deux échelles à égalité, ou
+ * une seule cote en commun) ou si le modèle n'offre pas cette taille : mieux
+ * vaut laisser choisir que poser une cote fausse sur un devis.
+ */
+function gammeStandard(cotes: number[]): string | undefined {
+  let meilleure: number[] | null = null;
+  let meilleurScore = 0;
+  let exaequo = false;
+  for (const echelle of ECHELLES_STANDARD) {
+    const score = cotes.filter((c) => echelle.includes(c)).length;
+    if (score > meilleurScore) {
+      meilleurScore = score;
+      meilleure = echelle;
+      exaequo = false;
+    } else if (score === meilleurScore && score > 0) {
+      exaequo = true;
+    }
+  }
+  if (!meilleure || meilleurScore < 2 || exaequo) return undefined;
+  const petite = meilleure[GAMME_RANG];
+  return petite != null && cotes.includes(petite) ? String(petite) : undefined;
+}
+
+/**
  * Attributs dont l'ABSENCE de segment vaut la valeur par défaut : dos ouvert,
  * face standard et bord tombé rebordé ne s'écrivent pas ; seuls le fermé (F),
  * l'occultant (OV) et le bord plié (BP) le sont.
@@ -124,15 +173,14 @@ const DEFAUTS: [SegmentCategory, string][] = [
 function defautsPour(toutes: ParsedReference[]): [SegmentCategory, string][] {
   const liste: [SegmentCategory, string][] = [];
 
-  const echelle = Array.from(
+  const cotes = Array.from(
     new Set(toutes.map((p) => p.byCategory.dimension).filter(Boolean) as string[])
   )
     .map(Number)
     .filter((n) => Number.isFinite(n))
     .sort((a, b) => a - b);
-  if (echelle.length > GAMME_RANG) {
-    liste.push(['dimension', String(echelle[GAMME_RANG])]);
-  }
+  const gamme = gammeStandard(cotes);
+  if (gamme) liste.push(['dimension', gamme]);
   liste.push(['largeur', GAMME_LARGEUR]);
 
   return [...liste, ...DEFAUTS];
