@@ -365,6 +365,38 @@ export interface FunnelResult {
  * parmi les candidats restants, elle est retenue par défaut (sans pour
  * autant empêcher l'utilisateur de choisir un RAL via chip ensuite).
  */
+/**
+ * Parmi plusieurs variantes d'une même famille, celles que les règles métier
+ * retiennent quand la demande ne tranche pas — dans l'ordre d'entrée.
+ *
+ * ⚠️ **UNE LISTE DE PROPOSITIONS N'EST PAS CLASSÉE PAR CE QU'ON VEND.** Odoo
+ * rend ses résultats dans son ordre à lui : sur « panneau AK3 » il renvoie le
+ * AK3.1000 avant le AK3.700, et retenir le premier posait un 1000 sur le devis
+ * — 50,02 € au lieu de 39,41 € — alors que la règle est claire : à défaut de
+ * précision, gamme **Petite**. C'est le même défaut que l'entonnoir de
+ * variantes applique déjà quand on choisit à la main ; il n'y a aucune raison
+ * qu'une reprise d'office décide autrement.
+ *
+ * `demande` est le texte du client : ce qu'il précise l'emporte sur le
+ * défaut — « AK3 1000 » garde le 1000.
+ *
+ * ⚠️ **NE FILTRE JAMAIS JUSQU'AU VIDE.** Quand la famille ne se prête pas à
+ * ces règles (une résine, un consommable), quand les cotes ne se rattachent à
+ * aucune échelle standard, ou quand la demande contredit tous les candidats,
+ * la liste d'entrée est rendue telle quelle : mieux vaut la proposition
+ * d'Odoo que pas de proposition du tout — une ligne sans article part au
+ * devis sans prix.
+ */
+export function variantesParDefaut(
+  candidates: CandidateProduit[],
+  demande = '',
+): string[] {
+  const toutes = candidates.map((c) => c.reference);
+  if (candidates.length < 2) return toutes;
+  const { matches } = buildFunnel({ candidates, query: demande });
+  return matches.length ? matches : toutes;
+}
+
 export function buildFunnel({
   candidates,
   query,

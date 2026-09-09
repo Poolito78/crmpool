@@ -29,6 +29,7 @@ import {
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
+import { variantesParDefaut } from '@/lib/variantFunnel';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
@@ -2157,7 +2158,19 @@ const [contratOdoo, setContratOdoo] = useState<
           ? [exacte]
           : (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []).filter(
               t => memeFamille(texteDemande(l, i), `${t.reference} ${t.designation || ''}`));
-        if (props.length) { n[i] = props[0]; change = true; }
+        if (!props.length) return;
+        /* ⚠️ L'ORDRE D'ODOO N'EST PAS L'ORDRE DE CE QU'ON VEND. Sur
+           « panneau AK3 » il rend le AK3.1000 avant le AK3.700 : retenir le
+           premier posait un 1000 à 50,02 € là où la règle dit gamme Petite,
+           soit le 700 à 39,41 €. On applique donc les mêmes défauts métier
+           qu'à la main (voir `variantesParDefaut`), en gardant l'ordre de
+           pertinence d'Odoo à l'intérieur de ce qui reste. */
+        const gardees = new Set(variantesParDefaut(
+          props.map(t => ({ reference: t.reference, description: t.designation })),
+          texteDemande(l, i),
+        ));
+        n[i] = props.find(t => gardees.has(t.reference)) ?? props[0];
+        change = true;
       });
       return change ? n : prev;
     });
