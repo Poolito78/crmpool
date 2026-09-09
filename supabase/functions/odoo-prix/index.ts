@@ -1593,8 +1593,24 @@ serve(async (req) => {
       if (await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id)) {
         niveauApplique = niveauImpose;
       }
+    } else if (!cadre.actif && niveauDefaut) {
+      /* FILET, ET RIEN QUE FILET.
+       *
+       * ⚠️ La grille n'est PAS chargée ici pour tarifer : la liste de prix
+       * fait foi (voir le chiffrage plus bas, « la liste d'abord »). Elle est
+       * chargée parce qu'un article que la liste ne sait pas tarifer serait
+       * autrement **retiré des propositions** — le garde-fou « sous le coût »
+       * l'écarte, les fiches Odoo valant 1 €. Sans elle, la demande MGD/PANTIN
+       * ne proposait plus AUCUN panneau : ni KC1, ni EPI, ni FP, ni point de
+       * rassemblement. Une ligne sans candidat est pire qu'un prix à vérifier.
+       */
+      if (await cadre.chargerNiveau(niveauDefaut, porteur.id, partenaire.id)) {
+        niveauApplique = niveauDefaut;
+        console.log(`[contrat-cadre] aucun contrat rattaché : grille `
+          + `${niveauDefaut} chargée en filet (la liste de prix reste prioritaire)`);
+      }
     }
-    /* ⚠️ **AUCUN REPLI AUTOMATIQUE SUR UNE GRILLE R1-R4.**
+    /* ⚠️ **UNE GRILLE PAR DÉFAUT NE TARIFE PLUS D'OFFICE.**
      *
      * Il en existait un : faute de contrat rattaché, la grille du niveau
      * affiché tarifait d'office. L'intention était bonne — éviter un prix
@@ -1713,22 +1729,23 @@ serve(async (req) => {
     const prix: Record<string, unknown> = {};
     for (const [ref, a] of parReference) {
       const qte = quantites.get(ref) || 1;
-      let contratPrix: number | null = null;
+      /* ⚠️ **LA LISTE DE PRIX D'ABORD, LA GRILLE EN REPLI** — même règle
+         qu'au chiffrage des recherches, plus bas, et pour la même raison :
+         c'est de la liste de prix qu'Odoo se sert pour émettre le devis. */
+      let pListe: number | null = null;
+      try {
+        const v = await tarif.prix(contratId, a, qte, 0, ref);
+        if (v !== null) pListe = Math.round(v * 100) / 100;
+      } catch {
+        // article hors barème : on n'invente pas de prix
+      }
       /* Prix négocié au contrat-cadre : c'est le montant réellement
-         facturé, il n'y a rien à recalculer ni à comparer au coût. */
-      const auCadre = cadre.prix(ref);
-      /* Au MILLIÈME : la grille cote 36,5105 et le devis Odoo affiche 36,511.
+         facturé, il n'y a rien à recalculer ni à comparer au coût.
+         Au MILLIÈME : la grille cote 36,5105 et le devis Odoo affiche 36,511.
          Arrondir au centime ferait dériver le total sur les grosses
          quantités et ne collerait plus à la pièce de référence. */
-      if (auCadre !== null) contratPrix = Math.round(auCadre * 1000) / 1000;
-      else {
-        try {
-          const v = await tarif.prix(contratId, a, qte, 0, ref);
-          if (v !== null) contratPrix = Math.round(v * 100) / 100;
-        } catch {
-          // article hors barème : on n'invente pas de prix
-        }
-      }
+      const auCadre = cadre.prix(ref);
+      const pCadre = auCadre !== null ? Math.round(auCadre * 1000) / 1000 : null;
       const coutOdoo = a.standard_price || 0;
       const coutLocal = coutsDirects.get(ref) || 0;
       const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
@@ -1739,17 +1756,24 @@ serve(async (req) => {
          RÈGLE peut très bien avoir matché et donner quand même ce résultat
          absurde — ce n'est pas réservé au cas « hors barème ». On le
          traite alors comme hors barème plutôt que de l'afficher tel quel. */
+      /* La liste ne fait foi que si elle rend un prix TENABLE ; sinon la
+         grille reprend la main plutôt que de laisser la ligne sans prix. */
+      const listeTenable = pListe !== null && pListe > 0
+        && !(cout > 0 && pListe < cout);
+      let contratPrix: number | null = listeTenable ? pListe : pCadre;
+
       const prixEffectif = contratPrix !== null ? contratPrix : a.lst_price;
       /* Le garde-fou « sous le coût » vise les prix reconstruits depuis une
          fiche à 1 € ; un tarif négocié au contrat-cadre est un vrai prix de
          vente, on ne le remet pas en cause même s'il passe sous un coût de
-         revient qui, lui, est souvent absent ou faux dans Odoo. */
-      if (auCadre === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
+         revient qui, lui, est souvent absent ou faux dans Odoo. Il ne joue
+         donc que si PLUS RIEN ne tarife l'article. */
+      if (contratPrix === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
         contratPrix = null;
       }
       prix[ref] = {
         designation: a.name,
-        source: auCadre !== null ? "contrat" : (contratPrix !== null ? "liste" : "aucun"),
+        source: listeTenable ? "liste" : (pCadre !== null ? "contrat" : "aucun"),
         gabarit: cadre.gabarit(ref),
         contrat: contratPrix,
         fiche: a.lst_price,
@@ -2451,16 +2475,27 @@ serve(async (req) => {
 
 
       trouvailles[q] = (await Promise.all(retenus.map(async (x, i) => {
-        let p: number | null = null;
+        /* ⚠️ **LA LISTE DE PRIX D'ABORD, LA GRILLE EN REPLI.**
+         *
+         * L'ordre était l'inverse, et il faisait annoncer des prix qu'aucun
+         * devis ISOSIGN ne porte : sur AF036911 (MGD, liste
+         * « 30/70/72/… »), la grille R4 cotait AK3.700.C1.BTR.R.IS.BRUT à
+         * 39,41 € quand le devis émis le facture **37,475 €**. Odoo se sert
+         * de la liste de prix ; MonCRM doit dire la même chose que lui.
+         *
+         * La grille garde deux rôles, et seulement deux : elle tarife quand
+         * un contrat cadre est réellement rattaché (`cadre.actif`, cf.
+         * AF035681 REFLEX) ou quand un niveau est imposé au sélecteur — et
+         * elle sert de repli quand la liste ne rend rien d'utilisable, ce qui
+         * évite que l'article soit purement et simplement retiré plus bas. */
+        let pListe: number | null = null;
+        try {
+          const v = await tarif.prix(contratId, arts[i], qte, 0, x.default_code || "");
+          if (v !== null) pListe = Math.round(v * 100) / 100;
+        } catch { /* article hors barème : on n'invente pas de prix */ }
         const auCadre = cadre.prix(x.default_code || "");
         // Au millième, comme Odoo (cf. commentaire plus haut).
-        if (auCadre !== null) p = Math.round(auCadre * 1000) / 1000;
-        else {
-          try {
-            const v = await tarif.prix(contratId, arts[i], qte, 0, x.default_code || "");
-            if (v !== null) p = Math.round(v * 100) / 100;
-          } catch { /* article hors barème : on n'invente pas de prix */ }
-        }
+        const pCadre = auCadre !== null ? Math.round(auCadre * 1000) / 1000 : null;
         const coutOdoo = x.standard_price || 0;
         const coutLocal = coutsBase.get(x.default_code || "") || 0;
         const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
@@ -2473,10 +2508,22 @@ serve(async (req) => {
            « hors barème » ou un prix à 0 €. Sans coût connu nulle part ET
            un prix non nul, on ne peut rien comparer : l'article reste
            affiché. */
+        /* La liste ne fait foi que si elle rend un prix TENABLE. Nulle, à
+           zéro, ou sous le coût de revient : c'est une reconstruction depuis
+           une fiche cassée, pas un tarif — la grille reprend la main. */
+        const listeTenable = pListe !== null && pListe > 0
+          && !(cout > 0 && pListe < cout);
+        const p = listeTenable ? pListe : pCadre;
+
         const prixEffectif = p !== null ? p : x.lst_price;
-        /* Un tarif venu du contrat-cadre est un prix négocié : il échappe au
-           garde-fou « sous le coût », prévu pour les prix reconstruits. */
-        if (auCadre === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
+        /* ⚠️ **NE RETIRER L'ARTICLE QUE SI PLUS RIEN NE LE TARIFE.**
+           Le garde-fou visait les prix reconstruits depuis une fiche à 1 € ;
+           il ne doit pas emporter un article que la grille sait coter. Le
+           laisser s'appliquer dès que la liste échouait a fait disparaître
+           TOUS les panneaux de la demande MGD/PANTIN — KC1, EPI, FP, point
+           de rassemblement — et une ligne sans candidat ne se rattrape pas :
+           elle part au devis vide. */
+        if (p === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
           return null;
         }
         return {
@@ -2501,7 +2548,7 @@ serve(async (req) => {
           /* D'où vient le prix : la grille du client, ou un calcul de liste
              de prix. L'écran doit pouvoir le dire — un prix reconstruit n'a
              pas la même valeur qu'un prix négocié. */
-          source: auCadre !== null ? "contrat" : (p !== null ? "liste" : "aucun"),
+          source: listeTenable ? "liste" : (pCadre !== null ? "contrat" : "aucun"),
           gabarit: cadre.gabarit(x.default_code || ""),
           /* Part des mots de la demande que cet article porte réellement.
              C'est ce qui permet à l'appli de retenir le premier d'office

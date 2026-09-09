@@ -3242,9 +3242,10 @@ const [contratOdoo, setContratOdoo] = useState<
                               contratOdoo.niveauParDefaut && contratOdoo.cadre ? (
                                 <span className="text-warning">
                                   <AlertTriangle className="inline w-3 h-3 mr-1" />
-                                  Aucun contrat rattaché à ce client : grille{' '}
-                                  <strong>{contratOdoo.niveauApplique}</strong> appliquée
-                                  par défaut — <strong>{contratOdoo.cadre}</strong>
+                                  Aucun contrat rattaché à ce client : les prix viennent
+                                  de la liste de prix ; la grille{' '}
+                                  <strong>{contratOdoo.niveauApplique}</strong> ne sert que
+                                  de filet — <strong>{contratOdoo.cadre}</strong>
                                 </span>
                               ) : (
                                 <span className="text-warning">
