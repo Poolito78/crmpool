@@ -3472,6 +3472,20 @@ const [contratOdoo, setContratOdoo] = useState<
                                 autre : le contrat CCI10019 a lui-même été forcé
                                 sur le devis AF035816. */}
                             <div className="flex items-center gap-2 pb-1.5 text-[11px]">
+                              {/* ⚠️ **LE SABLIER SE MET LÀ OÙ L'ON AGIT.** Il existait
+                                  déjà sur « Articles demandés », mais cette section est
+                                  plus BAS que les sélecteurs : on changeait la classe,
+                                  on attendait devant un écran immobile, et rien ne
+                                  disait qu'Odoo était reparti chercher. Changer gamme,
+                                  classe ou niveau relance toute la tarification — c'est
+                                  ici que l'attente commence, c'est ici qu'elle doit se
+                                  voir. */}
+                              {tarificationEnCours && (
+                                <span className="inline-flex items-center gap-1 text-primary font-medium">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Mise à jour des prix…
+                                </span>
+                              )}
                               <span className="text-muted-foreground">grille ISOSIGN 2026, tarif</span>
                               {/* Le même sélecteur que Gamme et Classe, et pour
                                   une raison de fond : un <select> natif ouvre une
