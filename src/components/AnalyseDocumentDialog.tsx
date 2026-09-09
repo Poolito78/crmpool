@@ -2165,9 +2165,18 @@ const [contratOdoo, setContratOdoo] = useState<
            soit le 700 à 39,41 €. On applique donc les mêmes défauts métier
            qu'à la main (voir `variantesParDefaut`), en gardant l'ordre de
            pertinence d'Odoo à l'intérieur de ce qui reste. */
+        /* ⚠️ **LE TEXTE ENRICHI, PAS LA DEMANDE BRUTE.** La demande du client
+           ne dit ni la gamme ni la classe — « panneau KC1 chantier interdit au
+           public » n'en souffle mot — et les défauts métier comblaient alors
+           ce silence par leurs propres valeurs : classe 2, alors que l'écran
+           affiche Classe 1 et que le devis Odoo porte du C1. La proposition
+           juste, KC1.800.600.C1.BTR.R.IS.BRUT, était écartée au profit d'une
+           C2. `texteRechercheOdoo` porte la gamme et la classe choisies à
+           l'écran — c'est la même chaîne qui a servi à interroger Odoo, donc
+           la seule qui puisse en trier la réponse sans la contredire. */
         const gardees = new Set(variantesParDefaut(
           props.map(t => ({ reference: t.reference, description: t.designation })),
-          texteDemande(l, i),
+          texteRechercheOdoo(l, i),
         ));
         n[i] = props.find(t => gardees.has(t.reference)) ?? props[0];
         change = true;

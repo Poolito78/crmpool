@@ -138,6 +138,25 @@ describe('reprise d’office d’une proposition Odoo', () => {
     expect(gardees).not.toContain('AK3.700.C1.BTR.R.IS.BRUT');
   });
 
+  /* ⚠️ LE DÉFAUT NE DOIT PAS COMBLER UN SILENCE QUE L'ÉCRAN A DÉJÀ ROMPU.
+     « panneau KC1 chantier interdit au public » ne dit pas la classe ; le
+     défaut métier posait alors C2 et écartait KC1.800.600.C1.BTR.R.IS.BRUT,
+     l'article que le devis AF036911 facture 48,185 €. L'appelant passe donc
+     le texte ENRICHI des sélecteurs Gamme/Classe, où la classe est écrite. */
+  it('laisse la classe de l’écran l’emporter sur le défaut C2', () => {
+    const KC1 = [
+      { reference: 'KC1.800.600.C1.BTR.R.IS.BRUT', description: 'IS KC1' },
+      { reference: 'KC1.800.600.C2.BTR.R.IS.BRUT', description: 'IS KC1' },
+      { reference: 'KC1.1000.750.C1.BTR.R.IS.BRUT', description: 'IS KC1' },
+    ];
+    // Sans la classe, le défaut C2 tranche — et se trompe.
+    expect(variantesParDefaut(KC1, 'panneau KC1 chantier interdit au public'))
+      .toEqual(['KC1.800.600.C2.BTR.R.IS.BRUT']);
+    // Avec le texte enrichi, la C1 demandée l'emporte.
+    expect(variantesParDefaut(KC1, 'panneau KC1 chantier interdit au public 800 C1'))
+      .toContain('KC1.800.600.C1.BTR.R.IS.BRUT');
+  });
+
   /* ⚠️ Une liste vide vaut « aucune proposition », donc une ligne au devis
      SANS PRIX. On préfère toujours rendre ce qu'Odoo a proposé. */
   it('ne filtre jamais jusqu’au vide', () => {
