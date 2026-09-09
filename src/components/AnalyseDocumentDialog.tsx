@@ -2201,14 +2201,27 @@ const [contratOdoo, setContratOdoo] = useState<
        Il fallait relancer l'analyse entière pour que le choix soit pris en
        compte — autant dire que le sélecteur ne servait à rien.
 
-       Ce sont deux valeurs simples, pas des fonctions : les ajouter ne peut
+       TOUT CE QUI COMPOSE LA QUESTION DOIT FIGURER ICI. `texteRechercheOdoo`
+       est bâti sur gamme, classe, libellé corrigé à la main et réglages
+       d'agglomération ; quatre d'entre eux manquaient, et chacun produisait
+       le même silence.
+
+       ⚠️ `libelleManuel` est le plus coûteux des quatre : **corriger le
+       libellé d'une ligne est précisément la façon de rattraper un mauvais
+       rapprochement**, et c'était sans effet — on réécrivait la demande, et
+       Odoo continuait de répondre à l'ancienne. Le délai de grâce de 500 ms
+       existe pour ce cas : on attend que la frappe s'arrête.
+
+       Le NIVEAU de tarif, lui, était déjà là (`niveauForce`).
+
+       Ce sont des valeurs simples, pas des fonctions : les ajouter ne peut
        pas boucler. Et si rien n'a bougé pour Odoo, la clé d'appel
        (`cleAppelOdoo`) arrête la demande avant le réseau. */
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce,
-      gammePanneau, classePanneau,
+      gammePanneau, classePanneau, libelleManuel, nomAgglo, hcAgglo, mentionAgglo,
       systemesDetectes]);
 
   /**
