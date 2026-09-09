@@ -81,3 +81,31 @@ describe('compterBrides', () => {
     expect(compterBrides([{ texte: 'A13A.700', quantite: 0 }]).brides).toBe(0);
   });
 });
+
+describe('la classe de rétroréflexion n’est pas un code de panneau', () => {
+  /* ⚠️ Références réelles du devis Odoo AF036911. Une référence porte sa
+     classe en segment — `AK3.700.C1.BTR.R.IS.BRUT` — et le motif « C + chiffres »
+     y trouvait `C1` : AK3, KC1, MSP et POINT DE RASSEMBLEMENT ressortaient tous
+     en famille « CE », avec une cote prise au hasard dans le reste de la
+     référence. Le total ne voulait rien dire, et rien ne le signalait. */
+  it('n’invente plus une famille C sur des références classées C1', () => {
+    const r = compterBrides([
+      { texte: 'AK3.700.C1.BTR.R.IS.BRUT IS AK3', quantite: 1 },
+      { texte: 'KC1.800.600.C1.BTR.R.IS.BRUT IS KC1', quantite: 7 },
+      { texte: 'POINTDERASSEMBLEMENT.500.C1.BTR.IS.BRUT IS POINT DE RASSEMBLEMENT', quantite: 2 },
+      { texte: 'TRIFLASHAK5.700.C1.BTR.R.IS.BRUT IS AK5 3 FEUX LEDS', quantite: 3 },
+    ]);
+    expect(r.lignes).toEqual([]);
+    expect(r.aVerifier).toEqual([]);
+    expect(r.brides).toBe(0);
+  });
+
+  /* Le garde-fou ne doit pas emporter les vrais panneaux de la série C, qui
+     portent au moins deux chiffres. */
+  it('reconnaît toujours les vrais panneaux de la série C', () => {
+    const r = compterBrides([{ texte: 'C18.500.C2.BTR.IS.BRUT IS C18', quantite: 1 }]);
+    expect(r.lignes.length + r.aVerifier.length).toBe(1);
+    const famille = r.lignes[0]?.famille ?? r.aVerifier[0]?.famille;
+    expect(famille).toBe('CE');
+  });
+});

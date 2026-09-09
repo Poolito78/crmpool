@@ -31,6 +31,7 @@ import {
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { variantesParDefaut } from '@/lib/variantFunnel';
 import { chantierDansTexte } from '@/lib/chantierDemande';
+import { compterBrides } from '@/lib/bridesDevis';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
@@ -4338,6 +4339,79 @@ const [contratOdoo, setContratOdoo] = useState<
                                 </div>
                               );
                             })}
+
+                            {/* ── BRIDES — UNE PAR RAIL ─────────────────────
+                                ⚠️ **LA DEMANDE DIT « AVEC BRIDES 80X40 », PAS
+                                COMBIEN.** C'est au chiffrage de les compter, et
+                                sur le devis AF036911 il en fallait 38 pour les
+                                panneaux et 6 pour les ensembles — un oubli se
+                                paie au chantier, un excès se facture au client.
+
+                                Le compte se fait sur l'ARTICLE RETENU quand il
+                                y en a un, local ou Odoo, et sur la demande à
+                                défaut : c'est ce qui partira au devis.
+
+                                Le nombre de rails se LIT dans la table du
+                                catalogue (`bridesDevis.ts`), famille par
+                                famille et cote par cote. Rien n'est deviné :
+                                une ligne hors table est signalée et n'entre pas
+                                dans le total. */}
+                            {(() => {
+                              const comptage = compterBrides(
+                                (result?.lignes || []).map((l, i) => {
+                                  /* Une ligne système est chiffrée par ses
+                                     composants : ses panneaux y sont déjà. */
+                                  if (systemesDetectes.has(i)) return null;
+                                  const p = produitDeLigne(i);
+                                  const odoo = choixOdoo[i];
+                                  const texte = p
+                                    ? `${p.reference} ${designationProduit(p)}`
+                                    : odoo
+                                      ? `${odoo.reference} ${odoo.designation}`
+                                      : texteDemande(l, i);
+                                  return { texte, quantite: quantiteDe(`d${i}`, l.quantite || 1) };
+                                }).filter((x): x is { texte: string; quantite: number } => x !== null),
+                              );
+                              if (!comptage.brides && !comptage.aVerifier.length) return null;
+
+                              return (
+                                <div className="rounded-lg border border-border bg-muted/30 p-2 space-y-1.5">
+                                  <div className="flex items-center justify-between">
+                                    <p className="text-[11px] font-medium">Brides</p>
+                                    <p className="text-[11px]">
+                                      <span className="font-semibold">{comptage.brides}</span>
+                                      <span className="text-muted-foreground"> — une par rail</span>
+                                    </p>
+                                  </div>
+
+                                  {comptage.lignes.length > 0 && (
+                                    <div className="space-y-0.5 text-[10px] text-muted-foreground">
+                                      {comptage.lignes.map((b, k) => (
+                                        <div key={k} className="flex gap-2">
+                                          <span className="flex-1 truncate" title={b.texte}>
+                                            {b.famille}{b.cote !== '—' ? ` ${b.cote}` : ''} — {b.quantite} × {b.railsUnitaires} rail{b.railsUnitaires > 1 ? 's' : ''}
+                                          </span>
+                                          <span className="font-medium text-foreground">{b.brides}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {comptage.aVerifier.length > 0 && (
+                                    <div className="space-y-0.5 border-t border-border pt-1 text-[10px] text-warning">
+                                      <p className="font-medium">
+                                        À vérifier — {comptage.aVerifier.length} ligne(s) hors table, non comptée(s) :
+                                      </p>
+                                      {comptage.aVerifier.map((v, k) => (
+                                        <div key={k} className="truncate" title={v.texte}>
+                                          {v.famille}{v.cote ? ` ${v.cote}` : ''} — {v.raison}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
 
                             {accompagnements.length > 0 && (
                               <div className="rounded-lg border border-primary/30 bg-primary/5 p-2 space-y-1">

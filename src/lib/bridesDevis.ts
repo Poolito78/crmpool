@@ -97,11 +97,35 @@ export function familleRails(code: string): string | null {
   return null;
 }
 
+/**
+ * La CLASSE de rétroréflexion, telle qu'une référence Odoo la porte en
+ * segment : C1, C2, C3 et leurs variantes (C3FJ).
+ *
+ * ⚠️ **ELLE SE FAISAIT PRENDRE POUR UN CODE DE PANNEAU.** Une référence
+ * s'écrit `AK3.700.C1.BTR.R.IS.BRUT` : le motif « C + chiffres » y trouvait
+ * `C1`, et la famille « C » répondait. Mesuré sur la demande MGD / PANTIN —
+ * AK3, KC1, MSP et POINT DE RASSEMBLEMENT ressortaient tous en famille
+ * « CE », avec une cote prise au hasard dans le reste de la référence. Le
+ * total de brides n'avait alors aucun rapport avec la demande, et rien ne le
+ * signalait.
+ *
+ * Les vrais panneaux de la série C portent au moins deux chiffres — C18,
+ * C20A, C27, C107 : écarter les C1/C2/C3 isolés ne coûte aucun panneau réel.
+ */
+const CLASSE_SEULE = /^C[123](FJ|J|V)?$/;
+
 /** Le code réglementaire présent dans un texte, s'il y en a un. */
 function codeDuTexte(t: string): string | null {
   const T = String(t || '').toUpperCase();
-  const m = T.match(/\b(M9[HB]|M\d+[A-Z]?\d*|AB\d+[A-Z]?\d*|A\d+[A-Z]*\d*|B\d+[A-Z]*\d*|CE\d+[A-Z]*|C\d+[A-Z]*|J\d+|G1[A-C]?)\b/);
-  return m ? m[1] : null;
+  const re = /\b(M9[HB]|M\d+[A-Z]?\d*|AB\d+[A-Z]?\d*|A\d+[A-Z]*\d*|B\d+[A-Z]*\d*|CE\d+[A-Z]*|C\d+[A-Z]*|J\d+|G1[A-C]?)\b/g;
+  /* On parcourt TOUTES les occurrences : dans une référence, la classe précède
+     souvent ce qui pourrait être un code, et s'arrêter à la première la
+     retenait. */
+  for (const m of T.matchAll(re)) {
+    if (CLASSE_SEULE.test(m[1])) continue;
+    return m[1];
+  }
+  return null;
 }
 
 /**
