@@ -2193,10 +2193,22 @@ const [contratOdoo, setContratOdoo] = useState<
        jamais la laisser aboutir. Elle est abandonnée au passage suivant, et
        seulement si la demande a réellement changé. */
     return () => { clearTimeout(minuteur); };
+    /* ⚠️ **LA GAMME ET LA CLASSE DOIVENT RELANCER LA RECHERCHE.**
+       Elles y manquaient, et l'`eslint-disable` ci-dessous empêchait l'outil
+       de le dire. Changer « Classe 2 » en « Classe 1 » ne redemandait donc
+       RIEN : l'écran affichait le nouveau réglage, la question posée à Odoo
+       gardait l'ancienne classe, et les propositions restaient celles du C2.
+       Il fallait relancer l'analyse entière pour que le choix soit pris en
+       compte — autant dire que le sélecteur ne servait à rien.
+
+       Ce sont deux valeurs simples, pas des fonctions : les ajouter ne peut
+       pas boucler. Et si rien n'a bougé pour Odoo, la clé d'appel
+       (`cleAppelOdoo`) arrête la demande avant le réseau. */
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce,
+      gammePanneau, classePanneau,
       systemesDetectes]);
 
   /**
