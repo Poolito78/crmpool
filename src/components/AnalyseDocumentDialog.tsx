@@ -1854,7 +1854,6 @@ const [contratOdoo, setContratOdoo] = useState<
     return (detail.length || isosign || gammes.length)
       ? { total, detail, isosign, gammes }
       : null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel]);
 
   /* Date de la dernière synchronisation réussie. Une grille périmée est
