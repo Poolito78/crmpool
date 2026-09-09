@@ -153,7 +153,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
 
   /* Les mots du client déjà retenus sur un article : on n'apprend pas deux
      fois le même, et la recherche d'article les voit. */
-  const { tagsDe } = useProduitTags();
+  const { tagsDe, parProduit: tagsParProduit } = useProduitTags();
 
   /* ── état analyse ── */
   const [texte, setTexte] = useState('');
@@ -1379,10 +1379,14 @@ const [contratOdoo, setContratOdoo] = useState<
       /* Une ligne système ne cherche pas d'article : la balayer contre les
          22 634 références ne produirait qu'un faux candidat à écarter. */
       if (systemesDetectes.has(i)) return;
-      m.set(i, rapprocherArticle(texteDemande(l, i), produits));
+      /* Les mots du client comptent ici aussi : « plot PVC » doit retrouver
+         le PLASTOBLOC dès qu'on le lui a appris une fois, sans quoi le tag ne
+         servirait qu'à la recherche à la main — c'est-à-dire jamais quand
+         l'appli choisit toute seule. */
+      m.set(i, rapprocherArticle(texteDemande(l, i), produits, 20, tagsParProduit));
     });
     return m;
-  }, [result, produits, systemesDetectes, texteDemande]);
+  }, [result, produits, systemesDetectes, texteDemande, tagsParProduit]);
 
   /** Variante retenue pour une ligne : le choix de l'utilisateur, sinon celle
       que l'épaisseur désigne. Rien tant que la variante reste à trancher. */

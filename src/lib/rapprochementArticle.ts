@@ -264,10 +264,42 @@ export function memeFamille(demandeTexte: string, cibleTexte: string): boolean {
  * `null` signifie « éliminé » : l'article contredit une caractéristique
  * explicite de la demande. Ce n'est pas un mauvais score, c'est une exclusion.
  */
+/**
+ * Ce qu'un tag CONSTATÉ vaut face à une ressemblance de libellé.
+ *
+ * ⚠️ Un tag n'est pas un mot de plus dans la description : c'est un synonyme
+ * que quelqu'un a vu juste, une fois, sur un vrai devis — « plot » pour un
+ * PLASTOBLOC, « cycliste » pour un « Homme à vélo ». Le recouvrement de
+ * vocabulaire plafonne à 30 points, en dessous du seuil de certitude (55) :
+ * un tag qui ne pèserait que cela laisserait la ligne « à vérifier » alors
+ * qu'on lui a précisément appris la réponse. Il passe donc au-dessus du
+ * seuil à lui seul.
+ */
+const BONUS_TAG = 60;
+
+/**
+ * Les tags de l'article que la demande emploie réellement.
+ *
+ * Comparaison par MOTS ENTIERS, au singulier : « 14 plots PVC » reconnaît le
+ * tag « plot », mais « platoplot » ne reconnaît rien. Un tag de plusieurs
+ * mots n'est retenu que si la demande les porte tous — « plot bordure » ne
+ * doit pas se déclencher sur une demande qui ne parle que de bordure.
+ */
+export function tagsReconnus(demandeTexte: string, tagsArticle: readonly string[]): string[] {
+  if (!tagsArticle.length) return [];
+  const md = mots(demandeTexte);
+  if (!md.size) return [];
+  return tagsArticle.filter(t => {
+    const mt = mots(t);
+    return mt.size > 0 && [...mt].every(m => md.has(m));
+  });
+}
+
 export function noter(
   demande: Caracteristiques,
   demandeTexte: string,
   produit: Produit,
+  tagsArticle: readonly string[] = [],
 ): { score: number; pourquoi: string } | null {
   const cible = caracteristiques(`${produit.reference} ${produit.description}`);
 
@@ -363,6 +395,19 @@ export function noter(
     }
   }
 
+  /* LE MOT DU CLIENT, APPRIS SUR UN DEVIS PRÉCÉDENT.
+     Il vaut mieux qu'une ressemblance : quelqu'un l'a constaté. Il vaut aussi
+     `caracteristiqueCommune` — sans quoi le contrôle final « rien ne les
+     rapproche » écarterait l'article que le tag désigne, puisque justement
+     aucun mot de la demande ne figure dans sa désignation. C'est tout l'objet
+     du tag. */
+  const tagsVus = tagsReconnus(demandeTexte, tagsArticle);
+  if (tagsVus.length) {
+    score += BONUS_TAG;
+    raisons.push(`tag « ${tagsVus.join(' », « ')} »`);
+    caracteristiqueCommune = true;
+  }
+
   // Recouvrement de vocabulaire, pour départager à caractéristiques égales.
   const md = mots(demandeTexte);
   const mc = mots(`${produit.reference} ${produit.description}`);
@@ -397,6 +442,8 @@ export function rapprocherArticle(
   demandeTexte: string,
   produits: Produit[],
   limite = 20,
+  /** Tags par identifiant d'article — l'`indexTags()` de `produitTags.ts`. */
+  tags?: ReadonlyMap<string, string[]>,
 ): Rapprochement {
   const texte = (demandeTexte || '').trim();
   if (!texte) return { candidats: [], confiance: 'aucun', pourquoi: 'demande vide' };
@@ -405,7 +452,7 @@ export function rapprocherArticle(
 
   const notes: { p: Produit; score: number; pourquoi: string }[] = [];
   for (const p of produits) {
-    const n = noter(demande, texte, p);
+    const n = noter(demande, texte, p, tags?.get(p.id));
     if (n && n.score > 0) notes.push({ p, score: n.score, pourquoi: n.pourquoi });
   }
   notes.sort((a, b) => b.score - a.score

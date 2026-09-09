@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  caracteristiques, couleurs, memeFamille, rapprocherArticle,
+  caracteristiques, couleurs, memeFamille, rapprocherArticle, tagsReconnus,
 } from './rapprochementArticle';
 import type { Produit } from './store';
 
@@ -283,5 +283,43 @@ describe('un plot de route n’est pas un coussin berlinois', () => {
 
   it('ne juge pas quand la demande n’a aucun mot significatif', () => {
     expect(memeFamille('100 360', 'COUSSIN BERLINOIS')).toBe(true);
+  });
+});
+
+describe('les mots du client nourrissent le rapprochement', () => {
+  /* Le cas réel : le devis AF036911 porte « 14 plot PVC », et l'article est
+     un PLASTOBLOC. Pas un mot commun — le rapprochement ne pouvait pas le
+     trouver, et le tag ne servait jusqu'ici qu'à la recherche à la main. */
+  const CAT = [
+    art('PLASTOBLOC24GM', 'Plastobloc 24 Kg GM (80x40-60x60-40x40-80x80-Ø42)'),
+    art('SG80401_5.1500.IS.BRUT', 'SUPPORT ACIER GALVA 80X40 1.5 LG 1500 + BOUCHON'),
+  ];
+  const TAGS = new Map([['PLASTOBLOC24GM', ['plot']]]);
+
+  it('ne trouve rien sans tag, et trouve avec', () => {
+    expect(rapprocherArticle('14 plot PVC', CAT).meilleur).toBeUndefined();
+
+    const r = rapprocherArticle('14 plot PVC', CAT, 20, TAGS);
+    expect(r.meilleur?.reference).toBe('PLASTOBLOC24GM');
+    /* ⚠️ Le tag doit porter jusqu'à la CERTITUDE : quelqu'un l'a constaté sur
+       un vrai devis. Laisser la ligne « à vérifier » reviendrait à ne pas se
+       fier à ce qu'on vient d'apprendre. */
+    expect(r.confiance).toBe('sure');
+    expect(r.pourquoi).toContain('tag');
+  });
+
+  /* Le pluriel du client ne doit pas faire manquer le tag. */
+  it('reconnaît le tag au pluriel', () => {
+    expect(tagsReconnus('14 plots PVC', ['plot'])).toEqual(['plot']);
+    expect(tagsReconnus('plot PVC', ['plot'])).toEqual(['plot']);
+  });
+
+  /* ⚠️ Un tag ne doit pas se déclencher sur un morceau de mot, ni sur une
+     demande qui n'en porte qu'une partie : ce serait pire que pas de tag du
+     tout, l'article partirait au devis avec l'aplomb d'une certitude. */
+  it('n’attrape ni un morceau de mot ni un tag à moitié', () => {
+    expect(tagsReconnus('platoplot du chantier', ['plot'])).toEqual([]);
+    expect(tagsReconnus('bordure de trottoir', ['plot bordure'])).toEqual([]);
+    expect(tagsReconnus('plot bordure a poser', ['plot bordure'])).toEqual(['plot bordure']);
   });
 });
