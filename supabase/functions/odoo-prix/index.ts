@@ -134,6 +134,8 @@ interface Article {
 }
 
 interface Regle {
+  /** Rendu d'office par `search_read` ; sert le départage final, comme chez Odoo. */
+  id?: number;
   applied_on: string;
   product_id?: [number, string] | false;
   product_tmpl_id?: [number, string] | false;
@@ -149,6 +151,18 @@ interface Regle {
   price_min_margin?: number;
   price_max_margin?: number;
   min_quantity?: number;
+  /**
+   * Fenêtre de validité de la règle, telle qu'Odoo la stocke
+   * (« 2026-01-01 00:00:00 », ou `false` si la règle n'est pas bornée).
+   *
+   * ⚠️ **CES DEUX CHAMPS ÉTAIENT DEMANDÉS À ODOO ET JETÉS** : `CHAMPS_REGLE`
+   * les listait, le type ne les portait pas, et `applicable()` ne les
+   * regardait pas. Une règle périmée tarifait donc exactement comme une
+   * règle en cours — et sur une liste qui garde ses lignes d'une année sur
+   * l'autre, c'est la remise de l'an dernier qui pouvait répondre.
+   */
+  date_start?: string | false;
+  date_end?: string | false;
 }
 
 const CHAMPS_REGLE = [
@@ -284,8 +298,24 @@ class Tarificateur {
     return items;
   }
 
+  /** « 2026-01-01 00:00:00 » (UTC chez Odoo) → millisecondes comparables. */
+  private static instant(v: string | false | undefined): number | null {
+    if (!v) return null;
+    const t = Date.parse(`${String(v).replace(" ", "T")}Z`);
+    return Number.isFinite(t) ? t : null;
+  }
+
   private async applicable(r: Regle, a: Article, qte: number) {
     if ((r.min_quantity || 0) > qte) return false;
+
+    /* VALIDITÉ. Une règle hors de sa fenêtre ne tarife pas — Odoo l'écarte,
+       nous devons faire de même, sans quoi la remise d'une saison passée
+       répond à la place de celle en cours. Une borne absente ne borne rien. */
+    const maintenant = Date.now();
+    const debut = Tarificateur.instant(r.date_start);
+    if (debut !== null && maintenant < debut) return false;
+    const fin = Tarificateur.instant(r.date_end);
+    if (fin !== null && maintenant > fin) return false;
     switch (r.applied_on) {
       case "0_product_variant":
         return !!r.product_id && r.product_id[0] === a.id;
@@ -333,10 +363,18 @@ class Tarificateur {
       return null;
     }
 
+    /* ⚠️ **L'ORDRE D'ODOO, EN ENTIER.** `product.pricelist.item._order` vaut
+       « applied_on, min_quantity desc, categ_id desc, id desc ». Les deux
+       derniers critères manquaient : quand plusieurs règles de CATÉGORIE
+       répondent — le cas courant sur une liste qui remise par famille — le
+       gagnant était celui qu'Odoo avait renvoyé en premier, c'est-à-dire le
+       hasard. Deux moteurs qui trient différemment ne peuvent pas tomber sur
+       le même prix. */
     candidats.sort((x, y) =>
-      x.applied_on === y.applied_on
-        ? (y.min_quantity || 0) - (x.min_quantity || 0)
-        : x.applied_on < y.applied_on ? -1 : 1
+      (x.applied_on < y.applied_on ? -1 : x.applied_on > y.applied_on ? 1 : 0)
+      || (y.min_quantity || 0) - (x.min_quantity || 0)
+      || ((y.categ_id ? y.categ_id[0] : 0) - (x.categ_id ? x.categ_id[0] : 0))
+      || ((y.id || 0) - (x.id || 0))
     );
     const r = candidats[0] as Regle & { id?: number };
 
