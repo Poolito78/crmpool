@@ -274,6 +274,19 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [odooCible, setOdooCible] = useState<'devis' | 'commande' | 'fournisseur' | null>(null);
   const [odooTerme, setOdooTerme] = useState('');
   const [odooEnCours, setOdooEnCours] = useState(false);
+  /**
+   * Odoo cherche-t-il en ce moment les articles et leurs prix ?
+   *
+   * ⚠️ **SANS CE TÉMOIN, UNE RECHERCHE EN COURS EST INDISCERNABLE D'UNE
+   * RECHERCHE BREDOUILLE.** Les lignes affichent « Aucun candidat ne
+   * correspond assez » et « — Libre — » exactement comme si Odoo avait
+   * répondu et n'avait rien trouvé : on croit le travail fini, on corrige à
+   * la main ce qui allait arriver seul, ou on chiffre une ligne restée vide.
+   * `odooEnCours` existait déjà mais ne couvre que la recherche d'un
+   * partenaire au clic — pas cette tarification-ci, qui part toute seule et
+   * peut demander une dizaine de secondes.
+   */
+  const [tarificationEnCours, setTarificationEnCours] = useState(false);
   const [odooResultats, setOdooResultats] = useState<PartenaireOdoo[] | null>(null);
 
   /**
@@ -1970,7 +1983,9 @@ const [contratOdoo, setContratOdoo] = useState<
       cleOdooRef.current = '';
       demandeOdooRef.current?.controleur.abort();
       demandeOdooRef.current = null;
-      setContratOdoo(null); setTrouvaillesOdoo({}); return;
+      setContratOdoo(null); setTrouvaillesOdoo({});
+      setTarificationEnCours(false);
+      return;
     }
     const corps: CorpsAppelOdoo = {
       client: critere,
@@ -1992,7 +2007,7 @@ const [contratOdoo, setContratOdoo] = useState<
        article corrigé qui porte la même référence Odoo, une variante de
        système cochée. L'état affiché est déjà le bon ; le reconstruire à
        l'identique ferait clignoter l'écran pour rien. */
-    if (cle === cleOdooRef.current) return;
+    if (cle === cleOdooRef.current) { setTarificationEnCours(false); return; }
 
     /* DÉJÀ EN ROUTE. L'effet se rejoue pendant que la réponse se fait
        attendre — il suffit d'une écriture dans `clients`. Relancer la MÊME
@@ -2016,6 +2031,7 @@ const [contratOdoo, setContratOdoo] = useState<
        dont les deux premiers ne servaient à rien mais occupaient Odoo — et la
        réponse utile arrivait derrière eux. On attend que la main s'arrête.
        Une demande déjà en cache n'attend pas : il n'y a rien à ménager. */
+    setTarificationEnCours(true);
     const minuteur = setTimeout(() => { void lancer(); }, enCache ? 0 : 500);
 
     async function lancer() {
@@ -2107,6 +2123,11 @@ const [contratOdoo, setContratOdoo] = useState<
            le contrat cadre affiché au profit d'une demande qu'on vient
            soi-même d'annuler. */
         if (!caduque()) { setContratOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({}); }
+      } finally {
+        /* ⚠️ Seule la demande ENCORE ATTENDUE éteint le témoin. Une demande
+           abandonnée qui s'éteindrait en partant laisserait l'écran annoncer
+           « terminé » alors que sa remplaçante travaille encore. */
+        if (!caduque()) setTarificationEnCours(false);
       }
     }
 
@@ -3522,7 +3543,19 @@ const [contratOdoo, setContratOdoo] = useState<
                             plusieurs déclinaisons — c'est à vous de trancher. */}
                         {(result?.lignes ?? []).length > 0 && (
                           <div className="space-y-2 pt-1">
-                            <Label className="text-xs">Articles demandés</Label>
+                            <Label className="text-xs">
+                              Articles demandés
+                              {/* Le sablier. Tant qu'Odoo cherche, les lignes
+                                  ci-dessous sont incomplètes par construction :
+                                  le dire évite de corriger à la main ce qui
+                                  allait arriver seul. */}
+                              {tarificationEnCours && (
+                                <span className="ml-2 inline-flex items-center gap-1 font-normal text-primary">
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                  Recherche des articles et des prix chez Odoo…
+                                </span>
+                              )}
+                            </Label>
                             {(result?.lignes ?? []).map((l, i) => {
                               const candidats = candidatsPour(i);
                               const retenu = produitDeLigne(i);
@@ -3790,8 +3823,10 @@ const [contratOdoo, setContratOdoo] = useState<
                                       contredisait : la ligne a bien un article
                                       et un prix, ils viennent d'ailleurs. */}
                                   {!sysRap && !retenu && !choixOdoo[i] && (
-                                    <p className="text-[11px] text-warning">
-                                      {candidats.length
+                                    <p className={`text-[11px] ${tarificationEnCours ? 'text-muted-foreground' : 'text-warning'}`}>
+                                      {tarificationEnCours
+                                        ? <><Loader2 className="inline w-3 h-3 mr-1 animate-spin" />Recherche en cours chez Odoo…</>
+                                        : candidats.length
                                         ? `Aucun candidat ne correspond assez pour être retenu d’office — ${candidats.length} proposition(s) ci-dessus.`
                                         : 'Aucun article trouvé — choisissez-en un ci-dessus.'}
                                     </p>
