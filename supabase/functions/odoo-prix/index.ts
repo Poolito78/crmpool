@@ -1451,9 +1451,10 @@ serve(async (req) => {
     /* Niveau imposé par le chargé d'affaires — R1 à R4. Quand il est fourni,
        c'est le contrat de CE niveau qui tarife, lu chez Odoo. */
     const niveauImpose = String(corps?.niveau || "").trim().toUpperCase();
-    /* Niveau par DÉFAUT — celui que MonCRM affiche faute de mieux. Il ne
-       remplace jamais un contrat trouvé : il sert de filet quand le client
-       n'en a aucun de rattaché. */
+    /* Niveau par DÉFAUT — celui que MonCRM AFFICHE faute de mieux.
+       ⚠️ Il ne tarife rien ici : voir plus bas, « aucun repli automatique sur
+       une grille R1-R4 ». Il reste lu pour la trace, et parce qu'il fait
+       partie de la clé d'appel côté MonCRM. */
     const niveauDefaut = String(corps?.niveauDefaut || "").trim().toUpperCase();
 
     /* ── Recherche libre dans le fichier client d'Odoo ──────────────────────
@@ -1570,7 +1571,8 @@ serve(async (req) => {
       + ` pricelist_propre=${JSON.stringify(partenaire.property_product_pricelist)}`
       + ` porteur=#${porteur.id} "${porteur.name}"`
       + ` pricelist_porteur=${JSON.stringify(porteur.property_product_pricelist)}`
-      + ` → contratId=${contratId} contrat=${JSON.stringify(contrat)}`);
+      + ` → contratId=${contratId} contrat=${JSON.stringify(contrat)}`
+      + ` niveauAffiche=${niveauDefaut || "-"} niveauImpose=${niveauImpose || "-"}`);
 
     /* Le tarif qui fait foi chez ce client n'est PAS la liste de prix lue
        ci-dessus mais le « contrat-cadre », un objet Studio séparé porté par
@@ -1591,23 +1593,31 @@ serve(async (req) => {
       if (await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id)) {
         niveauApplique = niveauImpose;
       }
-    } else if (!cadre.actif && niveauDefaut) {
-      /* FILET DE SÉCURITÉ.
-       *
-       * Aucun contrat rattaché au client : jusqu'ici tout retombait sur la
-       * liste de prix, qui recalcule depuis des fiches à 1 € et donnait
-       * 66,86 € là où le bordereau cote 56,13 €. Or les quatre grilles sont
-       * désormais en base, et celle du niveau affiché convient : on
-       * l'applique plutôt que de laisser passer un prix reconstruit.
-       *
-       * Le client reste maître : la réponse dit que le niveau a servi de
-       * repli, l'écran l'affiche, et le sélecteur permet d'en changer. */
-      if (await cadre.chargerNiveau(niveauDefaut, porteur.id, partenaire.id)) {
-        niveauApplique = niveauDefaut;
-        console.log(`[contrat-cadre] aucun contrat rattaché : repli sur la `
-          + `grille ${niveauDefaut}`);
-      }
     }
+    /* ⚠️ **AUCUN REPLI AUTOMATIQUE SUR UNE GRILLE R1-R4.**
+     *
+     * Il en existait un : faute de contrat rattaché, la grille du niveau
+     * affiché tarifait d'office. L'intention était bonne — éviter un prix
+     * reconstruit depuis les fiches Odoo à 1 € — mais elle écartait la LISTE
+     * DE PRIX que le client porte réellement, et Odoo, lui, s'en sert.
+     *
+     * Mesuré sur le devis Odoo **AF036911** (MGD MAINTENANCE GENERALE
+     * DISTRIBUTION, chantier PANTIN, liste de prix
+     * « 30/70/72/30/30/30/70/30/70/62/62 ») : la grille R4 cotait le
+     * AK3.700.C1.BTR.R.IS.BRUT à 39,41 €, quand le devis émis le facture
+     * **37,475 €** — celui de la liste de prix. MonCRM annonçait donc un
+     * prix qu'aucun devis ISOSIGN ne porte, et le repli était invisible
+     * puisque la ligne avait bien un article et bien un prix.
+     *
+     * La règle est donc : **la liste de prix fait foi**, sauf si un contrat
+     * cadre est réellement rattaché (il tarife alors, cf. AF035681 REFLEX) ou
+     * si le chargé d'affaires impose un niveau R1-R4 par le sélecteur — le
+     * seul cas où une grille remplace ce qu'Odoo applique.
+     *
+     * `niveauDefaut` continue d'arriver dans le corps de la requête : c'est
+     * le niveau que MonCRM AFFICHE, et il tarife encore les lignes chiffrées
+     * à la grille faute d'article Odoo (`prixPanneau`). Il ne décide plus
+     * rien ici. */
     /* Copie locale d'abord : elle évite des centaines de motifs envoyés à
        Odoo sur chaque devis. Son absence n'est pas une erreur. */
     await cadre.chargerCopieLocale();
