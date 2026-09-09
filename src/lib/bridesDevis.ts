@@ -180,6 +180,15 @@ export function railsDuPanneau(famille: string, texte: string): { rails: number 
   return { rails: c ? table[c] ?? null : null, cote: c };
 }
 
+/**
+ * Cote jusqu'à laquelle TOUTES les formes portent 2 rails.
+ *
+ * Relevé sur les tables : triangle 500/700/1000 → 2, disque 450 à 1050 → 2,
+ * carré 350 à 700 → 2 mais 900 → 3. C'est donc 850 qui borne l'accord — au
+ * delà, il faut connaître la forme, et un article sans code ne la dit pas.
+ */
+const COTE_DEUX_RAILS_PARTOUT = 850;
+
 export function compterBrides(lignes: LigneABrider[]): ComptageBrides {
   const bridees: LigneBridee[] = [];
   const aVerifier: LigneDouteuse[] = [];
@@ -192,8 +201,43 @@ export function compterBrides(lignes: LigneABrider[]): ComptageBrides {
     const famille = code ? familleRails(code) : null;
     /* Pas de code réglementaire : ce n'est pas un panneau. Une résine, un
        plot, un mât ne se signalent pas comme « à vérifier » — ils n'ont
-       simplement rien à voir avec des brides. */
-    if (!famille) continue;
+       simplement rien à voir avec des brides.
+
+       ⚠️ **SAUF SI LA DÉSIGNATION ANNONCE UN KIT RAIL.** Les articles créés
+       pour une affaire n'ont pas de code : sur le devis AF036911, les quatre
+       « BKSPFO PIETON EN 650 CL 1 KIT RAIL » portent la référence
+       GEAF036911-2 — le numéro du devis — et aucune table ne peut les
+       rattacher. Ils n'en portent pas moins des rails, et le devis les
+       facture. */
+    if (!famille) {
+      if (!/KIT\s*RAIL/i.test(l.texte || '')) continue;
+
+      /* On ne lit la cote QUE parce que « kit rail » est écrit : sans cette
+         condition, le premier nombre venu d'une désignation quelconque
+         deviendrait une taille de panneau. */
+      const c = coteSimple(l.texte || '');
+      const cote = c ? Number(c) : null;
+
+      /* ⚠️ **ON N'AFFIRME QUE CE SUR QUOI TOUTES LES FORMES S'ACCORDENT.**
+         Jusqu'à 850, triangles, disques et carrés portent tous 2 rails ;
+         au-delà, les tables divergent (le carré passe à 3 dès 900, le
+         triangle seulement à 1250). La forme étant inconnue ici — le texte ne
+         la dit pas — une cote plus grande se signale au lieu de se trancher. */
+      if (cote !== null && cote <= COTE_DEUX_RAILS_PARTOUT) {
+        bridees.push({
+          texte: l.texte, famille: 'KIT RAIL', cote: String(cote),
+          quantite, railsUnitaires: 2, brides: 2 * quantite,
+        });
+      } else {
+        aVerifier.push({
+          texte: l.texte, quantite,
+          raison: cote !== null ? 'cote absente de la table' : 'famille inconnue',
+          famille: 'KIT RAIL',
+          cote: cote !== null ? String(cote) : undefined,
+        });
+      }
+      continue;
+    }
 
     const { rails, cote } = railsDuPanneau(famille, l.texte || '');
     if (rails == null) {

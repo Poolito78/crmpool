@@ -158,3 +158,44 @@ describe('le kit rail existe aussi en signalisation temporaire', () => {
     expect(r.brides).toBe(8);
   });
 });
+
+describe('les articles crees pour une affaire, quand ils annoncent un kit rail', () => {
+  /* ⚠️ Sur le devis AF036911, les quatre « BKSPFO PIETON EN 650 CL 1 KIT RAIL »
+     portent la reference GEAF036911-2 — le numero du devis. Aucune table ne
+     peut les rattacher, et ils portent pourtant des rails. */
+  it('compte 2 rails quand « kit rail » est ecrit et la cote lisible', () => {
+    const r = compterBrides([
+      { texte: 'GEAF036911-2 BKSPFO PIETON EN 650 CL 1 KIT RAIL', quantite: 4 },
+    ]);
+    expect(r.aVerifier).toEqual([]);
+    expect(r.brides).toBe(8);
+    expect(r.lignes[0].famille).toBe('KIT RAIL');
+    expect(r.lignes[0].cote).toBe('650');
+  });
+
+  /* ⚠️ LE GARDE-FOU. Sans « kit rail » ecrit, on ne lit aucune cote : le
+     premier nombre venu d'une designation quelconque deviendrait sinon une
+     taille de panneau. */
+  it('ne lit aucune cote sans la mention « kit rail »', () => {
+    const r = compterBrides([
+      { texte: 'GEAF036911-2 BKSPFO PIETON EN 650 CL 1', quantite: 4 },
+      { texte: 'SG80401_5.1500.IS.BRUT IS SUPPORT AG 80X40 1.5 LG 1500', quantite: 14 },
+      { texte: 'ALIM.BOITIERPILES Boitier alim 2 piles + jack et platine', quantite: 3 },
+    ]);
+    expect(r.brides).toBe(0);
+    expect(r.aVerifier).toEqual([]);
+  });
+
+  /* ⚠️ On n'affirme que ce sur quoi toutes les formes s'accordent : jusqu'a
+     850. Au-dela le carre passe a 3 rails et le triangle non — la forme
+     manque, on signale au lieu de trancher. */
+  it('signale au lieu de deviner au-dela de la plage d’accord', () => {
+    const r = compterBrides([
+      { texte: 'GEAF000000-1 PANNEAU SPECIFIQUE 1200 KIT RAIL', quantite: 2 },
+      { texte: 'GEAF000000-2 PANNEAU SPECIFIQUE KIT RAIL', quantite: 1 },
+    ]);
+    expect(r.brides).toBe(0);
+    expect(r.aVerifier.map(v => v.raison))
+      .toEqual(['cote absente de la table', 'famille inconnue']);
+  });
+});
