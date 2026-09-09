@@ -31,6 +31,7 @@ import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuIte
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import TagsArticle from '@/components/TagsArticle';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import { useCatalogueServeur, COLONNES_BASE, COLONNES_TEXTE } from '@/hooks/useCatalogueServeur';
@@ -1827,6 +1828,13 @@ export default function Produits() {
             </div>
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
             <div><Label>Description détaillée</Label><Input value={form.descriptionDetaillee} onChange={e => setForm(p => ({ ...p, descriptionDetaillee: e.target.value }))} placeholder="Affiché dans le devis si renseigné" /></div>
+
+            {/* ── Tags : les mots du CLIENT ────────────────────────────────
+                Posés juste sous la description détaillée parce que c'est là
+                qu'on cherche à décrire l'article — mais les deux champs vont
+                en sens inverse : la description détaillée SORT dans le devis,
+                un tag n'en sort jamais. Voir `produitTags.ts`. */}
+            <TagsArticle produitId={editing?.id} />
 
             {/* Tarif — section spéciale pour les produits surcharge énergie */}
             {form.categorie === 'surcharge' && (

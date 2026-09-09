@@ -29,6 +29,7 @@ import {
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
+import { tagACandidat, ajouterTag, oublierTag, useProduitTags } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
   rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
@@ -148,6 +149,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
     updateProduits, updateProduitFournisseurs,
   } = useCRM();
+
+  /* Les mots du client déjà retenus sur un article : on n'apprend pas deux
+     fois le même, et la recherche d'article les voit. */
+  const { tagsDe } = useProduitTags();
 
   /* ── état analyse ── */
   const [texte, setTexte] = useState('');
@@ -1298,6 +1303,51 @@ const [contratOdoo, setContratOdoo] = useState<
   ) => libelleManuel[i]
     ?? [l.reference, l.description].filter(Boolean).join(' ').trim(),
   [libelleManuel]);
+
+  /**
+   * Choix d'article fait à la main sur une ligne de demande client — et le mot
+   * du client, retenu au passage.
+   *
+   * ⚠️ **C'EST LE SEUL ENDROIT OÙ LE VOCABULAIRE DU CLIENT ET L'ARTICLE SONT
+   * ENSEMBLE.** Le rapprochement automatique a échoué (sinon on ne serait pas
+   * en train de choisir), l'utilisateur sait, lui, que « cycliste » veut dire
+   * « Homme à vélo » — et cette connaissance disparaissait avec la fermeture
+   * du dialogue. Le devis suivant, chez lui ou chez un collègue, repartait de
+   * zéro.
+   *
+   * Un ou deux mots restants : c'est un synonyme, on l'inscrit sans rien
+   * demander (avec de quoi revenir en arrière). Au-delà, c'est une phrase de
+   * circonstance : on la propose. Voir `produitTags.ts`.
+   */
+  const choisirArticle = useCallback((
+    i: number,
+    ligne: { reference?: string; description?: string },
+    id: string,
+  ) => {
+    setChoixProduit(prev => ({ ...prev, [i]: id }));
+    if (!id) return;
+    const p = produitParId(produits, id);
+    if (!p) return;
+    const candidat = tagACandidat(texteDemande(ligne, i), p, tagsDe(p.id));
+    if (!candidat) return;
+
+    const { tag, automatique } = candidat;
+    if (!automatique) {
+      toast(`Retenir « ${tag} » comme tag de ${p.reference} ?`, {
+        description: 'Ce mot retrouverait cet article dans la recherche. Jamais affiché dans le devis.',
+        duration: 10000,
+        action: { label: 'Retenir', onClick: () => { void ajouterTag(p.id, tag, 'appris'); } },
+      });
+      return;
+    }
+    void ajouterTag(p.id, tag, 'appris').then(erreur => {
+      if (erreur) return;
+      toast.success(`Tag retenu : « ${tag} » → ${p.description}`, {
+        description: 'Ce mot retrouvera désormais cet article. Jamais affiché dans le devis.',
+        action: { label: 'Annuler', onClick: () => { void oublierTag(p.id, tag); } },
+      });
+    });
+  }, [produits, texteDemande, tagsDe]);
 
   const systemesDetectes = useMemo(() => {
     const m = new Map<number, RapprochementSysteme>();
@@ -3707,7 +3757,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       produits={produits}
                                       suggestions={candidats}
                                       value={retenu?.id ?? ''}
-                                      onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
+                                      onSelect={(id) => choisirArticle(i, l, id)}
                                     />
                                   )}
                                   {/* Cet avertissement ne parle que du catalogue

@@ -31,6 +31,7 @@ import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import VarianteSelect from '@/components/VarianteSelect';
+import { tagACandidat, ajouterTag, oublierTag, useProduitTags } from '@/lib/produitTags';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
@@ -95,6 +96,9 @@ export default function Devis() {
   const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
+  /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
+     ce qu'on sait déjà, et pour que la recherche d'article les voie. */
+  const { tagsDe } = useProduitTags();
 
   /* Ces deux listes dérivent du catalogue, pas de la saisie. Sans mémoire,
      elles étaient reconstruites — 22 634 objets pour la première — à chaque
@@ -1195,9 +1199,47 @@ export default function Devis() {
     return Math.round((base + diff) * 100) / 100;
   }
 
+  /**
+   * Retient le mot du CLIENT quand on choisit un article à la main.
+   *
+   * ⚠️ **C'EST ICI, ET NULLE PART AILLEURS, QUE LE MOT EXISTE ENCORE.** La
+   * suite de `selectProduit` écrase `description` par la désignation du
+   * catalogue : « cycliste » devient « Homme à vélo » et le mot tapé est
+   * perdu pour de bon. Le lire après le choix ne rendrait que la désignation,
+   * et le CRM apprendrait l'article à partir de lui-même.
+   *
+   * Un ou deux mots retenus : c'est un synonyme, on l'inscrit sans rien
+   * demander (avec de quoi revenir en arrière). Au-delà, c'est une phrase de
+   * circonstance qui ne servira plus au devis suivant : on la propose.
+   */
+  function apprendreTagDeLaSaisie(ligneId: string, p: typeof produits[0]) {
+    const demande = lignes.find(l => l.id === ligneId)?.description ?? '';
+    if (!demande.trim()) return;
+    const candidat = tagACandidat(demande, p, tagsDe(p.id));
+    if (!candidat) return;
+
+    const { tag, automatique } = candidat;
+    if (!automatique) {
+      toast(`Retenir « ${tag} » comme tag de ${p.reference} ?`, {
+        description: 'Ce mot retrouverait cet article dans la recherche. Jamais affiché dans le devis.',
+        duration: 10000,
+        action: { label: 'Retenir', onClick: () => { void ajouterTag(p.id, tag, 'appris'); } },
+      });
+      return;
+    }
+    void ajouterTag(p.id, tag, 'appris').then(erreur => {
+      if (erreur) return;
+      toast.success(`Tag retenu : « ${tag} » → ${p.description}`, {
+        description: 'Ce mot retrouvera désormais cet article. Jamais affiché dans le devis.',
+        action: { label: 'Annuler', onClick: () => { void oublierTag(p.id, tag); } },
+      });
+    });
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produitParId(produits, produitId);
     if (!p) return;
+    apprendreTagDeLaSaisie(ligneId, p);
     // Si c'est un kit : supprimer la ligne vide et insérer le groupe
     if (p.typeKit) {
       setLignes(prev => prev.filter(l => l.id !== ligneId));

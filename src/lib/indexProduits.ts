@@ -15,6 +15,14 @@ import { classifySegment } from '@/lib/variantFunnel';
  * store ne remplace pas `produits`, toutes les lignes du devis partagent le
  * même travail, et l'index disparaît avec le tableau sans qu'on ait à le
  * libérer.
+ *
+ * ⚠️ **DEUX CACHES ET NON UN SEUL.** Les tags (`produitTags.ts`) arrivent
+ * après le catalogue et changent dès qu'on en apprend un ; les entrées de
+ * recherche en dépendent donc, mais pas la table des identifiants.
+ * `produitParId` est appelée à chaque rendu de chaque ligne de devis, sans
+ * tags : partager un cache unique la ferait reconstruire l'index complet à
+ * chaque alternance avec une recherche taguée — 22 634 entrées par frappe,
+ * exactement ce que cet index existe pour éviter.
  */
 
 export interface EntreeIndex {
@@ -30,6 +38,12 @@ export interface EntreeIndex {
    * « RAL ».
    */
   ral: string;
+  /**
+   * Les mots du CLIENT attachés à l'article (`produitTags.ts`), prêts à
+   * chercher. Vide quand l'article n'en porte aucun — c'est le cas de la
+   * quasi-totalité du catalogue.
+   */
+  tags: string;
 }
 
 /** Finition d'une référence Odoo : le dernier segment classé « ral ». */
@@ -41,21 +55,58 @@ function finitionDeReference(reference: string): string {
   return '';
 }
 
+/**
+ * Le texte cherché pour les tags d'un article : les mots retenus, **plus leur
+ * pluriel**.
+ *
+ * On a retenu « cycliste » et le client suivant écrit « cyclistes ». La
+ * recherche compare des morceaux de texte : sans le pluriel dans l'index, ce
+ * « s » suffirait à manquer l'article, et tout l'intérêt du tag avec. Le
+ * pluriel est ajouté ici plutôt que retiré de la saisie parce que la saisie,
+ * elle, sert aussi à chercher les références — où un « s » final compte.
+ */
+function texteDesTags(tags: readonly string[]): string {
+  const morceaux: string[] = [];
+  for (const tag of tags) {
+    morceaux.push(tag);
+    for (const mot of tag.split(/\s+/)) {
+      if (mot.length >= 4 && !mot.endsWith('s')) morceaux.push(`${mot}s`);
+    }
+  }
+  return morceaux.join(' ').toLowerCase();
+}
+
 export interface IndexProduits {
   entrees: EntreeIndex[];
   parId: Map<string, Produit>;
 }
 
-const cache = new WeakMap<readonly Produit[], IndexProduits>();
+/** Tags par identifiant d'article — l'`indexTags()` de `produitTags.ts`. */
+export type TagsParProduit = ReadonlyMap<string, string[]>;
 
-export function indexProduits(produits: Produit[]): IndexProduits {
-  const connu = cache.get(produits);
+const cacheId = new WeakMap<readonly Produit[], Map<string, Produit>>();
+const cacheEntrees = new WeakMap<
+  readonly Produit[],
+  { tags: TagsParProduit | undefined; entrees: EntreeIndex[] }
+>();
+
+function tableIdentifiants(produits: Produit[]): Map<string, Produit> {
+  const connu = cacheId.get(produits);
   if (connu) return connu;
+  const parId = new Map<string, Produit>();
+  for (let i = 0; i < produits.length; i++) parId.set(produits[i].id, produits[i]);
+  cacheId.set(produits, parId);
+  return parId;
+}
+
+function entreesDeRecherche(produits: Produit[], tags?: TagsParProduit): EntreeIndex[] {
+  const connu = cacheEntrees.get(produits);
+  if (connu && connu.tags === tags) return connu.entrees;
 
   const entrees: EntreeIndex[] = new Array(produits.length);
-  const parId = new Map<string, Produit>();
   for (let i = 0; i < produits.length; i++) {
     const p = produits[i];
+    const sesTags = tags?.get(p.id);
     entrees[i] = {
       p,
       ref: (p.reference || '').toLowerCase(),
@@ -64,19 +115,22 @@ export function indexProduits(produits: Produit[]): IndexProduits {
       desc: `${p.description || ''} ${p.descriptionVariante || ''}`.toLowerCase(),
       cat: (p.categorie || '').toLowerCase(),
       ral: finitionDeReference(p.reference || ''),
+      tags: sesTags && sesTags.length ? texteDesTags(sesTags) : '',
     };
-    parId.set(p.id, p);
   }
 
-  const index = { entrees, parId };
-  cache.set(produits, index);
-  return index;
+  cacheEntrees.set(produits, { tags, entrees });
+  return entrees;
+}
+
+export function indexProduits(produits: Produit[], tags?: TagsParProduit): IndexProduits {
+  return { entrees: entreesDeRecherche(produits, tags), parId: tableIdentifiants(produits) };
 }
 
 /** Retrouve un article par son identifiant sans balayer le catalogue. */
 export function produitParId(produits: Produit[], id?: string | null) {
   if (!id) return undefined;
-  return indexProduits(produits).parId.get(id);
+  return tableIdentifiants(produits).get(id);
 }
 
 /**
@@ -85,7 +139,12 @@ export function produitParId(produits: Produit[], id?: string | null) {
  * Les résultats sont classés : d'abord les références qui commencent par la
  * saisie — taper « J11 » doit proposer J11C2 avant une balise dont la
  * description mentionne « conforme J11 » — puis les références qui la
- * contiennent, enfin les descriptions et catégories.
+ * contiennent, enfin les descriptions, catégories et tags.
+ *
+ * ⚠️ **Les tags cherchent au rang le plus large, jamais devant une
+ * référence.** Un tag est un mot appris, parfois d'un seul devis : le hisser
+ * ferait remonter un article marginal sur un mot que le catalogue porte déjà
+ * correctement ailleurs.
  *
  * À rang égal, **la finition BRUT passe devant les laquées**. Sans cette
  * règle, taper « BSP.650.C2.BTR » ramenait d'abord L7003, L5010, L7016… et
@@ -100,8 +159,9 @@ export function chercherProduits(
   produits: Produit[],
   requete: string,
   limite = 60,
+  tags?: TagsParProduit,
 ): { resultats: Produit[]; total: number } {
-  const { entrees } = indexProduits(produits);
+  const entrees = entreesDeRecherche(produits, tags);
   const q = requete.trim().toLowerCase();
 
   if (!q) {
@@ -127,11 +187,13 @@ export function chercherProduits(
 
     /* Trois rangs, du plus précis au plus large : la référence commence par
        la saisie, la référence la porte entière, ou elle se retrouve éparpillée
-       entre référence, désignation et catégorie. */
+       entre référence, désignation, catégorie et mots du client. */
     let rang = -1;
     if (termes.every(t => e.ref.includes(t))) rang = e.ref.startsWith(termes[0]) ? 0 : 1;
     else {
-      const tout = `${e.ref} ${e.desc} ${e.cat}`;
+      const tout = e.tags
+        ? `${e.ref} ${e.desc} ${e.cat} ${e.tags}`
+        : `${e.ref} ${e.desc} ${e.cat}`;
       if (termes.every(t => tout.includes(t))) rang = 2;
     }
     if (rang < 0) continue;

@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, Search } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { designationProduit, type Produit } from '@/lib/store';
 import { chercherProduits, produitParId } from '@/lib/indexProduits';
+import { useProduitTags } from '@/lib/produitTags';
 import TruncTooltip from '@/components/TruncTooltip';
 import {
   buildFunnel, CATEGORY_LABELS, labelValeur,
@@ -51,6 +52,11 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
 
   const selected = produitParId(produits, value);
 
+  /* Les mots du client (« cycliste » pour « Homme à vélo »). Le hook lit une
+     réserve partagée : les trente sélecteurs d'un devis de trente lignes ne
+     font qu'une requête à eux tous. */
+  const { parProduit: tagsParProduit } = useProduitTags();
+
   // La liste fermée ne cherche rien : un devis de trente lignes ne doit pas
   // balayer trente fois le catalogue à chaque rendu du formulaire.
   // En entonnoir non plus : la liste vient alors des variantes du modèle.
@@ -63,9 +69,9 @@ export default function ProduitCombobox({ produits, suggestions, value, onSelect
       if (surSuggestions) {
         return { resultats: suggestions!.slice(0, MAX_AFFICHE), total: suggestions!.length };
       }
-      return chercherProduits(produits, query, MAX_AFFICHE);
+      return chercherProduits(produits, query, MAX_AFFICHE, tagsParProduit);
     },
-    [produits, suggestions, surSuggestions, query, open, enEntonnoir],
+    [produits, suggestions, surSuggestions, query, open, enEntonnoir, tagsParProduit],
   );
 
   /* Variantes du modèle ouvert. Le catalogue entier est en mémoire, donc pas
