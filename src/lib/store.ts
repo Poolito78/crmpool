@@ -473,6 +473,18 @@ export interface Devis {
   dateEnvoi?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
+  /**
+   * Le CHANTIER, au sens d'Odoo : « PANTIN », « ZAC des Vignes ».
+   *
+   * ⚠️ **CE N'EST PAS LA RÉFÉRENCE D'AFFAIRE.** Odoo porte les deux côte à
+   * côte — `client_order_ref` pour la référence que le client donne à sa
+   * commande, `x_studio_chantier` pour le lieu des travaux — et les confondre
+   * faisait partir la référence du client dans la case Chantier. Sur le devis
+   * AF036911 elles se ressemblent (« CHANTIER PANTIN ») ; elles n'ont aucune
+   * raison de coïncider en général, et c'est le chantier qui regroupe les
+   * commandes d'un même site.
+   */
+  chantier?: string;
   systeme?: string;
   notes?: string;
   conditions?: string;
@@ -800,6 +812,7 @@ function dbToDevis(r: any): Devis {
     dateEnvoi: r.date_envoi?.split('T')[0] || undefined,
     lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
     referenceAffaire: r.reference_affaire || undefined,
+    chantier: r.chantier || undefined,
     systeme: r.systeme || undefined,
     notes: r.notes || undefined,
     conditions: r.conditions || undefined,
@@ -834,6 +847,11 @@ function devisToDb(d: Devis, userId: string) {
     date_envoi: d.dateEnvoi || null,
     lignes: d.lignes as any,
     reference_affaire: d.referenceAffaire || null,
+    /* Colonne ajoutée par migration : incluse conditionnellement, sinon
+       PostgREST rejette la ligne ENTIÈRE sur un environnement pas encore
+       migré — et l'écriture étant en « fire-and-forget », la perte serait
+       silencieuse. */
+    ...(d.chantier !== undefined ? { chantier: d.chantier || null } : {}),
     systeme: d.systeme || null,
     notes: d.notes || null,
     conditions: d.conditions || null,

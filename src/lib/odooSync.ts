@@ -225,6 +225,11 @@ export function genererScriptOdoo(
   const clientName = options?.odooPartnerName || client.societe || client.nom;
   const contactNom = options?.contactNom ?? '';
   const referenceAffaire = devis.referenceAffaire ?? '';
+  /* La case Chantier d'Odoo (`x_studio_chantier`, champ texte) reçoit le
+     chantier quand il est renseigné. À défaut, elle garde l'ancien
+     comportement — la référence d'affaire — pour que les devis créés avant
+     l'existence du champ continuent de partir comme avant. */
+  const chantier = (devis.chantier ?? '').trim() || referenceAffaire;
   const dateValidite = devis.dateValidite ?? '';
 
   return `(async()=>{
@@ -298,7 +303,7 @@ const orderVals={
   ${dateValidite ? `validity_date:${JSON.stringify(dateValidite)},` : ''}
   ${contactNom ? 'x_studio_contact_de_laffaire:contactId||false,' : ''}
 };
-if(chantierField&&${JSON.stringify(!!referenceAffaire)}){orderVals[chantierField]=${JSON.stringify(referenceAffaire)};}
+if(chantierField&&${JSON.stringify(!!chantier)}){orderVals[chantierField]=${JSON.stringify(chantier)};}
 const orderId=await rpc('sale.order','create',[orderVals]);
 console.log('Commande créée ID:',orderId);
 

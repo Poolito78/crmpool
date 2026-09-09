@@ -662,6 +662,9 @@ const [contratOdoo, setContratOdoo] = useState<
   const [creerDevisDate, setCreerDevisDate] = useState('');
   const [creerDevisValidite, setCreerDevisValidite] = useState('');
   const [creerDevisRefAffaire, setCreerDevisRefAffaire] = useState('');
+  /* Le chantier, au sens d'Odoo — « PANTIN ». Distinct de la référence
+     d'affaire : voir `Devis.chantier` dans `store.ts`. */
+  const [creerDevisChantier, setCreerDevisChantier] = useState('');
   const [creerDevisNotes, setCreerDevisNotes] = useState('');
 
   const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
@@ -2655,6 +2658,7 @@ const [contratOdoo, setContratOdoo] = useState<
       statut: 'brouillon',
       lignes,
       referenceAffaire: creerDevisRefAffaire || undefined,
+      chantier: creerDevisChantier || undefined,
       notes: creerDevisNotes || result?.notes || undefined,
       /* LE TRANSPORT SUIT LE DEVIS.
        *
@@ -3266,6 +3270,7 @@ const [contratOdoo, setContratOdoo] = useState<
                           <div className="space-y-1"><Label className="text-xs">Date *</Label><Input className="h-8 text-xs" type="date" value={creerDevisDate} onChange={e => setCreerDevisDate(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Validité</Label><Input className="h-8 text-xs" type="date" value={creerDevisValidite} onChange={e => setCreerDevisValidite(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Réf. affaire</Label><Input className="h-8 text-xs" value={creerDevisRefAffaire} onChange={e => setCreerDevisRefAffaire(e.target.value)} /></div>
+                          <div className="space-y-1"><Label className="text-xs">Chantier</Label><Input className="h-8 text-xs" placeholder="Ex : PANTIN" title="Le chantier tel qu'Odoo l'attend — il part dans sa case « Chantier »." value={creerDevisChantier} onChange={e => setCreerDevisChantier(e.target.value)} /></div>
                           <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerDevisNotes} onChange={e => setCreerDevisNotes(e.target.value)} /></div>
                         </div>
 

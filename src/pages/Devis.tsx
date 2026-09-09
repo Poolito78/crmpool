@@ -360,6 +360,7 @@ export default function Devis() {
   const [statut, setStatut] = useState<DevisType['statut']>('brouillon');
   const [dateEnvoi, setDateEnvoi] = useState('');
   const [referenceAffaire, setReferenceAffaire] = useState('');
+  const [chantier, setChantier] = useState('');
   const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -543,7 +544,7 @@ export default function Devis() {
       const current: DevisType = {
         id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
         clientId, contactId: contactId || undefined,
-        dateCreation, dateValidite, statut, lignes, referenceAffaire,
+        dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier,
         systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
         surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
       };
@@ -559,7 +560,7 @@ export default function Devis() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingId, clientId, contactId, clients, devis, produits, dateCreation, dateValidite,
-      statut, lignes, referenceAffaire, systeme, notes, conditions, fraisPortHT, fraisPortTVA,
+      statut, lignes, referenceAffaire, chantier, systeme, notes, conditions, fraisPortHT, fraisPortTVA,
       modeCalcul, surfaceGlobaleM2]);
 
 
@@ -699,6 +700,7 @@ export default function Devis() {
     setStatut(d.statut);
     setDateEnvoi(d.dateEnvoi || '');
     setReferenceAffaire(d.referenceAffaire || '');
+    setChantier(d.chantier || '');
     setSysteme(d.systeme || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -1299,7 +1301,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -1310,7 +1312,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -1483,12 +1485,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -2285,7 +2287,7 @@ export default function Devis() {
                       const preview: DevisType = {
                         id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
                         clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
-                        dateCreation, dateValidite, statut, lignes, referenceAffaire, systeme: systeme || undefined, notes, conditions,
+                        dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions,
                         fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
                       };
                       setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
@@ -2300,7 +2302,7 @@ export default function Devis() {
                         const current: DevisType = {
                           id: editingId, numero: existing?.numero || editingId,
                           clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
-                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire,
+                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier,
                           systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
                           surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
                         };
@@ -2566,6 +2568,13 @@ export default function Devis() {
               <div>
                 <Label>Référence affaire</Label>
                 <Input data-voice="chantier" placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
+              </div>
+              <div>
+                <Label>Chantier</Label>
+                {/* Le lieu des travaux, pas la référence du client : Odoo tient
+                    les deux séparément et c'est celui-ci qui part dans sa case
+                    « Chantier » (`x_studio_chantier`). */}
+                <Input placeholder="Ex : PANTIN" value={chantier} onChange={e => setChantier(e.target.value)} />
               </div>
               <div>
                 <Label>Système</Label>
