@@ -4,6 +4,7 @@ import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, type OdooPayload } from '@/lib/odooSync';
+import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -3103,6 +3104,66 @@ export default function Devis() {
               </div>
               </div>
             </div>
+
+            {/* BRIDES — UNE PAR RAIL.
+                Le nombre de rails se lit dans la table du catalogue, famille
+                par famille et taille par taille : il ne se déduit ni de la
+                surface ni du nombre de mâts. Une ligne dont la famille ou la
+                cote manque à la table est SIGNALÉE, jamais devinée — un rail
+                en trop se facture au client, un rail en moins manque sur le
+                chantier, et ni l'un ni l'autre ne se voit sur un total muet. */}
+            {(() => {
+              const comptage = compterBrides(
+                lignes
+                  .filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte')
+                  .map(l => {
+                    const p = l.produitId ? produitParId(produits, l.produitId) : undefined;
+                    return {
+                      texte: `${p?.reference || ''} ${p ? designationProduit(p) : ''} ${l.description || ''}`,
+                      quantite: l.quantite,
+                    };
+                  }),
+              );
+              if (!comptage.brides && comptage.aVerifier.length === 0) return null;
+
+              return (
+                <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold">Brides</p>
+                    <p className="text-sm">
+                      <span className="font-semibold">{comptage.brides}</span>
+                      <span className="text-muted-foreground"> — une par rail</span>
+                    </p>
+                  </div>
+
+                  {comptage.lignes.length > 0 && (
+                    <div className="space-y-0.5 text-[11px] text-muted-foreground">
+                      {comptage.lignes.map((b, i) => (
+                        <div key={i} className="flex gap-2">
+                          <span className="flex-1 truncate" title={b.texte}>
+                            {b.famille}{b.cote !== '—' ? ` ${b.cote}` : ''} — {b.quantite} × {b.railsUnitaires} rail{b.railsUnitaires > 1 ? 's' : ''}
+                          </span>
+                          <span className="font-medium text-foreground">{b.brides}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {comptage.aVerifier.length > 0 && (
+                    <div className="space-y-0.5 border-t border-border pt-1.5 text-[11px] text-warning">
+                      <p className="font-medium">
+                        À vérifier — {comptage.aVerifier.length} ligne(s) hors table, non comptée(s) :
+                      </p>
+                      {comptage.aVerifier.map((v, i) => (
+                        <div key={i} className="truncate" title={v.texte}>
+                          {v.famille}{v.cote ? ` ${v.cote}` : ''} — {v.raison}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Frais de port */}
             <div className="border border-border rounded-lg p-3 space-y-2 bg-muted/30">
