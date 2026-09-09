@@ -30,6 +30,7 @@ import {
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { variantesParDefaut } from '@/lib/variantFunnel';
+import { chantierDansTexte } from '@/lib/chantierDemande';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
@@ -843,6 +844,10 @@ const [contratOdoo, setContratOdoo] = useState<
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
       setCreerDevisRefAffaire(result.referencePartenaire || '');
+      /* Le chantier ne fait partie d'aucun champ extrait : le client l'écrit
+         dans l'objet de son mail. On le PROPOSE — et rien du tout plutôt que
+         n'importe quoi, voir `chantierDansTexte`. */
+      setCreerDevisChantier(chantierDansTexte(texte) || '');
       setCreerDevisNotes(result.notes || '');
     } else {
       const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
@@ -1089,7 +1094,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerCCDateLivraison(''); setCreerCCNotes('');
     setShowCreerDevis(false);
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
-    setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisNotes('');
+    setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
   }
 

@@ -183,7 +183,9 @@ export default function Devis() {
     const parseNum = (s: string) => { const n = parseFloat(s.replace(',', '.').replace(/[^\d.]/g, '')); return isNaN(n) ? null : n; };
     switch (t.kind) {
       case 'systeme': setSysteme(clean); toast.success('Système dicté'); break;
-      case 'chantier': setReferenceAffaire(clean); toast.success('Chantier dicté'); break;
+      /* Dicter « chantier » remplit le champ CHANTIER — il portait jusqu'ici
+         dans la référence d'affaire, faute de champ dédié. */
+      case 'chantier': setChantier(clean); toast.success('Chantier dicté'); break;
       case 'surface': { const n = parseNum(clean); if (n != null) { setSurfaceGlobaleM2(n); setModeCalcul('surface'); toast.success(`Surface : ${n} m²`); } else toast.error('Surface non comprise'); break; }
       case 'adresse': {
         const cl = clients.find(c => c.id === clientId);
@@ -2567,14 +2569,14 @@ export default function Devis() {
               </div>{/* fin grille dates/statut */}
               <div>
                 <Label>Référence affaire</Label>
-                <Input data-voice="chantier" placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
+                <Input placeholder="Ex: AFF-2024-001" value={referenceAffaire} onChange={e => setReferenceAffaire(e.target.value)} />
               </div>
               <div>
                 <Label>Chantier</Label>
                 {/* Le lieu des travaux, pas la référence du client : Odoo tient
                     les deux séparément et c'est celui-ci qui part dans sa case
                     « Chantier » (`x_studio_chantier`). */}
-                <Input placeholder="Ex : PANTIN" value={chantier} onChange={e => setChantier(e.target.value)} />
+                <Input data-voice="chantier" placeholder="Ex : PANTIN" value={chantier} onChange={e => setChantier(e.target.value)} />
               </div>
               <div>
                 <Label>Système</Label>
