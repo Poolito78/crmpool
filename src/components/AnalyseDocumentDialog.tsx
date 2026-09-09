@@ -30,7 +30,7 @@ import {
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { variantesParDefaut } from '@/lib/variantFunnel';
-import { tagACandidat, ajouterTag, oublierTag, useProduitTags } from '@/lib/produitTags';
+import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
   rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
@@ -1342,7 +1342,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!id) return;
     const p = produitParId(produits, id);
     if (!p) return;
-    const candidat = tagACandidat(texteDemande(ligne, i), p, tagsDe(p.id));
+    const candidat = tagACandidat(texteDemande(ligne, i), p, tagsDe(p.id), vocabulaireCatalogue(produits));
     if (!candidat) return;
 
     const { tag, automatique } = candidat;

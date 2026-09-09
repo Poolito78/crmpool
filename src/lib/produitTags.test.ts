@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   normaliserTag, memeTag, motsAppris, motsDuProduit, tagACandidat, tagsParProduit,
+  vocabulaireCatalogue,
   type TagArticle,
 } from './produitTags';
 import { chercherProduits } from './indexProduits';
@@ -118,5 +119,42 @@ describe('recherche du catalogue par tag', () => {
     const { resultats } = chercherProduits(catalogue, 'panhv60', 60, tagsLarges);
     expect(resultats[0]).toBe(cycliste);
     expect(resultats).toContain(resine);
+  });
+});
+
+describe('un code du catalogue n’est pas un synonyme', () => {
+  /* Le catalogue réel : `ak3` figure dans 18 références, `panneau` dans 2.
+     Les deux mots de la fausse leçon sont donc écartés. */
+  const CATALOGUE = [
+    produit({ id: 'a', reference: 'AK3.700.C1.BTR.R.IS.BRUT', description: 'IS AK3' }),
+    produit({ id: 'b', reference: 'AK14.700.C1.BTR.P.IS.BRUT', description: 'IS AK14' }),
+    produit({ id: 'c', reference: 'PANNEAU.SPECIAL', description: 'Panneau special' }),
+    produit({ id: 'd', reference: 'PLASTOBLOC24GM', description: 'PLASTOBLO24GMSTI' }),
+  ];
+  const VOCAB = vocabulaireCatalogue(CATALOGUE);
+  const ak14 = CATALOGUE[1];
+  const plastobloc = CATALOGUE[3];
+
+  it('relève les mots portés par les références', () => {
+    expect(VOCAB.has('ak3')).toBe(true);
+    expect(VOCAB.has('panneau')).toBe(true);
+    expect(VOCAB.has('plot')).toBe(false);
+  });
+
+  /* ⚠️ LE RATÉ QUI A MOTIVÉ LA RÈGLE. « panneau AK3 » avait été appris sur un
+     AK14 retenu par erreur pendant un essai. Inerte tant que les tags ne
+     servaient qu'à la recherche ; ravageur dès qu'ils ont valu une certitude
+     dans le rapprochement — toute demande « panneau AK3 » retenait un AK14. */
+  it('n’apprend rien d’une demande faite de codes du catalogue', () => {
+    expect(tagACandidat('panneau AK3', ak14)).not.toBeNull();     // avant : appris
+    expect(tagACandidat('panneau AK3', ak14, [], VOCAB)).toBeNull(); // après : rien
+  });
+
+  /* Le garde-fou ne doit pas emporter les vrais synonymes, qui sont tout
+     l'intérêt de la fonction. */
+  it('laisse passer les mots qui ne sont dans aucune référence', () => {
+    expect(tagACandidat('14 plot PVC', plastobloc, [], VOCAB))
+      .toEqual({ tag: 'plot pvc', automatique: true });
+    expect(motsAppris('cycliste', ak14, [], VOCAB)).toEqual(['cycliste']);
   });
 });

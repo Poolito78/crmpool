@@ -128,13 +128,52 @@ export function motsDuProduit(p: Produit): Set<string> {
 }
 
 /**
+ * Le vocabulaire des RÉFÉRENCES du catalogue : ce qu'un tag ne doit jamais
+ * retenir tout seul.
+ *
+ * ⚠️ **UN CODE N'EST PAS UN SYNONYME, ET L'APPRENTISSAGE NE SAVAIT PAS LES
+ * DISTINGUER.** Sur « panneau AK3 », un AK14 retenu par erreur pendant un
+ * essai a fait inscrire le tag « panneau ak3 » sur cet AK14. Inerte tant que
+ * les tags ne servaient qu'à la recherche à la main ; devenu ravageur dès
+ * qu'ils ont pesé 60 points dans le rapprochement, c'est-à-dire une
+ * certitude : toute demande contenant « panneau AK3 » retenait un AK14
+ * d'office, sans un mot d'avertissement.
+ *
+ * Le critère est mesuré sur le catalogue réel, pas choisi au jugé — `ak3`
+ * figure dans **18** références, `panneau` dans **2** : les deux mots de la
+ * fausse leçon sont donc écartés, et rien n'est appris. À l'inverse `plot`
+ * (0 référence), `cycliste` et `pvc` passent, et ce sont précisément les
+ * synonymes qu'on veut retenir. Pas de seuil de fréquence sur les
+ * DÉSIGNATIONS : `plot` en compte 38, et c'est justement parce que le
+ * PLASTOBLOC n'en fait pas partie que le tag a de la valeur.
+ *
+ * ⚠️ Ne s'applique qu'à l'apprentissage AUTOMATIQUE. Un tag saisi à la main
+ * sur la fiche article reste libre : celui qui l'écrit sait ce qu'il fait.
+ */
+const cacheVocabulaire = new WeakMap<readonly Produit[], Set<string>>();
+
+export function vocabulaireCatalogue(produits: Produit[]): Set<string> {
+  const connu = cacheVocabulaire.get(produits);
+  if (connu) return connu;
+  const v = new Set<string>();
+  for (const p of produits) for (const m of motsDe(p.reference || '')) v.add(m);
+  cacheVocabulaire.set(produits, v);
+  return v;
+}
+
+/**
  * Ce que la demande dit et que l'article ne dit pas.
  *
  * Rend les mots dans l'ordre où le client les a écrits — « plots bordure »
  * n'est pas « bordure plots », et un tag qui inverse les mots ne se retrouve
  * pas à la relecture.
  */
-export function motsAppris(demande: string, produit: Produit, tagsConnus: string[] = []): string[] {
+export function motsAppris(
+  demande: string,
+  produit: Produit,
+  tagsConnus: string[] = [],
+  vocabulaire?: ReadonlySet<string>,
+): string[] {
   const deja = motsDuProduit(produit);
   for (const t of tagsConnus) for (const m of motsDe(t)) deja.add(m);
 
@@ -144,7 +183,8 @@ export function motsAppris(demande: string, produit: Produit, tagsConnus: string
     const mot = brut.toLowerCase();
     if (!mot) continue;
     const cle = sansAccents(mot);
-    if (motInutile(mot) || deja.has(cle) || vus.has(cle)) continue;
+    // Un code du catalogue n'est pas un mot de client : voir `vocabulaireCatalogue`.
+    if (motInutile(mot) || deja.has(cle) || vus.has(cle) || vocabulaire?.has(cle)) continue;
     vus.add(cle);
     sortie.push(mot);
   }
@@ -178,8 +218,10 @@ export function tagACandidat(
   demande: string,
   produit: Produit,
   tagsConnus: string[] = [],
+  /** `vocabulaireCatalogue(produits)` — les mots qui sont des codes, pas des synonymes. */
+  vocabulaire?: ReadonlySet<string>,
 ): CandidatTag | null {
-  const mots = motsAppris(demande || '', produit, tagsConnus);
+  const mots = motsAppris(demande || '', produit, tagsConnus, vocabulaire);
   if (!mots.length) return null;
   const tag = normaliserTag(mots.join(' '));
   if (!tag) return null;

@@ -31,7 +31,7 @@ import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import VarianteSelect from '@/components/VarianteSelect';
-import { tagACandidat, ajouterTag, oublierTag, useProduitTags } from '@/lib/produitTags';
+import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
 import { DEVIS_TABLE_COLS_DEF, DEFAULT_DEVIS_TABLE_COLS, type DevisTableColKey } from '@/lib/devisTableConfig';
@@ -1215,7 +1215,7 @@ export default function Devis() {
   function apprendreTagDeLaSaisie(ligneId: string, p: typeof produits[0]) {
     const demande = lignes.find(l => l.id === ligneId)?.description ?? '';
     if (!demande.trim()) return;
-    const candidat = tagACandidat(demande, p, tagsDe(p.id));
+    const candidat = tagACandidat(demande, p, tagsDe(p.id), vocabulaireCatalogue(produits));
     if (!candidat) return;
 
     const { tag, automatique } = candidat;
