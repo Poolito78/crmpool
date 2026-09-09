@@ -398,8 +398,26 @@ class Tarificateur {
     if (r.base === "standard_price") {
       base = a.standard_price || 0;
     } else if (r.base === "pricelist" && r.base_pricelist_id) {
+      /* ⚠️ **LE MAILLON QUI SE PERD EN SILENCE.** Odoo enchaîne les listes :
+         sur AF036911, le prix part du public, subit une PREMIÈRE remise dans
+         la liste de base, et seulement ensuite la règle de catégorie. Mesuré
+         sur le devis : AK3.700.C1 vaut 191,20 public, 133,84 après la liste
+         de base (−30 %), 37,475 après les 72 % — et c'est bien le montant
+         facturé. Idem TRIFLASHAK5.700.C1 : 979,34 → 685,54 → 191,95 (devis
+         191,937).
+
+         Quand la récursion ne rend rien, on retombe sur le prix de fiche —
+         donc SANS la première remise — et le résultat sort trop haut sans que
+         rien ne le signale : 45,01 € au lieu de 37,475 €. Ce repli est peut-
+         être légitime (Odoo fait de même quand aucune règle ne répond), mais
+         il ne doit plus être muet. */
       const v = await this.prix(r.base_pricelist_id[0], a, qte, profondeur + 1, etiquette);
       base = v === null ? (a.lst_price || 0) : v;
+      if (profondeur === 0) {
+        console.log(`[tarif-base] ${etiquette || a.name} (#${a.id}) → liste de base `
+          + `#${r.base_pricelist_id[0]} rend ${v === null ? "RIEN (repli sur le prix de "
+          + `fiche ${a.lst_price || 0})` : v} — base retenue ${base}, fiche ${a.lst_price || 0}`);
+      }
     } else {
       base = a.lst_price || 0;
     }
