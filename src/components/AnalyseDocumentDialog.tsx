@@ -155,6 +155,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      fois le même, et la recherche d'article les voit. */
   const { tagsDe, parProduit: tagsParProduit } = useProduitTags();
 
+
   /* ── état analyse ── */
   const [texte, setTexte] = useState('');
   const [fichier, setFichier] = useState<File | null>(null);
@@ -287,6 +288,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * peut demander une dizaine de secondes.
    */
   const [tarificationEnCours, setTarificationEnCours] = useState(false);
+
+  /**
+   * La zone de saisie, et la hauteur qu'on lui a donnee.
+   *
+   * ⚠️ **ELLE SE REFERMAIT À 60 px DÈS L'ANALYSE FAITE** — c'est-à-dire au
+   * moment précis où l'on veut ajouter une précision et relancer. Trois
+   * lignes visibles pour un mail de dix : on relisait par le trou d'une
+   * serrure, et une demande mal complétée donne une analyse mal faite.
+   *
+   * La poignée de redimensionnement suffit (`resize-y`), mais la refaire à
+   * chaque ouverture serait une corvée : la hauteur choisie est retenue dans
+   * le navigateur et réappliquée. Elle est écrite EN DIRECT sur l'élément, et
+   * non gardée dans un état React — un état relancerait un rendu à chaque
+   * pixel tiré, ce rendu réappliquerait la hauteur, qui relancerait
+   * l'observateur.
+   */
+  const zoneTexteRef = useRef<HTMLTextAreaElement>(null);
   const [odooResultats, setOdooResultats] = useState<PartenaireOdoo[] | null>(null);
 
   /**
@@ -677,6 +695,33 @@ const [contratOdoo, setContratOdoo] = useState<
     || t === 'demande_devis';
 
   /* ── pré-remplissage formulaire CF ── */
+  useEffect(() => {
+    const el = zoneTexteRef.current;
+    if (!open || !el) return;
+    try {
+      const v = Number(localStorage.getItem('crm_analyse_hauteur'));
+      if (v > 0) el.style.height = `${v}px`;
+    } catch { /* navigateur sans stockage : la taille par défaut fera l'affaire */ }
+
+    if (typeof ResizeObserver === 'undefined') return;
+    let minuteur: number | undefined;
+    const obs = new ResizeObserver(() => {
+      /* On n'écrit qu'une fois le geste fini : un glisser produit des dizaines
+         d'événements, et autant d'écritures dans le stockage. */
+      window.clearTimeout(minuteur);
+      minuteur = window.setTimeout(() => {
+        const h = Math.round(el.getBoundingClientRect().height);
+        if (h > 0) {
+          try { localStorage.setItem('crm_analyse_hauteur', String(h)); } catch { /* ignoré */ }
+        }
+      }, 300);
+    });
+    obs.observe(el);
+    return () => { window.clearTimeout(minuteur); obs.disconnect(); };
+    /* `result` en dépendance : l'analyse faite change la hauteur minimale du
+       champ, il faut alors lui rendre la sienne. */
+  }, [open, result]);
+
   useEffect(() => {
     if (!result || matchedCF || !isFournisseurDoc(result.typeDocument)) return;
     const year = new Date().getFullYear();
@@ -2854,10 +2899,12 @@ const [contratOdoo, setContratOdoo] = useState<
                 {/* Textarea + bouton dictée */}
                 <div className="relative">
                   <Textarea
+                    ref={zoneTexteRef}
                     placeholder={fichier ? 'Texte complémentaire (optionnel)…' : 'Coller texte, email, commande…\nou glisser un PDF / Excel / .eml\nou dicter →'}
                     value={texte}
                     onChange={e => setTexte(e.target.value)}
-                    className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-none p-0 placeholder:text-muted-foreground/60 ${result ? 'min-h-[60px]' : 'min-h-[100px] sm:min-h-[140px]'}`}
+                    title="Tirez le coin inférieur droit pour agrandir la zone — la taille est retenue."
+                    className={`font-mono text-xs border-0 bg-transparent shadow-none focus-visible:ring-0 resize-y p-0 pr-10 placeholder:text-muted-foreground/60 ${result ? 'min-h-[90px]' : 'min-h-[140px] sm:min-h-[200px]'}`}
                   />
                   <div className="absolute top-0 right-0">
                     <VoiceButton
