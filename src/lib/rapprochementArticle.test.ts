@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   caracteristiques, couleurs, memeFamille, rapprocherArticle, tagsReconnus,
+  famillesAttendues,
 } from './rapprochementArticle';
 import type { Produit } from './store';
 
@@ -321,5 +322,49 @@ describe('les mots du client nourrissent le rapprochement', () => {
     expect(tagsReconnus('platoplot du chantier', ['plot'])).toEqual([]);
     expect(tagsReconnus('bordure de trottoir', ['plot bordure'])).toEqual([]);
     expect(tagsReconnus('plot bordure a poser', ['plot bordure'])).toEqual(['plot bordure']);
+  });
+});
+
+describe('un code nomme ferme les autres familles', () => {
+  /* Catégories relevées sur le catalogue réel. */
+  const cat = (reference: string, description: string, categorie: string): Produit => ({
+    ...art(reference, description), id: reference, categorie,
+  }) as Produit;
+
+  const CATALOGUE = [
+    cat('KC1.800.600.C1.BTR.R.IS.BRUT', 'IS KC1',
+        'SIGNALISATION TEMPORAIRE / Police / Rectangle (KM) / Maquette'),
+    cat('THERMOVELO128080', 'SIGLE HOMME A VELO 1280x800 THERMOPLASTIQUE (LOT DE 5)',
+        'ISOMARK / H2'),
+  ];
+  const TAGS = new Map([['THERMOVELO128080', ['cycliste']]]);
+  const DEMANDE = 'panneau personnalise "Deviation cyclistes vers la chaussee" '
+    + 'avec le style des panneaux KC1';
+
+  it('relève la famille depuis le catalogue, pas depuis une liste écrite à la main', () => {
+    expect([...famillesAttendues(DEMANDE, CATALOGUE)]).toEqual(['SIGNALISATION TEMPORAIRE']);
+    // « panneau » n'a pas de chiffre, « 80x40 » ne commence pas par une lettre.
+    expect(famillesAttendues('panneau 80x40 de 1.50m', CATALOGUE).size).toBe(0);
+  });
+
+  /* ⚠️ LE CAS RÉEL. Le tag « cycliste » faisait retenir un sigle
+     thermoplastique de marquage au sol — 156,82 € — sur une demande de
+     panneau au style KC1. Le tag était juste ailleurs, faux ici. */
+  it('écarte le marquage au sol quand la demande nomme un KC1', () => {
+    const r = rapprocherArticle(DEMANDE, CATALOGUE, 20, TAGS);
+    expect(r.candidats.map(c => c.reference)).not.toContain('THERMOVELO128080');
+    expect(r.candidats[0]?.reference).toBe('KC1.800.600.C1.BTR.R.IS.BRUT');
+    /* Et il n'est PAS retenu d'office : la demande ne le désigne qu'en partie
+       — un panneau « au style KC1 » n'est pas un KC1 de catalogue. Proposer
+       sans affirmer est ici la bonne réponse. */
+    expect(r.confiance).toBe('douteux');
+  });
+
+  /* ⚠️ Le filtre ne doit jamais vider la liste : une ligne sans candidat ne
+     se rattrape pas, elle part au devis vide. */
+  it('ne filtre pas jusqu’au vide', () => {
+    const seulementAilleurs = [CATALOGUE[1]];
+    const r = rapprocherArticle(DEMANDE, seulementAilleurs, 20, TAGS);
+    expect(r.candidats.map(c => c.reference)).toEqual(['THERMOVELO128080']);
   });
 });

@@ -438,6 +438,84 @@ export const SEUIL_PETIT_CONDITIONNEMENT = 30;
 /** Au-dessus, on retient l'article d'office. En dessous, on demande à voir. */
 const SEUIL_SUR = 55;
 
+/* ── La famille que le code impose ───────────────────────────────────────── */
+
+/**
+ * ⚠️ **UN CODE NOMMÉ FIXE LA FAMILLE, ET FERME LES AUTRES.**
+ *
+ * « panneau personnalisé "Déviation cyclistes vers la chaussée" avec le style
+ * des panneaux **KC1** » retenait THERMOVELO128080 — un sigle thermoplastique
+ * de marquage au sol, à 156,82 € — parce qu'un tag « cycliste » y avait été
+ * posé. Le tag était juste dans son contexte et faux dans celui-ci : un mot
+ * isolé ne porte pas la famille du produit.
+ *
+ * Le code, lui, la porte. Relevé sur le catalogue :
+ *
+ *     KC1.*        SIGNALISATION TEMPORAIRE / Police / Rectangle (KM)
+ *     AK3.*        SIGNALISATION TEMPORAIRE / Police / Triangle (AK)
+ *     THERMOVELO*  ISOMARK / H2
+ *
+ * Dès que la demande nomme KC1, chercher dans ISOMARK n'a plus de sens. On
+ * ferme donc les autres familles — c'est une CONTRADICTION, au même titre
+ * qu'un diamètre ou une couleur qui ne concordent pas, et non une simple
+ * préférence de classement.
+ *
+ * ⚠️ **Jamais jusqu'au vide** : si le filtre ne laisse rien, on rend la liste
+ * entière. Une ligne sans candidat ne se rattrape pas.
+ */
+const cacheFamilles = new WeakMap<readonly Produit[], Map<string, Set<string>>>();
+
+/** Le premier segment d'un chemin de catégorie : « SIGNALISATION TEMPORAIRE ». */
+function familleDeCategorie(categorie?: string): string {
+  return sansAccents((categorie || '').split('/')[0] || '').trim().toUpperCase();
+}
+
+/** Le code que porte une référence : son premier segment, « KC1 » de KC1.800.600. */
+function codeDeReference(reference?: string): string {
+  return sansAccents((reference || '').split('.')[0] || '').trim().toUpperCase();
+}
+
+/**
+ * Code d'article → familles où ce code existe, relevé sur le catalogue.
+ *
+ * Le catalogue est le seul référentiel qui ne vieillit pas : pas de liste de
+ * codes écrite à la main, qui serait fausse à la première gamme nouvelle.
+ */
+function famillesParCode(produits: Produit[]): Map<string, Set<string>> {
+  const connu = cacheFamilles.get(produits);
+  if (connu) return connu;
+  const m = new Map<string, Set<string>>();
+  for (const p of produits) {
+    const code = codeDeReference(p.reference);
+    const famille = familleDeCategorie(p.categorie);
+    if (!code || !famille) continue;
+    const s = m.get(code);
+    if (s) s.add(famille);
+    else m.set(code, new Set([famille]));
+  }
+  cacheFamilles.set(produits, m);
+  return m;
+}
+
+/**
+ * Les familles ouvertes par les codes que la demande nomme, ou rien.
+ *
+ * Un mot n'est retenu comme code que s'il **commence par une lettre**, porte
+ * un chiffre, et existe réellement comme premier segment de référence :
+ * « KC1 » et « AK3 » passent, « 80x40 » (commence par un chiffre) et
+ * « panneau » (aucun chiffre) non.
+ */
+export function famillesAttendues(demandeTexte: string, produits: Produit[]): Set<string> {
+  const table = famillesParCode(produits);
+  const out = new Set<string>();
+  for (const brut of sansAccents(demandeTexte).toUpperCase().split(/[^A-Z0-9#]+/)) {
+    if (brut.length < 2 || !/^[A-Z]/.test(brut) || !/\d/.test(brut)) continue;
+    const familles = table.get(brut);
+    if (familles) for (const f of familles) out.add(f);
+  }
+  return out;
+}
+
 export function rapprocherArticle(
   demandeTexte: string,
   produits: Produit[],
@@ -450,7 +528,7 @@ export function rapprocherArticle(
 
   const demande = caracteristiques(texte);
 
-  const notes: { p: Produit; score: number; pourquoi: string }[] = [];
+  let notes: { p: Produit; score: number; pourquoi: string }[] = [];
   for (const p of produits) {
     const n = noter(demande, texte, p, tags?.get(p.id));
     if (n && n.score > 0) notes.push({ p, score: n.score, pourquoi: n.pourquoi });
@@ -462,6 +540,15 @@ export function rapprocherArticle(
     || (caracteristiques(`${a.p.reference} ${a.p.description}`).conditionnement ?? 0)
        - (caracteristiques(`${b.p.reference} ${b.p.description}`).conditionnement ?? 0)
     || a.p.reference.length - b.p.reference.length);
+
+  /* La famille que le code impose ferme les autres — voir `famillesAttendues`.
+     Appliqué APRÈS la notation : le filtre ne change pas les scores, il retire
+     des articles d'une autre famille que celle nommée. */
+  const familles = famillesAttendues(texte, produits);
+  if (familles.size) {
+    const gardes = notes.filter(n => familles.has(familleDeCategorie(n.p.categorie)));
+    if (gardes.length) notes = gardes;
+  }
 
   const candidats = notes.slice(0, limite).map(n => n.p);
   if (!notes.length) {
