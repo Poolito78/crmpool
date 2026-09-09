@@ -47,6 +47,20 @@ export const RAILS_FIXES: Record<string, number> = {
   G1: 3,
   M9H: 2,
   M9B: 1,
+  /**
+   * CHANTIER, formes rectangulaires — KC, KD, CK.
+   *
+   * Le kit rail existe aussi en signalisation temporaire, et le devis Odoo
+   * AF036911 le facture : ses AK3, AK5 et KC1 portent le segment `.R.` et
+   * ouvrent une ligne de brides. La règle métier : **2 rails pour les
+   * disques, les carrés et les rectangles**, comme pour la police.
+   *
+   * Les triangles (AK) et les disques (BK) n'ont pas de table propre : ils
+   * reprennent celle de la police, où la cote décide — 2 rails jusqu'à 850,
+   * 3 au-delà. Un KC1 800×600 n'entre dans aucune gamme de cotes : c'est un
+   * rectangle, et 2 rails quelle que soit sa taille.
+   */
+  TEMPO_RECT: 2,
 };
 
 /**

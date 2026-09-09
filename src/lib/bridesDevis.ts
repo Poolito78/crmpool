@@ -76,7 +76,7 @@ function coteSimple(t: string): string | null {
 export function familleRails(code: string): string | null {
   const t = String(code || '').toUpperCase().replace(/\s+/g, '');
   if (!t) return null;
-  if (estCodeChantier(t)) return null;
+  if (estCodeChantier(t)) return familleChantier(t);
 
   if (/^M9H/.test(t)) return 'M9H';
   if (/^M9B/.test(t)) return 'M9B';
@@ -94,6 +94,29 @@ export function familleRails(code: string): string | null {
   if (/^J4/.test(t)) return 'J4';
   if (/^J5/.test(t)) return 'J5';
   if (/^G1/.test(t)) return 'G1';
+  return null;
+}
+
+/**
+ * Famille de rails d'un code de CHANTIER — AK, BK, KC, KD, CK, KM.
+ *
+ * ⚠️ **LE KIT RAIL EXISTE AUSSI EN SIGNALISATION TEMPORAIRE**, et ces
+ * familles étaient purement et simplement exclues du comptage. Le devis Odoo
+ * AF036911 le dit : ses AK3, AK5 et KC1 portent le segment `.R.` — kit rail —
+ * et ouvrent une ligne de brides. Les écarter revenait à livrer un chantier
+ * sans de quoi fixer ses panneaux.
+ *
+ * Elles n'ont pas de table à elles : **la forme décide, et la cote avec**,
+ * exactement comme pour la police. Un AK est un triangle, il lit la table des
+ * « A » ; un BK est un disque, il lit celle des « B » ; un KM porte une
+ * mention, il lit celle des panonceaux. Les rectangles — KC, KD, CK — ne
+ * relèvent d'aucune gamme de cotes : 2 rails, quelle que soit la taille.
+ */
+function familleChantier(t: string): string | null {
+  if (/^KM\d/.test(t)) return 'PANONCEAU';
+  if (/^AK\d/.test(t)) return 'A';
+  if (/^BK\d/.test(t)) return 'B';
+  if (/^(KC|KD|CK)\d/.test(t)) return 'TEMPO_RECT';
   return null;
 }
 
@@ -117,7 +140,10 @@ const CLASSE_SEULE = /^C[123](FJ|J|V)?$/;
 /** Le code réglementaire présent dans un texte, s'il y en a un. */
 function codeDuTexte(t: string): string | null {
   const T = String(t || '').toUpperCase();
-  const re = /\b(M9[HB]|M\d+[A-Z]?\d*|AB\d+[A-Z]?\d*|A\d+[A-Z]*\d*|B\d+[A-Z]*\d*|CE\d+[A-Z]*|C\d+[A-Z]*|J\d+|G1[A-C]?)\b/g;
+  /* Les codes de CHANTIER passent en tête : « AK3 » doit se lire AK3 et non
+     tomber plus loin sur un autre motif, et « KC1 » n'est reconnu par aucune
+     des alternatives de police. */
+  const re = /\b([ABC]K\d+[A-Z]*|K[A-Z]{0,2}\d+[A-Z]*|M9[HB]|M\d+[A-Z]?\d*|AB\d+[A-Z]?\d*|A\d+[A-Z]*\d*|B\d+[A-Z]*\d*|CE\d+[A-Z]*|C\d+[A-Z]*|J\d+|G1[A-C]?)\b/g;
   /* On parcourt TOUTES les occurrences : dans une référence, la classe précède
      souvent ce qui pourrait être un code, et s'arrêter à la première la
      retenait. */

@@ -14,10 +14,19 @@ describe('familleRails', () => {
     expect(familleRails('M9z')).toBe('PANONCEAU');
   });
 
-  it('ecarte la signalisation temporaire', () => {
-    expect(familleRails('KD22a')).toBeNull();
-    expect(familleRails('AK5')).toBeNull();
-    expect(familleRails('KC1')).toBeNull();
+  /* ⚠️ RÈGLE CORRIGÉE PAR LE MÉTIER. La signalisation temporaire était
+     écartée du comptage, au motif qu'elle se pose au sol ou sur trépied. Le
+     devis Odoo AF036911 dit le contraire : ses AK3, AK5 et KC1 portent le
+     segment « .R. » — kit rail — et ouvrent une ligne de brides. Les écarter
+     revenait à livrer un chantier sans de quoi fixer ses panneaux.
+
+     La forme décide, et la cote avec, comme pour la police. */
+  it('donne aux familles de chantier la table de leur forme', () => {
+    expect(familleRails('AK5')).toBe('A');          // triangle
+    expect(familleRails('BK1')).toBe('B');          // disque
+    expect(familleRails('KC1')).toBe('TEMPO_RECT'); // rectangle
+    expect(familleRails('KD22a')).toBe('TEMPO_RECT');
+    expect(familleRails('KM9')).toBe('PANONCEAU');
   });
 });
 
@@ -62,9 +71,12 @@ describe('compterBrides', () => {
   it('ne compte pas ce qui n a pas de rail', () => {
     const c = compterBrides([
       { texte: 'PLASTOBLOC16 plot PVC', quantite: 14 },
-      { texte: 'KC1.800.600 chantier mobile', quantite: 7 },
       { texte: 'SG80401_5.2500 mat', quantite: 4 },
+      { texte: 'BR8040SFP50.BRUT BRIDE 80X40 SIMPLE FACE', quantite: 38 },
     ]);
+    /* Un plot, un mât, une bride : aucun n'est un panneau. Ils ne sont pas
+       « à vérifier » non plus — ils n'ont simplement rien à voir avec des
+       rails. (Le KC1 qui figurait ici EN COMPTE désormais : voir plus haut.) */
     expect(c.brides).toBe(0);
     expect(c.aVerifier).toHaveLength(0);
   });
@@ -95,9 +107,9 @@ describe('la classe de rétroréflexion n’est pas un code de panneau', () => {
       { texte: 'POINTDERASSEMBLEMENT.500.C1.BTR.IS.BRUT IS POINT DE RASSEMBLEMENT', quantite: 2 },
       { texte: 'TRIFLASHAK5.700.C1.BTR.R.IS.BRUT IS AK5 3 FEUX LEDS', quantite: 3 },
     ]);
-    expect(r.lignes).toEqual([]);
+    /* Aucune ne doit ressortir en famille « CE » : c'etait le defaut. */
+    expect(r.lignes.map(l => l.famille)).not.toContain('CE');
     expect(r.aVerifier).toEqual([]);
-    expect(r.brides).toBe(0);
   });
 
   /* Le garde-fou ne doit pas emporter les vrais panneaux de la série C, qui
@@ -107,5 +119,42 @@ describe('la classe de rétroréflexion n’est pas un code de panneau', () => {
     expect(r.lignes.length + r.aVerifier.length).toBe(1);
     const famille = r.lignes[0]?.famille ?? r.aVerifier[0]?.famille;
     expect(famille).toBe('CE');
+  });
+});
+
+describe('le kit rail existe aussi en signalisation temporaire', () => {
+  /* ⚠️ Les familles de chantier etaient purement exclues du comptage. Le devis
+     AF036911 les facture : ses AK3, AK5 et KC1 portent le segment « .R. » —
+     kit rail — et ouvrent une ligne de brides. Les ecarter revenait a livrer
+     un chantier sans de quoi fixer ses panneaux.
+
+     La forme decide, et la cote avec, comme pour la police. */
+  it('compte les triangles de chantier sur la table des triangles', () => {
+    const r = compterBrides([
+      { texte: 'AK3.700.C1.BTR.R.IS.BRUT IS AK3', quantite: 1 },
+      { texte: 'TRIFLASHAK5.700.C1.BTR.R.IS.BRUT IS AK5 3 FEUX LEDS', quantite: 3 },
+    ]);
+    expect(r.aVerifier).toEqual([]);
+    expect(r.lignes.map(l => `${l.famille}/${l.cote}/${l.railsUnitaires}`))
+      .toEqual(['A/700/2', 'A/700/2']);
+    expect(r.brides).toBe(2 + 6);
+  });
+
+  /* Un KC1 800x600 ne releve d'aucune gamme de cotes : c'est un rectangle,
+     donc 2 rails quelle que soit sa taille. */
+  it('compte les rectangles de chantier a 2 rails, sans regarder la cote', () => {
+    const r = compterBrides([
+      { texte: 'KC1.800.600.C1.BTR.R.IS.BRUT IS KC1', quantite: 7 },
+    ]);
+    expect(r.aVerifier).toEqual([]);
+    expect(r.brides).toBe(14);
+  });
+
+  /* Un disque de chantier lit la table des disques : 650 -> 2 rails. */
+  it('compte les disques de chantier sur la table des disques', () => {
+    const r = compterBrides([
+      { texte: 'BK1.650.C1.BTR.R.IS.BRUT BKSPFO PIETON EN 650 KIT RAIL', quantite: 4 },
+    ]);
+    expect(r.brides).toBe(8);
   });
 });
