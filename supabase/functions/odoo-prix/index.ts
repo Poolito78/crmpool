@@ -2094,6 +2094,40 @@ serve(async (req) => {
                 + ` (${paliers[iBase].raison}, palier le plus précis qui réponde)`);
             }
           }
+
+          /* ⚠️ **LE CODE SEUL DOIT TOUJOURS ÊTRE PROPOSÉ, EN PLUS.**
+           *
+           * L'échelle s'arrête au palier le plus PRÉCIS qui rende au moins
+           * un article — d'ordinaire le bon réflexe, ici un piège. Sur
+           * « panneaux KC1 chantier interdit au public », le palier
+           * ["kc1","chantier"] rendait un article : KC1M#CHANTIER MOBILE.
+           * On s'arrêtait donc là, et le panneau réellement demandé —
+           * référence KC1.800.600.C1, désigné « IS KC1 » — n'était JAMAIS
+           * proposé : il ne porte pas le mot « chantier ».
+           *
+           * Or « chantier interdit au public » n'est pas le NOM du panneau,
+           * c'est sa SIGNIFICATION. Le client décrit ce que le panneau veut
+           * dire ; le catalogue, lui, le nomme par son code. Exiger la
+           * prose, c'est exclure l'article.
+           *
+           * On n'enlève donc rien — le palier précis reste en tête, il a
+           * ses raisons — mais on ajoute derrière lui la famille du code.
+           * Le classement tranche ensuite, et surtout le bon article est
+           * enfin À L'ÉCRAN, à un clic. Mesuré sur le devis AF036911 :
+           * KC1, EPI, FP et point de rassemblement ne proposaient rien du
+           * tout. */
+          const codesDemandes = mots.filter(estCodeArticle);
+          if (codesDemandes.length && base && base.length) {
+            const famille = base.filter((x: any) => porte(x, codesDemandes));
+            const vus = new Set(res.map((x: any) => x.id));
+            const ajouts = famille.filter((x: any) => !vus.has(x.id));
+            if (ajouts.length) {
+              res = [...res, ...ajouts];
+              console.log(`[recherche] « ${q} » : +${ajouts.length} article(s) de la `
+                + `famille ${JSON.stringify(codesDemandes)} ajoutés — la prose du `
+                + `client ne doit pas exclure l'article qu'elle décrit`);
+            }
+          }
         }
       }
 
@@ -2371,6 +2405,9 @@ serve(async (req) => {
       const petitContenant = /\b(pots?|seaux?|seau|bidons?|boites?|boîtes?)\b/i.test(q);
       const grosContenant = /\b(f[uû]ts?|tonnelets?|palettes?)\b/i.test(q);
 
+      /* Les codes d'article que la demande nomme — « kc1 », « ak3 ». */
+      const codesQ = motsQ.filter(estCodeArticle);
+
       const points = (x: any) => {
         const code = (x.default_code || "").toLowerCase();
         const nom = (x.name || "").toLowerCase();
@@ -2381,6 +2418,14 @@ serve(async (req) => {
         const cl = classeDe(x.default_code || "");
         if (classeDemandee && cl && cl !== classeDemandee) return -100;
         let n = 0;
+        /* ⚠️ **LE CODE EXACT PRIME SUR LE CODE VOISIN.**
+           « KC1 » demandé, KC1.800.600 et KC1M#CHANTIER MOBILE répondent tous
+           deux — mais KC1M est une AUTRE gamme, à un autre prix. De même AK3
+           contre AK3A, AK3B, AK30, AK31, tous vus dans les traces du devis
+           AF036911. Le premier segment de la référence porte le code : quand
+           il est exactement celui demandé, l'article passe devant. */
+        const premierSegment = (segments(x.default_code || "")[0] || "").toLowerCase();
+        if (codesQ.some((c) => premierSegment === c.toLowerCase())) n += 5;
         /* Préférence, pas obligation : elle départage à égalité de mots
            retrouvés, et ne peut écarter personne. */
         if (chantier && segments(x.default_code || "").some((y) => /^r$/i.test(y))) n += 3;
