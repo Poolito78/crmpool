@@ -1690,6 +1690,47 @@ serve(async (req) => {
      * le niveau que MonCRM AFFICHE, et il tarife encore les lignes chiffrées
      * à la grille faute d'article Odoo (`prixPanneau`). Il ne décide plus
      * rien ici. */
+
+    /**
+     * ⚠️ **LE CONTRAT-CADRE TARIFE, OU IL NE SERT QUE DE FILET.** Cette
+     * seule variable départage les deux, et les deux blocs de chiffrage
+     * (références désignées, propositions de recherche) la lisent — les
+     * laisser décider chacun de leur côté est exactement ce qui les avait
+     * fait diverger.
+     *
+     * Elle est VRAIE dans deux cas, et deux seulement :
+     *
+     *  1. **Un contrat-cadre est réellement rattaché au client** (`actif`).
+     *     C'est le tarif négocié, celui du bordereau signé : il l'emporte
+     *     sur tout calcul de liste de prix. Mesuré sur AF035681 (REFLEX) —
+     *     la liste appliquait une règle de catégorie à ~70 % et cotait le
+     *     B14#30km/h.650.C2 à 60,32 € quand le contrat le facture 46,62 €.
+     *     ⚠️ Ce cas était ÉCRIT ici depuis l'origine (« sauf si un contrat
+     *     cadre est réellement rattaché, il tarife alors ») et n'a jamais
+     *     été codé : `cadre.actif` ne servait qu'à charger le filet et à
+     *     renseigner l'écran. La liste doublait donc le contrat, en
+     *     silence, y compris chez les clients qui en ont un.
+     *  2. **Un niveau R1-R4 est imposé au sélecteur.** Forcer un niveau
+     *     n'a de sens que si la grille de ce niveau remplace ce qu'Odoo
+     *     applique — sinon le sélecteur ne changerait rien à l'écran.
+     *
+     * Elle est FAUSSE quand la grille n'est là qu'en filet
+     * (`niveauDefaut`, aucun contrat rattaché) : la liste de prix fait
+     * alors foi, cf. AF036911/MGD ci-dessus. La grille ne reprend la main
+     * que si la liste ne rend rien de tenable — sans quoi l'article
+     * disparaîtrait des propositions.
+     *
+     * Dans tous les cas la grille ne tarife QUE ce qu'elle couvre : un
+     * article qu'aucun gabarit n'atteint retombe sur la liste de prix.
+     */
+    const cadreTarife = cadre.actif || (!!niveauImpose && !!niveauApplique);
+    console.log(`[contrat-cadre] cadreTarife=${cadreTarife} `
+      + `(actif=${cadre.actif} impose=${niveauImpose || "-"} `
+      + `applique=${niveauApplique || "-"}) — `
+      + (cadreTarife
+        ? "la grille tarife, la liste de prix ne sert que ce qu'elle ne couvre pas"
+        : "la liste de prix fait foi, la grille n'est qu'un filet"));
+
     /* Copie locale d'abord : elle évite des centaines de motifs envoyés à
        Odoo sur chaque devis. Son absence n'est pas une erreur. */
     await cadre.chargerCopieLocale();
@@ -1785,9 +1826,11 @@ serve(async (req) => {
     const prix: Record<string, unknown> = {};
     for (const [ref, a] of parReference) {
       const qte = quantites.get(ref) || 1;
-      /* ⚠️ **LA LISTE DE PRIX D'ABORD, LA GRILLE EN REPLI** — même règle
-         qu'au chiffrage des recherches, plus bas, et pour la même raison :
-         c'est de la liste de prix qu'Odoo se sert pour émettre le devis. */
+      /* ⚠️ **QUI TARIFE DÉPEND DU CONTRAT, PAS DE L'ORDRE DES LIGNES** — la
+         règle tient dans `cadreTarife`, plus haut : contrat-cadre rattaché
+         ou niveau imposé → la grille ; sinon la liste de prix, dont Odoo se
+         sert pour émettre le devis. Les deux prix sont calculés dans tous
+         les cas, parce que celui qui perd sert de repli à l'autre. */
       let pListe: number | null = null;
       try {
         const v = await tarif.prix(contratId, a, qte, 0, ref);
@@ -1816,7 +1859,15 @@ serve(async (req) => {
          grille reprend la main plutôt que de laisser la ligne sans prix. */
       const listeTenable = pListe !== null && pListe > 0
         && !(cout > 0 && pListe < cout);
-      let contratPrix: number | null = listeTenable ? pListe : pCadre;
+      /* ⚠️ **QUI TARIFE : voir `cadreTarife` plus haut.** Contrat rattaché
+         ou niveau imposé → la grille, dès qu'elle couvre l'article. Sinon
+         la liste de prix, la grille ne servant que de repli. Un tarif
+         contractuel n'a pas à être comparé au coût de revient : c'est un
+         prix négocié, pas une reconstruction depuis une fiche à 1 €. */
+      const venuDuCadre = pCadre !== null && (cadreTarife || !listeTenable);
+      let contratPrix: number | null = venuDuCadre
+        ? pCadre
+        : (listeTenable ? pListe : null);
 
       const prixEffectif = contratPrix !== null ? contratPrix : a.lst_price;
       /* Le garde-fou « sous le coût » vise les prix reconstruits depuis une
@@ -1829,7 +1880,7 @@ serve(async (req) => {
       }
       prix[ref] = {
         designation: a.name,
-        source: listeTenable ? "liste" : (pCadre !== null ? "contrat" : "aucun"),
+        source: venuDuCadre ? "contrat" : (listeTenable ? "liste" : "aucun"),
         gabarit: cadre.gabarit(ref),
         contrat: contratPrix,
         fiche: a.lst_price,
@@ -2576,19 +2627,21 @@ serve(async (req) => {
 
 
       trouvailles[q] = (await Promise.all(retenus.map(async (x, i) => {
-        /* ⚠️ **LA LISTE DE PRIX D'ABORD, LA GRILLE EN REPLI.**
+        /* ⚠️ **QUI TARIFE : `cadreTarife`, défini une fois plus haut.**
          *
-         * L'ordre était l'inverse, et il faisait annoncer des prix qu'aucun
-         * devis ISOSIGN ne porte : sur AF036911 (MGD, liste
-         * « 30/70/72/… »), la grille R4 cotait AK3.700.C1.BTR.R.IS.BRUT à
-         * 39,41 € quand le devis émis le facture **37,475 €**. Odoo se sert
-         * de la liste de prix ; MonCRM doit dire la même chose que lui.
+         * La grille a trois rôles, et seulement trois. Elle TARIFE quand un
+         * contrat-cadre est réellement rattaché (cf. AF035681 REFLEX : la
+         * liste cotait le B14 à 60,32 €, le contrat le facture 46,62 €) ou
+         * quand un niveau R1-R4 est imposé au sélecteur. Elle sert de REPLI,
+         * sinon, quand la liste ne rend rien d'utilisable — ce qui évite que
+         * l'article soit purement et simplement retiré plus bas.
          *
-         * La grille garde deux rôles, et seulement deux : elle tarife quand
-         * un contrat cadre est réellement rattaché (`cadre.actif`, cf.
-         * AF035681 REFLEX) ou quand un niveau est imposé au sélecteur — et
-         * elle sert de repli quand la liste ne rend rien d'utilisable, ce qui
-         * évite que l'article soit purement et simplement retiré plus bas. */
+         * Hors de ces cas, la liste de prix fait foi, et il ne faut pas la
+         * doubler : sur AF036911 (MGD, sans contrat rattaché, liste
+         * « 30/70/72/… ») la grille R4 chargée en filet cotait
+         * AK3.700.C1.BTR.R.IS.BRUT à 39,41 € quand le devis émis le facture
+         * **37,475 €**. Odoo se sert de la liste ; MonCRM doit dire la même
+         * chose que lui. */
         let pListe: number | null = null;
         try {
           const v = await tarif.prix(contratId, arts[i], qte, 0, x.default_code || "");
@@ -2614,7 +2667,11 @@ serve(async (req) => {
            une fiche cassée, pas un tarif — la grille reprend la main. */
         const listeTenable = pListe !== null && pListe > 0
           && !(cout > 0 && pListe < cout);
-        const p = listeTenable ? pListe : pCadre;
+        /* ⚠️ **MÊME ARBITRAGE QU'AU BLOC DES RÉFÉRENCES** — une proposition
+           de recherche et la même référence saisie à la main doivent porter
+           le même prix, sans quoi le prix changerait en retenant l'article. */
+        const venuDuCadre = pCadre !== null && (cadreTarife || !listeTenable);
+        const p = venuDuCadre ? pCadre : (listeTenable ? pListe : null);
 
         const prixEffectif = p !== null ? p : x.lst_price;
         /* ⚠️ **NE RETIRER L'ARTICLE QUE SI PLUS RIEN NE LE TARIFE.**
@@ -2649,7 +2706,7 @@ serve(async (req) => {
           /* D'où vient le prix : la grille du client, ou un calcul de liste
              de prix. L'écran doit pouvoir le dire — un prix reconstruit n'a
              pas la même valeur qu'un prix négocié. */
-          source: listeTenable ? "liste" : (pCadre !== null ? "contrat" : "aucun"),
+          source: venuDuCadre ? "contrat" : (listeTenable ? "liste" : "aucun"),
           gabarit: cadre.gabarit(x.default_code || ""),
           /* Part des mots de la demande que cet article porte réellement.
              C'est ce qui permet à l'appli de retenir le premier d'office
@@ -2673,6 +2730,13 @@ serve(async (req) => {
          l'écran doit le dire au lieu de laisser croire au contraire. */
       contratCadre: cadre.intitule,
       contratCadreActif: cadre.actif,
+      /* ⚠️ **A-T-IL TARIFÉ, ou n'a-t-il servi que de filet ?** `actif` ne
+         suffit pas à le dire — un contrat peut être rattaché sans qu'aucun
+         gabarit n'atteigne l'article, et une grille peut être chargée sans
+         tarifer quoi que ce soit. L'écran doit annoncer d'où viennent les
+         prix qu'il affiche, pas d'où ils pourraient venir. Chaque ligne
+         porte en plus son propre `source` (« contrat » / « liste »). */
+      contratCadreTarife: cadreTarife,
       /* Niveau réellement appliqué, et s'il l'a été par défaut plutôt que
          par rattachement. L'écran doit pouvoir le dire. */
       niveauApplique,

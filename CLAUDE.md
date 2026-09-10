@@ -183,10 +183,11 @@ column` = colonne manquante → `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Les
 écritures `clients` utilisent `upsert` (pas insert/update séparés) pour éviter
 les courses création-puis-modif.
 
-⚠️ **`odoo-prix` : la LISTE DE PRIX du client fait foi, la grille est un
-repli** — et la grille reste chargée en filet même sans contrat, sans quoi le
-garde-fou « sous le coût » retire les articles des propositions. Détail et
-mesures dans `claude/modules.md`.
+⚠️ **`odoo-prix` : le CONTRAT-CADRE tarife dès qu'il est rattaché ; sans
+contrat, la LISTE DE PRIX fait foi** — et la grille reste alors chargée en
+filet, sans quoi le garde-fou « sous le coût » retire les articles des
+propositions. Un niveau R1-R4 imposé remplace tout. Détail et mesures dans
+`claude/modules.md`.
 
 ## Variables d'environnement
 

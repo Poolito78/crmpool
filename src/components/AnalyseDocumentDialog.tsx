@@ -646,6 +646,11 @@ const [contratOdoo, setContratOdoo] = useState<
       cadre?: string;
       /** Un contrat-cadre exploitable a-t-il été trouvé pour ce client ? */
       cadreActif?: boolean;
+      /** Ce contrat a-t-il RÉELLEMENT tarifé, ou n'a-t-il servi que de
+       *  filet ? Distinct de `cadreActif` : une grille peut être chargée
+       *  sans rien tarifer. C'est ce booléen qui décide de ce que l'écran
+       *  annonce, et du libellé du choix par défaut au sélecteur. */
+      cadreTarife?: boolean;
       /** Niveau dont la grille a réellement tarifé — R1 à R4. */
       niveauApplique?: string;
       /** Ce niveau a-t-il servi de repli, faute de contrat rattaché ? */
@@ -1545,9 +1550,22 @@ const [contratOdoo, setContratOdoo] = useState<
    * Il était recalculé à six endroits par le même appel ; en forcer un seul
    * aurait laissé les cinq autres sur l'ancienne valeur. Un seul point de
    * vérité, dont tout le reste dépend.
+   *
+   * ⚠️ **LE NIVEAU EST DANS LE NOM DU CONTRAT-CADRE, PAS DANS CELUI DE LA
+   * LISTE DE PRIX.** On lisait `contratOdoo.contrat`, qui est la liste
+   * (« AGILIS / NGE (ISO-STI) (EUR) ») : elle ne porte jamais de R, la
+   * lecture échouait donc toujours et R4 tombait par défaut. Le contrat,
+   * lui, l'annonce — « CCI10031 CONTRAT CADRE AGILIS 2026 **R4** & PAL ».
+   * Chez AGILIS les deux voies donnent R4, l'une par lecture et l'autre par
+   * hasard ; chez un client en R2 seul le contrat le dit, et le devis
+   * partait 15 points trop bas. La liste reste consultée en dernier recours,
+   * certaines en portant un.
    */
   const niveauRemise = useMemo(
-    () => niveauForce || niveauDepuisContrat(contratOdoo?.contrat) || 'R4',
+    () => niveauForce
+      || niveauDepuisContrat(contratOdoo?.cadre)
+      || niveauDepuisContrat(contratOdoo?.contrat)
+      || 'R4',
     [niveauForce, contratOdoo],
   );
 
@@ -2171,6 +2189,7 @@ const [contratOdoo, setContratOdoo] = useState<
             societeIncertaine: !!data.societeIncertaine,
             cadre: String(data.contratCadre || ''),
             cadreActif: !!data.contratCadreActif,
+            cadreTarife: !!data.contratCadreTarife,
             niveauApplique: String(data.niveauApplique || ''),
             niveauParDefaut: !!data.niveauParDefaut,
           });
@@ -3353,7 +3372,21 @@ const [contratOdoo, setContratOdoo] = useState<
                                 LUI qui tarife. Tant que les deux portaient le
                                 même nom à l'écran, son absence était invisible. */}
                             {contratOdoo.cadreActif && contratOdoo.cadre && !contratOdoo.niveauParDefaut ? (
-                              <>Contrat cadre <strong>{contratOdoo.cadre}</strong></>
+                              /* ⚠️ **DIRE QUE LE CONTRAT TARIFE, pas seulement
+                                 qu'il existe.** L'encart nommait le contrat et
+                                 s'arrêtait là, alors que les prix affichés
+                                 venaient de la liste de prix : on lisait
+                                 « Contrat cadre CCI10031 » au-dessus de
+                                 montants qui n'en sortaient pas. */
+                              <>
+                                Prix du contrat cadre <strong>{contratOdoo.cadre}</strong>
+                                {!contratOdoo.cadreTarife && (
+                                  <span className="text-warning">
+                                    {' '}<AlertTriangle className="inline w-3 h-3 mr-1" />
+                                    rattaché mais sans effet sur les prix affichés
+                                  </span>
+                                )}
+                              </>
                             ) : (
                               contratOdoo.niveauParDefaut && contratOdoo.cadre ? (
                                 <span className="text-warning">
@@ -3501,26 +3534,51 @@ const [contratOdoo, setContratOdoo] = useState<
                                   nécessaire — sans elle, le sélecteur affichait
                                   déjà « R4 » et choisir R4 ne changeait rien,
                                   donc on ne pouvait pas forcer le niveau qui se
-                                  trouvait être le défaut. */}
+                                  trouvait être le défaut.
+
+                                  ⚠️ **LE CONTRAT DU CLIENT EST LE CHOIX PAR
+                                  DÉFAUT, LES R SONT LE REPLI.** Quand un
+                                  contrat-cadre est rattaché, c'est lui qui
+                                  tarife et l'entrée « automatique » le dit par
+                                  son nom : choisir un R le REMPLACE, ce qui
+                                  n'est pas anodin et ne doit pas se faire sans
+                                  le savoir. Sans contrat rattaché, l'entrée
+                                  retombe sur le niveau déduit, et les R ne
+                                  remplacent rien puisque rien ne tarifait. */}
                               <Select
                                 value={niveauForce || 'auto'}
                                 onValueChange={v => setNiveauForce(v === 'auto' ? '' : v as 'R1' | 'R2' | 'R3' | 'R4')}
                               >
-                                <SelectTrigger className="h-7 w-44 text-[11px]"><SelectValue /></SelectTrigger>
+                                <SelectTrigger className="h-7 w-56 text-[11px]"><SelectValue /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="auto">{niveauRemise} — automatique</SelectItem>
+                                  <SelectItem value="auto">
+                                    {contratOdoo?.cadreActif
+                                      ? `Contrat cadre${niveauRemise ? ` — ${niveauRemise}` : ''}`
+                                      : `${niveauRemise} — automatique`}
+                                  </SelectItem>
                                   <SelectItem value="R1">R1 — 20 %</SelectItem>
                                   <SelectItem value="R2">R2 — 25 %</SelectItem>
                                   <SelectItem value="R3">R3 — 30 %</SelectItem>
                                   <SelectItem value="R4">R4 — 35 %</SelectItem>
                                 </SelectContent>
                               </Select>
+                              {/* Ce que le sélecteur vient de faire, en clair.
+                                  « forcé à la main » ne suffisait pas : forcer
+                                  un R chez un client SOUS CONTRAT écarte le
+                                  tarif négocié, et rien ne le disait. */}
                               <span className={niveauForce ? 'text-warning' : 'text-muted-foreground'}>
                                 {niveauForce
-                                  ? 'forcé à la main'
-                                  : (niveauDepuisContrat(contratOdoo?.contrat)
-                                      ? 'lu dans le contrat cadre'
-                                      : 'valeur par défaut, aucun niveau lisible dans le contrat')}
+                                  ? (contratOdoo?.cadreActif
+                                      ? 'forcé à la main — remplace le contrat cadre'
+                                      : 'forcé à la main')
+                                  : (contratOdoo?.cadreTarife
+                                      ? 'le contrat cadre tarife'
+                                      : (contratOdoo?.cadreActif
+                                          ? 'contrat cadre rattaché'
+                                          : (niveauDepuisContrat(contratOdoo?.cadre)
+                                              || niveauDepuisContrat(contratOdoo?.contrat)
+                                              ? 'lu dans le contrat cadre'
+                                              : 'valeur par défaut, aucun niveau lisible dans le contrat')))}
                               </span>
                               {niveauForce && (
                                 <button

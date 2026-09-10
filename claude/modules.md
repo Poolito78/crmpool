@@ -36,22 +36,51 @@ porter (mesures sur la base, historique des régressions).
 
 ---
 
-## `odoo-prix` (Edge Function) — la liste de prix fait foi
+## `odoo-prix` (Edge Function) — qui tarife
 
-⚠️ **LA LISTE DE PRIX DU CLIENT FAIT FOI, LA GRILLE EST UN REPLI.** Les deux
-blocs de tarification (articles désignés par référence, et propositions de
-recherche) essaient `tarif.prix` **d'abord** ; la grille du contrat-cadre ne
-reprend la main que si la liste ne rend rien de **tenable** (nul, à zéro, ou
-sous le coût de revient — les fiches Odoo valent souvent 1 €). Mesuré sur
-**AF036911** (MGD, liste « 30/70/72/… ») : la grille R4 cotait
-AK3.700.C1.BTR.R.IS.BRUT à 39,41 € quand le devis émis le facture **37,475 €**.
+⚠️ **LE CONTRAT-CADRE TARIFE DÈS QU'IL EST RATTACHÉ ; SANS CONTRAT, LA LISTE
+DE PRIX FAIT FOI.** Une seule variable le décide, `cadreTarife`, calculée une
+fois dans `serve` et lue par les **deux** blocs de tarification (articles
+désignés par référence, propositions de recherche) — les laisser trancher
+chacun de leur côté est ce qui les avait fait diverger. Elle est vraie quand
+un contrat-cadre est rattaché (`cadre.actif`) ou qu'un **niveau R1-R4 est
+imposé** au sélecteur ; fausse quand la grille n'est qu'un filet. La grille ne
+tarife dans tous les cas que ce qu'un gabarit atteint : ailleurs, la liste
+reprend.
 
-⚠️ **La grille reste chargée en filet quand aucun contrat n'est rattaché**, et
-ce n'est PAS pour tarifer : sans elle, le garde-fou « sous le coût » **retire
-l'article des propositions** — la demande MGD/PANTIN ne proposait plus aucun
-panneau (KC1, EPI, FP, point de rassemblement). Ce garde-fou ne joue donc plus
-que si **plus rien** ne tarife l'article. Un niveau R1-R4 **imposé** au
-sélecteur, lui, remplace toujours tout.
+⚠️ **CE CAS ÉTAIT ÉCRIT ET N'ÉTAIT PAS CODÉ.** Le commentaire de `serve`
+annonçait « sauf si un contrat cadre est réellement rattaché, il tarife
+alors » depuis l'origine, mais `cadre.actif` ne servait qu'à charger le filet
+et à renseigner l'écran : les deux blocs faisaient
+`listeTenable ? pListe : pCadre` **sans condition**, et la liste doublait donc
+le contrat en silence, y compris chez les clients qui en ont un (AGILIS :
+contrat « CCI10031 CONTRAT CADRE AGILIS 2026 R4 & PAL » **et** liste « AGILIS
+/ NGE (ISO-STI) »). Un niveau imposé au sélecteur ne remplaçait rien non plus.
+Référence de validation du contrat : **AF035681** (REFLEX) — la liste cotait
+le B14#30km/h.650.C2 à 60,32 €, le contrat le facture **46,62 €**.
+
+⚠️ **Sans contrat rattaché, ne PAS doubler la liste de prix.** Mesuré sur
+**AF036911** (MGD, liste « 30/70/72/… ») : la grille R4 chargée en filet
+cotait AK3.700.C1.BTR.R.IS.BRUT à 39,41 € quand le devis émis le facture
+**37,475 €**. La grille reste néanmoins chargée, et ce n'est PAS pour
+tarifer : sans elle, le garde-fou « sous le coût » **retire l'article des
+propositions** — la demande MGD/PANTIN ne proposait plus aucun panneau (KC1,
+EPI, FP, point de rassemblement). Ce garde-fou ne joue donc que si **plus
+rien** ne tarife l'article.
+
+⚠️ **Le NIVEAU se lit dans le nom du CONTRAT-CADRE, pas dans celui de la liste
+de prix.** `AnalyseDocumentDialog` passait `contratOdoo.contrat` — la liste,
+qui ne porte jamais de R — à `niveauDepuisContrat` : la lecture échouait
+toujours et R4 tombait par défaut. Le contrat, lui, l'annonce (« … 2026 **R4**
+& PAL »). Chez AGILIS les deux voies donnent R4, l'une par lecture et l'autre
+par hasard ; chez un client en R2, seul le contrat le dit.
+
+**Ce que l'écran renvoie** : `contratCadreActif` (rattaché) et
+`contratCadreTarife` (a réellement tarifé) sont **distincts** — un contrat
+peut être rattaché sans qu'aucun gabarit n'atteigne l'article. Chaque ligne
+porte en plus son `source` (`"contrat" | "liste" | "aucun"`). Au sélecteur, le
+contrat est le **choix par défaut** et les R1-R4 le repli manuel : en choisir
+un REMPLACE le tarif négocié, et l'écran le dit.
 
 ⚠️ **Le Tarificateur suit l'ordre d'Odoo, en entier** :
 `applied_on, min_quantity desc, categ_id desc, id desc`
