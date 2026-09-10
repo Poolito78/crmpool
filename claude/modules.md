@@ -82,15 +82,38 @@ remplaçant les ids de celle qu'on lui passe. Inutile quand un niveau est
 imposé (`cadre` EST déjà cette grille) ou quand rien ne tarife (`cadre` sert
 de filet). `source` vaut alors `"grille"`, distinct de `"contrat"`.
 
-⚠️ **LE DÉFAUT D'ODOO N'EST PAS UN CHOIX.** `property_product_pricelist` n'est
-jamais vide : sans choix sur la fiche, Odoo rend la liste par défaut de la
-société, si bien qu'« aucune liste » et « mise exprès au tarif public » se
-lisaient à l'identique. Le code préférait « la liste du contact si elle lui est
-propre » : #102108 « AGILIS » rendait le TARIF PUBLIC (le défaut), qui
-l'emportait sur « AGILIS / NGE (ISO-STI) » porté par la mère #75036.
-`listePrixParDefaut` lit la propriété globale (`ir.property`, `res_id` vide) et
-la comparaison rend les deux cas distinguables. Sans réponse d'Odoo, on garde
-le comportement d'avant.
+⚠️ **QUAND LE CONTACT ET SA SOCIÉTÉ PORTENT DES LISTES DE PRIX
+DIFFÉRENTES, CELLE DE LA SOCIÉTÉ L'EMPORTE.**
+`property_product_pricelist` n'est **jamais vide** : sans choix sur la fiche,
+Odoo rend la liste par défaut de la société, si bien qu'« aucune liste » et
+« mise exprès au tarif public » se lisent à l'identique. Le code préférait
+« la liste du contact si elle lui est propre », ce qui laissait un défaut
+écraser un tarif négocié : #102108 « AGILIS » rendait le TARIF PUBLIC quand sa
+société #75036 porte « AGILIS / NGE (ISO-STI) », conditions auxquelles la
+commande est réellement facturée. Interroger Odoo sur sa valeur par défaut a
+été tenté puis **retiré** : `ir.property` est refusé au compte API (groupe
+Administration/Settings) et `res.partner.default_get` reste muet sur ce champ.
+⚠️ Contrepartie **acceptée** : un contact portant vraiment une liste à lui,
+différente de celle de sa société, la perd. Le cas inverse a été constaté sur
+de vraies commandes ; celui-là reste théorique.
+
+⚠️ **La ponctuation n'est pas une différence de raison sociale** :
+`nomsProches` la ramène à une espace. « AGILIS (27) », tel que le document
+l'écrit, ne ressemblait pas à « AGILIS 27 » ; la fiche était dite
+« incohérente » à tort et deux recherches Odoo partaient par requête — sans
+résultat ici, mais un homonyme aurait pu répondre et emporter le mauvais
+contrat.
+
+**Le prix retenu se journalise** (`[prix] <ref> → <montant> (<source>) |
+contrat=… grille=… liste=… coût=…`). Sans cette ligne il se devinait :
+`[tarif]` et `[tarif-base]` s'écrivent à **chaque** référence, même quand la
+grille l'emporte, la liste étant calculée d'office pour servir de repli.
+
+**Vérifié de bout en bout** le 10/09/2026 contre la commande AGILIS, par les
+deux chemins d'identification (`facture-agilis@nge.fr` et `bduflo@agilis.net`,
+qui convergent sur le contrat #309) :
+`SG80401_5.3000.IS.BRUT` 89,43 → **22 €** (contrat) · `FPLATINE8040`
+184,80 → **36,60 €** (grille R4) · `FPLATINE8080` 184,80 → **39,64 €**.
 
 ⚠️ **LE CONTRAT SE CHERCHE DANS TOUT LE GROUPE** (`famillePartenaire`) — le
 couple (contact, parent) est trop étroit dès qu'un groupe éclate ses agences.

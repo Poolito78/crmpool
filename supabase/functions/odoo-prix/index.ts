@@ -1093,68 +1093,6 @@ function niveauDuNom(nom?: string | null): string {
  *
  * Ne lève jamais : sans réponse, on garde le comportement d'avant.
  */
-let defautPrixCache: { valeur: number | null } | null = null;
-
-async function listePrixParDefaut(od: Odoo): Promise<number | null> {
-  /* ⚠️ **UNE SEULE TENTATIVE PAR ISOLAT.** La question ne dépend ni du
-     client ni de la demande : la réponse est la même pour tout le monde et
-     ne bouge qu'au rythme des réglages Odoo. La redemander à chaque requête
-     ajoutait un aller-retour — et, quand le droit manque, un aller-retour
-     qui échoue à coup sûr. On mémorise donc aussi l'échec. */
-  if (defautPrixCache) return defautPrixCache.valeur;
-
-  /* 1. La propriété globale : `res_id` vide = la valeur que prend une fiche
-        sur laquelle personne n'a rien choisi. C'est la réponse exacte. */
-  try {
-    const props = (await od.kw(
-      "ir.property", "search_read",
-      [[["name", "=", "property_product_pricelist"], ["res_id", "=", false]],
-       ["value_reference"]],
-      { limit: 5 },
-    )) as any[];
-    for (const p of props) {
-      const m = String(p.value_reference || "").match(/product\.pricelist,(\d+)/);
-      if (m) {
-        console.log(`[liste de prix] défaut Odoo = #${m[1]} (ir.property)`);
-        defautPrixCache = { valeur: Number(m[1]) };
-        return defautPrixCache.valeur;
-      }
-    }
-  } catch (e) {
-    /* ⚠️ `ir.property` est réservé au groupe Administration/Settings, que le
-       compte API n'a pas — mesuré le 10/09/2026 : « You are not allowed to
-       access 'Company Property' (ir.property) records ». D'où la seconde
-       voie, qui ne demande aucun droit particulier. */
-    console.warn("[liste de prix] ir.property refusé :", (e as Error).message);
-  }
-
-  /* 2. À défaut, ce qu'Odoo proposerait à une fiche NEUVE. C'est la même
-        question posée autrement, et `default_get` ne demande que l'accès à
-        res.partner, que nous avons forcément. */
-  try {
-    const d = (await od.kw(
-      "res.partner", "default_get", [["property_product_pricelist"]],
-    )) as any;
-    const v = d?.property_product_pricelist;
-    const id = Array.isArray(v) ? v[0] : v;
-    if (typeof id === "number" && id > 0) {
-      console.log(`[liste de prix] défaut Odoo = #${id} (default_get)`);
-      defautPrixCache = { valeur: id };
-      return id;
-    }
-  } catch (e) {
-    console.warn("[liste de prix] default_get indisponible :", (e as Error).message);
-  }
-
-  /* Aucune des deux voies : on ne saura pas distinguer « rien de choisi » de
-     « mis exprès au tarif public », et la liste propre du contact primera
-     comme avant. Une seule ligne de journal, pas une par requête. */
-  console.warn("[liste de prix] défaut Odoo indétectable : la liste propre du "
-    + "contact primera, comme avant ce correctif");
-  defautPrixCache = { valeur: null };
-  return null;
-}
-
 /**
  * Toutes les fiches du GROUPE, pour y chercher le contrat-cadre.
  *
@@ -1836,18 +1774,38 @@ serve(async (req) => {
       }
     }
 
-    /* ⚠️ **LE DÉFAUT D'ODOO N'EST PAS UN CHOIX** — voir `listePrixParDefaut`.
-       On préférait « la liste du contact si elle lui est propre », mais une
-       fiche sans liste rend quand même le défaut : #102108 « AGILIS » rendait
-       le TARIF PUBLIC, qui l'emportait ainsi sur « AGILIS / NGE » porté par
-       la société mère #75036. Comparer au défaut rend enfin distinguables
-       « rien de choisi » et « mis exprès au tarif public ». */
-    const plDefaut = await listePrixParDefaut(od);
+    /**
+     * ⚠️ **QUAND LE CONTACT ET SA SOCIÉTÉ PORTENT DES LISTES DIFFÉRENTES,
+     * CELLE DE LA SOCIÉTÉ L'EMPORTE.**
+     *
+     * `property_product_pricelist` n'est JAMAIS vide : une fiche sur laquelle
+     * personne n'a rien choisi rend quand même la liste par défaut de la
+     * société. « Aucune liste » et « mise exprès au tarif public » se lisent
+     * donc à l'identique, et le code préférait jusqu'ici « la liste du contact
+     * si elle lui est propre » — ce qui revenait à laisser un défaut écraser
+     * un tarif négocié.
+     *
+     * Mesuré le 10/09/2026 : #102108 « AGILIS » rendait
+     * `[9173, "TARIF PUBLIC ISOSIGN VARIANTES"]` quand sa société #75036
+     * « AGILIS IDF ROISSY CDG » porte `[14700, "AGILIS / NGE (ISO-STI)"]`,
+     * et c'est à ces conditions-là que la commande est facturée.
+     *
+     * Une première version interrogeait Odoo sur la valeur par défaut pour
+     * distinguer les deux cas. Les deux voies sont refusées à ce compte API
+     * — `ir.property` réservé au groupe Administration/Settings, et
+     * `default_get` muet sur ce champ — d'où cette règle, plus simple et qui
+     * ne demande aucun droit.
+     *
+     * ⚠️ **CE QU'ELLE COÛTE, ET QUI A ÉTÉ ACCEPTÉ** : un contact qui porte
+     * VRAIMENT une liste à lui, différente de celle de sa société, la perd.
+     * Le cas inverse — un défaut qui écrase un tarif négocié — est celui
+     * qu'on a constaté sur de vraies commandes ; celui-ci reste théorique.
+     */
     const plPropre = partenaire.property_product_pricelist;
     const plPorteur = porteur.property_product_pricelist;
-    const propreChoisie = !!plPropre
-      && !(plDefaut !== null && plPropre[0] === plDefaut);
-    const pl = propreChoisie ? plPropre : (plPorteur || plPropre);
+    const societeTranche = !!plPorteur && !!plPropre
+      && plPorteur[0] !== plPropre[0];
+    const pl = societeTranche ? plPorteur : (plPropre || plPorteur);
     const contratId: number | null = pl ? pl[0] : null;
     const contrat: string | null = pl ? pl[1] : null;
     const societe: string = (partenaire.parent_id ? partenaire.parent_id[1] : partenaire.name) || '';
@@ -1864,7 +1822,7 @@ serve(async (req) => {
       + ` pricelist_propre=${JSON.stringify(partenaire.property_product_pricelist)}`
       + ` porteur=#${porteur.id} "${porteur.name}"`
       + ` pricelist_porteur=${JSON.stringify(porteur.property_product_pricelist)}`
-      + ` défaut=#${plDefaut ?? "?"} propreChoisie=${propreChoisie}`
+      + ` societeTranche=${societeTranche}`
       + ` → contratId=${contratId} contrat=${JSON.stringify(contrat)}`
       + ` niveauAffiche=${niveauDefaut || "-"} niveauImpose=${niveauImpose || "-"}`);
 
