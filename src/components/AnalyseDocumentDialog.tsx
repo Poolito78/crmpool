@@ -973,11 +973,30 @@ const [contratOdoo, setContratOdoo] = useState<
       return l.filter(x => !vus.has(x.client.id) && vus.add(x.client.id));
     };
 
+    /* ⚠️ **LE DOMAINE DIT LE GROUPE, MÊME QUAND IL NE DIT PAS L'AGENCE.**
+       Sur la demande AGILIS/Roissy, le texte analysé s'arrête à « Bonne
+       réception, » : la signature est une image, et rien dans ce qui reste ne
+       nomme une agence. La bonne fiche — « AGILIS IDF ROISSY CDG »,
+       `facture-agilis@nge.fr` — n'est donc ni sur le domaine ni dans le texte.
+       Proposer les seules fiches `@agilis.net` la rendait INTROUVABLE.
+
+       Or `societeDepuisEmail('callart@agilis.net')` rend « agilis » : le GROUPE
+       est connu, même quand l'agence ne l'est pas. On élargit donc les
+       propositions à toutes les fiches du groupe, quel que soit le domaine de
+       leur adresse. C'est le seul moyen d'atteindre une agence facturée par
+       la maison mère — ici NGE. */
+    const duGroupe = societeMail
+      ? clients.filter(c => contient(c.societe, societeMail)
+                         || contient(c.nom, societeMail))
+      : [];
+
     setClientsProposes(
       domaineAmbigu
-        ? dedoublonne([...enLice(parDomaine), ...rapprochementTexte.candidats]).slice(0, 8)
+        ? dedoublonne([...enLice(parDomaine), ...enLice(duGroupe),
+                       ...rapprochementTexte.candidats]).slice(0, 8)
       : emailAmbigu
-        ? dedoublonne([...enLice(parEmail), ...rapprochementTexte.candidats]).slice(0, 8)
+        ? dedoublonne([...enLice(parEmail), ...enLice(duGroupe),
+                       ...rapprochementTexte.candidats]).slice(0, 8)
       : foundClient || rapprochementTexte.retenu ? []
       : rapprochementTexte.candidats.slice(0, 5));
 
