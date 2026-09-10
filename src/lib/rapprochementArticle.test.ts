@@ -368,3 +368,39 @@ describe('un code nomme ferme les autres familles', () => {
     expect(r.candidats.map(c => c.reference)).toEqual(['THERMOVELO128080']);
   });
 });
+
+/* LE TAG QUI A FACTURÉ DES MÂTS À LA PLACE DE BOUCHONS.
+ *
+ * ⚠️ 11/09/2026, demande AGILIS/Roissy. Le tag « 40x80mm longueur », appris
+ * sur le mât SG80401_5.3000.IS.BRUT, se réduisait à { 40x80mm } parce que
+ * « longueur » figure dans MOTS_VIDES. Son unique exigence devenait une cote
+ * que TOUTE la famille partage, la demande « 20 bouchons 40x80mm brut » la
+ * satisfaisait, et l'écran proposait 20 mâts à 89,43 € — 1 788,60 € au lieu
+ * de 28 €. Un tag vaut 60 points, au-dessus du seuil de certitude : il
+ * emportait la ligne sans rien demander à personne. */
+describe('tagsReconnus — les mots du tag doivent tous être présents', () => {
+  it('n’applique PAS « 40x80mm longueur » à une demande de bouchons', () => {
+    expect(tagsReconnus('20 bouchons 40x80mm brut', ['40x80mm longueur']))
+      .toEqual([]);
+  });
+
+  it('l’applique bien à la demande qui parle de longueur', () => {
+    expect(tagsReconnus('10 supports 40x80mm, longueur 3m', ['40x80mm longueur']))
+      .toEqual(['40x80mm longueur']);
+  });
+
+  it('laisse le tag du bouchon désigner le bouchon', () => {
+    expect(tagsReconnus('20 bouchons 40x80mm brut', ['bouchons 40x80mm']))
+      .toEqual(['bouchons 40x80mm']);
+  });
+
+  it('« mm » et « lg » cessent aussi d’être effacés d’un tag', () => {
+    expect(tagsReconnus('plot pvc', ['plot 100 mm'])).toEqual([]);
+    expect(tagsReconnus('plot pvc 100 mm', ['plot 100 mm'])).toEqual(['plot 100 mm']);
+  });
+
+  it('un tag d’un seul mot continue de jouer', () => {
+    expect(tagsReconnus('14 plots PVC', ['plot'])).toEqual(['plot']);
+    expect(tagsReconnus('14 platoplots', ['plot'])).toEqual([]);
+  });
+});

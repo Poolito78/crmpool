@@ -190,10 +190,24 @@ export function couleurs(texte: string): string[] {
 
 /* ── Comparaison ─────────────────────────────────────────────────────────── */
 
-const MOTS_VIDES = new Set([
+/**
+ * Les LIAISONS : elles ne décrivent rien, dans aucun contexte.
+ */
+const LIAISONS = new Set([
   'de', 'du', 'la', 'le', 'les', 'des', 'a', 'au', 'aux', 'en', 'pour', 'avec',
-  'et', 'sur', 'par', 'is', 'mm', 'cm', 'm', 'long', 'longueur', 'lg',
+  'et', 'sur', 'par',
 ]);
+
+/**
+ * Unités et repères de cote : sans valeur pour reconnaître une FAMILLE
+ * d'article — « mm » ne distingue pas un bouchon d'un mât.
+ *
+ * ⚠️ **MAIS ILS DISTINGUENT UN TAG.** Voir `motsDeTag` : les effacer d'un tag
+ * le vide de ce qui le rendait précis.
+ */
+const UNITES = new Set(['is', 'mm', 'cm', 'm', 'long', 'longueur', 'lg']);
+
+const MOTS_VIDES = new Set([...LIAISONS, ...UNITES]);
 
 /**
  * Le singulier approximatif d'un mot.
@@ -285,12 +299,41 @@ const BONUS_TAG = 60;
  * mots n'est retenu que si la demande les porte tous — « plot bordure » ne
  * doit pas se déclencher sur une demande qui ne parle que de bordure.
  */
+/**
+ * Les mots d'un TAG, dont on n'efface que les liaisons.
+ *
+ * ⚠️ **UN TAG NE SE COMPARE PAS COMME UNE DÉSIGNATION.** `mots` écarte aussi
+ * les unités et les repères de cote — « mm », « longueur », « lg » — ce qui est
+ * juste pour reconnaître une FAMILLE : « mm » ne distingue pas un bouchon d'un
+ * mât. Appliqué à un tag, cet effacement le VIDE de ce qui le rendait précis.
+ *
+ * Mesuré le 11/09/2026, et cher payé. Le tag « 40x80mm longueur », appris sur
+ * le mât `SG80401_5.3000.IS.BRUT`, se réduisait à `{40x80mm}` : sa seule
+ * exigence devenait une cote que TOUTE la famille partage — mât, bouchon,
+ * fourreau, collier. La demande « 20 bouchons 40x80mm brut » la satisfaisait
+ * donc, le tag valait ses 60 points, et l'écran proposait 20 mâts à 89,43 € —
+ * **1 788,60 € au lieu de 28 €**.
+ *
+ * La règle « un tag de plusieurs mots exige que la demande les porte tous »
+ * était bien écrite dans le code ; elle était fausse en pratique, parce que
+ * les mots étaient effacés avant d'être exigés.
+ */
+function motsDeTag(t: string) {
+  return new Set(
+    sansAccents(t).split(/[^a-z0-9]+/)
+      .filter(m => m.length > 1 && !LIAISONS.has(m))
+      .map(singulier),
+  );
+}
+
 export function tagsReconnus(demandeTexte: string, tagsArticle: readonly string[]): string[] {
   if (!tagsArticle.length) return [];
-  const md = mots(demandeTexte);
+  /* ⚠️ LE MÊME DÉCOUPAGE DES DEUX CÔTÉS, sans quoi « longueur » manquerait à
+     la demande et le tag ne se déclencherait plus jamais. */
+  const md = motsDeTag(demandeTexte);
   if (!md.size) return [];
   return tagsArticle.filter(t => {
-    const mt = mots(t);
+    const mt = motsDeTag(t);
     return mt.size > 0 && [...mt].every(m => md.has(m));
   });
 }
