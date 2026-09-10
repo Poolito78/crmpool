@@ -956,11 +956,28 @@ const [contratOdoo, setContratOdoo] = useState<
        lieu de « mots » : l'infobulle dit sur quoi la fiche a été retrouvée,
        ce qu'on veut justement lire pour choisir entre quatre AGILIS. */
     const enLice = (l: typeof clients) =>
-      l.slice(0, 5).map(c => ({ client: c, score: 100, mots: [c.email || ''] }));
+      l.map(c => ({ client: c, score: 100, mots: [c.email || ''] }));
+
+    /* ⚠️ **LA BONNE FICHE N'EST PAS FORCÉMENT SUR LE DOMAINE.** Ne proposer
+       que les fiches du domaine laissait l'utilisateur devant cinq mauvaises
+       réponses : la demande AGILIS/Roissy du 11/09/2026 met en lice DUFLO,
+       BLOTIAU, DE MELO, BRUGEL et LIMOGES — tous en `@agilis.net` — alors que
+       la fiche cherchée, « AGILIS IDF ROISSY CDG », porte
+       `facture-agilis@nge.fr`. Le domaine ne pouvait PAS l'atteindre.
+
+       On réunit donc les deux origines : les fiches du domaine et ce que le
+       texte propose. S'abstenir n'a de sens que si la réponse figure parmi ce
+       qu'on montre. */
+    const dedoublonne = <T extends { client: typeof clients[number] }>(l: T[]): T[] => {
+      const vus = new Set<string>();
+      return l.filter(x => !vus.has(x.client.id) && vus.add(x.client.id));
+    };
 
     setClientsProposes(
-      domaineAmbigu ? enLice(parDomaine)
-      : emailAmbigu ? enLice(parEmail)
+      domaineAmbigu
+        ? dedoublonne([...enLice(parDomaine), ...rapprochementTexte.candidats]).slice(0, 8)
+      : emailAmbigu
+        ? dedoublonne([...enLice(parEmail), ...rapprochementTexte.candidats]).slice(0, 8)
       : foundClient || rapprochementTexte.retenu ? []
       : rapprochementTexte.candidats.slice(0, 5));
 
