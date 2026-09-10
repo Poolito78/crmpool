@@ -100,8 +100,14 @@ interface TrouvailleOdoo {
   classe?: string;
   /** Classe que la demande réclamait, quand elle en nomme une. */
   classeDemandee?: string;
-  /** D'où vient le prix : la grille du client, ou un calcul de liste de prix. */
-  source?: 'contrat' | 'liste' | 'aucun';
+  /** D'où vient le prix. Trois sources bien distinctes, et l'écran doit les
+   *  distinguer : `contrat` = le bordereau négocié du client ; `grille` = la
+   *  grille générale de SON niveau (R1-R4), qui cote ce que le bordereau ne
+   *  dit pas — le bouchon, les fourreaux platine ; `liste` = un prix
+   *  reconstruit depuis la liste de prix Odoo, le moins sûr des trois. */
+  source?: 'contrat' | 'grille' | 'liste' | 'aucun';
+  /** Le niveau dont la grille a coté, quand `source` vaut `grille`. */
+  niveauGrille?: string;
   /** Codification de grille qui a tarifé l'article, quand le contrat l'a couvert. */
   gabarit?: string | null;
   /** Dernière modification de la fiche Odoo, en ISO. Arbitre des prix. */
@@ -4381,6 +4387,18 @@ const [contratOdoo, setContratOdoo] = useState<
                                               {ch.source === 'contrat' ? (
                                                 <p className="text-[10px] text-muted-foreground">
                                                   Prix du bordereau{ch.gabarit ? <> — ligne <code>{ch.gabarit}</code></> : null}
+                                                </p>
+                                              ) : ch.source === 'grille' ? (
+                                                /* Le bordereau du client ne cote pas tout : le
+                                                   bouchon et les fourreaux platine n'y sont pas.
+                                                   La grille de SON niveau les cote, et c'est un
+                                                   vrai tarif — pas un prix reconstruit. Le dire
+                                                   autrement que « prix du bordereau », parce que
+                                                   ce n'est pas la même source. */
+                                                <p className="text-[10px] text-muted-foreground">
+                                                  Prix de la grille {ch.niveauGrille || ''} — cet article
+                                                  n’est pas au bordereau, son niveau le cote
+                                                  {ch.gabarit ? <> (ligne <code>{ch.gabarit}</code>)</> : null}
                                                 </p>
                                               ) : ch.source === 'liste' ? (
                                                 <p className="text-[10px] text-warning">

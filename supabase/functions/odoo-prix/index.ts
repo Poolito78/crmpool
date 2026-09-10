@@ -1042,6 +1042,71 @@ function nomsProches(a: string, b: string): boolean {
 }
 
 /**
+ * Le niveau R1-R4 écrit dans l'intitulé d'un contrat-cadre.
+ *
+ * Les deux formes existent côte à côte dans Odoo : « CCI10019 **TARIF R4** -
+ * 35% REMISE … » et « CCI10031 CONTRAT CADRE AGILIS 2026 **R4** & PAL ». On
+ * essaie donc « TARIF R4 » d'abord — un « R4 » isolé pourrait venir d'une
+ * référence d'article — puis le R seul.
+ *
+ * Même règle que `niveauDepuisContrat` côté MonCRM (`src/lib/tarifPanneaux.ts`) ;
+ * les deux sont volontairement séparés, la fonction Edge ne partageant pas le
+ * code du navigateur.
+ */
+function niveauDuNom(nom?: string | null): string {
+  const t = String(nom || "").toUpperCase();
+  const explicite = t.match(/\bTARIFS?\s*[-–]?\s*R([1-4])\b/);
+  if (explicite) return `R${explicite[1]}`;
+  const seul = t.match(/\bR([1-4])\b/);
+  return seul ? `R${seul[1]}` : "";
+}
+
+/**
+ * L'identifiant de la liste de prix que Odoo applique PAR DÉFAUT.
+ *
+ * ⚠️ **`property_product_pricelist` N'EST JAMAIS VIDE.** C'est un champ
+ * « property » : quand personne n'a rien choisi sur une fiche, Odoo rend
+ * quand même la liste par défaut de la société. Une fiche sans tarif négocié
+ * et une fiche mise exprès au tarif public sont donc IDENTIQUES à la lecture.
+ *
+ * C'est ce qui faisait tarifer AGILIS au prix public. La fiche #102108
+ * « AGILIS » rendait `[9173, "TARIF PUBLIC ISOSIGN VARIANTES"]` — le défaut,
+ * pas un choix — et comme le code préférait « la liste du contact si elle lui
+ * est propre », ce défaut l'emportait sur la liste réelle de la société mère
+ * #75036 « AGILIS IDF ROISSY CDG », `[14700, "AGILIS / NGE (ISO-STI)"]`.
+ * Les articles que la grille du contrat ne couvre pas — BOUCHON8040,
+ * FPLATINE8040, FPLATINE8080 — sortaient donc au tarif public.
+ *
+ * On demande donc à Odoo QUELLE est cette valeur par défaut : la propriété
+ * globale est celle dont `res_id` est vide. Comparer à elle rend enfin
+ * distinguables « pas de liste » et « liste choisie ».
+ *
+ * Ne lève jamais : sans réponse, on garde le comportement d'avant.
+ */
+async function listePrixParDefaut(od: Odoo): Promise<number | null> {
+  try {
+    const props = (await od.kw(
+      "ir.property", "search_read",
+      [[["name", "=", "property_product_pricelist"], ["res_id", "=", false]],
+       ["value_reference"]],
+      { limit: 5 },
+    )) as any[];
+    for (const p of props) {
+      const m = String(p.value_reference || "").match(/product\.pricelist,(\d+)/);
+      if (m) {
+        console.log(`[liste de prix] défaut Odoo = #${m[1]}`);
+        return Number(m[1]);
+      }
+    }
+    console.warn("[liste de prix] aucune propriété globale "
+      + "property_product_pricelist : le défaut restera indétectable");
+  } catch (e) {
+    console.warn("[liste de prix] défaut illisible :", (e as Error).message);
+  }
+  return null;
+}
+
+/**
  * Toutes les fiches du GROUPE, pour y chercher le contrat-cadre.
  *
  * ⚠️ **LE CONTRAT SE NÉGOCIE AVEC LE GROUPE, PAS AVEC L'AGENCE QUI ÉCRIT.**
@@ -1722,8 +1787,18 @@ serve(async (req) => {
       }
     }
 
-    const pl = partenaire.property_product_pricelist
-      || porteur.property_product_pricelist;
+    /* ⚠️ **LE DÉFAUT D'ODOO N'EST PAS UN CHOIX** — voir `listePrixParDefaut`.
+       On préférait « la liste du contact si elle lui est propre », mais une
+       fiche sans liste rend quand même le défaut : #102108 « AGILIS » rendait
+       le TARIF PUBLIC, qui l'emportait ainsi sur « AGILIS / NGE » porté par
+       la société mère #75036. Comparer au défaut rend enfin distinguables
+       « rien de choisi » et « mis exprès au tarif public ». */
+    const plDefaut = await listePrixParDefaut(od);
+    const plPropre = partenaire.property_product_pricelist;
+    const plPorteur = porteur.property_product_pricelist;
+    const propreChoisie = !!plPropre
+      && !(plDefaut !== null && plPropre[0] === plDefaut);
+    const pl = propreChoisie ? plPropre : (plPorteur || plPropre);
     const contratId: number | null = pl ? pl[0] : null;
     const contrat: string | null = pl ? pl[1] : null;
     const societe: string = (partenaire.parent_id ? partenaire.parent_id[1] : partenaire.name) || '';
@@ -1740,6 +1815,7 @@ serve(async (req) => {
       + ` pricelist_propre=${JSON.stringify(partenaire.property_product_pricelist)}`
       + ` porteur=#${porteur.id} "${porteur.name}"`
       + ` pricelist_porteur=${JSON.stringify(porteur.property_product_pricelist)}`
+      + ` défaut=#${plDefaut ?? "?"} propreChoisie=${propreChoisie}`
       + ` → contratId=${contratId} contrat=${JSON.stringify(contrat)}`
       + ` niveauAffiche=${niveauDefaut || "-"} niveauImpose=${niveauImpose || "-"}`);
 
@@ -1849,9 +1925,59 @@ serve(async (req) => {
         ? "la grille tarife, la liste de prix ne sert que ce qu'elle ne couvre pas"
         : "la liste de prix fait foi, la grille n'est qu'un filet"));
 
+    /**
+     * ⚠️ **CE QUE LE CONTRAT DU CLIENT NE COUVRE PAS SE TARIFE À SON NIVEAU,
+     * PAS AU CATALOGUE.**
+     *
+     * Un contrat-cadre client ne cote pas tout : celui d'AGILIS
+     * (« CCI10031 … 2026 R4 & PAL », #309) tarife le support et la bride,
+     * mais ne dit rien du bouchon ni des fourreaux platine — le journal les
+     * signale « sans gabarit », et la grille ne contient rien pour BOUC% /
+     * FPLA%. Retomber alors sur la liste de prix sortait des montants qui ne
+     * sont pas ceux du bordereau.
+     *
+     * Or le niveau est écrit dans le NOM du contrat, et la grille générale de
+     * ce niveau, elle, les cote. Vérifié ligne à ligne contre la commande
+     * Odoo, grille #276 « CCI10019 TARIF R4 » :
+     *
+     *     BOUCHON8040    1,400 €   ← commande : 1,400 €
+     *     FPLATINE8040  36,600 €   ← commande : 36,600 €
+     *     FPLATINE8080  39,640 €   ← commande : 39,640 €
+     *
+     * L'ordre devient donc : contrat du client, puis grille de SON niveau,
+     * puis liste de prix. On ne devine rien — le niveau est lu dans le nom du
+     * contrat que le client porte, pas choisi par nous.
+     *
+     * Inutile quand un niveau est IMPOSÉ (`cadre` est déjà cette grille-là)
+     * ou quand aucun contrat ne tarife (`cadre` sert alors de filet).
+     */
+    let cadreRepli: ContratCadre | null = null;
+    let niveauRepli = "";
+    if (cadreTarife && !niveauImpose) {
+      const n = niveauDuNom(cadre.intitule) || niveauDefaut;
+      if (n) {
+        const r = new ContratCadre(od);
+        if (await r.chargerNiveau(n, ...famille)) {
+          cadreRepli = r;
+          niveauRepli = n;
+          console.log(`[contrat-cadre] repli au niveau ${n}, lu dans `
+            + `« ${cadre.intitule} » : ${r.intitule}`);
+        } else {
+          console.warn(`[contrat-cadre] niveau ${n} lu dans « ${cadre.intitule} » `
+            + `mais sa grille est introuvable : les articles hors contrat `
+            + `retomberont sur la liste de prix`);
+        }
+      } else {
+        console.warn(`[contrat-cadre] aucun niveau R lisible dans `
+          + `« ${cadre.intitule} » : les articles hors contrat retomberont `
+          + `sur la liste de prix`);
+      }
+    }
+
     /* Copie locale d'abord : elle évite des centaines de motifs envoyés à
        Odoo sur chaque devis. Son absence n'est pas une erreur. */
     await cadre.chargerCopieLocale();
+    if (cadreRepli) await cadreRepli.chargerCopieLocale();
 
     /* Les contacts de la société.
      *
@@ -1940,6 +2066,8 @@ serve(async (req) => {
     /* Le contrat-cadre prime : on va chercher d'un coup le tarif de toutes
        les références demandées avant d'entrer dans la boucle. */
     await cadre.precharger([...parReference.keys()]);
+    /* La grille du niveau, pour ce que le contrat du client ne cote pas. */
+    if (cadreRepli) await cadreRepli.precharger([...parReference.keys()]);
 
     const prix: Record<string, unknown> = {};
     for (const [ref, a] of parReference) {
@@ -1961,8 +2089,12 @@ serve(async (req) => {
          Au MILLIÈME : la grille cote 36,5105 et le devis Odoo affiche 36,511.
          Arrondir au centime ferait dériver le total sur les grosses
          quantités et ne collerait plus à la pièce de référence. */
+      /* Contrat du client d'abord, puis la grille de SON niveau pour ce
+         qu'il ne cote pas (bouchon, fourreaux platine…) — voir `cadreRepli`. */
       const auCadre = cadre.prix(ref);
-      const pCadre = auCadre !== null ? Math.round(auCadre * 1000) / 1000 : null;
+      const auRepli = auCadre === null ? (cadreRepli?.prix(ref) ?? null) : null;
+      const brutCadre = auCadre !== null ? auCadre : auRepli;
+      const pCadre = brutCadre !== null ? Math.round(brutCadre * 1000) / 1000 : null;
       const coutOdoo = a.standard_price || 0;
       const coutLocal = coutsDirects.get(ref) || 0;
       const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
@@ -1998,8 +2130,14 @@ serve(async (req) => {
       }
       prix[ref] = {
         designation: a.name,
-        source: venuDuCadre ? "contrat" : (listeTenable ? "liste" : "aucun"),
-        gabarit: cadre.gabarit(ref),
+        /* « contrat » = le bordereau du client ; « grille » = la grille de
+           son niveau, qui cote ce que le bordereau ne dit pas. Les
+           confondre effacerait la seule chose que l'écran doit montrer. */
+        source: venuDuCadre
+          ? (auRepli !== null ? "grille" : "contrat")
+          : (listeTenable ? "liste" : "aucun"),
+        niveauGrille: auRepli !== null ? niveauRepli : "",
+        gabarit: cadre.gabarit(ref) ?? cadreRepli?.gabarit(ref) ?? null,
         contrat: contratPrix,
         fiche: a.lst_price,
         cout: cout || a.standard_price,
@@ -2691,6 +2829,7 @@ serve(async (req) => {
     /* Même règle que pour les références explicites : le contrat-cadre
        prime sur la liste de prix quand il couvre l'article. */
     await cadre.precharger(toutesRefs);
+    if (cadreRepli) await cadreRepli.precharger(toutesRefs);
     chrono("préchargement des propositions");
 
     /* LE STOCK, LU SEULEMENT SUR LES ARTICLES RETENUS, ET EN UNE FOIS.
@@ -2766,8 +2905,12 @@ serve(async (req) => {
           if (v !== null) pListe = Math.round(v * 100) / 100;
         } catch { /* article hors barème : on n'invente pas de prix */ }
         const auCadre = cadre.prix(x.default_code || "");
+        const auRepli = auCadre === null
+          ? (cadreRepli?.prix(x.default_code || "") ?? null)
+          : null;
+        const brutCadre = auCadre !== null ? auCadre : auRepli;
         // Au millième, comme Odoo (cf. commentaire plus haut).
-        const pCadre = auCadre !== null ? Math.round(auCadre * 1000) / 1000 : null;
+        const pCadre = brutCadre !== null ? Math.round(brutCadre * 1000) / 1000 : null;
         const coutOdoo = x.standard_price || 0;
         const coutLocal = coutsBase.get(x.default_code || "") || 0;
         const cout = coutOdoo > 0 ? coutOdoo : coutLocal;
@@ -2824,8 +2967,12 @@ serve(async (req) => {
           /* D'où vient le prix : la grille du client, ou un calcul de liste
              de prix. L'écran doit pouvoir le dire — un prix reconstruit n'a
              pas la même valeur qu'un prix négocié. */
-          source: venuDuCadre ? "contrat" : (listeTenable ? "liste" : "aucun"),
-          gabarit: cadre.gabarit(x.default_code || ""),
+          source: venuDuCadre
+            ? (auRepli !== null ? "grille" : "contrat")
+            : (listeTenable ? "liste" : "aucun"),
+          niveauGrille: auRepli !== null ? niveauRepli : "",
+          gabarit: cadre.gabarit(x.default_code || "")
+            ?? cadreRepli?.gabarit(x.default_code || "") ?? null,
           /* Part des mots de la demande que cet article porte réellement.
              C'est ce qui permet à l'appli de retenir le premier d'office
              sans le faire à l'aveugle : au-dessus du seuil elle l'annonce
@@ -2855,6 +3002,11 @@ serve(async (req) => {
          prix qu'il affiche, pas d'où ils pourraient venir. Chaque ligne
          porte en plus son propre `source` (« contrat » / « liste »). */
       contratCadreTarife: cadreTarife,
+      /* Le niveau dont la grille cote ce que le contrat du client ne dit
+         pas, lu dans le NOM de ce contrat. Vide quand il n'y a pas de
+         repli — l'écran ne doit pas annoncer une grille qui n'a pas servi. */
+      niveauRepli,
+      contratRepli: cadreRepli?.intitule || "",
       /* Niveau réellement appliqué, et s'il l'a été par défaut plutôt que
          par rattachement. L'écran doit pouvoir le dire. */
       niveauApplique,

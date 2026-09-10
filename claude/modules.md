@@ -68,6 +68,30 @@ propositions** — la demande MGD/PANTIN ne proposait plus aucun panneau (KC1,
 EPI, FP, point de rassemblement). Ce garde-fou ne joue donc que si **plus
 rien** ne tarife l'article.
 
+⚠️ **CE QUE LE CONTRAT DU CLIENT NE COTE PAS SE TARIFE À SON NIVEAU, PAS AU
+CATALOGUE.** L'ordre est : **contrat du client → grille de SON niveau → liste
+de prix**. Le niveau est lu dans le NOM du contrat (`niveauDuNom`), jamais
+choisi : « CCI10031 CONTRAT CADRE AGILIS 2026 **R4** & PAL » → R4. Un contrat
+client ne cote pas tout — celui d'AGILIS (#309) tarife le support et la bride,
+pas le bouchon ni les fourreaux platine (« sans gabarit », grille vide pour
+BOUC% / FPLA%). Vérifié ligne à ligne contre la commande Odoo, grille #276
+« CCI10019 TARIF R4 » : `BOUCHON8040=1,400`, `FPLATINE8040=36,600`,
+`FPLATINE8080=39,640` — les trois montants exacts de la commande. Le repli vit
+dans une **seconde instance** `ContratCadre` (`cadreRepli`), `chargerNiveau`
+remplaçant les ids de celle qu'on lui passe. Inutile quand un niveau est
+imposé (`cadre` EST déjà cette grille) ou quand rien ne tarife (`cadre` sert
+de filet). `source` vaut alors `"grille"`, distinct de `"contrat"`.
+
+⚠️ **LE DÉFAUT D'ODOO N'EST PAS UN CHOIX.** `property_product_pricelist` n'est
+jamais vide : sans choix sur la fiche, Odoo rend la liste par défaut de la
+société, si bien qu'« aucune liste » et « mise exprès au tarif public » se
+lisaient à l'identique. Le code préférait « la liste du contact si elle lui est
+propre » : #102108 « AGILIS » rendait le TARIF PUBLIC (le défaut), qui
+l'emportait sur « AGILIS / NGE (ISO-STI) » porté par la mère #75036.
+`listePrixParDefaut` lit la propriété globale (`ir.property`, `res_id` vide) et
+la comparaison rend les deux cas distinguables. Sans réponse d'Odoo, on garde
+le comportement d'avant.
+
 ⚠️ **LE CONTRAT SE CHERCHE DANS TOUT LE GROUPE** (`famillePartenaire`) — le
 couple (contact, parent) est trop étroit dès qu'un groupe éclate ses agences.
 Deux passes, aucune ne suffisant seule : la **branche** (`child_of` depuis le
