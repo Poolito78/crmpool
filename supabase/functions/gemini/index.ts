@@ -31,6 +31,12 @@
  * les six appels tombaient en 404 sans que rien ne le dise à l'écran : la
  * lecture des signatures rendait `null` comme si l'image n'avait rien donné.
  *
+ * ⚠️ **ET LA 2.5 EST TOMBÉE LE MÊME JOUR** : « This model models/gemini-2.5-flash
+ * is no longer available to NEW USERS » — une fermeture aux comptes récents, que
+ * la documentation publique ne montre pas, puisqu'elle décrit ces modèles comme
+ * disponibles. Seul le message de Google le disait, et c'est précisément ce que
+ * cette fonction remonte.
+ *
  * ⚠️ **UN ÉCHEC SE DIT, IL NE SE TAIT PAS.** La réponse porte le détail de
  * chaque tentative (`essais`), pas seulement un « ça n'a pas marché ». C'est
  * ce qui manquait pour distinguer un modèle retiré (404), une clé refusée
@@ -60,7 +66,7 @@ const corsHeaders = {
  * Les deux listes se corrigent ensemble — celle-ci fait foi, puisqu'elle
  * s'applique même à un front resté en cache.
  */
-const MODELES_DEFAUT = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+const MODELES_DEFAUT = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });

@@ -17,6 +17,13 @@
  * du modèle était écrit en dur dans cinq fichiers. D'où ce module — le prochain
  * retrait se corrige ICI, et dans l'en-tête de la fonction Edge.
  *
+ * ⚠️ **LA 2.5 EST TOMBÉE LE MÊME JOUR, ET AUTREMENT** : « no longer available to
+ * NEW USERS ». Fermée aux comptes récents seulement — la documentation publique
+ * la donne pour disponible, si bien qu'aucune lecture de la doc ne pouvait le
+ * prévoir. C'est le message de Google, relayé par l'Edge Function, qui a nommé
+ * les remplaçants : `gemini-3.6-flash` et `gemini-3.5-flash-lite`. Moralité : sur
+ * ce sujet, la seule source fiable est la réponse de l'API elle-même.
+ *
  * ⚠️ **`MODELES_GEMINI` DOUBLE LA LISTE DE LA FONCTION, à dessein** : le
  * navigateur et Deno ne partagent pas de code. Celle de la fonction fait foi,
  * puisqu'elle s'applique même à un front resté en cache ; celle-ci ne sert qu'à
@@ -26,7 +33,7 @@
 import { supabase } from '@/integrations/supabase/client';
 
 /** Modèles capables de lire du texte ET des images, du plus capable au repli. */
-export const MODELES_GEMINI = ['gemini-2.5-flash', 'gemini-2.5-flash-lite'] as const;
+export const MODELES_GEMINI = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'] as const;
 
 /** Le corps d'une requête Gemini, tel que l'API l'attend. */
 export interface CorpsGemini {
