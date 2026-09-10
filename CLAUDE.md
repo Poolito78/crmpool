@@ -1,292 +1,203 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guide pour Claude Code sur ce dépôt.
+
+⚠️ **Ce fichier est chargé à CHAQUE session : il ne contient que ce qui est vrai
+pour TOUTES les tâches.** Le détail par module vit ailleurs et se lit à la
+demande — voir « Où est le détail » plus bas. Ne pas le regonfler : ce qui
+n'est utile qu'à une tâche sur vingt appartient à `claude/*.md` ou à l'en-tête
+du fichier source concerné.
 
 ## Commands
 
 ```bash
-npm run dev          # Start dev server (Vite, http://localhost:8080 ; PWA SW disabled in dev)
-npm run build        # Production build (clears Vite cache first via prebuild)
-npm run build:dev    # Dev-mode build (skips minification, useful for debugging)
+npm run dev          # Vite, http://localhost:8080 (SW PWA désactivé en dev)
+npm run build        # Build production (vide le cache Vite via prebuild)
 npm run lint         # ESLint
-npm run test         # Run tests once (Vitest)
-npm run test:watch   # Vitest in watch mode
+npm run test         # Vitest, une passe
 
-# Run a single test file / test by name (Vitest)
-npx vitest run src/test/example.test.ts
-npx vitest run -t "name of the test"
+npx vitest run src/lib/xxx.test.ts     # un seul fichier — à préférer
+npx vitest run -t "nom du test"
 
-# Type-check. The root `tsc --noEmit` is effectively a no-op (solution-style
-# tsconfig with project references), so always target the app config:
-npx tsc -p tsconfig.app.json --noEmit
+npx tsc -p tsconfig.app.json --noEmit   # LE type-check (le tsc racine est un no-op)
 ```
 
-⚠️ Keep `npx tsc -p tsconfig.app.json --noEmit` at **0 errors**. The esbuild-based `npm run build` succeeds even with type errors, so it does **not** substitute for the type-check.
+⚠️ Garder `npx tsc -p tsconfig.app.json --noEmit` à **0 erreur**. Le build
+esbuild réussit malgré les erreurs de types : il ne remplace pas le type-check.
+
+## Garde-fous absolus
+
+- ⚠️ **Ne jamais éditer un fichier source via PowerShell `Set-Content`/`Out-File`** : l'encodage casse les accents UTF-8 (mojibake `envoyÃ©`). Utiliser l'outil Edit.
+- ⚠️ **Ne pas manipuler le token Supabase de l'utilisateur** — il lance `gen-types.ps1` / `deploy-function.ps1` lui-même.
+- **Toujours pusher automatiquement** après chaque commit. Une session Claude parallèle pousse sur le même dépôt : `git pull`/rebase avant de pousser, **jamais** de force.
+- **Jamais d'`enum`** — union de littéraux : `type Status = 'draft' | 'sent';`
+- ⚠️ **`LigneDevis.type` `undefined` DÉSIGNE UNE LIGNE D'ARTICLE.** En base les 410 lignes d'article portent `type: null`, pas une seule la chaîne `'ligne'`. Reconnaître un article **par exclusion** (`!== 'groupe' && !== 'soustotal' && !== 'texte'`), jamais par `=== 'ligne'`.
+- **On n'invente jamais une donnée métier.** Une valeur absente de la table se signale (« à vérifier ») au lieu de se deviner : un rail en trop se facture au client, un rail en moins manque sur le chantier — et aucun des deux ne se voit sur un total muet. Même règle pour les prix, les chantiers, les tags.
 
 ## Architecture
 
-**Tech stack:** React 18 + TypeScript + Vite 5, shadcn/ui (Radix), Tailwind CSS, Supabase (Postgres + Auth), React Router v6, deployed on Vercel.
+**Stack :** React 18 + TypeScript + Vite 5, shadcn/ui (Radix), Tailwind,
+Supabase (Postgres + Auth), React Router v6, Vercel.
 
-**Relation avec Veille :** crmpool partage le même projet Supabase (`qkjxcfosutclnahvxflf`) avec l'app standalone `Poolito78/veille`. Les tables `concurrents`, `concurrent_produits`, `concurrent_notes` sont communes. Les accès aux deux apps sont gérés depuis le panel Admin de Veille via la table `veille_roles` (colonnes `role` pour Veille, `crm_access` pour crmpool).
+**Relation avec Veille :** crmpool partage le projet Supabase
+(`qkjxcfosutclnahvxflf`) avec l'app `Poolito78/veille`. Tables communes :
+`concurrents`, `concurrent_produits`, `concurrent_notes`. Les accès aux deux
+apps se gèrent depuis le panel Admin de Veille via `veille_roles` (`role`,
+`crm_access`).
 
 ### App bootstrap (`src/App.tsx`)
 
-`App` wraps everything in `ErrorBoundary → QueryClientProvider → TooltipProvider → BrowserRouter`. Inside `AppRoutes`, `useAuth()` guards routes: unauthenticated users go to `/auth`, password-recovery flows show `<ResetPassword>` regardless of session. All authenticated routes render inside `<StoreProvider><CRMLayout>` — so `useCRM()` is only valid inside authenticated pages.
+`ErrorBoundary → QueryClientProvider → TooltipProvider → BrowserRouter`. Dans
+`AppRoutes`, `useAuth()` garde les routes : non authentifié → `/auth`,
+récupération de mot de passe → `<ResetPassword>`. Toutes les routes
+authentifiées rendent dans `<StoreProvider><CRMLayout>` — `useCRM()` n'est donc
+valide que dans les pages authentifiées. ⚠️ La route publique `/p/:id`
+(`FichePublique`) sort **en tête de `AppRoutes`**, avant tous les gardes.
 
-**Droits par utilisateur (`src/hooks/useAuth.tsx`) :** après la session Supabase, `useAuth()` lit la ligne `veille_roles` de l'utilisateur (`select('*')`, indépendant des migrations) et expose, partagés via `<AuthProvider>` + `useCurrentUser()` (appelé une seule fois, pas de double souscription) :
-- `active` (`crm_active`, admin = toujours actif) — **interrupteur maître**. `null` = chargement (spinner) ; `false` = écran « Accès refusé » complet (l'app n'est jamais rendue).
-- `canCrm` (`crm_access`, admin = oui) — accès à la **page CRM** (`/crm` : Pipeline/Actions/Calendrier/Analyse). Sans ce droit, l'utilisateur garde le reste (Ventes, Devis, Stock…).
-- `canAchat` (`crm_achat_access`, admin = oui) — périmètre **Achat** (menu Achat + routes `/fournisseurs` `/commandes` `/factures-fournisseur` ; et masque coûts/marges/prix d'achat dans Devis, Produits, Dashboard, Stock, Calcul Transport).
-- `isAdmin` = `role === 'admin'` (tous droits + voit Paramètres → Administration).
+**Droits (`src/hooks/useAuth.tsx`)** — lus dans `veille_roles`, partagés via
+`<AuthProvider>` + `useCurrentUser()` :
+`active` (interrupteur maître ; `null` = spinner, `false` = « Accès refusé »),
+`canCrm` (page `/crm`), `canAchat` (menu Achat + masque coûts/marges partout),
+`isAdmin`. `crm_active` retombe sur `crm_access` si la colonne manque.
+Gestion dans `AdminAccessPanel.tsx` (Paramètres → Administration).
+⚠️ Masquage **UI seulement** — pour un cloisonnement dur, ajouter des policies RLS.
 
-`crm_active` retombe sur `crm_access` si la colonne n'existe pas encore (pré-migration). Les routes protégées redirigent vers `/` si le droit manque. La gestion se fait dans le **panneau admin natif** `src/components/AdminAccessPanel.tsx` (Paramètres → Administration, admins only) : cases Compte actif / Accès CRM / Accès Achat écrites dans `veille_roles`. ⚠️ Masquage **UI seulement** — pour un cloisonnement dur, ajouter des policies RLS sur les tables sensibles. Voir migrations `20260614100000` (crm_achat_access) et `20260614110000` (crm_active).
+### État — `useStore` / `useCRM`
 
-### State management — `useStore` / `useCRM`
+Tout l'état vit dans `src/lib/store.ts → useStore()`, fourni via
+`StoreContext` et consommé par `useCRM()`. Collections : `clients`,
+`fournisseurs`, `produits`, `devis`, `produitFournisseurs`,
+`commandesFournisseur`, `commandesClient`, `facturesClient`,
+`facturesFournisseur`.
 
-All application state lives in `src/lib/store.ts → useStore()`, provided app-wide via `StoreContext` and consumed in every page via `useCRM()`.
+Chaque collection a un `updateXxx(fn: prev => next)` qui applique la mutation
+localement **et** diffe contre l'état précédent pour déclencher les
+inserts/updates/deletes Supabase. **Il n'y a pas de couche API séparée.**
 
-`useStore` holds: `clients`, `fournisseurs`, `produits`, `devis`, `produitFournisseurs`, `commandesFournisseur`, `commandesClient`, `facturesClient`, `facturesFournisseur`.
+Hors `useStore`, trois hooks gèrent leur propre synchro : `useCrmActions()`
+(`crm_actions`), `useDevisMessageTemplates()` (`devis_message_templates`),
+`useConcurrents()` (`src/lib/concurrents.ts`).
 
-Each collection has an `updateXxx(fn: prev => next)` callback that applies the mutation locally **and** diffs against the previous state to fire the correct Supabase inserts/updates/deletes. There is **no separate API layer** — mutations go through the updater callbacks.
+### Convention DB ↔ App
 
-Three additional hooks live outside `useStore` and manage their own Supabase sync:
-- `useCrmActions()` — CRM actions (table `crm_actions`). Returns `{ actions, addAction, updateAction, deleteAction }`.
-- `useDevisMessageTemplates()` — archive comment templates (table `devis_message_templates`). Returns `{ templates, addTemplate, deleteTemplate }`.
-- `useConcurrents()` (`src/lib/concurrents.ts`) — competitor watch (tables `concurrents`, `concurrent_produits`, `concurrent_notes`). Returns full CRUD for all three entity types.
+Chaque entité a une paire de fonctions privées dans `store.ts` :
+`dbToXxx(row)` (snake_case → camelCase) et `xxxToDb(obj, userId)` (l'inverse,
+ajoute `user_id`). **Seuls endroits qui touchent aux noms de colonnes bruts.**
 
-### DB ↔ App mapping convention
-
-Every entity has a pair of private functions in `store.ts`:
-- `dbToXxx(row)` — snake_case DB row → camelCase TS interface
-- `xxxToDb(obj, userId)` — reverse, adds `user_id`
-
-These are the only places that touch raw DB column names. When adding a new optional field to a domain type, use spread to conditionally include it in `xxxToDb` to avoid PostgREST rejecting inserts when the column doesn't exist yet:
+Pour un champ optionnel nouveau, spread conditionnel — sinon PostgREST rejette
+l'insert tant que la colonne n'existe pas :
 ```ts
 ...(a.newField !== undefined ? { new_field: a.newField } : {}),
 ```
 
-When adding a new field: update **both** `dbToXxx` and `xxxToDb` in `store.ts`, create a migration file, and apply it. Forgetting any one of these three causes silent data loss. The same pattern applies to the standalone `concurrents.ts` hook.
+⚠️ Nouveau champ = **trois** gestes : `dbToXxx`, `xxxToDb`, **et** la migration
+appliquée. En oublier un cause une perte de données silencieuse.
 
-### Key domain types (`src/lib/store.ts`)
+### Types métier (`src/lib/store.ts`)
 
 | Type | Notes |
 |---|---|
-| `Produit` | `prixAchat` = prix achat conditionné (unit cost). `paliersPrix?: PrixPalier[]` = tiered pricing by quantity. `prixHT` = public price. `ficheUrl?` + `ficheLinkLabel?` = product sheet URL injected into devis emails. Distinct from `ProduitFournisseur.prixAchat` (catalog price/kg). |
-| `ComposantProduit` | Three quantity modes: plain `quantite`, `poidsKg` (weight → qty via `produit.poids`), or `consommationPct` (% of a base component). All three modes must be handled wherever composant cost is calculated. |
-| `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`, **optionnel — `undefined` DÉSIGNE UNE LIGNE D'ARTICLE** (c'est la valeur par défaut, et en base les 410 lignes d'article portent `type: null`, pas une seule la chaîne `'ligne'`). ⚠️ Reconnaître une ligne d'article **par exclusion** (`!== 'groupe' && !== 'soustotal' && !== 'texte'`), jamais par `=== 'ligne'` : un test positif ne reconnaît aucun article. `prixAchatLigne` = free-line purchase cost (e.g. energy surcharges). |
-| `ProduitFournisseur` | Links a product to a supplier. `prixAchat` here is price per kg from supplier catalog — **different** from `Produit.prixAchat`. |
-| `Client` | `delaiReglement?: string` — preset payment terms (`'Comptant' \| '30J' \| '30J FDM' \| '45J' \| '45J FDM'`). Drives auto-fill of the `conditions` textarea in the devis form when client changes. `DELAI_REGLEMENT_OPTIONS` (label + full text) exported from `Clients.tsx`. |
-| `Devis` | `modeCalcul: 'standard' \| 'surface'`. Surface mode uses `surfaceGlobaleM2` + per-product `consommation`. `statut` includes `'archivé'`. Archived devis carry: `archiveDate?`, `archiveRaison?`, `archiveCommentaire?`, `archiveConcurrents?`. Prévisionnel fields: `probabiliteReussite?` (0/25/50/75/100), `dateRealisation?` (YYYY-MM-DD), `moContent?` (HTML riche de l'onglet Mise en œuvre). Passer à `'accepté'` met auto `probabiliteReussite=100` + `dateRealisation=today` (sur les 3 sélecteurs de statut). |
-| `CrmAction` | Has `concurrents?: CrmActionConcurrent[]` for recording competitor prices observed during visits/calls. Only include in DB payload when defined (column may not exist yet). |
-| `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constant `RAISON_ARCHIVE` holds label/color/messageDefaut per key. |
+| `Produit` | `prixAchat` = prix achat conditionné. `paliersPrix?: PrixPalier[]` = prix par quantité. `prixHT` = prix public. `ficheUrl?` + `ficheLinkLabel?` = fiche technique injectée dans les mails. Distinct de `ProduitFournisseur.prixAchat` (prix/kg catalogue). |
+| `ComposantProduit` | Trois modes de quantité : `quantite`, `poidsKg` (poids → qté via `produit.poids`), `consommationPct` (% d'un composant de base). Les trois doivent être gérés partout où un coût de composant est calculé. |
+| `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`, **optionnel** (voir garde-fous). `prixAchatLigne` = coût d'achat d'une ligne libre. |
+| `ProduitFournisseur` | Lie un article à un fournisseur. `prixAchat` = prix au kg du catalogue fournisseur — **différent** de `Produit.prixAchat`. |
+| `Client` | `delaiReglement?` (`'Comptant' \| '30J' \| '30J FDM' \| '45J' \| '45J FDM'`) pré-remplit le textarea `conditions` du devis. `DELAI_REGLEMENT_OPTIONS` exporté de `Clients.tsx`. |
+| `Devis` | `modeCalcul: 'standard' \| 'surface'`. `statut` inclut `'archivé'` (+ `archiveDate/Raison/Commentaire/Concurrents`). Prévisionnel : `probabiliteReussite?` (0/25/50/75/100), `dateRealisation?`, `moContent?`. `chantier?` (case Chantier d'Odoo, sous Réf. affaire). Passer à `'accepté'` met auto `probabiliteReussite=100` + `dateRealisation=today` sur les 3 sélecteurs. |
+| `CrmAction` | `concurrents?: CrmActionConcurrent[]`. À n'inclure dans le payload que si défini. |
+| `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constante `RAISON_ARCHIVE` (label/couleur/messageDefaut). |
 
-### Key utility functions (`src/lib/store.ts`)
+**⚠️ `designationProduit(p)` est le SEUL point de vérité pour nommer un
+article.** `produits.description` porte la désignation du *modèle* (« IS KC1 »
+pour douze déclinaisons) ; `description_variante` celle de la *déclinaison*.
+Ne jamais lire `p.description` directement pour afficher ou nommer une ligne.
 
-- `getPrixPourQuantite(produit, quantite)` — returns `{ prixAchat, prixRevendeur, prixHT }` from the correct price tier. **Always use this instead of `produit.prixAchat` directly** when the quantity matters.
-- `calculerTotalLigne(ligne)` — line total after remise + TVA.
-- `calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA)` — full devis totals.
-- `calculerFraisPort(poidsKg, hasGranulat)` — standard transport barème.
-- `calculerFraisPortBareme(bareme, poidsKg)` — generic barème (UPS / messagerie / GLS).
+### Fonctions utilitaires (`src/lib/store.ts`)
 
-**Local helpers in `Devis.tsx`** (defined after `calcQuantiteSurface`, hoisted):
-- `getVarianteDiff(produit, variantesChoisies?)` — sums `prixDiff` from all chosen variant options.
-- `getPrixLigne(produit, quantite, variantesChoisies?, isRevendeur?)` — `getPrixPourQuantite` base + `getVarianteDiff`. **Always use instead of `getPrixPourQuantite` alone whenever variants may be chosen** (quantity change, surface/conso change, populateForm). The existing `VarianteSelect onChange` handler is the canonical reference for this pattern.
+- `getPrixPourQuantite(produit, quantite)` → `{ prixAchat, prixRevendeur, prixHT }` du bon palier. **Toujours l'utiliser** plutôt que `produit.prixAchat` quand la quantité compte.
+- `calculerTotalLigne(ligne)`, `calculerTotalDevis(lignes, fraisPortHT, fraisPortTVA)`
+- `calculerFraisPort(poidsKg, hasGranulat)`, `calculerFraisPortBareme(bareme, poidsKg)`
+
+**Helpers locaux de `Devis.tsx`** (après `calcQuantiteSurface`, hoistés) :
+- `getVarianteDiff(produit, variantesChoisies?)` — somme des `prixDiff`.
+- `getPrixLigne(produit, quantite, variantesChoisies?, isRevendeur?)` — base + diff. **Toujours l'utiliser plutôt que `getPrixPourQuantite` seul dès que des variantes sont possibles** (changement de quantité, surface/conso, `populateForm`). Le handler `VarianteSelect onChange` est la référence.
 - `calcQuantiteSurface(prod, surface, consoOverride?)` — `Math.ceil(surface × conso / poids)`.
 
-**Devis comparatif manual overrides:** states `compaEditingId / compaEditVal` (per-line puAchat) and `portAchatManuel` (transport). Click-to-edit inline input, amber colour when overridden, ↺ reset. `portAchat = portAchatManuel ?? portAchatCalcule` in the IIFE.
+## Où est le détail
 
-### Sidebar nav structure (`src/components/CRMLayout.tsx`)
+Ces fichiers ne sont **pas** chargés automatiquement : les ouvrir quand la
+tâche les concerne, pas avant.
 
-The nav uses a `NavEntry = NavLink | NavGroup` type union. Groups (`Vente`, `Achat`) are collapsible, auto-expand when a child route is active, and persist open state in `openGroups: string[]`. The flat list `NAV_FLAT` is used for the mobile bottom bar and the top-bar title.
-
-Current structure:
-- Tableau de bord, **Veille Concurrence** (`/veille-concurrence`), CRM (top-level)
-- **Vente** group: Clients, Produits, Devis, Commandes Client, Factures Client
-- **Achat** group: Fournisseurs, **Devis Fournisseurs** (`/devis-fournisseurs`), Cmd Fournisseur, Factures Fourn.
-- Stock, Calcul Transport (top-level)
-- **Paramètres** group: Tableau de bord, Entrepôts, Devis, Veille Concurrence, Historique GED. Les 4 premiers sont des **liens profonds** vers les onglets de `/parametres` via `?tab=dashboard|entrepots|devis|veille` ; `Parametres.tsx` lit l'onglet actif depuis `useSearchParams`.
-
-**Glisser-déposer d'un document — dans `CRMLayout`, donc sur TOUTES les pages.** Les gestionnaires (`depotDragEnter/Over/Leave/Drop`), le voile et l'unique `<AnalyseDocumentDialog>` vivent dans la coquille ; une page ne doit **pas** en remettre une copie (elle ouvrirait deux fenêtres — c'était le cas du tableau de bord). Fichiers et texte sont acceptés. ⚠️ Un **glisser interne** (réordonner des colonnes via `useTableColumns`, déplacer une ligne de devis) émet les mêmes événements : un écouteur `dragstart` en phase de capture lève `glisserInterne`, et le dépôt est alors ignoré. Sans ce garde-fou, trier un tableau ouvrirait l'analyse.
-
-**Liens avec `?tab=` dans la nav** : un `NavLink.path` peut contenir une query (`/parametres?tab=devis`). `CRMLayout` expose `isLinkActive(path)` (compare `pathname` + `?tab=`, défaut `dashboard`) pour le surlignage, et `isSectionActive(path)` (pathname seul, ignore la query) pour l'auto-ouverture du groupe. `currentLabel` (titre du bandeau) utilise `isLinkActive` puis un repli par pathname.
-
-### Pages (`src/pages/`)
-
-| Page | Role |
+| Fichier | Contenu |
 |---|---|
-| `Devis.tsx` | Largest file. Full devis lifecycle: list (vue liste cartes / vue tableau colonnes), create/edit dialog (tabs: **Devis / Comparatif / MO / CRM / Notes & Fichiers**), archive dialog, PDF, email. Lignes éditables en mode cartes OU tableau (`lignesView`, persisté) — la vue tableau utilise `TABLE_LIGNE_COLS` + `useTableColumns('devis_lignes_table')` (colonnes resize/drag), en-tête figé dans la barre sticky, scroll H synchronisé. Sélection multi-lignes (cases à cocher) pour déplacer un bloc (groupe + lignes + sous-total) ensemble. **Fermeture / retour** : pattern historique navigateur — ouverture liste = `pushState` factice (back ferme la modale, reste sur la liste) ; ouverture via `?editDevis=` (navigation) = `navigate(-1)` (revient à la vraie page précédente). Voir `openedViaUrlRef` / `closeDevisDialog`. |
-| `CRM.tsx` | 4-tab page: Pipeline / Actions / Calendrier / Analyse. Uses its own scroll container (see below). (La Veille n'est plus un onglet de CRM — c'est une page dédiée `/veille-concurrence`.) |
-| `VeilleConcurrence.tsx` | Competitor watch. Export par défaut `VeilleConcurrence` (page dédiée, wrapper flex pleine hauteur) + export nommé **`VeilleContent({ embedded? })`** (le contenu réutilisable). 4 sous-onglets (Fiches / Produits / Notes / Analyse) rendus **sur la ligne du titre** (TabsList à côté du `<h1>`), boutons d'action à droite : menu **Action** (dropdown : Export Excel / Envoi par email / Importer tarif) + bouton unique **+ Ajout** (ouvre le dialog produit, qui contient lui-même « Importer tarif » et « + Concurrent » — concurrent créé auto-sélectionné). `embedded` masque le titre et désactive le flex-fill (flux normal). **Onglet Produits** : tableau data-driven (`PROD_COLS`/`PCol`) via `useTableColumns('veille_prod_table')` (drag + resize), filtres/tri **inline dans les en-têtes**, gear « colonnes » dans la dernière cellule d'en-tête, **en-tête sticky** (`<th sticky top-0>`) avec scroll unique flex-fill (`<Table containerClassName="flex-1 min-h-0">`). Colonne **Quantité** (prix par quantité). En mode page dédiée, `VeilleContent` passe en `flex flex-col flex-1 min-h-0` ; chaque `TabsContent` scrolle dans sa propre zone. |
-| `Produits.tsx` | Product catalog with tiered pricing, variants, kit composition, supplier links, qteVendue column. Onglet **Images & fiches techniques** : l'adresse et le libellé de la **fiche technique** (`ficheUrl` / `ficheLinkLabel`) y sont saisis — ils venaient de l'onglet Informations, où l'on ne voyait pas le résultat ; ⚠️ le bloc est rendu **avant** le garde-fou « enregistrez d'abord l'article », sinon on ne pourrait plus renseigner une fiche à la création. Bloc **« Documents de la catégorie »** : les documents de famille de l'article, hérités des catégories parentes et **attachables depuis l'article** — le sélecteur propose toute la chaîne avec le nombre d'articles que chaque niveau toucherait. Lien à texte raccourci par photo (`libelle`, éditable sous la vignette) + bouton de copie, et un bloc « Liens à coller » qui copie fiche technique + photo + fiche publique d'un coup (voir `liensProduit.ts`). Glisser-déposer de photos (compressées avant envoi, voir `produitImages.ts`), galerie, choix de la principale, champ « adresse d'une image en ligne », et jauge de place restante. ⚠️ La zone de dépôt fait `stopPropagation` : sinon le glisser-déposer global de `CRMLayout` intercepterait l'image pour l'analyse de document. Vignette de la principale dans la colonne Référence du tableau. Onglet **Informations** : bloc **Tags** (`TagsArticle.tsx`) sous « Description détaillée » — les mots du client, jamais affichés dans le devis, avec la marque de ceux que le CRM a retenus tout seul (voir `produitTags.ts`). Onglet **Prix** : historique des prix en périodes datées (`useJournalPrix` + `periodesDePrix`, voir `journalPrix.ts`). Prix d'achat et marge masqués sans `canAchat`. |
-| `DevisFournisseurs.tsx` | Les offres de prix **reçues** des fournisseurs (Achat → Devis Fournisseurs). Page de consultation : ces devis entrent par `AnalyseDocumentDialog`, pas par une saisie. Liste dépliable (un clic ouvre les articles proposés), filtres par statut, export Excel. Une ligne montre son **sort** et si son prix a été **appliqué** — un tarif lu n'est pas un tarif répercuté. Le panneau déplié permet de **(ré)appliquer** les prix : cases par ligne, destinations (fiche fournisseur / fiche article), bouton. ⚠️ Le `action` gardé en base dit ce qui était vrai le jour de la lecture ; l'écran **recalcule** l'état d'aujourd'hui via `proposerPrix` (le prix a pu bouger depuis) et l'écriture passe par `appliquerPrix`, la même fonction pure que le dialogue d'analyse. Données via `useDevisFournisseur()`. |
-| `Clients.tsx` | CRM contacts. Edit dialog has tabs: Infos / CRM (actions + devis history + win/loss). |
-| `Stock.tsx` | Stock level tracking. |
-| `Fournisseurs.tsx` | Supplier contacts with delivery addresses, per-category discounts. |
-| `Commandes.tsx` / `CommandesClient.tsx` | Purchase & sales order management. |
-| `FacturesClient.tsx` / `FacturesFournisseur.tsx` | Invoice tracking. |
-| `GED.tsx` | Document management (pieces jointes per devis line via `devis_pieces_jointes` table). |
-| `CalculateurUPS.tsx` | Shipping cost calculator. 5 tabs: Standard, Transporteurs, Barèmes transporteurs, Saisie manuelle, **Achat**. The Achat tab stores real transport purchase history (drag-and-drop reorder, sortable, AI PDF extraction). localStorage key `crm_transport_achats`. `AchatTransport` interface has `fournisseur` (sender/client, e.g. QRM) distinct from `transporteur` (carrier, e.g. UPS). |
-| `StatsVariantes.tsx` | Sales statistics by product variant. |
-| `Parametres.tsx` | Réglages, organisés en **onglets** (`Tabs` contrôlé par `?tab=` via `useSearchParams`) : **Tableau de bord** (visibilité des tuiles), **Entrepôts** (CRUD `useEntrepots`), **Devis** (vue par défaut + colonnes), **Veille Concurrence** (`<VeilleDisplayName>` + `<VeilleCorrectionPanel>`). Atteignables en lien direct depuis la nav (`/parametres?tab=…`). |
-| `FichePublique.tsx` | **Route publique `/p/:id`, hors authentification.** La page qu'un client ouvre depuis un lien de mail : désignation, photos, description détaillée, bouton vers la fiche technique. **Aucun prix** — et la frontière est tenue en base, pas à l'affichage : la fonction Postgres `fiche_publique(uuid)` (`security definer`, `grant execute to anon`) ne renvoie ni prix, ni coût, ni stock, ni fournisseur. ⚠️ **Fonction et non vue** : une vue ouverte à `anon` se lirait sans filtre et le catalogue entier (22 500 désignations) partirait au premier `select *`. La fonction exige l'UUID de l'article — indevinable, et non énumérable. Filtre `disponible_vente`. La sortie de route est faite **en tête de `AppRoutes`**, avant les gardes chargement/session/compte actif : un lien de mail qui atterrit sur l'écran de connexion est un lien mort. |
-| `Dashboard.tsx` | 2 onglets (persistés localStorage `dashboard_tab`) : **Vue d'ensemble** (KPIs, alertes, derniers devis…) et **Prévisionnel devis** — pipeline pondéré par `probabiliteReussite` : CA pondéré, coût fournisseur pondéré, marge pondérée ; filtres statut + période de réalisation ; groupement par mois ; graphe `recharts` (BarChart) + export Excel. Liens devis avec `&returnTo=dashboard`. |
+| `claude/modules.md` | Les modules `src/lib/` un par un + la règle de tarification `odoo-prix`. |
+| `claude/ui.md` | Pages, composants, nav, scroll CRM, **convention obligatoire des vues tableau**, marge achat/vente du devis. |
+| `.claude/rules/reprise-2026-09.md` | Ce que la session de septembre 2026 a établi + ce qui reste ouvert. **Chargé automatiquement.** |
 
-### CRM page scroll architecture
+⚠️ `reprise-2026-09.md` renvoie à `claude/brides-et-rails.md` et
+`claude/designations-odoo.md` : **ces deux fichiers n'existent pas.** Pour les
+brides, la source fait foi (`bridesDevis.ts` et `railsPanneaux.donnees.ts`
+portent chacun un en-tête complet). Pour les désignations Odoo, le résumé de
+`reprise-2026-09.md` est tout ce qui reste.
 
-`CRM.tsx` remplit la hauteur de `<main>` en flex-fill et annule son padding via marges négatives (alignées sur le padding réel de `main` : `-mx-4 md:-mx-6 -mt-2 -mb-20 md:-mb-6`) :
+⚠️ **La source fait foi avant ces fichiers.** Chaque module de `src/lib/` porte
+un en-tête documenté de 13 à 28 lignes qui explique le *pourquoi* — c'est la
+première chose à lire en ouvrant un fichier, et c'est là que va toute nouvelle
+explication.
 
-```
-<div className="flex flex-col flex-1 min-h-0 -mx-4 md:-mx-6 -mt-2 -mb-20 md:-mb-6">
-  <button className="flex-none">   ← bandeau « N actions en retard » (cliquable, ouvre l'onglet Actions)
-  <div className="flex-none">      ← barre d'onglets (Pipeline / Actions / Calendrier / Analyse / Veille) — NE scrolle JAMAIS
-  <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4">  ← le contenu d'onglet scrolle ici
-```
+**Index des modules `src/lib/`** (détail dans `claude/modules.md`) :
+`rapprochementArticle` (un code nommé ferme les autres familles) ·
+`rapprochementClient` (la rareté d'un mot fait sa valeur) ·
+`produitTags` (les mots du client, jamais affichés dans un devis) ·
+`indexProduits` (index catalogue en WeakMap, deux caches) ·
+`bridesDevis` + `railsPanneaux.donnees` (une bride par rail, jamais devinée) ·
+`chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
+`produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
+`odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·
+`parseEml` / `parseMsgPdf` / `parseExcel` · `exportExcel` · `historique` ·
+`concurrents` · `ralColors`
 
-Sticky elements inside the scroll zone use `top-0` (not `top-16`). This pattern avoids the CSS bug where `overflow-x: hidden` on a parent breaks `position: sticky`. ⚠️ Ne pas utiliser `-m-4` + `height: calc(100vh-4rem)` (ancien hack) : depuis le passage de `<main>` en flex (`pt-2`), ça décalait le bandeau sous le header.
+## Supabase
 
-### Key components (`src/components/`)
+Migrations dans `supabase/migrations/`, numérotées par horodatage. Appliquer via
+l'éditeur SQL du dashboard ou `supabase db push`.
+`src/integrations/supabase/types.ts` est **généré** et resynchronisé avec la base.
 
-- `DevisPreview.tsx` — Read-only devis renderer for on-screen preview and PDF generation. Option **Fiches & photos** (`showLiens`) : ajoute en bas du devis, par article, sa fiche technique et sa photo. ⚠️ **Les liens y sont cliquables DANS LE PDF** grâce à l'attribut `data-pdf-href` : le PDF étant une capture d'écran, un `<a href>` n'y serait qu'une image de texte — `generatePdfFromElement` relève ces éléments, mesure leur position et pose une annotation jsPDF par-dessus. Porter l'attribut sur le texte du lien, jamais sur la ligne entière, sinon toute la largeur devient cliquable.
-- `DevisArchiveDialog.tsx` — Dialog for archiving a devis: raison select, pre-filled editable comment, competitor entries (nom/prix/délai), saveable message templates.
-- `CRMActionDialog.tsx` — Create/edit CRM action with collapsible "Infos concurrence" section (competitor name, product ref, tarif, délai, note). Auto-opens for Visite/Appel/RDV types. Accepts optional `produits` prop for product dropdown.
-- `ConcurrentDialog.tsx` — Create/edit competitor fiche: 3 tabs (Infos / Produits / Notes). Passes `clients` prop for "client source" tracking on product entries.
-- `DevisEmailDialog.tsx`, `CommandeEmailDialog.tsx` — Email composition with PDF attachment. Generate RFC 822 `.eml` files (MIME multipart/mixed, `X-Unsent: 1` for Outlook). On mobile: Web Share API; fallback to download + `mailto:`. **Section « Liens produit »** : pour chaque article du devis, jusqu'à trois liens (fiche technique `ficheUrl`, photo principale `produit_images`, fiche publique `/p/<id>`), cases à cocher + pastilles « tout cocher » par destination, **libellé éditable** (c'est le seul texte que le client lit) et bouton **« Copier les liens »** (presse-papiers HTML + texte, voir `liensProduit.ts`). Les liens cochés partent dans le HTML du `.eml` et dans le corps texte du repli mobile. Défaut : fiches techniques et photos cochées, fiches CRM **et documents de famille décochés** — une homologation ne s'invite pas d'elle-même dans tous les devis. Les photos sont bornées aux articles du devis ; les documents de famille sont lus en entier (quelques dizaines de lignes, et les borner exigerait de calculer la chaîne des catégories parentes en SQL). Les photos sont lues **bornées aux articles du devis** (`.in('produit_id', …)`), jamais la table entière.
-- `CommandeARDialog.tsx` / `CommandeARPreview.tsx` — Order acknowledgement document.
-- `ProduitFournisseursPanel.tsx` — Supplier pricing panel inside the product form.
-- `AnalyseDocumentDialog.tsx` — AI-powered document classifier: reads PDF/EML/MSG, classifies type, and extracts structured fields. **Trois débouchés selon le type** : devis/commande client → `handleCreerDevis` / `handleCreerCC` ; commande ou BL fournisseur → réception (`handleReception`, `handleCreerCF`) ; **devis fournisseur → `handleAppliquerPrixAchat`**. Ce dernier écrit la fiche fournisseur (`produit_fournisseurs`, coché d'office) et, **seulement si la case est cochée**, le `prixAchat` de la fiche article — celui qui commande toutes les marges. Le rapprochement d'article passe d'abord par `reference_fournisseur` (lien exact) avant `rapprocherArticle` (ressemblance). L'offre est enregistrée dans `devis_fournisseur` **même si aucun prix n'est appliqué**. ⚠️ **La reprise d'office d'une proposition Odoo applique les défauts métier** (`variantesParDefaut`, `variantFunnel.ts`) et non l'ordre d'Odoo : sur « panneau AK3 » il rend le AK3.1000 avant le AK3.700, et retenir le premier posait un 1000 à 50,02 € là où la règle dit gamme **Petite** — 39,41 €. Ce que le client précise l'emporte (« AK3 1000 » garde le 1000), et le filtre ne va **jamais jusqu'au vide** : une ligne sans article part au devis sans prix. **Fournisseur inconnu** : le nom lu part automatiquement en recherche Odoo (`rechercheOdoo('fournisseur')` → `importerFournisseurOdoo`, le fichier partenaires y mêle clients et fournisseurs), avec un repli `creerFournisseurDepuisDocument(nom)` quand Odoo ne connaît pas la société. Une seule requête par nom (`chercheFaitePour`). **Contact de l'affaire** : le sélecteur présélectionne l'interlocuteur (nom du signataire prioritaire sur l'adresse, voir `contactRetenu`) ; `handleCreerDevis` le rattache au fichier client via `rattacherContact` puis le porte sur `devis.contactId`. Une fiche Odoo **rattachée** (`estSociete: false`) est une personne, pas une société : `importerClientOdoo` met la société mère dans `societe` **et** inscrit la personne dans `contacts` — sans quoi elle ne servait qu'à remplir `nom` du client, où aucune liste de contacts ne va la chercher. ⚠️ `nomDuFournisseur()` écarte ISOSIGN : sur un devis reçu notre propre société figure en destinataire, et l'extraction la retient parfois comme partenaire — la proposer créerait un fournisseur « ISOSIGN ».
-- `DevisAssistantDialog.tsx`, `AiCalculatorDialog.tsx`, `EmailAnalyzerDialog.tsx`, `EmailToContactDialog.tsx` — AI-assisted workflows.
-- `DevisChatter.tsx` — Threaded comments/history on a devis.
-- `ClientCombobox.tsx`, `ProduitCombobox.tsx`, `VarianteSelect.tsx` — Reusable entity pickers. `ClientCombobox` accepte `onCreateNew(societe)` : si aucune société trouvée, propose « Créer la société … » (Devis crée le client persisté puis ouvre le formulaire complet via `/clients?editClient=<id>&returnDevis=<id>`).
-- `TruncTooltip.tsx` — Text truncation with hover tooltip.
-- `RichTextEditor.tsx` — Éditeur HTML riche (contentEditable + `execCommand`, sans dépendance) : gras/italique/souligné, titres, listes, taille, **couleur** (palette + sélecteur libre). Utilisé par l'onglet MO du devis. CSS placeholder `.rte-content:empty::before` dans `index.css`.
-- `RowActionsMenu.tsx` — Roue crantée d'actions par ligne (menu en **portail** position fixe, jamais rogné). Actions = `{ icon, label, onClick, danger?, hidden? }`. Utilisé sur toutes les vues tableau (Devis, Produits, Clients, Commandes, Factures).
-- `TableGearMenu.tsx` / `PageHeaderSlot.tsx` — voir section « Tableaux de données » ci-dessous.
-- `VeilleDisplayName.tsx` — éditeur autonome du nom d'affichage Veille de l'utilisateur courant (localStorage `crm_creator_names` + `veille_roles.display_name`). Affiché dans Paramètres → Veille.
-- `VeilleCorrectionPanel.tsx` — correction globale catégories/informateurs des produits concurrents (sous-composant `RenameGroup` : renomme une valeur sur tous les produits via `updateProduit`). Lit les données via `useConcurrents()`. Affiché dans Paramètres → Veille.
-- `ui/table.tsx` — le `<Table>` shadcn accepte un **`containerClassName`** optionnel (mergé sur le wrapper `relative w-full overflow-auto`). Indispensable pour borner le conteneur de scroll en flex-fill et obtenir un **en-tête `<th>` sticky** (sinon le wrapper overflow-auto non borné empêche le sticky vertical).
-
-### Library modules (`src/lib/`)
-
-- **`concurrents.ts`** — `useConcurrents()` hook + `formatCreateur(emailOrName)` utility. `formatCreateur` resolves an email to a display name stored in localStorage key `crm_creator_names` (`{ "email": "displayName" }`). Used wherever creator identity is shown in competitor watch. La table `concurrent_produits` a des colonnes additionnelles ajoutées par migration et incluses **conditionnellement** dans `concurrentProduitToDb` (spread `...(p.x !== undefined ? {...} : {})`) : `client_nom`, `informateur`, `date_renseignement`, **`quantite`** (numeric, prix par quantité). `ConcurrentProduit.quantite?: number`.
-- **`historique.ts`** — Fire-and-forget audit log via `logHistorique(entry)`. Never awaited — never blocks UI. `fetchHistorique(opts?)` retrieves entries. Table: `historique`.
-- **`rapprochementArticle.ts` — la famille imposée par le code** : ⚠️ **UN CODE NOMMÉ FERME LES AUTRES FAMILLES.** « panneau personnalisé "Déviation cyclistes" avec le style des panneaux **KC1** » retenait THERMOVELO128080, un sigle thermoplastique de marquage au sol à 156,82 €, parce qu'un tag « cycliste » y était posé — le tag était juste dans son contexte et faux dans celui-ci. Le **premier segment de la catégorie** porte la famille (`KC1.*` → SIGNALISATION TEMPORAIRE, `THERMOVELO*` → ISOMARK / H2) et `famillesAttendues(texte, produits)` la relève **sur le catalogue** — aucune liste de codes écrite à la main, qui serait fausse à la première gamme nouvelle. Un mot n'est un code que s'il commence par une lettre, porte un chiffre, et existe comme premier segment de référence : « 80x40 » et « panneau » n'en sont pas. C'est une CONTRADICTION (comme un diamètre qui ne concorde pas), pas une préférence de classement — mais elle ne filtre **jamais jusqu'au vide**.
-- **`rapprochementClient.ts`** — Reconnaître le client dans un **texte tapé**, quand il n'y a pas d'adresse e-mail (le courriel se rapproche d'abord par expéditeur puis domaine ; ceci est le dernier recours). ⚠️ **TOUS LES MOTS NE SE VALENT PAS, ET LE FICHIER CLIENT LE DIT** : `poidsDesMots` mesure la rareté de chaque mot parmi les clients — « SIGNALISATION » chez 7 sur 50 ne désigne personne, « HORUS » chez 1 désigne quelqu'un. Pas de liste de mots interdits, elle serait fausse en six mois. Deuxième garde-fou : `motsFrequentsDuCatalogue(produits)` fournit le **vocabulaire du métier** (un mot dans ≥ 10 désignations d'articles) — sans lui, « 30 m² de résine époxy » sortait SERVICES & RESINE, car RESINE est rare chez les clients mais figure dans 58 articles. `rapprocherClient` fouille le **texte entier** (pas seulement `nomPartenaire`), compare des **mots entiers** (« SUD » n'est pas dans « SUDOKU »), rattrape les apostrophes perdues par la forme collée (« Villequip » = « VILL'EQUIP »), tranche entre deux fiches d'une même société en gardant la plus renseignée, et **s'abstient en rendant `candidats`** quand plusieurs répondent — l'écran les propose en pastilles cliquables. Tests : `rapprochementClient.test.ts`.
-- **`journalPrix.ts`** — Historique des prix en **périodes datées**. La table `journal_prix` est alimentée par le déclencheur Postgres `trg_noter_prix` (fonction `noter_prix()`), qui écrit une ligne à chaque changement de `prix_achat` ou `prix_ht` avec la valeur d'avant et celle d'après. `periodesDePrix(mouvements, actuel?)` reconstitue les périodes, **de la plus récente à la plus ancienne** : un mouvement FERME une période et en OUVRE une autre, la plus ancienne n'a pas de `debut` (le journal ne remonte pas avant sa création) et la plus récente pas de `fin`. ⚠️ La période en cours prend les prix de la **fiche article**, pas ceux du dernier mouvement ; quand les deux divergent (écriture hors application, ou antérieure au déclencheur) elle porte `ecartAvecFiche: true` — la fiche fait foi et l'écart est signalé. `useJournalPrix(produitId?)` lit **à la demande** (jamais au chargement du catalogue : 22 508 articles). Tests : `journalPrix.test.ts`.
-- **`prixAchatFournisseur.ts`** — Reprise des prix d'**achat** depuis un devis fournisseur. `rapprocherFournisseur(nom, fournisseurs)` compare les mots qui distinguent (la forme juridique et « France » n'en sont pas) et **s'abstient** quand deux fournisseurs se valent. `coefficientVente(produits, categorie)` **mesure** le rapport prix public / prix d'achat sur les articles de la catégorie (repli sur le dernier segment : `ISOMARK / FLOORING / EPOXY` → `EPOXY`) et renvoie `fiable: false` quand la famille ne s'accorde pas avec elle-même — vrai sur les résines (EPOXY/PU/MMA tiennent à 2,29), faux sur la signalisation où `prix_achat` mélange coûts à l'unité et au kilo. `prixVenteDepuisAchat` ne renvoie **rien** sans coefficient fiable : un prix de vente vide se voit au premier devis, un prix plausible et faux part chez le client. `proposerPrix({...})` classe la ligne en `actualiser | rattacher | inchange | absent | sans_prix`. **`appliquerPrix({...})` est PURE** — elle rend les tableaux `produits` et `liens` mis à jour sans toucher au store ni à Supabase : c'est ce qui garantit qu'un prix appliqué depuis l'analyse de document et le même prix appliqué six mois plus tard depuis la page Devis Fournisseurs produisent le même résultat. Elle ne redate pas un `prixAchat` déjà égal (sinon l'historique montrerait un mouvement là où rien n'a bougé). Tests : `prixAchatFournisseur.test.ts`.
-- **`devisFournisseur.ts`** — `useDevisFournisseur()` : les offres reçues (tables `devis_fournisseur` + `devis_fournisseur_lignes`, RLS « tous authentifiés » comme `systemes` — un tarif engage la société, pas un commercial). Lecture **à la demande**, jamais au démarrage. `enregistrer(devis, sourceTexte?)` crée ou remplace en bloc (les lignes n'ont pas d'existence propre hors de leur devis). `marquerAppliquees`, `changerStatut`, `supprimer`.
-- **`categorieDocuments.ts`** — Documents attachés à une **CATÉGORIE** d'articles (table `categorie_documents`, RLS « tous authentifiés »). ⚠️ **LA CATÉGORIE EST UN CHEMIN, ET C'EST CE QUI PORTE L'HÉRITAGE** : `produit.categorie` s'écrit « ISOMARK / H2 / PREFA THERMO » et un document posé sur « ISOMARK / H2 » s'affiche aussi sur les articles rangés dessous. Sans héritage la fonction serait inutilisable : 29 articles thermoplastiques sont dans « ISOMARK / H2 », **2 seulement** dans « ISOMARK / H2 / PREFA THERMO ». `chaineCategories` rend les ancêtres du plus précis au plus général, `documentsPourCategorie` les documents applicables (chacun marqué `herite` + sa catégorie d'attache ; **le plus précis gagne** sur un doublon d'URL), `articlesConcernes` **compte les articles touchés** — à afficher avant d'attacher, « SIGNALISATION POLICE » en couvre 13 163. `normaliserCategorie` rapproche « ISOMARK/H2 » et « ISOMARK / H2 » (les chemins viennent d'Odoo ET de la saisie). ⚠️ **Certains niveaux n'ont aucun article en propre** — « ISOMARK » n'est la catégorie de personne mais couvre 985 articles, « SIGNALISATION POLICE / Carre (C) » en couvre 3 907 : le sélecteur d'attache les propose quand même. **Que des liens, aucun fichier** : un PDF d'homologation pèse 2-5 Mo et ne se compresse pas comme une photo — le forfait gratuit ne le supporterait pas. `liensDocumentsCategorie(articles, documents)` produit les liens collables du devis, **dédoublonnés** (six panneaux carrés ne proposent pas six fois le même masque). Tests : `categorieDocuments.test.ts`.
-- **`produitImages.ts`** — Photos des fiches produit (table `produit_images`, seau **public** `produits-images`). ⚠️ **LA CONTRAINTE QUI COMMANDE LE MODULE** : forfait Supabase **gratuit** = 1 Go de fichiers, dont ~103 Mo déjà pris par `devis-pj`. Un PNG d'appareil photo pèse 3-5 Mo ; on **compresse dans le navigateur avant l'envoi** (`compresserImage` : canvas → 800 px de plus grand côté → WebP q=0,82, repli JPEG quand `toBlob` ne sait pas écrire du WebP), ce qui ramène une photo à 40-60 Ko et fait tenir 15 000 à 20 000 images. Ne **jamais** stocker une image en base : la base gratuite est limitée à 500 Mo. Le seau est public (et non signé comme `devis-pj`) pour que le navigateur mette en cache — le CDN dispose de ses propres 5 Go d'egress. Deux provenances dans la même table : image **déposée** (`chemin` renseigné, compte dans le quota, supprimée du seau avec sa ligne) et image **externe** (`chemin` nul, ne pèse rien, jamais supprimée chez son hébergeur). `ordre = 0` désigne la principale — pas de colonne `est_principale` qui finirait par en désigner deux ou aucune. `useProduitImages()` lit tout d'un bloc : une ligne par image ajoutée, pas par article. Tests : `produitImages.test.ts`.
-- **`contactAffaire.ts`** — L'interlocuteur de l'affaire, du fichier Odoo jusqu'au devis. `rattacherContact(contactsExistants, source, nouvelId)` est **pure** et rend `{ contacts, contactId, modifie }`. ⚠️ **Deux écritures, pas une** : le contact appartient au CLIENT (colonne JSON `contacts` sur `clients`), le devis n'en retient que l'`id` — rattacher quelqu'un à une affaire, c'est d'abord l'inscrire au fichier client. Le doublon est le vrai risque (la même personne revient sur chaque demande), donc on rapproche avant de créer : **l'adresse tranche, le nom non** — `email` exact d'abord, `memePersonne` seulement à défaut, sinon « Jean MARTIN » et « Sophie MARTIN » se confondraient. **On complète, on n'écrase pas** : un champ vide se remplit, un champ saisi à la main reste. Le nom part entier dans `nom`, sans découpage prénom/nom (Odoo écrit tantôt « Thierry BARAILLER », tantôt « BARAILLER Thierry », et deviner à l'envers s'imprimerait sur le PDF). Tests : `contactAffaire.test.ts`.
-- **`liensProduit.ts`** — Les liens d'article qu'on colle dans un mail. ⚠️ **« Lien raccourci » ne veut PAS dire URL raccourcie** : aucun service tiers, aucune table de redirection — c'est le **texte affiché** qu'on choisit (la désignation), l'URL se cache derrière un `<a href>`. Trois destinations, complémentaires et non interchangeables : `fiche` (fiche technique fabricant, `produits.fiche_url`), `image` (photo principale, `produit_images`), `page` (fiche publique du CRM `/p/<uuid>`, seul lien qui reste juste quand la photo change). **Quatrième destination `categorie`** : un document de FAMILLE (voir `categorieDocuments.ts`) — il n'appartient à aucun article, donc ni `liensDuProduit` ni `articlesLiesDuDevis` ne le produisent ; c'est l'écran qui l'ajoute. `liensDuProduit` / `liensDesProduits` (dédoublonne un article présent sur plusieurs lignes), `liensHtml` / `liensTexte` (rendu), `copierLiens` — le presse-papiers porte **les deux formes à la fois** (`text/html` pour Outlook/Gmail, `text/plain` pour les messageries brutes), avec repli `execCommand('copy')` sur une sélection hors écran puis `writeText`. Le libellé saisi sur l'article (`ficheLinkLabel`) gagne toujours sur le libellé construit. Styles **en ligne** obligatoires dans le HTML (Outlook jette les feuilles de style ; un lien sans `color` s'affiche en noir donc invisible). Tests : `liensProduit.test.ts`.
-- **`produitTags.ts`** — Les mots par lesquels le CLIENT demande un article, table `produit_tags` (RLS « tous authentifiés »). ⚠️ **LE CLIENT N'EMPLOIE PAS LE VOCABULAIRE DU CATALOGUE** : il écrit « cycliste », l'article s'appelle « Homme à vélo » — ni la référence, ni la description, ni la catégorie ne portent le mot tapé, donc la recherche ne rend rien et le rapprochement est refait à neuf à chaque devis, par chaque commercial. Un tag est un **synonyme du catalogue**, vrai pour tout le monde dès qu'il a été constaté une fois. ⚠️ **JAMAIS AFFICHÉ DANS UN DEVIS** — c'est le mot du client, pas la désignation commerciale ; aucun rendu (`DevisPreview`, PDF, mail, Odoo) ne le lit. ⚠️ **UNE TABLE, PAS UNE COLONNE `tags text[]` SUR `produits`** : on apprend depuis l'ÉCRAN DEVIS, et l'application écrit les articles par ligne entière (`produitToDb`) — ajouter un tag par ce chemin réécrirait les quarante colonnes, `prix_achat_maj` compris, et écraserait un prix corrigé entre-temps par quelqu'un d'autre. `tagACandidat(demande, produit, tagsConnus)` ne garde de la demande que ce que l'article ne dit pas déjà (`motsDuProduit` écarte « résine » sur une résine), sans les quantités, unités ni liaisons, et n'inscrit **tout seul** que si ce reste tient en un ou deux mots — au-delà c'est une phrase de circonstance, proposée et non inscrite. Points de capture : `selectProduit` dans `Devis.tsx` (⚠️ **avant** la ligne qui écrase `description` par `designationProduit(p)` — après, le mot est perdu) et `choisirArticle` dans `AnalyseDocumentDialog.tsx`. ⚠️ **RÉSERVE PARTAGÉE** (`useSyncExternalStore`, pas un `useState` par composant) : `ProduitCombobox` est monté une fois par ligne de devis, un hook par instance ferait trente requêtes à l'ouverture d'un devis de trente lignes. Dans `indexProduits.ts`, les tags entrent au **rang 2** (le plus large, avec désignation et catégorie), jamais devant une référence, et l'index porte aussi leur **pluriel** — on retient « cycliste », le client suivant écrit « cyclistes ». ⚠️ **LES TAGS NOURRISSENT AUSSI LE RAPPROCHEMENT AUTOMATIQUE**, pas seulement la recherche à la main — sans quoi ils ne serviraient jamais quand l'appli choisit seule. `rapprocherArticle(texte, produits, limite, tags)` les passe à `noter`, où un tag reconnu vaut **60 points** (au-dessus du seuil de certitude de 55 : quelqu'un l'a constaté sur un vrai devis) et vaut `caracteristiqueCommune` — sinon le contrôle final « rien ne les rapproche » écarterait justement l'article que le tag désigne. Comparaison par **mots entiers au singulier** : « 14 plots PVC » reconnaît « plot », « platoplot » non, et un tag de plusieurs mots exige que la demande les porte tous. ⚠️ **UN CODE DU CATALOGUE N'EST PAS UN SYNONYME** : `vocabulaireCatalogue(produits)` relève les mots portés par les RÉFÉRENCES, et l'apprentissage automatique les écarte. Mesuré sur le catalogue : `ak3` figure dans 18 références, `panneau` dans 2 — la fausse leçon « panneau ak3 » inscrite sur un AK14 (retenu par erreur pendant un essai) n'aurait jamais été apprise. Elle était inerte tant que les tags ne servaient qu'à la recherche, et ravageuse dès qu'ils ont valu une certitude : toute demande « panneau AK3 » retenait un AK14 d'office. **Aucun seuil de fréquence sur les désignations** : `plot` en compte 38, et c'est précisément parce que le PLASTOBLOC n'en fait pas partie que le tag vaut quelque chose. Le garde-fou ne vise que l'apprentissage AUTOMATIQUE — un tag saisi à la main reste libre. Tests : `produitTags.test.ts`, `rapprochementArticle.test.ts`.
-- **`pdfFolder.ts`** — `generatePdfFromElement` / `savePdfFromElement` via `html2canvas` + `jsPDF`. Smart page-break detection on `<tr>` boundaries. `writeFileToSubfolder` persists to a user-chosen directory via File System Access API (stored in IndexedDB).
-- **`exportExcel.ts`** — `exportMultiSheet` generates multi-sheet `.xlsx` files (used for global data export from the nav bar).
-- **`parseEml.ts`** / **`parseMsgPdf.ts`** / **`parseExcel.ts`** — Parse raw email and Excel files into structured objects for AI analysis and import flows.
-- **`analyseDocument.ts`** — PDF text extraction via `pdfjs-dist`. Exports `TypeDocument` union and `TYPE_LABELS`.
-- **`analyseTransport.ts`** — `analyserDocumentTransport(file, apiKey?, geminiKey?, openrouterKey?)` extracts transport data from PDF/text via AI (Groq → Gemini → OpenRouter fallback). Returns `TransportExtrait`: `fournisseur` (donneur d'ordre / sender, e.g. QRM, TREMCO CPG) **distinct from** `transporteur` (carrier, e.g. UPS, Heppner). Used in the Achat tab of `CalculateurUPS.tsx`.
-- **`odooSync.ts`** — Generates a JS script to paste into the Odoo browser console to create a `sale.order`. Entry point: `genererScriptOdoo(devis, client, produits, options?)`. Constants: `ODOO_COMPANY_ID = 13`, `ODOO_FALLBACK_PRODUCT_ID = 362577`. Uses `promptOdooPartnerName(clientId, defaultName)` to handle partner name mismatches (cached in `localStorage` as `odoo_partner_<clientId>`).
-- **`ralColors.ts`** — RAL colour reference data. `getRalInfo('RAL XXXX')` returns `{ hex, dark }`. `VarianteSelect` auto-renders colour swatches for options whose `label` matches `RAL XXXX` — no `imageUrl` needed. Texture images (e.g. QuartzColor swatches) require `imageUrl` pointing to `/quartz/*.jpg`.
-
-### PDF generation (`src/lib/pdfFolder.ts`)
-
-- `zoneLienSurPage(lien, page)` — fonction **pure** : où poser l'annotation de lien sur une page donnée, ou `null` si le lien n'y est pas. Le HAUT du lien décide de sa page (un lien à cheval reste cliquable là où il commence) et la hauteur est bornée au bas de page — une annotation qui déborde est perdue sans rien signaler. Tests : `pdfLiens.test.ts`.
-- `generatePdfFromElement(element, opts)` — renders a DOM element to multi-page PDF via `html2canvas` + `jsPDF`. Smart page-break detection on `<tr>` boundaries with repeating headers.
-- `savePdfFromElement(...)` — wraps above + saves via File System Access API (persisted in IndexedDB).
-- `writeFileToSubfolder(subfolderName, fileName, content)` — saves to a named subfolder within the memorised directory.
-
-### Devis — purchase/sale margin logic
-
-The **comparatif achat/vente** tab uses these rules for `puAchat` per line:
-1. `Surcharge énergie MMA` lines → `puVente × (14.8 / 15)`
-2. `Surcharge énergie hors MMA` lines → `puVente × (4.8 / 5)`
-3. Free lines with `prixAchatLigne` set → use that value
-4. Product lines → `getPrixPourQuantite(prod, quantite).prixAchat`
-
-Replicate this pattern consistently in: the comparatif IIFE, devis card list (`totalAchatD`), and aperçu summary (`totalAchat`).
-
-**`populateForm` price recalculation:** when loading an existing devis into the edit dialog, `prixUnitaireHT` is recalculated for any `'ligne'`-type row where `getVarianteDiff > 0`. This corrects values saved before the variant-prixDiff logic was added without overriding manually set prices on non-variant lines.
-
-**Onglet MO (Mise en œuvre)** : éditeur `RichTextEditor` sur `moContent`. Bouton « (Re)générer » construit le récap depuis groupes (titres), notes (texte), et lignes produit (description produit + note de ligne). « PDF Mise en œuvre » → `generatePdfFromElement` (titré « Mise en œuvre — N° — système »), enregistré dans le dossier devis **et** joint aux Notes & Fichiers (bucket `devis-pj` + table `devis_pieces_jointes`). `DevisChatter` accepte `embedded` pour s'afficher dans l'onglet « Notes & Fichiers ».
-
-**Aperçu/PDF (`DevisPreview`)** : la colonne « Unité » (Condit.) et « KG » retombent sur `l.quantite` (× poids) quand le calcul auto surface×conso n'aboutit pas. Le PDF de l'email capture `#devis-print` (pas le wrapper) pour un rendu identique au bouton PDF direct. Pagination : `minBreak` à 0.82 (recul de saut limité) pour éviter un grand vide en bas de page.
-
-### Supabase migrations (`supabase/migrations/`)
-
-SQL migrations are numbered by timestamp. Apply via Supabase dashboard SQL editor or CLI (`supabase db push`). `src/integrations/supabase/types.ts` is auto-generated and **resynced** avec la base — `npx tsc --noEmit` passe à 0 erreur (le maintenir ainsi).
-
-**Régénérer `types.ts`** : utiliser le script racine **`gen-types.ps1`** (lit `SUPABASE_ACCESS_TOKEN` depuis l'env — jamais en clair, gère le bon `--project-id` et l'encodage) :
+**Régénérer `types.ts`** — script racine `gen-types.ps1` (lit
+`SUPABASE_ACCESS_TOKEN` depuis l'env, gère le `--project-id` et l'encodage) :
 ```powershell
-$env:SUPABASE_ACCESS_TOKEN = "sbp_xxx"   # token sur https://supabase.com/dashboard/account/tokens
+$env:SUPABASE_ACCESS_TOKEN = "sbp_xxx"   # https://supabase.com/dashboard/account/tokens
 .\gen-types.ps1
 ```
-⚠️ Régénérer **après** avoir appliqué les `ALTER TABLE` (sinon la colonne absente n'apparaît pas dans les types). Le token est interactif (`supabase login`) ou via la variable d'env — **ne pas manipuler le token de l'utilisateur** (il lance la commande lui-même). Les commandes `npx supabase …` s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
+⚠️ Régénérer **après** les `ALTER TABLE`. Les commandes `npx supabase …`
+s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 
-To apply programmatically from the browser, use the Supabase Management API with `localStorage.getItem('supabase.dashboard.auth.token')` at `https://api.supabase.com/v1/projects/qkjxcfosutclnahvxflf/database/query`.
+**Edge Functions** (`supabase/functions/*`) : déployer avec
+`.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
+`extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
+`send-devis-email`, `odoo-prix`.
 
-**Diagnostic « ne persiste pas » :** les `updateXxx` font les écritures Supabase en fire-and-forget. Si un upsert envoie une colonne inexistante, PostgREST renvoie 400 et **toute la ligne est rejetée silencieusement** (perte de données). Les écritures clients loggent désormais `console.error('[clients update] …')` ; une erreur `Could not find the 'X' column` = colonne manquante → `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Colonnes récemment ajoutées sur `devis` : `mo_content text`, `probabilite_reussite numeric`, `date_realisation text` ; sur `clients` : champs compta/légal (`siret`, `tva_intra`, `capital_social`…). Les écritures `clients` utilisent `upsert` (pas insert/update séparés) pour éviter les courses création-puis-modif.
+**Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
+fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et
+**toute la ligne est rejetée silencieusement**. Les écritures clients loggent
+`console.error('[clients update] …')` ; une erreur `Could not find the 'X'
+column` = colonne manquante → `ALTER TABLE … ADD COLUMN IF NOT EXISTS`. Les
+écritures `clients` utilisent `upsert` (pas insert/update séparés) pour éviter
+les courses création-puis-modif.
 
-⚠️ **`odoo-prix` : la LISTE DE PRIX du client fait foi, la grille est un repli.** Les deux blocs de tarification (articles désignés par référence, et propositions de recherche) essaient `tarif.prix` **d'abord** ; la grille du contrat-cadre ne reprend la main que si la liste ne rend rien de **tenable** (nul, à zéro, ou sous le coût de revient — les fiches Odoo valent souvent 1 €). Mesuré sur **AF036911** (MGD, liste « 30/70/72/… ») : la grille R4 cotait AK3.700.C1.BTR.R.IS.BRUT à 39,41 € quand le devis émis le facture **37,475 €**. ⚠️ **La grille reste chargée en filet quand aucun contrat n'est rattaché**, et ce n'est PAS pour tarifer : sans elle, le garde-fou « sous le coût » **retire l'article des propositions** — la demande MGD/PANTIN ne proposait plus aucun panneau (KC1, EPI, FP, point de rassemblement). Ce garde-fou ne joue donc plus que si **plus rien** ne tarife l'article. Un niveau R1-R4 **imposé** au sélecteur, lui, remplace toujours tout. ⚠️ **Le Tarificateur suit l'ordre d'Odoo, en entier** : `applied_on, min_quantity desc, categ_id desc, id desc` (`product.pricelist.item._order`). Les deux derniers critères manquaient — quand plusieurs règles de CATÉGORIE répondent, cas courant sur une liste qui remise par famille, le gagnant était celui qu'Odoo avait renvoyé en premier. ⚠️ **Et la VALIDITÉ des règles est enfin lue** : `date_start`/`date_end` étaient demandés à Odoo puis jetés (absents du type `Regle`, jamais testés dans `applicable()`), si bien qu'une règle périmée tarifait comme une règle en cours.
+⚠️ **`odoo-prix` : la LISTE DE PRIX du client fait foi, la grille est un
+repli** — et la grille reste chargée en filet même sans contrat, sans quoi le
+garde-fou « sous le coût » retire les articles des propositions. Détail et
+mesures dans `claude/modules.md`.
 
-**Edge Functions** (`supabase/functions/*`) : déployer avec `.\deploy-function.ps1 <nom>` (ou `-All`). Le script demande l'access token Supabase (ou réutilise `SUPABASE_ACCESS_TOKEN`). Fonctions : `extract-client`, `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`, `send-devis-email`.
-
-⚠️ **Ne jamais éditer un fichier source via PowerShell `Set-Content`/`Out-File`** : l'encodage casse les accents UTF-8 (mojibake `envoyÃ©`). Utiliser l'outil Edit.
-
-### localStorage column visibility (table pages)
-
-Pages like `Produits.tsx` persist visible columns in localStorage. When adding a new default-visible column, merge the saved set with the new defaults on load — otherwise new columns are invisible for existing users:
-```ts
-const saved = JSON.parse(localStorage.getItem(KEY) || '[]');
-const merged = [...new Set([...DEFAULT_VISIBLE_COLS, ...saved.filter(k => ALL_COLS.includes(k))])];
-```
-
-### Tableaux de données — colonnes & filtres (CONVENTION OBLIGATOIRE)
-
-**Toute vue en tableau (desktop) DOIT** utiliser l'infrastructure partagée plutôt que des `<th>`/`<td>` codés en dur. Réutiliser systématiquement dans les futurs développements :
-
-- **`useTableColumns<K>(storageKey, allKeys)`** (`src/hooks/useTableColumns.tsx`) : largeur (resize) + ordre (drag) des colonnes, persistés en localStorage (`${storageKey}_widths`, `${storageKey}_order`). API : `ordered(allCols, isVisible?)`, `widthStyle(key)`, `thProps(key)`, `resizeHandleProps(key)`, `dragKey`, `dragOverKey`.
-- **`<ColResizeHandle {...cols.resizeHandleProps(key)} />`** : poignée de redimensionnement à poser dans un `<th class="relative">`.
-- En-tête, ligne de filtres ET corps doivent tous itérer via `cols.ordered(...)` (même ordre partout, sinon colonnes désalignées).
-
-**Filtres de colonne** — composants partagés, menus rendus en **portail** (position fixe, échappent à l'`overflow` du tableau) :
-- **`FilterSuggestInput`** — texte libre + liste de suggestions (ouverte au focus). Pour colonnes texte.
-- **`FilterChoiceInput`** — choix fixes ; `excludable` active le mode exclusion (clic prolongé/clic droit = masquer, valeur encodée `!a,b`). Helper `parseChoiceFilter`.
-- **`FilterDateInput`** — Le / Avant / Après / Entre (calendrier). Helper `matchDateFilter`.
-- **`FilterAmountInput`** — = / < / > / Entre (montant). Helper `matchAmountFilter`.
-
-**Comportement attendu (à respecter partout)** :
-- En-tête = libellé + flèche de tri + **icône filtre**. Clic sur l'icône → contrôle de filtre affiché **inline dans l'en-tête** (pas de ligne dédiée qui pousse le contenu).
-- Fermé **sans** valeur → la colonne se replie sur l'icône seule (`onClose` retire la clé de `openFilterCols`). Avec valeur → le contrôle reste visible.
-- Une barre **« Filtres actifs »** au-dessus du tableau liste les filtres en cours (chips avec ✕) + bouton « Effacer ».
-- **Roue crantée (`Settings`) dans la dernière cellule d'en-tête** : composant partagé **`TableGearMenu`** (`src/components/TableGearMenu.tsx`) = choix des colonnes visibles + export Excel. Utilisé par Commandes Client, Factures Client/Fournisseur. (Produits/Devis ont leur propre variante inline ; `Produits` ajoute aussi `Columns2` + reset ordre/largeurs via `cols.reset()`.) À reproduire sur toute vue tableau.
-
-**Bandeau titre fixe + en-tête sticky + pleine page (PRINCIPE D'AFFICHAGE — à respecter partout)** :
-- **Coquille `CRMLayout`** : la racine est en **`h-screen overflow-hidden`** (hauteur d'écran exacte, la page ne défile pas globalement). Le bandeau titre (`<header>`) est `shrink-0`, et **`<main>` est l'unique zone qui défile** (`relative flex flex-col min-h-0 overflow-x-hidden`). → un seul scrollbar, le bandeau du haut reste fixe.
-- **`<PageHeaderSlot>`** (`src/components/PageHeaderSlot.tsx`) : portaile son contenu dans le bandeau titre fixe, à droite du titre. Y placer la **recherche** + le **bouton d'action principal** + actions contextuelles. (Le layout rend `<PageHeaderSlotTarget />`.)
-- **Le tableau remplit tout l'espace disponible (largeur + hauteur), en-tête figé sous le bandeau, scroll unique** :
-  - Page « tableau seul » → carte du tableau en **`md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border overflow-hidden`** ; conteneur de scroll interne en **`flex-1 min-h-0 overflow-auto`** (PAS de `max-h`). Racine de page en `flex flex-col flex-1 min-h-0`. ⚠️ Ne PAS utiliser `md:absolute md:inset-0` : ça recouvre un éventuel bandeau au-dessus (ex. « Retour au devis » via `?returnDevis`). Devis (vue tableau plein écran, sans bandeau) reste l'exception en `md:absolute`.
-  - Page multi-sections (Commandes Client, Factures Client/Fournisseur) → racine en **`flex flex-col flex-1 min-h-0 gap-4`** ; contenu au-dessus (cartes résumé, filtres statut) auto ; conteneur de tableau en **`flex-1 min-h-0 overflow-auto`** → le tableau remplit la hauteur restante.
-  - Chaque `<th>` reste `sticky top-0 z-10 bg-muted`.
-  - ⚠️ Ne PAS utiliser `max-h-[calc(...)]` sur le conteneur de scroll (cause un double scrollbar). Exception connue : `Stock.tsx` (3 onglets) conserve encore `max-h` (structure tabulée multi-sections, refonte à faire).
-- Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`** (filtres + colonnes + bandeau fixe + sticky). Filtres inline en-tête + barre « Filtres actifs » + bandeau fixe + sticky faits sur **toutes** les vues tableau : Devis, Produits, Clients, Stock (×3), Commandes Client, Factures Client, Factures Fournisseur, **Veille Concurrence (onglet Produits)**. Pour les colonnes date/montant, utiliser `FilterDateInput`/`FilterAmountInput` (helpers `matchDateFilter`/`matchAmountFilter` côté logique de filtrage).
-
-### TypeScript conventions
-
-- **Never use `enum`** — always prefer string literal unions:
-  ```ts
-  type Status = 'draft' | 'sent' | 'signed'; // ✅
-  enum Status { ... }                          // ❌
-  ```
-
-### Environment variables
+## Variables d'environnement
 
 ```
 VITE_SUPABASE_URL
 VITE_SUPABASE_PUBLISHABLE_KEY
 ```
 
-### Git / deploy
+## Git / deploy
 
-- Repo: `Poolito78/crmpool` on GitHub, branch `main`
-- Auto-deployed to Vercel on push to `main`
-- **Toujours pusher automatiquement** après chaque commit
-- Supabase project ref: `qkjxcfosutclnahvxflf`
+- Dépôt : `Poolito78/crmpool`, branche `main`
+- Déploiement Vercel automatique au push sur `main`
+- Projet Supabase : `qkjxcfosutclnahvxflf`
