@@ -816,9 +816,50 @@ const [contratOdoo, setContratOdoo] = useState<
     const rapprochementTexte = rapprocherClient(
       analyseTexteRef.current || '', result.nomPartenaire, clients, motsMetier);
 
-    const foundClient =
-      clients.find(c => assezLong(c.email)
-        && indicesTexte.emails.includes(c.email!.toLowerCase()))
+    /* ⚠️ **PLUSIEURS FICHES PEUVENT RÉPONDRE, ET L'ORDRE DU TABLEAU N'EST
+       PAS UNE RÈGLE.** On prenait la PREMIÈRE fiche dont l'adresse figure dans
+       le document — `clients.find` — sans regarder s'il y en avait d'autres.
+
+       Mesuré le 10/09/2026 sur la commande AGILIS/Roissy : le document porte
+       DEUX adresses connues du fichier, `bduflo@agilis.net` (M. Benjamin
+       DUFLO, société « AGILIS (27) », BEUZEVILLE) et `facture-agilis@nge.fr`
+       (« AGILIS IDF ROISSY CDG », LE THOR 84250, l'adresse de facturation de
+       la commande). Le devis se créait sur AGILIS (27), au hasard du rang. */
+    const parEmail = clients.filter(c => assezLong(c.email)
+      && indicesTexte.emails.includes(c.email!.toLowerCase()));
+
+    /* Ce que le document NOMME tranche : une fiche dont la raison sociale est
+       écrite dans le texte l'emporte sur une fiche qui n'y figure que par son
+       adresse — une boîte de facturation ou un expéditeur de passage. */
+    const texteClient = (analyseTexteRef.current || '').toLowerCase();
+    const nommeeDansLeTexte = (c: typeof clients[number]) =>
+      (assezLong(c.societe) && texteClient.includes(c.societe!.toLowerCase()))
+      || (assezLong(c.nom) && texteClient.includes(c.nom!.toLowerCase()));
+
+    let clientParEmail: typeof clients[number] | undefined;
+    if (parEmail.length === 1) {
+      clientParEmail = parEmail[0];
+    } else if (parEmail.length > 1) {
+      const nommees = parEmail.filter(nommeeDansLeTexte);
+      if (nommees.length === 1) clientParEmail = nommees[0];
+      console.log('[client] %d fiches répondent par adresse : %s — %s',
+        parEmail.length,
+        parEmail.map(c => `${c.nom} (${c.societe || '-'})`).join(' | '),
+        clientParEmail
+          ? `le document nomme « ${clientParEmail.societe || clientParEmail.nom} »`
+          : 'aucune n’est nommée dans le document : on ne tranche pas');
+    }
+
+    /* ⚠️ **UNE AMBIGUÏTÉ AU NIVEAU LE PLUS SÛR NE SE TRANCHE PAS PLUS BAS.**
+       Deux adresses exactes qui désignent deux fiches, c'est une question à
+       poser. Laisser courir jusqu'au domaine, puis au nom deviné, rendrait la
+       main à un `find` encore plus flou — les deux fiches partagent le groupe
+       AGILIS — et on retomberait sur un choix arbitraire en croyant l'avoir
+       déduit. */
+    const emailAmbigu = parEmail.length > 1 && !clientParEmail;
+
+    const foundClient = emailAmbigu ? undefined :
+      clientParEmail
       || clients.find(c => assezLong(c.email)
         && domainesTexte.includes(c.email!.toLowerCase().split('@')[1]))
       || (societeMail
@@ -845,9 +886,18 @@ const [contratOdoo, setContratOdoo] = useState<
 
     /* Rien de sûr : plutôt que le silence, on rend la liste. Cinq sociétés
        portent « AGILIS » — c'est une question à poser, pas à trancher. */
-    setClientsProposes(foundClient || rapprochementTexte.retenu
-      ? []
-      : rapprochementTexte.candidats.slice(0, 5));
+    /* Les fiches qui se disputent l'affaire passent devant les candidats du
+       rapprochement par le texte : elles sont désignées par une adresse
+       exacte, ce qui est bien plus sûr que des mots pesés. */
+    setClientsProposes(emailAmbigu
+      /* Même forme que les candidats du rapprochement, pour que les pastilles
+         les rendent sans cas particulier. L'adresse tient lieu de « mots » :
+         l'infobulle dit alors sur quoi la fiche a été retrouvée, ce qui est
+         exactement ce qu'on veut lire pour choisir entre deux AGILIS. */
+      ? parEmail.slice(0, 5).map(c => ({ client: c, score: 100, mots: [c.email || ''] }))
+      : (foundClient || rapprochementTexte.retenu
+        ? []
+        : rapprochementTexte.candidats.slice(0, 5)));
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');

@@ -185,3 +185,24 @@ Référence d'implémentation complète : **`Devis.tsx`** et **`Produits.tsx`**.
 Filtres inline + barre « Filtres actifs » + bandeau fixe + sticky sont faits sur
 **toutes** les vues tableau : Devis, Produits, Clients, Stock (×3), Commandes
 Client, Factures Client, Factures Fournisseur, Veille Concurrence (Produits).
+
+## Le client du bloc « Créer comme devis »
+
+⚠️ **PLUSIEURS FICHES PEUVENT RÉPONDRE, ET L'ORDRE DU TABLEAU N'EST PAS UNE
+RÈGLE.** `AnalyseDocumentDialog` prenait la **première** fiche dont l'adresse
+figure dans le document (`clients.find`), sans regarder s'il y en avait
+d'autres. Mesuré le 10/09/2026 sur la commande AGILIS/Roissy : le document
+porte deux adresses connues du fichier — `bduflo@agilis.net` (M. Benjamin
+DUFLO, société « AGILIS (27) », BEUZEVILLE) et `facture-agilis@nge.fr`
+(« AGILIS IDF ROISSY CDG », LE THOR 84250, l'adresse de facturation de la
+commande) — et le devis se créait sur AGILIS (27), au hasard du rang.
+
+Désormais : on relève **toutes** les fiches qui répondent par adresse exacte ;
+ce que le document **nomme** tranche (une raison sociale écrite dans le texte
+l'emporte sur une fiche qui n'y figure que par son adresse) ; et à défaut on
+**s'abstient**, les fiches en lice partant en pastilles cliquables.
+
+⚠️ **Une ambiguïté au niveau le plus sûr ne se tranche pas plus bas** : quand
+deux adresses exactes désignent deux fiches, on ne laisse PAS courir jusqu'au
+domaine puis au nom deviné — les deux fiches partagent le groupe AGILIS, et on
+retomberait sur un choix arbitraire en croyant l'avoir déduit.
