@@ -42,3 +42,50 @@ export function cleAppelOdoo(corps: CorpsAppelOdoo): string {
     niveauDefaut: corps.niveauDefaut ?? null,
   });
 }
+
+/**
+ * Ce qu'il faut d'une proposition Odoo pour la classer : son prix pour ce
+ * client, et ce qu'Odoo en a en magasin.
+ */
+export interface PropositionOdoo {
+  /** Prix de la liste du client. `null` = article hors barème. */
+  contrat: number | null;
+  /** Stock constaté chez Odoo. Absent = article non suivi en quantité. */
+  stockDispo?: number;
+}
+
+/**
+ * Ce qui disqualifie une proposition Odoo, à pertinence égale.
+ *
+ * ⚠️ **UN ARTICLE HORS BARÈME N'A PAS DE PRIX POUR CE CLIENT.** Il part au
+ * devis sans montant, ou au tarif public — l'écart se compte en dizaines
+ * d'euros par ligne. La rupture, elle, coûte un délai : elle pèse, mais moins.
+ * Aucune des deux n'élimine — Odoo reste la source, et un article qui n'existe
+ * qu'en rupture doit rester proposable.
+ *
+ * ⚠️ **UN STOCK INCONNU N'EST PAS UNE RUPTURE.** `stockDispo` manque sur les
+ * articles qu'Odoo ne suit pas en quantité ; les pénaliser reviendrait à
+ * préférer systématiquement ceux qu'il suit.
+ */
+function penaliteProposition(t: PropositionOdoo): number {
+  return (t.contrat == null ? 2 : 0) + ((t.stockDispo ?? 1) <= 0 ? 1 : 0);
+}
+
+/**
+ * Les propositions d'Odoo, ce qu'on peut vendre d'abord.
+ *
+ * ⚠️ **LA TÊTE DE LISTE EST CE QUE L'APPLI RETIENT.** Le 10/09/2026, sur la
+ * demande AGILIS « 10 supports 40×80 mm, longueur 3 m », l'écran affichait
+ * SG80401_5.3000.IS.BRUT en tête et cochait SG80401_5.3000.IS.L1000, marqué
+ * « rupture » ET « hors barème ». Deux ordres pour une seule liste : on ne
+ * peut pas vérifier un choix qu'on ne voit pas.
+ *
+ * Le tri est STABLE : l'ordre de pertinence d'Odoo reste maître entre deux
+ * propositions également vendables. Il ne retire rien — il classe.
+ */
+export function ordonnerPropositions<T extends PropositionOdoo>(props: T[]): T[] {
+  return props
+    .map((t, rang) => ({ t, rang }))
+    .sort((a, b) => penaliteProposition(a.t) - penaliteProposition(b.t) || a.rang - b.rang)
+    .map(x => x.t);
+}

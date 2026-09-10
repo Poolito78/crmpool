@@ -83,6 +83,29 @@ describe('chercherProduits — classement des finitions', () => {
     expect(resultats[0].reference).toBe('A11.1000.C1.BTR.IS.BRUT');
   });
 
+  /* Cas AGILIS du 10/09/2026 — « 10 supports 40×80 mm, longueur 3 m ». La
+     demande ne nomme aucune couleur : la brute doit sortir en tête, et « LG »,
+     l'abréviation que le client écrit pour la longueur, ne doit pas passer
+     pour un RAL demandé. Le catalogue range les huit laquées avant elle. */
+  const SUPPORTS: Produit[] = [
+    ...Array.from({ length: 8 }, (_, n) =>
+      art(`SG80401_5.3000.IS.L100${n}`, '',
+        '', `SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON LAQUE RAL 100${n}`)),
+    art('SG80401_5.3000.IS.BRUT', '',
+      '', 'SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON BRUT'),
+  ];
+
+  it('remonte la brute du support quand la demande ne nomme pas de couleur', () => {
+    const { resultats, total } = chercherProduits(SUPPORTS, 'support 80x40');
+    expect(resultats[0].reference).toBe('SG80401_5.3000.IS.BRUT');
+    expect(total).toBe(9);
+  });
+
+  it('ne prend pas « LG » pour un RAL demandé', () => {
+    const { resultats } = chercherProduits(SUPPORTS, 'support 80x40 lg 3000');
+    expect(resultats[0].reference).toBe('SG80401_5.3000.IS.BRUT');
+  });
+
   it('garde la priorité de la référence sur la description', () => {
     const mixte: Produit[] = [
       art('BALISE.J11', 'balise conforme J11'),

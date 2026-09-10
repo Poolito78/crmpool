@@ -368,3 +368,31 @@ describe('un code nomme ferme les autres familles', () => {
     expect(r.candidats.map(c => c.reference)).toEqual(['THERMOVELO128080']);
   });
 });
+
+/* Cas AGILIS du 10/09/2026 — « 10 supports 40×80 mm, longueur 3 m ».
+   Le rapprochement local classait bien la brute en tête, mais sans certitude :
+   il ne retenait donc rien, et la reprise d'office des propositions Odoo
+   prenait la main — c'est elle qui cochait SG80401_5.3000.IS.L1000, en rupture
+   et hors barème. Ce qui se joue ici est le CLASSEMENT, qui doit rester le
+   même que celui de la recherche : brute devant, tant qu'aucun mot ne nomme
+   de RAL. Voir `variantFunnel.test.ts` pour la reprise d'office. */
+describe('supports acier — la brute devant les laquées', () => {
+  const SUPPORTS = [
+    ...Array.from({ length: 8 }, (_, n) =>
+      art(`SG80401_5.3000.IS.L100${n}`,
+        `SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON LAQUE RAL 100${n}`)),
+    art('SG80401_5.3000.IS.BRUT',
+      'SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON BRUT'),
+  ];
+
+  it('classe la brute en tête quand la demande ne nomme pas de couleur', () => {
+    const r = rapprocherArticle('10 supports 40x80mm, longueur 3m', SUPPORTS);
+    expect(r.candidats[0]?.reference).toBe('SG80401_5.3000.IS.BRUT');
+  });
+
+  it('retient la brute d’office quand la demande est explicite', () => {
+    const r = rapprocherArticle('support 80x40 lg 3000', SUPPORTS);
+    expect(r.confiance).toBe('sure');
+    expect(r.meilleur?.reference).toBe('SG80401_5.3000.IS.BRUT');
+  });
+});

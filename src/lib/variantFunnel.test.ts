@@ -169,7 +169,42 @@ describe('reprise d’office d’une proposition Odoo', () => {
     ];
     expect(variantesParDefaut(resines, 'resine epoxy')).toHaveLength(2);
 
-    // Une demande qui ne correspond à rien ne doit pas tout supprimer.
-    expect(variantesParDefaut(AK3, 'panneau AK3 9999')).toHaveLength(AK3.length);
+    /* Une cote que personne ne porte ne doit pas tout supprimer — et elle ne
+       doit pas non plus rendre la main à l'ordre d'Odoo : la contrainte est
+       écartée, les défauts métier tranchent comme si elle n'avait pas été
+       écrite. On garde donc la gamme Petite, pas le 1000 qu'Odoo met en tête. */
+    const large = variantesParDefaut(AK3, 'panneau AK3 9999');
+    expect(large.length).toBeGreaterThan(0);
+    expect(large[0]).toBe('AK3.700.C1.BTR.R.IS.BRUT');
+  });
+
+  /* ⚠️ **LE FRANÇAIS DU CLIENT N'EST PAS UNE RÉFÉRENCE.**
+   *
+   * `classifySegment` lit des segments de référence, où « L… » ne peut être
+   * qu'un RAL. Sur les mots d'une demande, « LONGUEUR », « LONG » et « LG »
+   * passent le même filtre — et la classe `C2` que l'écran ajoute à toute
+   * ligne n'a aucun sens sur un mât d'acier, qui ne porte pas de film.
+   *
+   * Le 10/09/2026, sur la demande AGILIS « 10 supports 40×80 mm, longueur
+   * 3 m », ces deux faux jetons vidaient le vivier : le garde-fou anti-vide
+   * rendait les neuf déclinaisons à égalité, la reprise d'office prenait la
+   * première d'Odoo — SG80401_5.3000.IS.L1000, en rupture et hors barème —
+   * alors que la commande facture bien la brute. */
+  it('ignore un mot de la demande qu’aucune déclinaison ne porte', () => {
+    const SUPPORTS = [
+      { reference: 'SG80401_5.3000.IS.BRUT', description: 'SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON BRUT' },
+      ...Array.from({ length: 8 }, (_, n) => ({
+        reference: `SG80401_5.3000.IS.L100${n}`,
+        description: `SUPPORT ACIER GALVA 80X40 1.5 LG 3000 + BOUCHON LAQUE RAL 100${n}`,
+      })),
+    ];
+
+    // Le texte tel que l'écran l'envoie : la demande, plus la classe du panneau.
+    expect(variantesParDefaut(SUPPORTS, '10 supports 40x80mm, longueur 3m C2'))
+      .toEqual(['SG80401_5.3000.IS.BRUT']);
+
+    // Un RAL vraiment nommé reste maître : on ne lui impose pas la brute.
+    expect(variantesParDefaut(SUPPORTS, '10 supports 40x80mm longueur 3m L1003 C2'))
+      .toEqual(['SG80401_5.3000.IS.L1003']);
   });
 });

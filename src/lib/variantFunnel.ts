@@ -457,13 +457,37 @@ export function buildFunnel({
     ...chipOverrides,
   };
 
+  /* ⚠️ **UNE CONTRAINTE QUE PERSONNE NE SATISFAIT N'EN EST PAS UNE.**
+   *
+   * `classifySegment` lit un segment de RÉFÉRENCE, où tout est propre. Ici on
+   * lui donne des mots du CLIENT, et le français en abuse : « LONGUEUR »,
+   * « LONG » et « LG » passent tous `^L[A-Z0-9]+$` et deviennent une demande
+   * de RAL. Quant à la classe `C2` que `texteRechercheOdoo` ajoute à toute
+   * ligne, elle n'a aucun sens sur un mât d'acier, qui ne porte pas de film.
+   *
+   * Filtrer sec vidait alors le vivier, `variantesParDefaut` rendait la liste
+   * d'entrée telle quelle — son garde-fou anti-vide — et le défaut métier
+   * RAL = BRUT n'était jamais appliqué. Mesuré le 10/09/2026 sur la demande
+   * AGILIS « supports 40×80, longueur 3 m » : le mot « longueur » suffisait à
+   * mettre les huit laquées à égalité avec SG80401_5.3000.IS.BRUT, et la
+   * reprise d'office retenait SG80401_5.3000.IS.L1000 — en rupture et hors
+   * barème — là où la commande Odoo facture bien la brute.
+   *
+   * On écarte donc la contrainte au lieu du vivier : elle ne dit rien de ce
+   * qu'on a sous la main, et les défauts qui suivent, eux, disent quelque
+   * chose. `resolved` ne l'annonce pas — on n'a pas tranché cet attribut. */
   let pool = parsed;
+  const ignorees: SegmentCategory[] = [];
   for (const key of Object.keys(constraints) as SegmentCategory[]) {
     const value = constraints[key]!;
-    pool = pool.filter(
+    const essai = pool.filter(
       (p) => (p.byCategory[key] ?? '').toUpperCase() === value.toUpperCase()
     );
+    if (essai.length) pool = essai;
+    else ignorees.push(key);
   }
+  const retenues: Partial<Record<SegmentCategory, string>> = { ...constraints };
+  for (const key of ignorees) delete retenues[key];
 
   /* Application des défauts (dos ouvert, RAL brut).
      Les options sont relevées AVANT de restreindre, sinon le défaut masquerait
@@ -472,7 +496,7 @@ export function buildFunnel({
   const defaultOptions: PendingCategory[] = [];
   const defautsAppliques = new Map<SegmentCategory, string>();
   for (const [category, valeurs] of defautsPour(parsed)) {
-    if (constraints[category]) continue;
+    if (retenues[category]) continue;
     /* Plusieurs valeurs = ordre de repli : on retient la première que la
        famille propose réellement. Aucune ne convient (dos sur une résine,
        rail sur un panneau permanent) : on ne force rien. */
@@ -497,14 +521,14 @@ export function buildFunnel({
     defautsAppliques.set(category, valeur);
   }
 
-  const resolved: Partial<Record<SegmentCategory, string>> = { ...constraints };
+  const resolved: Partial<Record<SegmentCategory, string>> = { ...retenues };
   for (const category of defaultsApplied) {
     resolved[category] = defautsAppliques.get(category)!;
   }
 
   const pending: PendingCategory[] = [];
   for (const category of FUNNEL_ORDER) {
-    if (constraints[category]) continue;
+    if (retenues[category]) continue;
     if (defaultsApplied.includes(category)) continue; // résolu par défaut, modifiable via chip
     const values = trierValeurs(
       Array.from(new Set(pool.map((p) => p.byCategory[category]).filter(Boolean) as string[]))

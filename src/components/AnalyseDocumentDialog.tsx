@@ -18,7 +18,7 @@ import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
 import { produitParId } from '@/lib/indexProduits';
 import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
-import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
+import { cleAppelOdoo, ordonnerPropositions, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
   codeDansTexte, estCodeChantier, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
@@ -2278,8 +2278,9 @@ const [contratOdoo, setContratOdoo] = useState<
            montrée ne doit pas être retenue d'office dans son dos. */
         const props = exacte
           ? [exacte]
-          : (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []).filter(
-              t => memeFamille(texteDemande(l, i), `${t.reference} ${t.designation || ''}`));
+          : ordonnerPropositions(
+              (trouvaillesOdoo[texteRechercheOdoo(l, i)] || []).filter(
+                t => memeFamille(texteDemande(l, i), `${t.reference} ${t.designation || ''}`)));
         if (!props.length) return;
         /* ⚠️ L'ORDRE D'ODOO N'EST PAS L'ORDRE DE CE QU'ON VEND. Sur
            « panneau AK3 » il rend le AK3.1000 avant le AK3.700 : retenir le
@@ -2300,6 +2301,10 @@ const [contratOdoo, setContratOdoo] = useState<
           props.map(t => ({ reference: t.reference, description: t.designation })),
           texteRechercheOdoo(l, i),
         ));
+        /* `props` est déjà classé « ce qu'on peut vendre d'abord » : prendre le
+           premier que les défauts métier gardent, c'est prendre la tête de la
+           liste affichée. Aucun gardé — impossible en principe, `gardees` étant
+           tiré de `props` : on retombe sur la tête. */
         n[i] = props.find(t => gardees.has(t.reference)) ?? props[0];
         change = true;
       });
@@ -4254,9 +4259,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                        produit. La fiche lue par référence
                                        EXACTE, elle, n'a rien à prouver. */
                                     const demandeTexte = texteDemande(l, i);
-                                    const cherchees = (trouvaillesOdoo[texteRechercheOdoo(l, i)] || [])
-                                      .filter(t => memeFamille(
-                                        demandeTexte, `${t.reference} ${t.designation || ''}`));
+                                    /* Même classement qu'à la reprise d'office,
+                                       sans quoi la liste montrerait une tête et
+                                       l'appli en cocherait une autre. */
+                                    const cherchees = ordonnerPropositions(
+                                      (trouvaillesOdoo[texteRechercheOdoo(l, i)] || [])
+                                        .filter(t => memeFamille(
+                                          demandeTexte, `${t.reference} ${t.designation || ''}`)));
                                     const props = [
                                       ...(exacte ? [exacte] : []),
                                       ...cherchees.filter(t => t.reference !== exacte?.reference),
