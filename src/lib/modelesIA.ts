@@ -24,16 +24,16 @@
  * les remplaçants : `gemini-3.6-flash` et `gemini-3.5-flash-lite`. Moralité : sur
  * ce sujet, la seule source fiable est la réponse de l'API elle-même.
  *
- * ⚠️ **`MODELES_GEMINI` DOUBLE LA LISTE DE LA FONCTION, à dessein** : le
- * navigateur et Deno ne partagent pas de code. Celle de la fonction fait foi,
- * puisqu'elle s'applique même à un front resté en cache ; celle-ci ne sert qu'à
- * imposer un modèle particulier depuis un appelant.
+ * ⚠️ **LA LISTE DES MODÈLES N'EST PAS ICI, ET NE DOIT PAS Y REVENIR.** Elle
+ * vit dans l'Edge Function, seul endroit qui l'applique : aucun appelant ne
+ * passe `modeles`, et un front resté en cache doit bénéficier d'une correction
+ * sans être redéployé. Une constante de repli côté navigateur serait un piège —
+ * on la corrigerait, on redéploierait Vercel, et rien ne changerait. Le
+ * paramètre `modeles` reste ouvert pour imposer un modèle depuis un appelant,
+ * mais personne ne s'en sert.
  */
 
 import { supabase } from '@/integrations/supabase/client';
-
-/** Modèles capables de lire du texte ET des images, du plus capable au repli. */
-export const MODELES_GEMINI = ['gemini-3.6-flash', 'gemini-3.5-flash-lite'] as const;
 
 /** Le corps d'une requête Gemini, tel que l'API l'attend. */
 export interface CorpsGemini {
