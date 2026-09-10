@@ -830,24 +830,45 @@ const [contratOdoo, setContratOdoo] = useState<
 
     /* Ce que le document NOMME tranche : une fiche dont la raison sociale est
        écrite dans le texte l'emporte sur une fiche qui n'y figure que par son
-       adresse — une boîte de facturation ou un expéditeur de passage. */
-    const texteClient = (analyseTexteRef.current || '').toLowerCase();
-    const nommeeDansLeTexte = (c: typeof clients[number]) =>
-      (assezLong(c.societe) && texteClient.includes(c.societe!.toLowerCase()))
-      || (assezLong(c.nom) && texteClient.includes(c.nom!.toLowerCase()));
+       adresse — une boîte de facturation ou un expéditeur de passage.
+
+       ⚠️ **LA RAISON SOCIALE D'ABORD, LE NOM DE LA FICHE SEULEMENT À DÉFAUT.**
+       Tester les deux ensemble donnait la victoire à l'expéditeur : son nom
+       est TOUJOURS dans le document, il le signe. « M. Benjamin DUFLO »
+       l'emportait donc sur « AGILIS IDF ROISSY CDG » alors que c'est la
+       seconde qui désigne le client de l'affaire. Une fiche de personne ne
+       porte pas la société dans `nom` ; une fiche de société, si — d'où le
+       repli, qui ne sert qu'à celles-là.
+
+       La ponctuation ne compte pas : le fichier écrit « AGILIS (27) » et le
+       client écrit « AGILIS 27 ». Même raison que dans `nomsProches`. */
+    const sansPonctuation = (v: string) =>
+      v.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, ' ').trim();
+    const texteClient = sansPonctuation(analyseTexteRef.current || '');
+    const citee = (v?: string) =>
+      assezLong(v) && texteClient.includes(sansPonctuation(v!));
 
     let clientParEmail: typeof clients[number] | undefined;
+    let pourquoiClient = '';
     if (parEmail.length === 1) {
       clientParEmail = parEmail[0];
     } else if (parEmail.length > 1) {
-      const nommees = parEmail.filter(nommeeDansLeTexte);
-      if (nommees.length === 1) clientParEmail = nommees[0];
+      const parSociete = parEmail.filter(c => citee(c.societe));
+      const parNom = parEmail.filter(c => citee(c.nom));
+      if (parSociete.length === 1) {
+        clientParEmail = parSociete[0];
+        pourquoiClient = `raison sociale « ${clientParEmail.societe} » citée`;
+      } else if (parSociete.length === 0 && parNom.length === 1) {
+        clientParEmail = parNom[0];
+        pourquoiClient = `fiche « ${clientParEmail.nom} » citée`;
+      } else {
+        pourquoiClient = 'aucune ne se détache dans le document : on ne tranche pas';
+      }
       console.log('[client] %d fiches répondent par adresse : %s — %s',
         parEmail.length,
         parEmail.map(c => `${c.nom} (${c.societe || '-'})`).join(' | '),
-        clientParEmail
-          ? `le document nomme « ${clientParEmail.societe || clientParEmail.nom} »`
-          : 'aucune n’est nommée dans le document : on ne tranche pas');
+        pourquoiClient);
     }
 
     /* ⚠️ **UNE AMBIGUÏTÉ AU NIVEAU LE PLUS SÛR NE SE TRANCHE PAS PLUS BAS.**

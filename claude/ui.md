@@ -198,9 +198,17 @@ DUFLO, société « AGILIS (27) », BEUZEVILLE) et `facture-agilis@nge.fr`
 commande) — et le devis se créait sur AGILIS (27), au hasard du rang.
 
 Désormais : on relève **toutes** les fiches qui répondent par adresse exacte ;
-ce que le document **nomme** tranche (une raison sociale écrite dans le texte
-l'emporte sur une fiche qui n'y figure que par son adresse) ; et à défaut on
-**s'abstient**, les fiches en lice partant en pastilles cliquables.
+ce que le document **nomme** tranche ; et à défaut on **s'abstient**, les fiches
+en lice partant en pastilles cliquables.
+
+⚠️ **LA RAISON SOCIALE D'ABORD, LE NOM DE LA FICHE SEULEMENT À DÉFAUT.**
+Tester les deux ensemble donne la victoire à l'expéditeur : son nom est
+**toujours** dans le document, il le signe. « M. Benjamin DUFLO » l'emportait
+ainsi sur « AGILIS IDF ROISSY CDG », alors que c'est la seconde qui désigne le
+client de l'affaire. Une fiche de personne ne porte pas la société dans `nom` ;
+une fiche de société, si — d'où le repli, qui ne sert qu'à celles-là. La
+comparaison ignore la ponctuation : le fichier écrit « AGILIS (27) » là où le
+client écrit « AGILIS 27 ».
 
 ⚠️ **Une ambiguïté au niveau le plus sûr ne se tranche pas plus bas** : quand
 deux adresses exactes désignent deux fiches, on ne laisse PAS courir jusqu'au
