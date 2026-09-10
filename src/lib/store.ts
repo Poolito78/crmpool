@@ -1271,9 +1271,21 @@ async function lireTout(table: string) {
   /* Le tri sur « id » n'est pas cosmétique : sans ordre explicite, PostgREST
      ne garantit pas la même séquence d'une requête à l'autre, et deux tranches
      lues en parallèle pourraient se recouvrir ou laisser un trou. */
+  /* ⚠️ **`count: 'exact'` COÛTE UN PARCOURS COMPLET DE LA TABLE, et il tuait
+     le chargement.** Mesuré le 11/09/2026 sur `produits` : la tranche de
+     données prend 100 ms (parcours d'index sur la clé), le comptage exact
+     1 450 ms — quatorze fois plus cher que ce qu'il sert à dimensionner — et
+     entièrement DEPUIS LE CACHE. À froid, les 8 secondes du `statement_timeout`
+     tombaient, `GET` et `HEAD` expiraient ensemble, et l'application démarrait
+     sans catalogue : « canceling statement due to statement timeout », six fois
+     dans la journée du 10 septembre.
+
+     L'estimation du planificateur (`reltuples`) est instantanée et suffit ici :
+     le total ne sert qu'à savoir COMBIEN de tranches lancer en parallèle. La
+     fin réelle, elle, se reconnaît autrement — voir plus bas. */
   const premiere = await supabase
     .from(table as any)
-    .select('*', { count: 'exact' })
+    .select('*', { count: 'estimated' })
     .order('id')
     .range(0, TRANCHE - 1);
 
@@ -1282,11 +1294,13 @@ async function lireTout(table: string) {
     return [];
   }
   const tout: any[] = premiere.data || [];
-  const total = premiere.count ?? tout.length;
-  if (total <= TRANCHE) return tout;
+  /* Une page COURTE est la fin, et c'est le seul signal qui ne mente jamais :
+     il ne dépend d'aucune statistique. */
+  if (tout.length < TRANCHE) return tout;
 
+  const estime = premiere.count ?? tout.length;
   const departs: number[] = [];
-  for (let d = TRANCHE; d < total; d += TRANCHE) departs.push(d);
+  for (let d = TRANCHE; d < estime; d += TRANCHE) departs.push(d);
 
   /* UN LOT QUI ÉCHOUE NE DOIT PAS DISPARAÎTRE EN SILENCE.
    *
@@ -1299,6 +1313,7 @@ async function lireTout(table: string) {
    * On réessaie donc chaque tranche, une fois, après un court répit. Et si
    * le compte n'y est toujours pas, on le DIT plutôt que de rendre une liste
    * amputée dont personne ne saura qu'elle l'est. */
+  let abandons = 0;
   const lireTranche = async (d: number, essai = 0): Promise<any[]> => {
     const { data, error } = await supabase
       .from(table as any)
@@ -1311,6 +1326,7 @@ async function lireTout(table: string) {
         return lireTranche(d, essai + 1);
       }
       console.error(`Lecture de ${table} (${d}) abandonnée :`, error.message);
+      abandons += TRANCHE;
       return [];
     }
     return data || [];
@@ -1336,11 +1352,28 @@ async function lireTout(table: string) {
     if (i + CONCURRENCE < departs.length) await new Promise(r => setTimeout(r, 0));
   }
 
-  if (tout.length < total) {
-    const manque = total - tout.length;
-    console.error(`Lecture de ${table} incomplète : ${tout.length} sur ${total}.`);
+  /* ⚠️ **UNE ESTIMATION PEUT ÊTRE BASSE, ET IL NE DOIT RIEN Y PARAÎTRE.**
+     `reltuples` date du dernier ANALYZE : il retarde sur la réalité après un
+     import. S'y fier pour décider de la fin, c'est le bug de mai — la base
+     comptait 22 508 lignes, l'écran en affichait 21 508 — remis au goût du
+     jour. On poursuit donc tant qu'une tranche revient PLEINE. Le prix est
+     d'une requête de plus, vide, sur les seules tables qui dépassent mille
+     lignes : le catalogue. C'est très au-dessous du parcours complet qu'on
+     vient de supprimer. */
+  let depart = (departs.length ? departs[departs.length - 1] : 0) + TRANCHE;
+  for (;;) {
+    const lot = await lireTranche(depart);
+    tout.push(...lot);
+    if (lot.length < TRANCHE) break;
+    depart += TRANCHE;
+  }
+
+  /* On ne DÉDUIT plus ce qui manque d'un total qui pourrait être faux : on
+     compte ce qu'on a réellement abandonné après ses deux tentatives. */
+  if (abandons) {
+    console.error(`Lecture de ${table} incomplète : ${abandons} ligne(s) abandonnée(s).`);
     toast.error(
-      `Chargement incomplet : ${manque} ligne(s) de « ${table} » manquent. Rechargez la page.`,
+      `Chargement incomplet : jusqu'à ${abandons} ligne(s) de « ${table} » manquent. Rechargez la page.`,
       { duration: 12000 },
     );
   }
@@ -1407,8 +1440,14 @@ export function useStore() {
       // L'application est utilisable ici : on ne fait plus attendre personne.
       setLoading(false);
 
-      // Le compte part sans attendre : c'est lui qu'on affiche en premier.
-      supabase.from('produits').select('id', { count: 'exact', head: true })
+      /* ⚠️ **CE COMPTEUR COÛTAIT UN PARCOURS COMPLET DE `produits`.** C'est le
+         `HEAD /produits?select=id` qui expirait de pair avec la première
+         tranche : 1 450 ms warm, davantage à froid, pour une STATISTIQUE de
+         tableau de bord. L'estimation du planificateur s'en acquitte
+         instantanément, et le chiffre exact arrive de toute façon quelques
+         secondes plus tard avec le catalogue — `Dashboard` affiche déjà
+         `nbProduits ?? produits.length`. */
+      supabase.from('produits').select('id', { count: 'estimated', head: true })
         .then(({ count }) => { if (typeof count === 'number') setNbProduits(count); });
 
       // Le catalogue continue d'arriver en arrière-plan.
@@ -1422,6 +1461,11 @@ export function useStore() {
           if (i + 2000 < pRes.length) await new Promise(r => setTimeout(r, 0));
         }
         setProduits(sortie);
+        /* Le compte EXACT remplace l'estimation dès que le catalogue est là.
+           Sans cela, le tableau de bord garderait à jamais le chiffre du
+           planificateur — 22 723 au lieu de 22 634, une approximation qui n'a
+           de sens que le temps du chargement. */
+        setNbProduits(sortie.length);
         setProduitsCharges(true);
       });
     }

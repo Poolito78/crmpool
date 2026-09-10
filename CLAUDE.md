@@ -189,6 +189,14 @@ filet, sans quoi le garde-fou « sous le coût » retire les articles des
 propositions. Un niveau R1-R4 imposé remplace tout. Détail et mesures dans
 `claude/modules.md`.
 
+⚠️ **Diagnostic « l'application démarre sans catalogue »** — `canceling
+statement due to statement timeout` sur `produits`. Ce n'est pas la taille de
+la table (53 Mo, 22 700 lignes, tranche lue en 100 ms) mais le **comptage
+exact** : `count: 'exact'` déclenche un parcours complet, mesuré à 1 450 ms
+*depuis le cache*, et à froid il dépasse les 8 s du `statement_timeout`.
+`lireTout` compte donc en `'estimated'` et reconnaît la fin à une **tranche
+courte**, jamais à un total. Détail dans l'en-tête de `lireTout` (`store.ts`).
+
 ## Variables d'environnement
 
 ```
