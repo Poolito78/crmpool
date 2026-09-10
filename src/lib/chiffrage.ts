@@ -39,6 +39,17 @@ export interface IndicesClient {
   noms: string[];
   villes: string[];
   reference: string;
+  /**
+   * L'EXPÉDITEUR seul, tiré de la ligne « De : » / « From: ».
+   *
+   * ⚠️ **`noms` NE SUFFIT PAS À LE DÉSIGNER.** Ce tableau mêle l'expéditeur,
+   * les raisons sociales repérées par leur forme juridique et les deux lignes
+   * qui suivent la formule de politesse — s'y fier par son RANG marcherait
+   * tant qu'une ligne « De : » existe, et désignerait une société dès qu'il
+   * n'y en a pas. Or l'expéditeur sert à INSCRIRE UN CONTACT au fichier
+   * client : se tromper de nom, c'est y créer une fiche fantôme.
+   */
+  expediteur?: string;
 }
 
 /** Nos propres domaines : l'expéditeur interne n'est jamais le client. */
@@ -154,9 +165,17 @@ export function extraireIndices(texte: string): IndicesClient {
     }
   };
 
-  (t.match(/^\s*(?:De|From|Exp[ée]diteur)\s*:\s*(.+)$/gim) || []).forEach((l) =>
-    pousse(l.replace(/^\s*(?:De|From|Exp[ée]diteur)\s*:\s*/i, '').split('<')[0]),
-  );
+  let expediteur = '';
+  (t.match(/^\s*(?:De|From|Exp[ée]diteur)\s*:\s*(.+)$/gim) || []).forEach((l) => {
+    const v = l.replace(/^\s*(?:De|From|Exp[ée]diteur)\s*:\s*/i, '').split('<')[0];
+    pousse(v);
+    /* Le PREMIER « De : », et lui seul : un fil de discussion en porte un par
+       message repris en citation, et c'est le plus récent qui écrit. */
+    if (!expediteur) {
+      const n = String(v || '').replace(/[<>"]/g, '').replace(/[,;.\s]+$/, '').trim();
+      if (n.length >= 3 && n.length <= 80 && !/@/.test(n) && !BRUIT.test(n)) expediteur = n;
+    }
+  });
   (t.match(/^\s*(?:Soci[ée]t[ée]|Client|Entreprise)\s*:\s*(.+)$/gim) || []).forEach((l) =>
     pousse(l.split(':').slice(1).join(':')),
   );
@@ -205,7 +224,10 @@ export function extraireIndices(texte: string): IndicesClient {
     reference = mots.join(' ').replace(/[.,;]+$/, '');
   }
 
-  return { emails, noms: noms.slice(0, 8), villes: villes.slice(0, 4), reference };
+  return {
+    emails, noms: noms.slice(0, 8), villes: villes.slice(0, 4), reference,
+    ...(expediteur ? { expediteur } : {}),
+  };
 }
 
 /* ============================================================

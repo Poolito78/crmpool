@@ -207,3 +207,46 @@ describe('prixDeLigne', () => {
     expect(r.origine).toBe('catalogue');
   });
 });
+
+/* L'EXPÉDITEUR, ISOLÉ DES RAISONS SOCIALES.
+ *
+ * ⚠️ Il sert à INSCRIRE UN CONTACT au fichier client — se tromper de nom y
+ * crée une fiche fantôme. `noms` ne peut pas jouer ce rôle : il mêle
+ * l'expéditeur, les sociétés repérées à leur forme juridique et les lignes de
+ * signature, et s'y fier par le RANG désignerait une société dès qu'aucune
+ * ligne « De : » n'existe. */
+describe('extraireIndices — l’expéditeur', () => {
+  it('lit la ligne « De : » de la demande AGILIS', () => {
+    const i = extraireIndices([
+      'Objet : Demande de devis',
+      'De : ALLART Cyprien',
+      'Adresse : callart@agilis.net',
+      '',
+      'Bonjour, pourrais tu m’envoyer un devis pour 10 supports 40x80mm ?',
+    ].join('\n'));
+    expect(i.expediteur).toBe('ALLART Cyprien');
+    expect(i.emails).toContain('callart@agilis.net');
+  });
+
+  it('ne prend PAS une raison sociale pour l’expéditeur', () => {
+    const i = extraireIndices('Bonjour, de la part de REFLEX SIGNALISATION SAS.');
+    expect(i.expediteur).toBeUndefined();
+    // La société est bien repérée, mais dans `noms` — pas comme expéditeur.
+    expect(i.noms.some(n => /REFLEX/i.test(n))).toBe(true);
+  });
+
+  it('garde le PREMIER « De : » : un fil en porte un par message cité', () => {
+    const i = extraireIndices([
+      'De : ALLART Cyprien',
+      'Bonjour, voir ci-dessous.',
+      'De : DUFLO Benjamin',
+      'Message initial.',
+    ].join('\n'));
+    expect(i.expediteur).toBe('ALLART Cyprien');
+  });
+
+  it('accepte « From: » et coupe l’adresse entre chevrons', () => {
+    const i = extraireIndices('From: Cyprien ALLART <callart@agilis.net>');
+    expect(i.expediteur).toBe('Cyprien ALLART');
+  });
+});

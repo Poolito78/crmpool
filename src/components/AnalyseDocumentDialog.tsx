@@ -237,6 +237,34 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [gammePanneau, setGammePanneau] = useState<Taille>('P');
   const [classePanneau, setClassePanneau] = useState<number>(2);
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
+
+  /**
+   * CELUI QUI ÉCRIT, prêt à être inscrit au fichier client.
+   *
+   * ⚠️ **UN NOM ET UNE ADRESSE, OU RIEN.** Un contact sans adresse ne servirait
+   * à rien ici — c'est l'adresse qui retrouvera la société à la demande
+   * suivante ; et un contact sans nom est un enregistrement technique, pas une
+   * personne (`rattacherContact` le refuse d'ailleurs). On n'invente ni l'un ni
+   * l'autre : sans les deux, on n'inscrit personne.
+   *
+   * La signature lue prime — elle porte la fonction et les téléphones, que
+   * l'en-tête du message n'a pas. À défaut, la ligne « De : » et la première
+   * adresse du texte, ce qui suffit au cas courant : « De : ALLART Cyprien » +
+   * « callart@agilis.net ».
+   */
+  const contactExpediteur = useMemo<ContactSource | null>(() => {
+    const indices = extraireIndices(analyseTexteRef.current || '');
+    const nom = String(signature?.nom || indices.expediteur || '').trim();
+    const email = String(signature?.email || indices.emails[0] || '').trim();
+    if (!nom || !email) return null;
+    return {
+      nom,
+      email,
+      fonction: signature?.fonction,
+      telephone: signature?.telephone,
+      mobile: signature?.mobile,
+    };
+  }, [signature, result]);
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
 
@@ -824,8 +852,19 @@ const [contratOdoo, setContratOdoo] = useState<
        DUFLO, société « AGILIS (27) », BEUZEVILLE) et `facture-agilis@nge.fr`
        (« AGILIS IDF ROISSY CDG », LE THOR 84250, l'adresse de facturation de
        la commande). Le devis se créait sur AGILIS (27), au hasard du rang. */
-    const parEmail = clients.filter(c => assezLong(c.email)
-      && indicesTexte.emails.includes(c.email!.toLowerCase()));
+    /* ⚠️ **L'ADRESSE D'UN CONTACT DÉSIGNE SA SOCIÉTÉ.** On ne comparait que
+       `client.email`, l'adresse de la FICHE — souvent une boîte générique de
+       facturation. Or les demandes viennent des personnes : `callart@agilis.net`
+       n'était nulle part, et rien ne pouvait mener à « AGILIS IDF ROISSY CDG »,
+       dont la fiche porte `facture-agilis@nge.fr`. Les contacts inscrits sur le
+       client (colonne JSON `contacts`) sont donc interrogés eux aussi — c'est
+       ce qui rend utile l'enregistrement du contact à l'import. */
+    const adresseConnue = (c: typeof clients[number]) =>
+      (assezLong(c.email) && indicesTexte.emails.includes(c.email!.toLowerCase()))
+      || (c.contacts || []).some(ct => assezLong(ct.email)
+        && indicesTexte.emails.includes(ct.email!.trim().toLowerCase()));
+
+    const parEmail = clients.filter(adresseConnue);
 
     /* Ce que le document NOMME tranche : une fiche dont la raison sociale est
        écrite dans le texte l'emporte sur une fiche qui n'y figure que par son
@@ -2837,17 +2876,26 @@ const [contratOdoo, setContratOdoo] = useState<
     }
 
     /* L'interlocuteur retenu à l'écran, rattaché au fichier client sans y
-       créer de doublon. Sans contact désigné, `rattachement` ne change rien. */
+       créer de doublon. Sans contact désigné, `rattachement` ne change rien.
+
+       ⚠️ **À DÉFAUT, L'EXPÉDITEUR.** On n'inscrivait QUE le contact choisi dans
+       la liste Odoo. Celui qui écrit — et dont l'adresse permettra de retrouver
+       la société à la demande suivante — restait inconnu du fichier client :
+       `callart@agilis.net` n'y figurait nulle part, et rien ne menait plus à
+       « AGILIS IDF ROISSY CDG ». C'est cette inscription qui donne sa valeur au
+       rapprochement par l'adresse d'un contact.
+
+       Le contact Odoo garde la priorité : il a été DÉSIGNÉ, l'expéditeur n'est
+       qu'un constat. Et `rattacherContact` ne crée rien sans nom, ne remplace
+       jamais un champ saisi à la main, et tranche sur l'adresse plutôt que sur
+       le nom — « Jean MARTIN » et « Sophie MARTIN » ne se confondront pas. */
     const ctOdoo = contactsOdoo.find(c => String(c.id) === contactRetenu);
     const clientDuDevis = clients.find(c => c.id === creerDevisClientId);
-    const rattachement = rattacherContact(
-      clientDuDevis?.contacts,
-      ctOdoo
-        ? { nom: ctOdoo.nom, fonction: ctOdoo.fonction, email: ctOdoo.email,
-            telephone: ctOdoo.telephone, mobile: ctOdoo.mobile }
-        : null,
-      generateId,
-    );
+    const source: ContactSource | null = ctOdoo
+      ? { nom: ctOdoo.nom, fonction: ctOdoo.fonction, email: ctOdoo.email,
+          telephone: ctOdoo.telephone, mobile: ctOdoo.mobile }
+      : contactExpediteur;
+    const rattachement = rattacherContact(clientDuDevis?.contacts, source, generateId);
 
     const validite = creerDevisValidite || (() => {
       const d = new Date(creerDevisDate);
@@ -3496,6 +3544,18 @@ const [contratOdoo, setContratOdoo] = useState<
                               className="h-7 text-xs"
                               onClick={() => {
                                 const id = generateId();
+                                /* ⚠️ **LE CONTACT S'INSCRIT AVEC LA SOCIÉTÉ.**
+                                   La fiche créée ne portait que l'adresse de la
+                                   SOCIÉTÉ — souvent une boîte de facturation,
+                                   `facture-agilis@nge.fr` chez AGILIS Roissy.
+                                   Celui qui écrit restait inconnu, si bien que
+                                   la demande suivante du même interlocuteur ne
+                                   retrouvait pas la société qu'on venait de
+                                   créer pour lui. On inscrit donc l'expéditeur
+                                   du même geste : c'est son adresse qui fera le
+                                   lien la prochaine fois. */
+                                const { contacts } = rattacherContact(
+                                  [], contactExpediteur, generateId);
                                 updateClients(prev => [...prev, {
                                   id,
                                   nom: clientOdoo.nom,
@@ -3507,10 +3567,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                   codePostal: clientOdoo.codePostal,
                                   dateCreation: today(),
                                   adressesLivraison: [],
+                                  ...(contacts.length ? { contacts } : {}),
                                 } as any]);
                                 setCreerDevisClientId(id);
                                 setClientOdoo(null);
-                                toast.success(`${clientOdoo.societe} créé depuis Odoo`);
+                                toast.success(contacts.length
+                                  ? `${clientOdoo.societe} créé depuis Odoo, avec ${contacts[0].nom}`
+                                  : `${clientOdoo.societe} créé depuis Odoo`);
                               }}
                             >
                               Créer ce client depuis Odoo

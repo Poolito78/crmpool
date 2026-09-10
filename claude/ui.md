@@ -227,3 +227,23 @@ pèse les mots par leur rareté (« AGILIS » ne désigne personne, « ROISSY »
 désigne quelqu'un) et s'abstient quand plusieurs répondent. On lui passe la
 main plutôt que de refaire un classement à côté du sien. Figé par deux tests
 dans `rapprochementClient.test.ts`, avec le texte réel du message.
+
+⚠️ **L'ADRESSE D'UN CONTACT DÉSIGNE SA SOCIÉTÉ, et le contact s'inscrit avec
+elle.** Deux moitiés d'une même règle, inutiles l'une sans l'autre.
+
+1. **Le rapprochement interroge les contacts**, pas seulement `client.email` —
+   qui est souvent une boîte générique de facturation. Les demandes viennent
+   des personnes : `callart@agilis.net` n'était nulle part, et rien ne menait à
+   « AGILIS IDF ROISSY CDG », dont la fiche porte `facture-agilis@nge.fr`.
+2. **L'expéditeur est enregistré** — à la création du client depuis Odoo comme
+   à la création du devis, via `rattacherContact` (qui ne crée rien sans nom,
+   n'écrase aucun champ saisi, et tranche sur l'adresse plutôt que sur le nom).
+   Le contact Odoo DÉSIGNÉ garde la priorité ; l'expéditeur n'est qu'un constat.
+
+`contactExpediteur` exige **un nom ET une adresse**, sinon il ne rend rien : une
+adresse sans nom est un enregistrement technique, un nom sans adresse ne
+retrouvera jamais la société. La signature lue prime (elle porte fonction et
+téléphones) ; à défaut, `extraireIndices().expediteur` lit la ligne « De : ».
+⚠️ Ne PAS se servir de `noms[0]` pour cela : ce tableau mêle expéditeur,
+raisons sociales et lignes de signature — il désignerait une société dès
+qu'aucune ligne « De : » n'existe, et créerait une fiche fantôme.
