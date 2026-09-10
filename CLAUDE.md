@@ -131,13 +131,12 @@ tâche les concerne, pas avant.
 |---|---|
 | `claude/modules.md` | Les modules `src/lib/` un par un + la règle de tarification `odoo-prix`. |
 | `claude/ui.md` | Pages, composants, nav, scroll CRM, **convention obligatoire des vues tableau**, marge achat/vente du devis. |
+| `claude/designations-odoo.md` | L'import de `description_variante` : **le champ est « Variant Sale Description », PAS `name`**, le curseur par référence, l'état du catalogue. |
 | `.claude/rules/reprise-2026-09.md` | Ce que la session de septembre 2026 a établi + ce qui reste ouvert. **Chargé automatiquement.** |
 
-⚠️ `reprise-2026-09.md` renvoie à `claude/brides-et-rails.md` et
-`claude/designations-odoo.md` : **ces deux fichiers n'existent pas.** Pour les
-brides, la source fait foi (`bridesDevis.ts` et `railsPanneaux.donnees.ts`
-portent chacun un en-tête complet). Pour les désignations Odoo, le résumé de
-`reprise-2026-09.md` est tout ce qui reste.
+⚠️ `reprise-2026-09.md` renvoie aussi à `claude/brides-et-rails.md`, qui
+**n'existe pas** : pour les brides, la source fait foi — `bridesDevis.ts` et
+`railsPanneaux.donnees.ts` portent chacun un en-tête complet.
 
 ⚠️ **La source fait foi avant ces fichiers.** Chaque module de `src/lib/` porte
 un en-tête documenté de 13 à 28 lignes qui explique le *pourquoi* — c'est la

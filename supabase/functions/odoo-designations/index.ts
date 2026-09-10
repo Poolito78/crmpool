@@ -1,23 +1,12 @@
 /**
- * Remplit `produits.description_variante` avec la désignation qu'Odoo vend.
+ * Remplit `produits.description_variante` avec la designation qu'Odoo vend.
  *
- * `produits.description` porte la désignation du MODÈLE : « IS KC1 » pour les
- * douze déclinaisons de KC1. Odoo nomme chacune — « KC1 800 600 C1 BRUT
- * (MARCO POLO) » — dans `product.product.name`, la colonne que l'export
- * appelle « Variant Sale Description ». C'est cette ligne-là qu'on lit pour
- * choisir un article, et elle n'existait nulle part chez nous.
+ * Le champ voulu est « Variant Sale Description », PAS `name` : celui-ci porte
+ * la designation du modele (« IS A11 »), identique pour toutes les
+ * declinaisons. Son nom technique varie d'une base a l'autre, on le retrouve
+ * donc par son libelle via fields_get.
  *
- * La fonction travaille PAR PAGES, curseur sur la référence : le catalogue
- * compte 22 700 articles et aucune requête ne les tient. Chaque appel rend
- * `dernier`, à repasser en `depuis` pour la page suivante, et `fini` quand il
- * n'y a plus rien à lire.
- *
- * Secrets : ODOO_URL, ODOO_DB, ODOO_LOGIN, ODOO_APIKEY (les mêmes que les
- * autres fonctions Odoo), plus SUPABASE_URL et SUPABASE_SERVICE_ROLE_KEY
- * fournis par la plateforme.
- *
- * Corps attendu :
- *   { "jeton": "…", "depuis": "", "limite": 1000, "simulation": false }
+ * Corps : { jeton, depuis?, limite?, simulation?, champs? }
  */
 
 const JETON = "BFs9kvvvAh8jOvzTPEinUswnDZqooE0p";
@@ -74,9 +63,30 @@ class Odoo {
   }
 }
 
-/* Odoo lit par paquets : « default_code in [...] » avec 1 000 valeurs finit en
-   requete SQL geante et en delai depasse. 200 tient largement. */
 const PAQUET_ODOO = 200;
+type MetaChamp = { string?: string; type?: string };
+
+async function champsDeVariante(odoo: Odoo): Promise<Record<string, MetaChamp>> {
+  return await odoo.kw("product.product", "fields_get", [[], ["string", "type"]], {}) as Record<string, MetaChamp>;
+}
+
+/** Le champ « Variant Sale Description », par son libelle. */
+function trouverChamp(champs: Record<string, MetaChamp>): string {
+  const texte = (m: MetaChamp) => m.type === "char" || m.type === "text" || m.type === "html";
+  const entrees = Object.entries(champs);
+
+  for (const [nom, m] of entrees) {
+    if ((m.string || "").trim().toLowerCase() === "variant sale description") return nom;
+  }
+  for (const [nom, m] of entrees) {
+    if (nom === "variant_sale_description" || nom === "description_sale_variant") return nom;
+  }
+  for (const [nom, m] of entrees) {
+    const s = (m.string || "").toLowerCase();
+    if (texte(m) && s.includes("sale description") && s.includes("variant")) return nom;
+  }
+  throw new Error("Champ « Variant Sale Description » introuvable sur product.product.");
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -89,17 +99,29 @@ Deno.serve(async (req) => {
       });
     }
 
+    const odoo = new Odoo();
+
+    /* Mode diagnostic : rendre les champs texte de product.product, pour
+       reconnaitre celui que l'ecran appelle « Variant Sale Description ». */
+    if (corps.champs === true) {
+      const champs = await champsDeVariante(odoo);
+      const liste = Object.entries(champs)
+        .filter(([, m]) => m.type === "char" || m.type === "text" || m.type === "html")
+        .map(([nom, m]) => ({ nom, libelle: m.string || "", type: m.type }));
+      return new Response(JSON.stringify({ champs: liste }), {
+        headers: { ...CORS, "Content-Type": "application/json" },
+      });
+    }
+
     const depuis = String(corps.depuis ?? "");
     const limite = Math.min(Math.max(Number(corps.limite) || 1000, 1), 2000);
     const simulation = corps.simulation === true;
+    const champ = String(corps.champ || "") || trouverChamp(await champsDeVariante(odoo));
 
     const base = Deno.env.get("SUPABASE_URL")!;
     const cle = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const enTetes = { apikey: cle, Authorization: `Bearer ${cle}`, "Content-Type": "application/json" };
 
-    /* La page de references a traiter. Curseur sur la reference : elle est
-       unique et ordonnable, la ou un offset deraperait des qu'une ecriture
-       change l'ordre entre deux appels. */
     const filtre = depuis ? `&reference=gt.${encodeURIComponent(depuis)}` : "";
     const rLire = await fetch(
       `${base}/rest/v1/produits?select=reference&order=reference.asc&limit=${limite}${filtre}`,
@@ -110,12 +132,11 @@ Deno.serve(async (req) => {
     const refs = lignes.map((l) => l.reference).filter(Boolean);
 
     if (!refs.length) {
-      return new Response(JSON.stringify({ lus: 0, trouves: 0, ecrits: 0, dernier: depuis, fini: true }), {
+      return new Response(JSON.stringify({ champ, lus: 0, trouves: 0, ecrits: 0, dernier: depuis, fini: true, echantillon: [] }), {
         headers: { ...CORS, "Content-Type": "application/json" },
       });
     }
 
-    const odoo = new Odoo();
     const designations: { reference: string; designation: string }[] = [];
 
     for (let i = 0; i < refs.length; i += PAQUET_ODOO) {
@@ -123,15 +144,15 @@ Deno.serve(async (req) => {
       const articles = await odoo.kw(
         "product.product",
         "search_read",
-        [[["default_code", "in", paquet]], ["default_code", "name"]],
-        // `active_test: false` : une declinaison archivee chez Odoo garde sa
-        // designation, et nos fiches, elles, restent vendables.
+        [[["default_code", "in", paquet]], ["default_code", champ]],
         { limit: paquet.length * 2, context: { active_test: false } },
-      ) as { default_code: string; name: string }[];
+      ) as Record<string, unknown>[];
 
       for (const a of articles) {
         const ref = String(a.default_code || "").trim();
-        const nom = String(a.name || "").trim();
+        const brut = a[champ];
+        const nom = (brut === false || brut == null ? "" : String(brut))
+          .replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
         if (ref && nom) designations.push({ reference: ref, designation: nom });
       }
     }
@@ -147,11 +168,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({
+        champ,
         lus: refs.length,
         trouves: designations.length,
         ecrits,
         dernier: refs[refs.length - 1],
         fini: refs.length < limite,
+        echantillon: designations.slice(0, 6),
       }),
       { headers: { ...CORS, "Content-Type": "application/json" } },
     );
