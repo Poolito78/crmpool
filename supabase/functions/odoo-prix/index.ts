@@ -1033,8 +1033,18 @@ class ContratCadre {
  *  rien à voir avec la société attendue) sans être trop strict sur la forme
  *  exacte (« REFLEX SIGNALISATION » doit matcher « Reflex Signalisation »). */
 function nomsProches(a: string, b: string): boolean {
+  /* ⚠️ **LA PONCTUATION N'EST PAS UNE DIFFÉRENCE DE RAISON SOCIALE.**
+     Mesuré le 10/09/2026 : « AGILIS (27) », tel que le document l'écrit, ne
+     ressemblait pas à « AGILIS 27 », le nom de la fiche Odoo. La fiche était
+     déclarée « incohérente » à tort, ce qui déclenchait deux recherches Odoo
+     supplémentaires par requête — sans résultat, heureusement, mais un
+     homonyme aurait pu répondre et emporter le mauvais contrat.
+     On ramène donc toute ponctuation à une espace avant de comparer. */
   const normalise = (s: string) =>
-    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
   const na = normalise(a);
   const nb = normalise(b);
   if (!na || !nb) return false;
@@ -2167,14 +2177,26 @@ serve(async (req) => {
       if (contratPrix === null && (prixEffectif <= 0 || (cout > 0 && prixEffectif < cout))) {
         contratPrix = null;
       }
+      /* « contrat » = le bordereau du client ; « grille » = la grille de son
+         niveau, qui cote ce que le bordereau ne dit pas ; « liste » = un prix
+         reconstruit. Les confondre effacerait la seule chose que l'écran doit
+         montrer. */
+      const source = venuDuCadre
+        ? (auRepli !== null ? "grille" : "contrat")
+        : (listeTenable ? "liste" : "aucun");
+      /* ⚠️ **LE PRIX RETENU SE JOURNALISE, SINON IL SE DEVINE.**
+         `[tarif]` et `[tarif-base]` s'écrivent à CHAQUE ligne, même quand la
+         grille l'emporte — la liste est calculée d'office pour servir de
+         repli. Lire « FPLATINE8040 → liste rend 184,8 » ne dit donc PAS que
+         184,8 a été retenu, et le 10/09/2026 rien dans le journal ne
+         permettait de trancher entre ce montant et les 36,60 € de la grille.
+         Une ligne par référence, avec les trois candidats côte à côte. */
+      console.log(`[prix] ${ref} → ${contratPrix ?? "aucun"} € (${source})`
+        + ` | contrat=${auCadre ?? "-"} grille=${auRepli ?? "-"}`
+        + ` liste=${pListe ?? "-"} coût=${cout || "-"}`);
       prix[ref] = {
         designation: a.name,
-        /* « contrat » = le bordereau du client ; « grille » = la grille de
-           son niveau, qui cote ce que le bordereau ne dit pas. Les
-           confondre effacerait la seule chose que l'écran doit montrer. */
-        source: venuDuCadre
-          ? (auRepli !== null ? "grille" : "contrat")
-          : (listeTenable ? "liste" : "aucun"),
+        source,
         niveauGrille: auRepli !== null ? niveauRepli : "",
         gabarit: cadre.gabarit(ref) ?? cadreRepli?.gabarit(ref) ?? null,
         contrat: contratPrix,
