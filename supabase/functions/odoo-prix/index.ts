@@ -1083,7 +1083,18 @@ function niveauDuNom(nom?: string | null): string {
  *
  * Ne lève jamais : sans réponse, on garde le comportement d'avant.
  */
+let defautPrixCache: { valeur: number | null } | null = null;
+
 async function listePrixParDefaut(od: Odoo): Promise<number | null> {
+  /* ⚠️ **UNE SEULE TENTATIVE PAR ISOLAT.** La question ne dépend ni du
+     client ni de la demande : la réponse est la même pour tout le monde et
+     ne bouge qu'au rythme des réglages Odoo. La redemander à chaque requête
+     ajoutait un aller-retour — et, quand le droit manque, un aller-retour
+     qui échoue à coup sûr. On mémorise donc aussi l'échec. */
+  if (defautPrixCache) return defautPrixCache.valeur;
+
+  /* 1. La propriété globale : `res_id` vide = la valeur que prend une fiche
+        sur laquelle personne n'a rien choisi. C'est la réponse exacte. */
   try {
     const props = (await od.kw(
       "ir.property", "search_read",
@@ -1094,15 +1105,43 @@ async function listePrixParDefaut(od: Odoo): Promise<number | null> {
     for (const p of props) {
       const m = String(p.value_reference || "").match(/product\.pricelist,(\d+)/);
       if (m) {
-        console.log(`[liste de prix] défaut Odoo = #${m[1]}`);
-        return Number(m[1]);
+        console.log(`[liste de prix] défaut Odoo = #${m[1]} (ir.property)`);
+        defautPrixCache = { valeur: Number(m[1]) };
+        return defautPrixCache.valeur;
       }
     }
-    console.warn("[liste de prix] aucune propriété globale "
-      + "property_product_pricelist : le défaut restera indétectable");
   } catch (e) {
-    console.warn("[liste de prix] défaut illisible :", (e as Error).message);
+    /* ⚠️ `ir.property` est réservé au groupe Administration/Settings, que le
+       compte API n'a pas — mesuré le 10/09/2026 : « You are not allowed to
+       access 'Company Property' (ir.property) records ». D'où la seconde
+       voie, qui ne demande aucun droit particulier. */
+    console.warn("[liste de prix] ir.property refusé :", (e as Error).message);
   }
+
+  /* 2. À défaut, ce qu'Odoo proposerait à une fiche NEUVE. C'est la même
+        question posée autrement, et `default_get` ne demande que l'accès à
+        res.partner, que nous avons forcément. */
+  try {
+    const d = (await od.kw(
+      "res.partner", "default_get", [["property_product_pricelist"]],
+    )) as any;
+    const v = d?.property_product_pricelist;
+    const id = Array.isArray(v) ? v[0] : v;
+    if (typeof id === "number" && id > 0) {
+      console.log(`[liste de prix] défaut Odoo = #${id} (default_get)`);
+      defautPrixCache = { valeur: id };
+      return id;
+    }
+  } catch (e) {
+    console.warn("[liste de prix] default_get indisponible :", (e as Error).message);
+  }
+
+  /* Aucune des deux voies : on ne saura pas distinguer « rien de choisi » de
+     « mis exprès au tarif public », et la liste propre du contact primera
+     comme avant. Une seule ligne de journal, pas une par requête. */
+  console.warn("[liste de prix] défaut Odoo indétectable : la liste propre du "
+    + "contact primera, comme avant ce correctif");
+  defautPrixCache = { valeur: null };
   return null;
 }
 
