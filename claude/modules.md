@@ -68,6 +68,26 @@ propositions** — la demande MGD/PANTIN ne proposait plus aucun panneau (KC1,
 EPI, FP, point de rassemblement). Ce garde-fou ne joue donc que si **plus
 rien** ne tarife l'article.
 
+⚠️ **LE CONTRAT SE CHERCHE DANS TOUT LE GROUPE** (`famillePartenaire`) — le
+couple (contact, parent) est trop étroit dès qu'un groupe éclate ses agences.
+Deux passes, aucune ne suffisant seule : la **branche** (`child_of` depuis le
+sommet) et les **fiches de même raison sociale**, car une agence sœur peut
+être une RACINE distincte. Mesuré sur AGILIS le 10/09/2026 : la boîte de
+groupe `facture-agilis@nge.fr` menait à #111772 → chapeau « AGILIS » #102108,
+sans contrat, TARIF PUBLIC ; le contrat #309 vit sur « AGILIS 27 » #75203, une
+racine sans lien d'arborescence avec le chapeau. Le support 80x40 sortait à
+**89,43 €** quand la commande le facture **22 €** — et la grille contenait
+pourtant `SG80401_5.3000.IS.BRUT=22`. Décision métier actée : **le contrat de
+groupe vaut pour toutes les fiches du groupe**. Plusieurs contrats trouvés →
+grilles réunies, et un `console.warn` les nomme (sans lui, la première ligne
+rencontrée trancherait en silence).
+
+⚠️ **UNE FICHE ODOO SANS NOM N'EST JAMAIS UN CLIENT.** Odoo laisse des
+enregistrements techniques (facturation, livraison) dont `name` est vide — le
+journal les imprime « false ». Ils ne portent ni contrat ni liste propre :
+`trouverPartenaire` remonte au parent. Le garde-fou `incertaine` ne les voyait
+pas, puisqu'il exige `!parent_id` et que ces fiches ont un parent.
+
 ⚠️ **Le NIVEAU se lit dans le nom du CONTRAT-CADRE, pas dans celui de la liste
 de prix.** `AnalyseDocumentDialog` passait `contratOdoo.contrat` — la liste,
 qui ne porte jamais de R — à `niveauDepuisContrat` : la lecture échouait

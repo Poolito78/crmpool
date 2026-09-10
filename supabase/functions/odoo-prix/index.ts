@@ -690,7 +690,18 @@ class ContratCadre {
       }
 
       console.log(`[contrat-cadre] contrat(s) #${this.ids.join(",")} `
-        + `via [${champs.join(", ")}], lignes dans ${this.modeleLignes}`);
+        + `« ${this.noms.join(" + ")} » via [${champs.join(", ")}], `
+        + `lignes dans ${this.modeleLignes}`);
+      /* ⚠️ Chercher dans tout le groupe peut ramener PLUSIEURS contrats
+         distincts — deux agences ayant négocié à part. On les charge tous,
+         c'est la règle retenue pour les groupes, mais l'écart doit se lire :
+         sinon c'est la première ligne de grille rencontrée qui tranche, sans
+         que personne sache qu'un second contrat existait. */
+      if (this.ids.length > 1) {
+        console.warn(`[contrat-cadre] ⚠️ ${this.ids.length} contrats trouvés `
+          + `dans le groupe — leurs grilles sont réunies : `
+          + this.noms.map((n, i) => `#${this.ids[i]} « ${n} »`).join(" | "));
+      }
     } catch (e) {
       console.warn("[contrat-cadre] chargement impossible :", (e as Error).message);
     }
@@ -1031,6 +1042,86 @@ function nomsProches(a: string, b: string): boolean {
 }
 
 /**
+ * Toutes les fiches du GROUPE, pour y chercher le contrat-cadre.
+ *
+ * ⚠️ **LE CONTRAT SE NÉGOCIE AVEC LE GROUPE, PAS AVEC L'AGENCE QUI ÉCRIT.**
+ * On n'interrogeait que le couple (contact, parent), et c'est trop étroit
+ * dès qu'un groupe éclate ses agences en fiches distinctes.
+ *
+ * Mesuré sur AGILIS, le 10 septembre 2026, à deux minutes d'intervalle :
+ *
+ *   #111772 (sans nom) → parent « AGILIS » #102108 → aucun contrat,
+ *                        TARIF PUBLIC ISOSIGN VARIANTES
+ *   #106510 « Benjamin DUFLO » → « AGILIS 27 » #75203 → contrat #309,
+ *                        liste « AGILIS / NGE (ISO-STI) »
+ *
+ * Même groupe, même contrat 2026 (« CCI10031 CONTRAT CADRE AGILIS 2026 R4 &
+ * PAL » sur les commandes), et pourtant l'une des deux demandes tarifait au
+ * prix public : le support 80x40 à 89,43 € quand la commande le facture 22 €.
+ *
+ * Deux passes, parce que ni l'une ni l'autre ne suffit :
+ *
+ *  1. **La branche** — le sommet de l'arborescence et tous ses descendants
+ *     (`child_of`). Attrape les agences rattachées en fils.
+ *  2. **Les fiches de même raison sociale** — une agence sœur peut être une
+ *     RACINE distincte, sans lien d'arborescence avec le chapeau du groupe :
+ *     c'est exactement le cas d'« AGILIS 27 » face à « AGILIS ». Sans cette
+ *     passe, la branche seule ne l'aurait jamais atteinte.
+ *
+ * On ne rend que des identifiants À INTERROGER : c'est `ContratCadre.charger`
+ * qui décide s'il existe un contrat, et il n'en invente aucun. Une fiche de
+ * plus dans la liste ne crée pas de tarif — elle donne une chance de trouver
+ * celui qui existe.
+ */
+async function famillePartenaire(
+  od: Odoo,
+  partenaire: any,
+  porteur: any,
+  societe: string,
+): Promise<number[]> {
+  const ids = new Set<number>();
+  for (const p of [partenaire?.id, porteur?.id]) if (p) ids.add(p);
+
+  /* 1. La branche entière, depuis son sommet. */
+  try {
+    const sommet = porteur?.parent_id ? porteur.parent_id[0] : porteur?.id;
+    if (sommet) {
+      const branche = (await od.kw(
+        "res.partner", "search", [[["id", "child_of", sommet]]], { limit: 200 },
+      )) as number[];
+      for (const i of branche) ids.add(i);
+    }
+  } catch (e) {
+    console.warn("[famille] branche illisible :", (e as Error).message);
+  }
+
+  /* 2. Les fiches de même raison sociale, y compris hors de la branche.
+     `nomsProches` évite d'attraper un homonyme lointain : « AGILIS » retient
+     « AGILIS 27 » et « AGILIS IDF », pas une société sans rapport. Un nom
+     trop court ratisserait tout le fichier — on s'abstient sous 3 lettres. */
+  const nom = String(societe || porteur?.name || "").trim();
+  if (nom.length >= 3) {
+    try {
+      const soeurs = (await od.kw(
+        "res.partner", "search_read", [[["name", "ilike", nom]], ["name"]],
+        { limit: 50 },
+      )) as any[];
+      for (const s of soeurs) {
+        if (nomsProches(String(s.name || ""), nom)) ids.add(s.id);
+      }
+    } catch (e) {
+      console.warn("[famille] fiches de même nom illisibles :", (e as Error).message);
+    }
+  }
+
+  const liste = [...ids];
+  console.log(`[famille] "${nom}" → ${liste.length} fiche(s) interrogée(s) `
+    + `pour le contrat-cadre : #${liste.slice(0, 25).join(",")}`
+    + (liste.length > 25 ? ` … (+${liste.length - 25})` : ""));
+  return liste;
+}
+
+/**
  * Retrouve le client dans Odoo. Trois passes, de la plus sûre à la plus floue :
  * l'adresse électronique désigne une agence précise, la raison sociale peut
  * en désigner plusieurs — auquel cas la ville départage.
@@ -1071,7 +1162,29 @@ async function trouverPartenaire(
     // venue rattachait le devis à la mauvaise agence.
     const r = await lire([["email", "=ilike", c.email]]);
     if (r.length) {
-      const trouve = departager(r);
+      let trouve = departager(r);
+      /* ⚠️ **UNE FICHE SANS NOM N'EST JAMAIS UN CLIENT.**
+       *
+       * Odoo laisse des enregistrements purement techniques — adresse de
+       * facturation, adresse de livraison — dont le champ `name` est vide ;
+       * le journal les imprime « false ». Ils ne portent ni contrat ni liste
+       * de prix propre, et les retenir fait tarifer au TARIF PUBLIC.
+       *
+       * Mesuré sur AGILIS : `facture-agilis@nge.fr`, boîte de facturation du
+       * groupe, désignait #111772 (sans nom, parent « AGILIS » #102108).
+       * Le garde-fou `incertaine` ci-dessous ne voyait rien à redire — il
+       * exige `!parent_id`, et cette fiche a un parent — si bien que le
+       * support 80x40 sortait à 89,43 € au lieu des 22 € du bordereau.
+       *
+       * On remonte donc au parent, qui est la vraie fiche commerciale. */
+      if (trouve && !String(trouve.name || "").trim() && trouve.parent_id) {
+        const [mere] = (await od.kw(
+          "res.partner", "read", [[trouve.parent_id[0]], champs],
+        )) as any[];
+        console.log(`[partenaire] fiche #${trouve.id} sans nom (technique) → `
+          + `remontée au parent #${trouve.parent_id[0]} "${trouve.parent_id[1]}"`);
+        if (mere) trouve = mere;
+      }
       /* Une boîte générique (contact@…, accueil@…) peut n'exister que sur la
          fiche d'un simple contact mal rattaché — sans société ni parent, ou
          pire, rattaché au MAUVAIS parent. Chez REFLEX SIGNALISATION, la
@@ -1638,7 +1751,12 @@ serve(async (req) => {
        sur le B14. On charge donc la grille du contrat : quand elle couvre un
        article, son prix l'emporte sur tout calcul de liste de prix. */
     const cadre = new ContratCadre(od);
-    await cadre.charger(porteur.id, partenaire.id);
+    /* ⚠️ TOUT LE GROUPE, pas seulement (contact, parent) — voir
+       `famillePartenaire` : le contrat d'AGILIS vit sur « AGILIS 27 », une
+       racine distincte du chapeau « AGILIS » sur lequel la boîte de
+       facturation du groupe faisait atterrir la demande. */
+    const famille = await famillePartenaire(od, partenaire, porteur, societe);
+    await cadre.charger(...famille);
     chrono("contrat cadre chargé");
     /* Le niveau imposé REMPLACE le contrat du client : c'est tout l'intérêt
        du forçage. S'il n'aboutit pas — intitulé introuvable, grille vide —
@@ -1646,7 +1764,7 @@ serve(async (req) => {
        et le nom affiché à l'écran dira lequel a servi. */
     let niveauApplique = "";
     if (niveauImpose) {
-      if (await cadre.chargerNiveau(niveauImpose, porteur.id, partenaire.id)) {
+      if (await cadre.chargerNiveau(niveauImpose, ...famille)) {
         niveauApplique = niveauImpose;
       }
     } else if (!cadre.actif && niveauDefaut) {
@@ -1660,7 +1778,7 @@ serve(async (req) => {
        * ne proposait plus AUCUN panneau : ni KC1, ni EPI, ni FP, ni point de
        * rassemblement. Une ligne sans candidat est pire qu'un prix à vérifier.
        */
-      if (await cadre.chargerNiveau(niveauDefaut, porteur.id, partenaire.id)) {
+      if (await cadre.chargerNiveau(niveauDefaut, ...famille)) {
         niveauApplique = niveauDefaut;
         console.log(`[contrat-cadre] aucun contrat rattaché : grille `
           + `${niveauDefaut} chargée en filet (la liste de prix reste prioritaire)`);
