@@ -186,3 +186,56 @@ describe('formes écrites autrement', () => {
     expect(r.pourquoi).toMatch(/2 fiches portent/);
   });
 });
+
+/* La demande AGILIS / Roissy du 11 septembre 2026.
+ *
+ * ⚠️ CE CAS A COÛTÉ UN DEVIS SUR LA MAUVAISE AGENCE. Le message est de
+ * Cyprien ALLART, `callart@agilis.net`, adresse absente du fichier client :
+ * la correspondance exacte échoue, l'écran passe au DOMAINE, et quatre fiches
+ * portent `@agilis.net`. `clients.find` rendait la première — « AGILIS (27) »,
+ * à Beuzeville — alors que la signature dit Roissy CDG en toutes lettres.
+ *
+ * L'écran passe désormais la main à `rapprocherClient` : c'est ce test qui
+ * fige ce qu'il doit en faire. « AGILIS » ne désigne personne, cinq fiches le
+ * portent ; « ROISSY » n'en désigne qu'une, et c'est ce qui doit l'emporter. */
+describe('la demande de Cyprien ALLART (AGILIS Roissy)', () => {
+  const AGENCES = [
+    ...CLIENTS,
+    c('agilis-roissy', 'AGILIS IDF ROISSY CDG', 'AGILIS IDF ROISSY CDG'),
+    c('agilis-27', 'AGILIS (27)', 'M. Benjamin DUFLO'),
+    c('agilis-limoges', 'AGILIS IDF AGENCE LIMOGES 77', 'AGILIS IDF LIMOGES FOURCHES 77-NUNO'),
+  ];
+
+  const MESSAGE = `Bonjour,
+Pourrais tu m'envoyer un devis pour :
+- 10 supports 40x80mm, longueur 3m
+- 20 bouchons 40x80mm brut
+- 10 fourreaux platine 40x80mm
+- 10 fourreaux platine 80x80mm
+- 20 colliers 40x80mm avec visserie
+Merci de ton retour,
+Cordialement,
+Cyprien ALLART
+Aide Conducteur de Travaux
+Aéroportuaire et équipements de la route
+M: +33 (0) 6 31 60 66 44
+@ : callart@agilis.net
+AGILIS AIRPORT
+Base Vie Est - Aéroport Roissy CDG
+Les Vignes
+77990 Le Mesnil-Amelot`;
+
+  it('retient l’agence de Roissy, pas celle du Vingt-Sept', () => {
+    const r = rapprocherClient(MESSAGE, undefined, AGENCES, new Set());
+    expect(r.retenu?.id).toBe('agilis-roissy');
+  });
+
+  it('ne retient jamais AGILIS (27) : rien dans le message ne la nomme', () => {
+    const r = rapprocherClient(MESSAGE, undefined, AGENCES, new Set());
+    expect(r.retenu?.id).not.toBe('agilis-27');
+    const rangs = r.candidats.map(x => x.client.id);
+    if (rangs.includes('agilis-27') && rangs.includes('agilis-roissy')) {
+      expect(rangs.indexOf('agilis-roissy')).toBeLessThan(rangs.indexOf('agilis-27'));
+    }
+  });
+});

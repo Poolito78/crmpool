@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import { MODELES_GEMINI, urlGemini } from './modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -114,7 +115,7 @@ async function callGroq(texte: string, apiKey: string): Promise<TransportExtrait
 
 async function callGemini(texte: string, geminiKey: string): Promise<TransportExtrait> {
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${geminiKey}`,
+    urlGemini(MODELES_GEMINI[MODELES_GEMINI.length - 1], geminiKey),
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

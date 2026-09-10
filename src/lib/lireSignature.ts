@@ -12,6 +12,8 @@
  * le faire ; c'est déjà le modèle de repli de l'analyse de document.
  */
 
+import { MODELES_GEMINI, urlGemini } from './modelesIA';
+
 export interface ContactSignature {
   nom?: string;
   fonction?: string;
@@ -131,10 +133,10 @@ export async function lireSignature(
     generationConfig: { temperature: 0, maxOutputTokens: 600 },
   };
 
-  for (const modele of ['gemini-2.0-flash', 'gemini-2.0-flash-lite']) {
+  for (const modele of MODELES_GEMINI) {
     try {
       const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent?key=${geminiKey}`,
+        urlGemini(modele, geminiKey),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

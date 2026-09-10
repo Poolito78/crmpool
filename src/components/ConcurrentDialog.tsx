@@ -14,6 +14,7 @@ import type { Produit, Client } from '@/lib/store';
 import { formatMontant } from '@/lib/store';
 import { parseExcel } from '@/lib/parseExcel';
 import * as pdfjsLib from 'pdfjs-dist';
+import { MODELES_GEMINI, urlGemini } from '@/lib/modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -176,7 +177,7 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
   if (geminiKey) {
     try {
       const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+        urlGemini(MODELES_GEMINI[0], geminiKey),
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

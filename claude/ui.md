@@ -214,3 +214,16 @@ client écrit « AGILIS 27 ».
 deux adresses exactes désignent deux fiches, on ne laisse PAS courir jusqu'au
 domaine puis au nom deviné — les deux fiches partagent le groupe AGILIS, et on
 retomberait sur un choix arbitraire en croyant l'avoir déduit.
+
+⚠️ **LE DOMAINE DÉSIGNE LA SOCIÉTÉ, PAS L'AGENCE — et c'est lui qui mordait
+pour de bon.** Même `clients.find` à l'étape suivante. Mesuré le 11/09/2026 :
+la demande vient de Cyprien ALLART, `callart@agilis.net`, dont la signature dit
+« AGILIS AIRPORT — Aéroport Roissy CDG, 77990 Le Mesnil-Amelot ». Cette adresse
+n'est PAS au fichier client, donc la correspondance exacte échoue et l'on passe
+au domaine — où **quatre** fiches portent `@agilis.net` (DUFLO, BRUGEL,
+DE MELO, BLOTIAU). Le devis se créait sur « AGILIS (27) », à Beuzeville.
+Désormais le texte départage, et c'est `rapprocherClient` qui s'en charge — il
+pèse les mots par leur rareté (« AGILIS » ne désigne personne, « ROISSY »
+désigne quelqu'un) et s'abstient quand plusieurs répondent. On lui passe la
+main plutôt que de refaire un classement à côté du sien. Figé par deux tests
+dans `rapprochementClient.test.ts`, avec le texte réel du message.

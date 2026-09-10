@@ -879,10 +879,51 @@ const [contratOdoo, setContratOdoo] = useState<
        déduit. */
     const emailAmbigu = parEmail.length > 1 && !clientParEmail;
 
-    const foundClient = emailAmbigu ? undefined :
+    /* ⚠️ **LE DOMAINE DÉSIGNE LA SOCIÉTÉ, PAS L'AGENCE.** Même défaut que
+       ci-dessus, et c'est celui-là qui mordait pour de bon : `clients.find`
+       rendait la PREMIÈRE fiche du domaine.
+
+       Mesuré le 11/09/2026 sur la demande AGILIS/Roissy. Le message est de
+       Cyprien ALLART, `callart@agilis.net`, dont la signature dit « AGILIS
+       AIRPORT — Aéroport Roissy CDG, 77990 Le Mesnil-Amelot ». Cette adresse
+       n'est PAS au fichier client : la correspondance exacte échoue, on passe
+       au domaine, et quatre fiches portent `@agilis.net` — DUFLO, BRUGEL,
+       DE MELO, BLOTIAU. Le devis se créait sur « AGILIS (27) », à Beuzeville,
+       parce qu'elle sortait la première du tableau.
+
+       Le texte doit donc départager, et `rapprocherClient` sait le faire : il
+       pèse chaque mot par sa rareté dans le fichier — « AGILIS » ne désigne
+       personne, « ROISSY » désigne quelqu'un — écarte le vocabulaire du
+       catalogue, et **s'abstient** quand plusieurs répondent aussi bien. On lui
+       passe la main plutôt que de refaire un classement à côté du sien. */
+    const parDomaine = clients.filter(c => assezLong(c.email)
+      && domainesTexte.includes(c.email!.toLowerCase().split('@')[1]));
+
+    let clientParDomaine: typeof clients[number] | undefined;
+    if (parDomaine.length === 1) {
+      clientParDomaine = parDomaine[0];
+    } else if (parDomaine.length > 1) {
+      const duDomaine = new Set(parDomaine.map(c => c.id));
+      if (rapprochementTexte.retenu && duDomaine.has(rapprochementTexte.retenu.id)) {
+        clientParDomaine = rapprochementTexte.retenu;
+      }
+      console.log('[client] %d fiches partagent le domaine : %s — %s',
+        parDomaine.length,
+        parDomaine.map(c => `${c.nom} (${c.societe || '-'})`).join(' | '),
+        clientParDomaine
+          ? `le texte retient « ${clientParDomaine.societe || clientParDomaine.nom} » (${rapprochementTexte.pourquoi})`
+          : `le texte ne tranche pas : ${rapprochementTexte.pourquoi}`);
+    }
+
+    /* Domaine partagé par plusieurs fiches ET texte muet : on propose au lieu
+       de choisir. Descendre plus bas — raison sociale devinée, puis premier
+       venu — c'est retomber sur l'arbitraire en croyant l'avoir déduit. */
+    const domaineAmbigu = parDomaine.length > 1 && !clientParDomaine
+      && !rapprochementTexte.retenu;
+
+    const foundClient = (emailAmbigu || domaineAmbigu) ? undefined :
       clientParEmail
-      || clients.find(c => assezLong(c.email)
-        && domainesTexte.includes(c.email!.toLowerCase().split('@')[1]))
+      || clientParDomaine
       || (societeMail
         ? clients.find(c => contient(c.societe, societeMail)
                          || contient(c.nom, societeMail))
@@ -910,15 +951,18 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Les fiches qui se disputent l'affaire passent devant les candidats du
        rapprochement par le texte : elles sont désignées par une adresse
        exacte, ce qui est bien plus sûr que des mots pesés. */
-    setClientsProposes(emailAmbigu
-      /* Même forme que les candidats du rapprochement, pour que les pastilles
-         les rendent sans cas particulier. L'adresse tient lieu de « mots » :
-         l'infobulle dit alors sur quoi la fiche a été retrouvée, ce qui est
-         exactement ce qu'on veut lire pour choisir entre deux AGILIS. */
-      ? parEmail.slice(0, 5).map(c => ({ client: c, score: 100, mots: [c.email || ''] }))
-      : (foundClient || rapprochementTexte.retenu
-        ? []
-        : rapprochementTexte.candidats.slice(0, 5)));
+    /* Les fiches en lice prennent la forme des candidats du rapprochement,
+       pour que les pastilles les rendent sans cas particulier. L'adresse tient
+       lieu de « mots » : l'infobulle dit sur quoi la fiche a été retrouvée,
+       ce qu'on veut justement lire pour choisir entre quatre AGILIS. */
+    const enLice = (l: typeof clients) =>
+      l.slice(0, 5).map(c => ({ client: c, score: 100, mots: [c.email || ''] }));
+
+    setClientsProposes(
+      domaineAmbigu ? enLice(parDomaine)
+      : emailAmbigu ? enLice(parEmail)
+      : foundClient || rapprochementTexte.retenu ? []
+      : rapprochementTexte.candidats.slice(0, 5));
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');

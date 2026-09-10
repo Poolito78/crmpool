@@ -33,6 +33,7 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
+import { MODELES_GEMINI, urlGemini } from '@/lib/modelesIA';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -156,7 +157,7 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
   const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (gemKey) {
     try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
+      const r = await fetch(urlGemini(MODELES_GEMINI[0], gemKey), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }] }] }),
       });
@@ -217,7 +218,7 @@ async function callVisionAI(images: { mimeType: string; b64: string }[]): Promis
   if (gemKey) {
     try {
       const parts: any[] = [{ text: IMPORT_PROMPT }, ...images.map(im => ({ inlineData: { mimeType: im.mimeType, data: im.b64 } }))];
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${gemKey}`, {
+      const r = await fetch(urlGemini(MODELES_GEMINI[0], gemKey), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts }] }),
       });

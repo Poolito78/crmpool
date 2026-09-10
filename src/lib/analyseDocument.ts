@@ -1,4 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
+import { MODELES_GEMINI, urlGemini } from './modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -239,12 +240,12 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
 
 /** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */
 async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
-  const models = ['gemini-2.0-flash', 'gemini-2.0-flash-lite'];
+  const models = MODELES_GEMINI;
   let lastError: Error | null = null;
 
   for (const model of models) {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+      urlGemini(model, geminiKey),
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
