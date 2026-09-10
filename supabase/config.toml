@@ -13,3 +13,9 @@ verify_jwt = true
 
 [functions.odoo-stock-sync]
 verify_jwt = true
+
+# Relais Gemini : la cle vit cote serveur, l'acces exige une session MonCRM.
+# Un relais ouvert offrirait a tout venant un acces Gemini facture au
+# proprietaire de la cle — c'est exactement ce que la cle publique permettait.
+[functions.gemini]
+verify_jwt = true

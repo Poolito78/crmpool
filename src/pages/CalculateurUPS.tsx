@@ -366,7 +366,6 @@ export default function CalculateurUPS() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const groqKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
-  const geminiKey2 = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   const openrouterKey2 = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 
   const handleDocumentFile = useCallback(async (file: File) => {
@@ -379,7 +378,7 @@ export default function CalculateurUPS() {
     setExtracting(true);
     setExtractedFile(file.name);
     try {
-      const extrait = await analyserDocumentTransport(file, groqKey, geminiKey2, openrouterKey2);
+      const extrait = await analyserDocumentTransport(file, groqKey, openrouterKey2);
       // Pré-remplir le formulaire
       setAchatForm(prev => ({
         ...prev,
@@ -401,7 +400,7 @@ export default function CalculateurUPS() {
     } finally {
       setExtracting(false);
     }
-  }, [groqKey, geminiKey2, openrouterKey2]);
+  }, [groqKey, openrouterKey2]);
 
   const onDropZone = useCallback((e: React.DragEvent) => {
     e.preventDefault();

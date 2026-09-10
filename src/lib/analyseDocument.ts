@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { MODELES_GEMINI, urlGemini } from './modelesIA';
+import { appelerGemini, texteGemini } from './modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -239,43 +239,25 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
 }
 
 /** Appel Gemini comme fallback — JSON natif, quota gratuit journalier */
-async function analyserViaGemini(texte: string, geminiKey: string): Promise<DocumentAnalysis> {
-  const models = MODELES_GEMINI;
-  let lastError: Error | null = null;
-
-  for (const model of models) {
-    const response = await fetch(
-      urlGemini(model, geminiKey),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: PROMPT }] },
-          contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
-          generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
-        }),
-      }
-    );
-
-    if (response.status === 429 || response.status === 404) {
-      lastError = response.status === 429
-        ? Object.assign(new Error('quota'), { quota: true })
-        : new Error(`Gemini ${model} indisponible (404)`);
-      console.warn(`Gemini ${model} ${response.status} — essai modèle suivant`);
-      continue;
-    }
-
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`Erreur Gemini ${response.status} : ${err.slice(0, 200)}`);
-    }
-
-    const data = await response.json();
-    const text: string = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    return lireAnalyse(text);
+async function analyserViaGemini(texte: string): Promise<DocumentAnalysis> {
+  /* ⚠️ La chaîne de repli vit dans l'Edge Function `gemini`, avec la clé.
+     Le 404 sur modèle retiré et le 429 de quota s'y distinguent désormais, et
+     le message remonté porte le détail de chaque tentative. On garde ici la
+     seule chose qui intéresse l'appelant : `quota`, qui déclenche le repli
+     vers un autre fournisseur plutôt qu'une erreur à l'écran. */
+  try {
+    const data = await appelerGemini({
+      systemInstruction: { parts: [{ text: PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: `Document :
+${texte}` }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
+    });
+    return lireAnalyse(texteGemini(data));
+  } catch (e) {
+    const m = (e as Error).message || '';
+    if (/429|quota/i.test(m)) throw Object.assign(new Error('quota'), { quota: true });
+    throw e;
   }
-
-  throw lastError ?? Object.assign(new Error('quota'), { quota: true });
 }
 
 export async function analyserDocument(
@@ -283,7 +265,6 @@ export async function analyserDocument(
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
     | { type: 'text'; texte: string },
   apiKey: string,
-  geminiKey?: string,
   openrouterKey?: string
 ): Promise<DocumentAnalysis> {
   let texte: string;
@@ -338,14 +319,17 @@ export async function analyserDocument(
     console.warn('Groq quota dépassé — basculement sur Gemini');
   }
 
-  // 2. Fallback Gemini
-  if (geminiKey) {
-    try {
-      return await analyserViaGemini(texte, geminiKey);
-    } catch (err: any) {
-      if (!err.quota) throw err;
-      console.warn('Gemini quota dépassé — basculement sur OpenRouter');
-    }
+  /* 2. Repli Gemini — par l'Edge Function `gemini`.
+     ⚠️ **PLUS DE GARDE `if (geminiKey)`.** La clé vit côté serveur : le
+     navigateur ne PEUT plus savoir si elle est configurée, et faire semblant
+     en gardant une variable de build reviendrait à la remettre dans le bundle,
+     ce que ce chantier vient précisément de supprimer. On essaie donc, et
+     l'échec parle : la fonction dit si le secret manque. */
+  try {
+    return await analyserViaGemini(texte);
+  } catch (err: any) {
+    if (!err.quota) console.warn('Gemini indisponible — basculement sur OpenRouter :', err?.message);
+    else console.warn('Gemini quota dépassé — basculement sur OpenRouter');
   }
 
   // 3. Fallback OpenRouter

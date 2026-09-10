@@ -681,7 +681,6 @@ const [contratOdoo, setContratOdoo] = useState<
   const [creerDevisNotes, setCreerDevisNotes] = useState('');
 
   const apiKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
-  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 
   /* ── helpers ── */
@@ -1057,7 +1056,7 @@ const [contratOdoo, setContratOdoo] = useState<
       if (pdfFile) {
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
         if (texteCtx.trim()) analyseTexteRef.current = texteCtx;
-        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, geminiKey, openrouterKey);
+        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey);
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
         let texteAnalyse = texteCtx;
@@ -1076,7 +1075,7 @@ const [contratOdoo, setContratOdoo] = useState<
           } catch { /* garder texte brut */ }
         }
         analyseTexteRef.current = texteAnalyse;
-        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, geminiKey, openrouterKey);
+        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, openrouterKey);
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
@@ -1137,7 +1136,7 @@ const [contratOdoo, setContratOdoo] = useState<
       for (const f of [...emlFiles, ...msgFiles]) {
         try {
           const images = await extraireImages(f);
-          const c = await lireSignature(images, geminiKey);
+          const c = await lireSignature(images);
           if (c) { setSignature(c); break; }
         } catch { /* la signature reste facultative */ }
       }

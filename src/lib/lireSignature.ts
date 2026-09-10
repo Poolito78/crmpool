@@ -12,7 +12,7 @@
  * le faire ; c'est déjà le modèle de repli de l'analyse de document.
  */
 
-import { MODELES_GEMINI, urlGemini } from './modelesIA';
+import { appelerGemini, texteGemini } from './modelesIA';
 
 export interface ContactSignature {
   nom?: string;
@@ -117,9 +117,8 @@ Règles :
  */
 export async function lireSignature(
   images: ImageExtraite[],
-  geminiKey?: string,
 ): Promise<ContactSignature | null> {
-  if (!geminiKey || !images.length) return null;
+  if (!images.length) return null;
 
   const corps = {
     contents: [{
@@ -133,34 +132,27 @@ export async function lireSignature(
     generationConfig: { temperature: 0, maxOutputTokens: 600 },
   };
 
-  for (const modele of MODELES_GEMINI) {
-    try {
-      const r = await fetch(
-        urlGemini(modele, geminiKey),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(corps),
-        },
-      );
-      if (!r.ok) { console.warn(`[signature] ${modele} ${r.status}`); continue; }
-      const data = await r.json();
-      const texte = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      const json = texte.match(/\{[\s\S]*\}/);
-      if (!json) { console.warn(`[signature] ${modele} : pas de JSON`); continue; }
+  /* ⚠️ La chaîne de repli et la clé vivent désormais dans l'Edge Function
+     `gemini` : ici on demande, on ne choisit plus. Un échec porte le détail de
+     chaque modèle essayé — c'est ce qui manquait pour distinguer un modèle
+     retiré d'une API non activée sur le projet Google. */
+  try {
+    const texte = texteGemini(await appelerGemini(corps));
+    const json = texte.match(/\{[\s\S]*\}/);
+    if (!json) { console.warn('[signature] pas de JSON dans la réponse'); return null; }
 
-      const brut = JSON.parse(json[0]) as Record<string, unknown>;
-      const c: ContactSignature = {};
-      for (const cle of ['nom', 'fonction', 'societe', 'email', 'telephone',
-                         'mobile', 'adresse', 'codePostal', 'ville'] as const) {
-        const v = brut[cle];
-        if (typeof v === 'string' && v.trim()) c[cle] = v.trim();
-      }
-      // Une signature sans nom ni société n'apprend rien d'utile.
-      return (c.nom || c.societe) ? c : null;
-    } catch (e) {
-      console.warn(`[signature] ${modele} exception`, e);
+    const brut = JSON.parse(json[0]) as Record<string, unknown>;
+    const c: ContactSignature = {};
+    for (const cle of ['nom', 'fonction', 'societe', 'email', 'telephone',
+                       'mobile', 'adresse', 'codePostal', 'ville'] as const) {
+      const v = brut[cle];
+      if (typeof v === 'string' && v.trim()) c[cle] = v.trim();
     }
+    // Une signature sans nom ni société n'apprend rien d'utile.
+    return (c.nom || c.societe) ? c : null;
+  } catch (e) {
+    console.warn('[signature]', (e as Error).message);
+    return null;
   }
   return null;
 }

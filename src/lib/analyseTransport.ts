@@ -1,5 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
-import { MODELES_GEMINI, urlGemini } from './modelesIA';
+import { appelerGemini, texteGemini } from './modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -113,23 +113,22 @@ async function callGroq(texte: string, apiKey: string): Promise<TransportExtrait
   return parseJSON(data.choices?.[0]?.message?.content ?? '');
 }
 
-async function callGemini(texte: string, geminiKey: string): Promise<TransportExtrait> {
-  const res = await fetch(
-    urlGemini(MODELES_GEMINI[MODELES_GEMINI.length - 1], geminiKey),
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: PROMPT }] },
-        contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
-        generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 512 },
-      }),
-    },
-  );
-  if (res.status === 429) throw Object.assign(new Error('quota'), { quota: true });
-  if (!res.ok) throw new Error(`Gemini ${res.status}`);
-  const data = await res.json();
-  return parseJSON(data.candidates?.[0]?.content?.parts?.[0]?.text ?? '');
+async function callGemini(texte: string): Promise<TransportExtrait> {
+  /* La clé et la chaîne de repli sont dans l'Edge Function `gemini`. Seul
+     `quota` compte ici : il fait passer au fournisseur suivant. */
+  try {
+    const data = await appelerGemini({
+      systemInstruction: { parts: [{ text: PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: `Document :
+${texte}` }] }],
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 512 },
+    });
+    return parseJSON(texteGemini(data));
+  } catch (e) {
+    const m = (e as Error).message || '';
+    if (/429|quota/i.test(m)) throw Object.assign(new Error('quota'), { quota: true });
+    throw e;
+  }
 }
 
 async function callOpenRouter(texte: string, key: string): Promise<TransportExtrait> {
@@ -166,7 +165,6 @@ async function callOpenRouter(texte: string, key: string): Promise<TransportExtr
 export async function analyserDocumentTransport(
   file: File,
   apiKey?: string,
-  geminiKey?: string,
   openrouterKey?: string,
 ): Promise<TransportExtrait> {
   // Extraire le texte
@@ -191,10 +189,11 @@ export async function analyserDocumentTransport(
     try { return await callGroq(texte, apiKey); }
     catch (e: any) { if (!e.quota) throw e; console.warn('Groq quota → Gemini'); }
   }
-  if (geminiKey) {
-    try { return await callGemini(texte, geminiKey); }
-    catch (e: any) { if (!e.quota) throw e; console.warn('Gemini quota → OpenRouter'); }
-  }
+  /* Plus de garde sur une clé que le front n'a plus : elle est dans l'Edge
+     Function. On essaie, et l'on passe au suivant quoi qu'il arrive — une
+     panne de Gemini ne doit pas emporter la chaîne entière. */
+  try { return await callGemini(texte); }
+  catch (e: any) { console.warn('Gemini → OpenRouter :', e?.message); }
   if (openrouterKey) {
     try { return await callOpenRouter(texte, openrouterKey); }
     catch (e: any) { if (!e.quota) throw e; }

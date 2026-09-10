@@ -14,7 +14,7 @@ import type { Produit, Client } from '@/lib/store';
 import { formatMontant } from '@/lib/store';
 import { parseExcel } from '@/lib/parseExcel';
 import * as pdfjsLib from 'pdfjs-dist';
-import { MODELES_GEMINI, urlGemini } from '@/lib/modelesIA';
+import { appelerGemini, texteGemini } from '@/lib/modelesIA';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.mjs',
@@ -87,7 +87,6 @@ function tronquer(t: string, max = 6000) {
 
 async function callAI(texte: string): Promise<ExtractedProduit[]> {
   const groqKey = import.meta.env.VITE_GROQ_API_KEY as string | undefined;
-  const geminiKey = import.meta.env.VITE_GEMINI_API_KEY as string | undefined;
   const openrouterKey = import.meta.env.VITE_OPENROUTER_API_KEY as string | undefined;
 
   /**
@@ -173,28 +172,17 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
     } catch { /* fallthrough */ }
   }
 
-  // 2. Gemini
-  if (geminiKey) {
-    try {
-      const r = await fetch(
-        urlGemini(MODELES_GEMINI[0], geminiKey),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: PROMPT_TARIF }] },
-            contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 2048 },
-          }),
-        }
-      );
-      if (r.ok) {
-        const data = await r.json();
-        const result = parseResponse(data.candidates?.[0]?.content?.parts?.[0]?.text ?? '');
-        if (result) return result;
-      }
-    } catch { /* fallthrough */ }
-  }
+  /* 2. Gemini, par l'Edge Function : la clé ne vit plus dans le bundle.
+     Plus de garde `if (geminiKey)` — le navigateur ne peut plus savoir si le
+     secret est posé, et l'échec fait simplement passer au suivant. */
+  try {
+    const result = parseResponse(texteGemini(await appelerGemini({
+      systemInstruction: { parts: [{ text: PROMPT_TARIF }] },
+      contents: [{ role: 'user', parts: [{ text: `Document :\n${texte}` }] }],
+      generationConfig: { temperature: 0, maxOutputTokens: 2048 },
+    })));
+    if (result) return result;
+  } catch (e) { console.warn('[concurrent] Gemini → OpenRouter :', (e as Error).message); }
 
   // 3. OpenRouter
   if (openrouterKey) {
@@ -212,7 +200,7 @@ async function callAI(texte: string): Promise<ExtractedProduit[]> {
     } catch { /* fallthrough */ }
   }
 
-  throw new Error('Aucun fournisseur IA disponible. Vérifiez vos clés API (VITE_GROQ_API_KEY, VITE_GEMINI_API_KEY).');
+  throw new Error('Aucun fournisseur IA n’a répondu. Vérifiez VITE_GROQ_API_KEY et VITE_OPENROUTER_API_KEY côté front, et le secret GEMINI_API_KEY des Edge Functions.');
 }
 
 export default function ConcurrentDialog({

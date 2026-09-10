@@ -33,7 +33,7 @@ import { useTableColumns } from '@/hooks/useTableColumns';
 import ColResizeHandle from '@/components/ColResizeHandle';
 import RowActionsMenu from '@/components/RowActionsMenu';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
-import { MODELES_GEMINI, urlGemini } from '@/lib/modelesIA';
+import { appelerGemini, texteGemini } from '@/lib/modelesIA';
 
 // ── Export helpers ────────────────────────────────────────────────────────────
 
@@ -154,18 +154,14 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
     } catch { /* fallthrough */ }
   }
 
-  const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
-  if (gemKey) {
-    try {
-      const r = await fetch(urlGemini(MODELES_GEMINI[0], gemKey), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }] }] }),
-      });
-      const d = await r.json();
-      const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
-    } catch { /* fallthrough */ }
-  }
+  /* Gemini par l'Edge Function : la clé ne vit plus dans le bundle, donc plus
+     de garde `if (gemKey)` — on essaie, et l'échec passe au suivant. */
+  try {
+    const text = texteGemini(await appelerGemini({
+      contents: [{ parts: [{ text: `${IMPORT_PROMPT}\n\n${texte.slice(0, 12000)}` }] }],
+    }));
+    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  } catch (e) { console.warn('[veille] Gemini → OpenRouter :', (e as Error).message); }
 
   const orKey = getOpenRouterApiKey();
   if (orKey) {
@@ -179,7 +175,7 @@ async function callTarifAI(texte: string): Promise<ExtractedProduit[]> {
     return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
   }
 
-  throw new Error('Aucune clé API configurée (VITE_GROQ_API_KEY, VITE_GEMINI_API_KEY ou VITE_OPENROUTER_API_KEY)');
+  throw new Error('Aucun fournisseur IA n’a répondu (VITE_GROQ_API_KEY, VITE_OPENROUTER_API_KEY, ou le secret GEMINI_API_KEY des Edge Functions)');
 }
 
 function fileToBase64(file: File): Promise<string> {
@@ -195,7 +191,6 @@ function fileToBase64(file: File): Promise<string> {
 async function callVisionAI(images: { mimeType: string; b64: string }[]): Promise<ExtractedProduit[]> {
   if (images.length === 0) return [];
   const groqKey = import.meta.env.VITE_GROQ_API_KEY;
-  const gemKey = import.meta.env.VITE_GEMINI_API_KEY;
   const orKey = getOpenRouterApiKey();
   let lastErr: Error | null = null;
 
@@ -214,20 +209,12 @@ async function callVisionAI(images: { mimeType: string; b64: string }[]): Promis
     } catch (e: any) { lastErr = e; }
   }
 
-  // 1) Gemini (vision) si clé dispo
-  if (gemKey) {
-    try {
-      const parts: any[] = [{ text: IMPORT_PROMPT }, ...images.map(im => ({ inlineData: { mimeType: im.mimeType, data: im.b64 } }))];
-      const r = await fetch(urlGemini(MODELES_GEMINI[0], gemKey), {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      });
-      const d = await r.json();
-      if (!r.ok || d.error) throw new Error(`Gemini : ${d.error?.message || r.status}`);
-      const text = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-      return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
-    } catch (e: any) { lastErr = e; }
-  }
+  // 1) Gemini (vision), par l'Edge Function
+  try {
+    const parts: any[] = [{ text: IMPORT_PROMPT }, ...images.map(im => ({ inlineData: { mimeType: im.mimeType, data: im.b64 } }))];
+    const text = texteGemini(await appelerGemini({ contents: [{ parts }] }));
+    return JSON.parse(text.match(/\[[\s\S]*\]/)?.[0] || '[]');
+  } catch (e: any) { lastErr = e; }
 
   // 2) OpenRouter — plusieurs modèles vision gratuits (dispo qui change souvent)
   if (orKey) {
