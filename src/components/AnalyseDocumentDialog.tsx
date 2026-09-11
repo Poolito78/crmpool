@@ -3543,6 +3543,34 @@ const [contratOdoo, setContratOdoo] = useState<
                               variant="outline"
                               className="h-7 text-xs"
                               onClick={() => {
+                                /* ⚠️ **NE PAS RECRÉER CE QUI EXISTE DÉJÀ.**
+                                   Chaque clic ajoutait une fiche de plus : le
+                                   11/09/2026, le fichier portait DEUX
+                                   « Cyrpien ALLART / AGILIS IDF ROISSY CDG »,
+                                   créés à un jour d'intervalle, tous deux avec
+                                   `callart@agilis.net`. Et plus il y a de
+                                   fiches sur une même adresse, moins elle
+                                   désigne quelqu'un : l'appli s'abstenait, on
+                                   recréait, on aggravait. « Je crée le client
+                                   mais à la relance il n'est pas retrouvé. »
+
+                                   On cherche donc d'abord — par l'adresse de la
+                                   fiche ET par celle de ses contacts, puisque
+                                   c'est ce couple qui sert à la retrouver. */
+                                const cherchee = String(clientOdoo.email || '')
+                                  .trim().toLowerCase();
+                                const deja = cherchee
+                                  ? clients.find(c =>
+                                      String(c.email || '').trim().toLowerCase() === cherchee
+                                      || (c.contacts || []).some(ct =>
+                                        String(ct.email || '').trim().toLowerCase() === cherchee))
+                                  : undefined;
+                                if (deja) {
+                                  setCreerDevisClientId(deja.id);
+                                  setClientOdoo(null);
+                                  toast.info(`${deja.societe || deja.nom} existe déjà : fiche retenue`);
+                                  return;
+                                }
                                 const id = generateId();
                                 /* ⚠️ **LE CONTACT S'INSCRIT AVEC LA SOCIÉTÉ.**
                                    La fiche créée ne portait que l'adresse de la
