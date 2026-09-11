@@ -1601,10 +1601,27 @@ const [contratOdoo, setContratOdoo] = useState<
 
     const { tag, automatique } = candidat;
     if (!automatique) {
+      /* ⚠️ **UNE PROPOSITION DE TAG NE DOIT PAS S'ÉVANOUIR.** Elle attendait
+         un clic pendant DIX SECONDES, puis disparaissait sans laisser de
+         trace — et le tag n'était jamais inscrit. « J'ai déjà tagué mais ce
+         n'est pas persistant » : c'est cela, et l'utilisateur n'avait aucun
+         moyen de le savoir, le choix de l'article ayant bien été pris en
+         compte par ailleurs.
+
+         Mesuré sur « colliers 40x80mm avec visserie » face à « BRIDE 80X40
+         SIMPLE FACE P50 » : le résidu fait trois mots — colliers, 40x80mm,
+         visserie — donc au-dessus de MOTS_MAX_AUTOMATIQUE, donc proposé. Or
+         « collier » EST le mot du client pour une bride : le tag le plus utile
+         du lot était justement celui qu'on laissait filer.
+
+         La proposition reste donc à l'écran jusqu'à ce qu'on tranche. Elle ne
+         s'inscrit toujours pas toute seule — trois mots peuvent être une
+         phrase de circonstance — mais le choix cesse d'être une course. */
       toast(`Retenir « ${tag} » comme tag de ${p.reference} ?`, {
         description: 'Ce mot retrouverait cet article dans la recherche. Jamais affiché dans le devis.',
-        duration: 10000,
+        duration: Infinity,
         action: { label: 'Retenir', onClick: () => { void ajouterTag(p.id, tag, 'appris'); } },
+        cancel: { label: 'Non', onClick: () => {} },
       });
       return;
     }

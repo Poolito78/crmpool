@@ -1225,10 +1225,14 @@ export default function Devis() {
 
     const { tag, automatique } = candidat;
     if (!automatique) {
+      /* ⚠️ Même raison qu'au dialogue d'analyse : une proposition de tag qui
+         s'évanouit en dix secondes n'est jamais retenue, et l'utilisateur
+         croit avoir tagué. Elle attend désormais qu'on tranche. */
       toast(`Retenir « ${tag} » comme tag de ${p.reference} ?`, {
         description: 'Ce mot retrouverait cet article dans la recherche. Jamais affiché dans le devis.',
-        duration: 10000,
+        duration: Infinity,
         action: { label: 'Retenir', onClick: () => { void ajouterTag(p.id, tag, 'appris'); } },
+        cancel: { label: 'Non', onClick: () => {} },
       });
       return;
     }
