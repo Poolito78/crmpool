@@ -959,9 +959,22 @@ const [contratOdoo, setContratOdoo] = useState<
     const domaineAmbigu = parDomaine.length > 1 && !clientParDomaine
       && !rapprochementTexte.retenu;
 
-    const foundClient = (emailAmbigu || domaineAmbigu) ? undefined :
+    /* ⚠️ **UNE AMBIGUÏTÉ AU NIVEAU FAIBLE N'ANNULE PAS UNE CERTITUDE AU NIVEAU
+       FORT.** Cette ligne écrivait `(emailAmbigu || domaineAmbigu) ? undefined`,
+       si bien que `domaineAmbigu` effaçait `clientParEmail` — une décision prise
+       sur l'ADRESSE EXACTE, le signal le plus sûr dont on dispose.
+
+       Symptôme, le 11/09/2026 : une seule fiche portait `callart@agilis.net`
+       (celle d'AGILIS IDF ROISSY CDG, via son contact), mais six fiches
+       partagent `@agilis.net` et le texte ne les départage pas. Le domaine
+       était donc « ambigu », et le client s'affichait en pastilles — proposé,
+       jamais sélectionné — alors qu'il était identifié sans le moindre doute.
+
+       Chaque niveau ne répond donc que de LUI-MÊME : l'ambiguïté du domaine ne
+       pèse que si l'adresse exacte n'a rien tranché. */
+    const foundClient = emailAmbigu ? undefined :
       clientParEmail
-      || clientParDomaine
+      || (domaineAmbigu ? undefined : clientParDomaine)
       || (societeMail
         ? clients.find(c => contient(c.societe, societeMail)
                          || contient(c.nom, societeMail))
@@ -1029,7 +1042,10 @@ const [contratOdoo, setContratOdoo] = useState<
       : [];
 
     setClientsProposes(
-      domaineAmbigu
+      /* Ne rien proposer quand l'adresse exacte a tranché : une pastille est
+         une question, et la question ne se pose plus. */
+      clientParEmail ? []
+      : domaineAmbigu
         ? dedoublonne([...enLice(parDomaine), ...enLice(duGroupe),
                        ...rapprochementTexte.candidats]).slice(0, 8)
       : emailAmbigu
