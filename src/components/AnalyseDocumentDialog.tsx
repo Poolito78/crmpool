@@ -2383,8 +2383,27 @@ const [contratOdoo, setContratOdoo] = useState<
           if (prev && cts.some(c => String(c.id) === prev)) return prev;
           return String((parNom || parMail)?.id ?? '');
         });
-        // Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
-        if (!cli && data?.coordonnees?.nom) {
+        /* Client absent de MonCRM mais connu d'Odoo : on propose de l'importer.
+         *
+         * ⚠️ **« ABSENT » N'EST PAS « PAS ENCORE SÉLECTIONNÉ ».** La condition
+         * ne regardait que `cli`, c'est-à-dire le client RETENU à l'écran. Tant
+         * qu'on n'avait rien choisi — le cas même où l'on hésite — le bandeau
+         * annonçait « AGILIS IDF ROISSY CDG existe dans Odoo mais pas encore
+         * dans MonCRM » alors que la fiche existait. Il invitait à créer ce qui
+         * était déjà là, et c'est ainsi que le fichier s'est retrouvé avec deux
+         * « Cyrpien ALLART / AGILIS IDF ROISSY CDG » le 11/09/2026.
+         *
+         * On cherche donc pour de bon, par l'adresse du partenaire Odoo — celle
+         * de la fiche comme celles de ses contacts, puisque c'est ce couple qui
+         * sert à la retrouver partout ailleurs. */
+        const mailOdoo = String(data?.coordonnees?.email || '').trim().toLowerCase();
+        const dejaAuFichier = mailOdoo
+          ? clients.some(c =>
+              String(c.email || '').trim().toLowerCase() === mailOdoo
+              || (c.contacts || []).some(ct =>
+                String(ct.email || '').trim().toLowerCase() === mailOdoo))
+          : false;
+        if (!cli && !dejaAuFichier && data?.coordonnees?.nom) {
           setClientOdoo({ ...data.coordonnees, societe: data.societe || data.coordonnees.nom });
         } else setClientOdoo(null);
         if (data?.contrat) {
