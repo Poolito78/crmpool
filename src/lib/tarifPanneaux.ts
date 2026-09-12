@@ -1,10 +1,11 @@
 import {
-  TARIFS, PANO_TABLE, PANO_CLASS, SUP_PRIX, LONGUEURS_MAT, POSE, TAILLES,
-  type NiveauTarif, type Gamme, type Taille, type GrilleForme,
+  TARIFS, PANO_TABLE, PANO_CLASS, SUP_PRIX, SUP_SECT, SECTIONS_SUPPORT,
+  LONGUEURS_MAT, POSE, TAILLES,
+  type NiveauTarif, type Gamme, type Taille, type GrilleForme, type SectionSupport,
 } from '@/lib/tarifPanneaux.donnees';
 
-export { TAILLES, LONGUEURS_MAT, POSE };
-export type { NiveauTarif, Gamme, Taille };
+export { TAILLES, LONGUEURS_MAT, POSE, SECTIONS_SUPPORT };
+export type { NiveauTarif, Gamme, Taille, SectionSupport };
 
 /**
  * Chiffrage d'un panneau de police, de son panonceau et de son support.
@@ -245,52 +246,133 @@ export function panonceauPour(
   };
 }
 
+/** Intitulé d'une section, tel qu'il se lit à l'écran et sur le devis. */
+export const LIBELLE_SECTION: Record<SectionSupport, string> = {
+  'Ø60': 'Mât Ø60 galvanisé',
+  '80x40': 'Support 80×40',
+  '80x80x2': 'Support 80×80×2',
+  '80x80x3': 'Support 80×80×3',
+  'Ø76alu': 'Tube alu Ø76',
+  'Ø90alu': 'Tube alu Ø90',
+};
+
+/**
+ * Panneaux qui NE SE POSENT PAS à 2,10 m sous le panneau.
+ *
+ * Les chevrons B21 et les balises de contournement J5 se posent bas : ils
+ * bordent l'obstacle qu'ils signalent, ils ne surplombent pas un trottoir. La
+ * hauteur sous panneau y vaut, par défaut, la hauteur du panneau lui-même —
+ * un J5 de 500 se pose à 500 mm, un B21a de 650 à 650 mm — et reste
+ * modifiable, la pose dépendant du terrain.
+ *
+ * ⚠️ Le J5 n'a AUCUNE grille dans `TARIFS` : cette règle le concerne, mais
+ * tant qu'il n'est pas tarifé il n'atteint pas le chiffrage. C'est voulu —
+ * on ne lui invente pas un prix de triangle.
+ */
+export function estPoseBasse(code: string): boolean {
+  const t = String(code || '').toUpperCase().replace(/\s+/g, '');
+  return /^B21/.test(t) || /^J5/.test(t);
+}
+
+/**
+ * Prix d'une longueur de support, section par section.
+ *
+ * Les tables de `SUP_SECT` sont TROUÉES : le 80×40 n'a ni 2 m ni 3 m, les
+ * tubes alu s'arrêtent à 4 m. Une longueur absente se prolonge depuis la plus
+ * proche longueur inférieure, au mètre linéaire du tarif (`leml`) — c'est ce
+ * que fait déjà le Ø60 au-delà de 5 m, et la vérification le confirme : en
+ * 80×40 R4, 1,5 m + 1 × 6,95 donne 18,60 là où le tarif porte 18,58.
+ *
+ * En deçà de la plus courte longueur tarifée, on prend celle-là : un support
+ * plus court ne se vend pas, l'extrapoler vers le bas inventerait un prix.
+ */
+function prixSection(section: SectionSupport, longueur: number, niveau: NiveauTarif):
+  { prix: number; exact: boolean } | null {
+  const table = section === 'Ø60'
+    ? (SUP_PRIX[niveau] ?? SUP_PRIX.R4)
+    : (SUP_SECT[niveau] ?? SUP_SECT.R4)?.[section];
+  if (!table) return null;
+
+  const bareme: Record<string, number> = section === 'Ø60'
+    ? (table as { mat: Record<string, number> }).mat
+    : (table as Record<string, number>);
+  const leml = section === 'Ø60'
+    ? (table as { leml: number }).leml
+    : (table as Record<string, number>).leml;
+
+  const exact = bareme[String(longueur)];
+  if (exact != null) return { prix: exact, exact: true };
+
+  const connues = Object.keys(bareme)
+    .filter(k => k !== 'leml' && k !== 'collier')
+    .map(Number)
+    .filter(n => !isNaN(n))
+    .sort((a, b) => a - b);
+  if (!connues.length || !leml) return null;
+
+  const inferieure = [...connues].reverse().find(l => l < longueur);
+  if (inferieure == null) return { prix: bareme[String(connues[0])], exact: false };
+  return {
+    prix: Math.round((bareme[String(inferieure)] + (longueur - inferieure) * leml) * 100) / 100,
+    exact: false,
+  };
+}
+
 export interface Support {
+  section: SectionSupport;
+  libelle: string;
   /** Longueur normalisée, en mètres. */
   longueur: number;
   prix: number;
-  /** Colliers de fixation, un par élément porté. */
-  colliers: number;
-  prixColliers: number;
+  /** Faux quand la longueur ne figure pas au tarif et a été prolongée au ml. */
+  prixExact: boolean;
   explication: string;
 }
 
 /**
- * Mât Ø60 pour un ensemble panneau + panonceau.
+ * Support pour un ensemble panneau + panonceau.
  *
  * La longueur se déduit de la réglementation, pas d'un choix : hauteur libre
  * sous le panneau le plus bas (2,10 m en agglomération), plus la hauteur de ce
  * qui est porté, plus l'ancrage (0,50 m). On arrondit ensuite à la longueur
  * standard immédiatement supérieure — un mât ne se coupe pas à la demande.
+ *
+ * La hauteur libre et l'ancrage sont réglables : la première parce que les
+ * chevrons et les balises se posent bas (voir `estPoseBasse`), le second
+ * parce qu'un massif béton n'a pas la profondeur d'un scellement en pleine
+ * terre.
+ *
+ * ⚠️ **LES FIXATIONS NE SONT PLUS COMPTÉES ICI.** Elles l'étaient à raison
+ * d'une par élément porté, ce qui ne correspond à rien : la règle ISOSIGN est
+ * UNE BRIDE PAR RAIL, et le nombre de rails se lit dans la table du catalogue
+ * — un B21a1 en porte quatre, un panonceau 500×150 un seul. Voir
+ * `fixationsPour` dans `bridesDevis.ts`.
  */
 export function supportPour(
   hauteursPorteesM: number[],
-  { niveau = 'R4', hauteurLibre = POSE.hauteurLibre }: {
-    niveau?: NiveauTarif; hauteurLibre?: number;
+  { niveau = 'R4', hauteurLibre = POSE.hauteurLibre, ancrage = POSE.ancrage,
+    section = 'Ø60' }: {
+    niveau?: NiveauTarif; hauteurLibre?: number; ancrage?: number;
+    section?: SectionSupport;
   } = {},
 ): Support | null {
-  const p = SUP_PRIX[niveau] ?? SUP_PRIX.R4;
-  if (!p) return null;
-
   const porte = hauteursPorteesM.reduce((s, h) => s + (h || 0), 0);
-  const besoin = POSE.ancrage + hauteurLibre + porte;
+  const besoin = ancrage + hauteurLibre + porte;
   const longueur = LONGUEURS_MAT.find(l => l >= besoin - 1e-6)
     ?? LONGUEURS_MAT[LONGUEURS_MAT.length - 1];
 
-  let prix = p.mat[String(longueur)];
-  if (prix == null) {
-    // Au-delà de 5 m le tarif se prolonge au mètre linéaire.
-    prix = Math.round((p.mat['5'] + (longueur - 5) * p.leml) * 100) / 100;
-  }
+  const p = prixSection(section, longueur, niveau);
+  if (!p) return null;
 
-  const colliers = Math.max(1, hauteursPorteesM.length);
   return {
+    section,
+    libelle: LIBELLE_SECTION[section],
     longueur,
-    prix,
-    colliers,
-    prixColliers: Math.round(colliers * p.collier * 100) / 100,
-    explication: `${longueur} m = ${POSE.ancrage} d'ancrage + ${hauteurLibre} de hauteur libre`
-      + ` + ${Math.round(porte * 100) / 100} porté(s), arrondi au standard supérieur`,
+    prix: p.prix,
+    prixExact: p.exact,
+    explication: `${longueur} m = ${ancrage} d'ancrage + ${hauteurLibre} de hauteur libre`
+      + ` + ${Math.round(porte * 100) / 100} porté(s), arrondi au standard supérieur`
+      + (p.exact ? '' : ` — longueur absente du tarif ${section}, prolongée au mètre linéaire`),
   };
 }
 

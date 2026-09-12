@@ -2,6 +2,10 @@ import { estCodeChantier } from '@/lib/tarifPanneaux';
 import {
   RAILS_PANNEAU, RAILS_PANONCEAU, RAILS_FIXES, RAILS_ZONE, RAILS_J4,
 } from '@/lib/railsPanneaux.donnees';
+import {
+  SUP_PRIX, BRIDE_ACIER, COLLIER_ALU,
+  type NiveauTarif, type SectionSupport,
+} from '@/lib/tarifPanneaux.donnees';
 
 /**
  * Combien de brides un devis demande-t-il ?
@@ -265,5 +269,78 @@ export function compterBrides(lignes: LigneABrider[]): ComptageBrides {
     lignes: bridees,
     aVerifier,
     brides: bridees.reduce((s, b) => s + b.brides, 0),
+  };
+}
+
+/**
+ * L'article de fixation qu'appelle une section de support, et son prix.
+ *
+ * **LA SECTION COMMANDE LA FIXATION.** Un mât rond galvanisé se ceinture d'un
+ * collier ; un profil carré ou rectangulaire se boulonne par une bride acier,
+ * qui se pince sur l'arête ; les tubes aluminium ont leur collier propre, six
+ * fois plus cher qu'un collier galvanisé. Choisir la section sans changer la
+ * fixation reviendrait à facturer des colliers Ø60 sur un 80×80.
+ */
+export function fixationDeSection(
+  section: SectionSupport,
+  niveau: NiveauTarif = 'R4',
+): { nom: string; prix: number } {
+  if (section === 'Ø76alu' || section === 'Ø90alu') {
+    return { nom: 'Collier alu', prix: (COLLIER_ALU[niveau] ?? COLLIER_ALU.R4) };
+  }
+  if (section === 'Ø60') {
+    return {
+      nom: 'Collier galvanisé Ø60',
+      prix: (SUP_PRIX[niveau] ?? SUP_PRIX.R4).collier,
+    };
+  }
+  return { nom: 'Bride acier', prix: (BRIDE_ACIER[niveau] ?? BRIDE_ACIER.R4) };
+}
+
+export interface Fixations {
+  /** Nom de l'article — collier ou bride, selon la section du support. */
+  nom: string;
+  prixUnitaire: number;
+  /**
+   * Nombre de fixations : UNE PAR RAIL, lu dans la table du catalogue.
+   * `null` quand aucun élément n'a pu être tranché — on ne compte pas à vide.
+   */
+  nombre: number | null;
+  prix: number | null;
+  /** Le détail de ce qui a été compté, pour que le devis se relise. */
+  lignes: LigneBridee[];
+  /** Les éléments hors table : ils ne sont PAS dans le nombre. */
+  aVerifier: LigneDouteuse[];
+  explication: string;
+}
+
+/**
+ * Fixations d'un ensemble : une par rail, au prix de la section choisie.
+ *
+ * On ne devine rien. Un élément dont la famille ou la cote manque à la table
+ * ressort dans `aVerifier`, hors du compte : une bride en trop se facture au
+ * client, une bride en moins manque sur le chantier, et ni l'une ni l'autre
+ * ne se voit sur un total muet.
+ */
+export function fixationsPour(
+  elements: LigneABrider[],
+  { niveau = 'R4', section = 'Ø60' }: {
+    niveau?: NiveauTarif; section?: SectionSupport;
+  } = {},
+): Fixations {
+  const { nom, prix: prixUnitaire } = fixationDeSection(section, niveau);
+  const comptage = compterBrides(elements);
+  const nombre = comptage.lignes.length ? comptage.brides : null;
+
+  return {
+    nom,
+    prixUnitaire,
+    nombre,
+    prix: nombre == null ? null : Math.round(nombre * prixUnitaire * 100) / 100,
+    lignes: comptage.lignes,
+    aVerifier: comptage.aVerifier,
+    explication: comptage.lignes
+      .map(b => `${b.famille}${b.cote !== '—' ? ` ${b.cote}` : ''} : ${b.railsUnitaires} rail(s)`)
+      .join(' · ') || 'aucun élément dont la table donne les rails',
   };
 }

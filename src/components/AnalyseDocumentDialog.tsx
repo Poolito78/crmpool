@@ -22,7 +22,8 @@ import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
   codeDansTexte, estCodeChantier, prixPanneau, panonceauPour, supportPour, hauteurDeDimension,
-  formeDeCode, niveauDepuisContrat, FORME_PANONCEAU, type Taille,
+  formeDeCode, niveauDepuisContrat, estPoseBasse, POSE, SECTIONS_SUPPORT, LIBELLE_SECTION,
+  FORME_PANONCEAU, type Taille, type SectionSupport, type Chiffre, type Support,
 } from '@/lib/tarifPanneaux';
 import {
   typeAgglomeration, nomAgglomerationDansTexte, dimensionnerAgglomerationAuto,
@@ -31,7 +32,8 @@ import {
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { variantesParDefaut } from '@/lib/variantFunnel';
 import { chantierDansTexte } from '@/lib/chantierDemande';
-import { compterBrides } from '@/lib/bridesDevis';
+import { compterBrides, fixationsPour, fixationDeSection, type Fixations } from '@/lib/bridesDevis';
+import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
 import {
@@ -236,6 +238,18 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      rarement du B14 en petite et du C18 en normale sur la même affaire. */
   const [gammePanneau, setGammePanneau] = useState<Taille>('P');
   const [classePanneau, setClassePanneau] = useState<number>(2);
+  /* SECTION DU SUPPORT, COMMUNE À L'AFFAIRE — et elle décide de la fixation.
+     Un chantier se pose sur une section, pas sur six ; et changer la section
+     sans changer la fixation ferait facturer des colliers Ø60 sur du 80×80. */
+  const [sectionSupport, setSectionSupport] = useState<SectionSupport>('Ø60');
+  /* CE QUI PART AU DEVIS, LIGNE PAR LIGNE.
+     Clés `d3:pano`, `d3:support`, `d3:fixations`. Rien n'est coché d'office :
+     l'encart chiffre ce qui accompagne le panneau, il ne le vend pas à la
+     place du chargé d'affaires. */
+  const [optionsEnsemble, setOptionsEnsemble] = useState<Record<string, boolean>>({});
+  /* Hauteur libre sous panneau imposée à la main, par ligne. Absente = la
+     règle s'applique : 2,10 m, ou la hauteur du panneau en pose basse. */
+  const [hauteurSousPanneau, setHauteurSousPanneau] = useState<Record<string, number>>({});
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
 
   /**
@@ -1097,6 +1111,10 @@ const [contratOdoo, setContratOdoo] = useState<
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({});
     setLibelleManuel({});
+    /* Les options d'ensemble sont indexées sur le RANG de la ligne : gardées
+       d'une analyse à l'autre, elles cocheraient le support d'un panneau qui
+       n'a rien à voir avec celui qu'on avait retenu. */
+    setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
@@ -1796,6 +1814,134 @@ const [contratOdoo, setContratOdoo] = useState<
       || 'R4',
     [niveauForce, contratOdoo],
   );
+
+  /**
+   * L'ENSEMBLE QUE FORME UN PANNEAU DE POLICE — et rien qu'un seul calcul.
+   *
+   * Un panneau ne se pose pas seul : il porte souvent un panonceau, il tient
+   * sur un support, et il s'y fixe par des brides. Ces trois-là se chiffraient
+   * à l'affichage et n'allaient nulle part — le devis créé ne portait que le
+   * panneau, et le mât se ressaisissait à la main. Ils sont désormais des
+   * OPTIONS : l'écran les montre ligne à ligne, on coche ce qu'on retient, et
+   * ce qui est coché part au devis. L'affichage et la création du devis lisent
+   * donc la même fonction, faute de quoi l'un montrerait un prix que l'autre
+   * ne facturerait pas.
+   *
+   * ⚠️ **LA HAUTEUR SOUS PANNEAU N'EST PAS TOUJOURS 2,10 m.** Les chevrons
+   * B21 et les balises J5 se posent bas : la règle par défaut y devient la
+   * hauteur du panneau lui-même — un B21a de 650 se pose à 650 mm — et reste
+   * modifiable. Voir `estPoseBasse`.
+   */
+  const ensembleDeLigne = useCallback((i: number): {
+    code: string;
+    panneau: Chiffre;
+    /** Le panonceau de l'ensemble, proposé d'office ou demandé par le client. */
+    panonceau: Chiffre | null;
+    /** Vrai quand le client le demande lui-même : il a déjà sa ligne au devis. */
+    panonceauDemande: boolean;
+    hauteurPanneau: number;
+    hauteurLibre: number;
+    poseBasse: boolean;
+    support: Support | null;
+    fixations: Fixations;
+  } | null => {
+    const l = (result?.lignes ?? [])[i];
+    if (!l) return null;
+    const trouve = codeDansTexte(texteDemande(l, i));
+    if (!trouve) return null;
+    /* Les panneaux d'agglomération et les panonceaux ont leur propre encart :
+       les uns ne se dimensionnent pas d'après un tarif, les autres sont
+       eux-mêmes le porté d'un ensemble. */
+    if (typeAgglomeration(trouve.code)) return null;
+    const forme = formeDeCode(trouve.code);
+    if (!forme || forme === FORME_PANONCEAU) return null;
+
+    const opts = { taille: gammePanneau, classe: classePanneau, niveau: niveauRemise };
+    const panneau = prixPanneau(trouve.code, opts);
+    if (!panneau) return null;
+
+    /* Le panonceau proposé d'office n'a lieu d'être que si le client n'en
+       demande pas un lui-même à la ligne suivante. Mais celui qu'il demande
+       COMPTE QUAND MÊME dans la hauteur portée et dans les brides : il est
+       sur le même mât. Il était purement ignoré, et le mât sortait trop court. */
+    const suivante = (result?.lignes ?? [])[i + 1];
+    const cSuiv = suivante ? codeDansTexte(texteDemande(suivante, i + 1)) : null;
+    const panonceauDemande = !!cSuiv && formeDeCode(cSuiv.code) === FORME_PANONCEAU;
+    const codePano = panonceauDemande && cSuiv ? cSuiv.code : 'M9z';
+    const panonceau = panonceauPour(codePano, trouve.code, {
+      ...opts, mention: panonceauDemande ? (suivante?.description || '') : '',
+    });
+
+    const hauteurPanneau = hauteurDeDimension(panneau.dimension);
+    const poseBasse = estPoseBasse(trouve.code);
+    const hauteurLibre = hauteurSousPanneau[`d${i}`]
+      ?? (poseBasse ? hauteurPanneau : POSE.hauteurLibre);
+
+    const portes = [hauteurPanneau];
+    if (panonceau) portes.push(hauteurDeDimension(panonceau.dimension));
+    const support = supportPour(portes, {
+      niveau: niveauRemise, hauteurLibre, section: sectionSupport,
+    });
+
+    /* Une fixation par rail, et le nombre de rails se LIT dans la table du
+       catalogue. Le code et la cote suffisent à l'y retrouver. */
+    const elements = [{ texte: `${trouve.code} ${panneau.dimension}`, quantite: 1 }];
+    if (panonceau) elements.push({ texte: `${codePano} ${panonceau.dimension}`, quantite: 1 });
+    const fixations = fixationsPour(elements, {
+      niveau: niveauRemise, section: sectionSupport,
+    });
+
+    return {
+      code: trouve.code, panneau, panonceau, panonceauDemande,
+      hauteurPanneau, hauteurLibre, poseBasse, support, fixations,
+    };
+  }, [result, texteDemande, gammePanneau, classePanneau, niveauRemise,
+    sectionSupport, hauteurSousPanneau]);
+
+  /** Les lignes de demande qui forment un ensemble de police. */
+  const lignesEnsemble = useMemo(
+    () => (result?.lignes ?? []).map((_, i) => i).filter(i => !!ensembleDeLigne(i)),
+    [result, ensembleDeLigne],
+  );
+
+  /**
+   * Ce qu'une option coche ou décoche, pour une ligne ou pour toutes.
+   *
+   * Le sélecteur général du devis appelle le même chemin que la case d'une
+   * ligne : sans quoi « tous les supports » et la case d'à côté finiraient par
+   * ne plus dire la même chose.
+   */
+  const cocherOption = useCallback(
+    (option: 'pano' | 'support' | 'fixations', valeur: boolean, lignes?: number[]) => {
+      const cibles = lignes ?? lignesEnsemble;
+      setOptionsEnsemble(prev => {
+        const suite = { ...prev };
+        for (const i of cibles) suite[`d${i}:${option}`] = valeur;
+        return suite;
+      });
+    }, [lignesEnsemble]);
+
+  /** Vrai quand TOUTES les lignes de police portent l'option. */
+  const optionPartout = useCallback(
+    (option: 'pano' | 'support' | 'fixations') =>
+      lignesEnsemble.length > 0
+      && lignesEnsemble.every(i => !!optionsEnsemble[`d${i}:${option}`]),
+    [lignesEnsemble, optionsEnsemble]);
+
+  /** Ce que pèsent les accessoires cochés d'une ligne — le total les compte. */
+  const totalOptionsDe = useCallback((i: number, quantite: number) => {
+    const ens = ensembleDeLigne(i);
+    if (!ens) return 0;
+    let t = 0;
+    if (optionsEnsemble[`d${i}:pano`] && ens.panonceau && !ens.panonceauDemande) {
+      t += ens.panonceau.prix;
+    }
+    if (optionsEnsemble[`d${i}:support`] && ens.support) t += ens.support.prix;
+    if (optionsEnsemble[`d${i}:fixations`] && ens.fixations.prix != null) {
+      t += ens.fixations.prix;
+    }
+    return t * quantite;
+  }, [ensembleDeLigne, optionsEnsemble]);
 
   const texteRechercheOdoo = useCallback((
     l: { reference?: string; description?: string },
@@ -2849,6 +2995,57 @@ const [contratOdoo, setContratOdoo] = useState<
       return [entete, ...composants];
     };
 
+    /**
+     * LES ACCESSOIRES COCHÉS D'UN ENSEMBLE DE POLICE.
+     *
+     * L'encart de tarif chiffrait panonceau, mât et colliers, puis le devis
+     * créé ne portait que le panneau : il fallait ressaisir à la main ce qui
+     * était à l'écran une seconde plus tôt. Ce qui est coché part désormais en
+     * ligne propre, au prix de la grille et avec de quoi se relire.
+     *
+     * Les fixations partent en QUANTITÉ, pas en forfait : « 6 × Bride acier à
+     * 3,24 € » se vérifie sur le devis, « 1 × 19,44 € » ne se vérifie pas.
+     */
+    const lignesOptionsEnsemble = (
+      i: number, l: { quantite: number; tva?: number },
+    ): LigneDevis[] => {
+      const ens = ensembleDeLigne(i);
+      if (!ens) return [];
+      const qte = quantiteDe(`d${i}`, l.quantite || 1);
+      const tva = l.tva ?? 20;
+      const out: LigneDevis[] = [];
+
+      /* Le panonceau que le client demande a déjà sa propre ligne : le
+         reprendre ici le facturerait deux fois. */
+      if (optionsEnsemble[`d${i}:pano`] && ens.panonceau && !ens.panonceauDemande) {
+        out.push({
+          id: generateId(),
+          description: `Panonceau ${ens.panonceau.dimension} — classe ${classePanneau}`,
+          quantite: qte, unite: 'u', prixUnitaireHT: ens.panonceau.prix,
+          tva, remise: 0, note: ens.panonceau.explication,
+        });
+      }
+      if (optionsEnsemble[`d${i}:support`] && ens.support) {
+        out.push({
+          id: generateId(),
+          description: `${ens.support.libelle} — ${ens.support.longueur} m`,
+          quantite: qte, unite: 'u', prixUnitaireHT: ens.support.prix,
+          tva, remise: 0, note: ens.support.explication,
+        });
+      }
+      if (optionsEnsemble[`d${i}:fixations`] && ens.fixations.nombre != null) {
+        out.push({
+          id: generateId(),
+          description: ens.fixations.nom,
+          quantite: qte * ens.fixations.nombre, unite: 'u',
+          prixUnitaireHT: ens.fixations.prixUnitaire,
+          tva, remise: 0,
+          note: `une par rail — ${ens.fixations.explication}`,
+        });
+      }
+      return out;
+    };
+
     const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => {
       const cle = `d${i}`;
       /* UNE LIGNE SYSTÈME S'ÉCLATE EN SES COMPOSANTS.
@@ -2869,7 +3066,7 @@ const [contratOdoo, setContratOdoo] = useState<
          part en ligne libre — référence dans le libellé, prix du bordereau. */
       const odoo = choixOdoo[i];
       if (odoo) {
-        return {
+        return [{
           id: generateId(),
           /* L'article existe désormais dans le catalogue : la ligne le
              désigne, et la colonne Réf. l'affiche comme les autres. */
@@ -2886,10 +3083,10 @@ const [contratOdoo, setContratOdoo] = useState<
           prixUnitaireHT: puDeLigne(i),
           tva: l.tva ?? 20,
           remise: 0,
-        };
+        }, ...lignesOptionsEnsemble(i, l)];
       }
       const p = produitDeLigne(i);
-      return {
+      return [{
         id: generateId(),
         produitId: p?.id,
         /* L'ARTICLE NOMME LA LIGNE, PAS LA DEMANDE.
@@ -2909,7 +3106,7 @@ const [contratOdoo, setContratOdoo] = useState<
         prixUnitaireHT: puDeLigne(i),
         tva: l.tva ?? 20,
         remise: 0,
-      };
+      }, ...lignesOptionsEnsemble(i, l)];
     });
     // Les articles ajoutés par les règles suivent les articles demandés.
     for (const a of accompagnements) {
@@ -3910,6 +4107,68 @@ const [contratOdoo, setContratOdoo] = useState<
                                 {grilleEnCours ? 'Synchronisation…' : 'Synchroniser depuis Odoo'}
                               </button>
                             </div>
+
+                            {/* ── SUPPORTS ET FIXATIONS, POUR TOUT LE DEVIS ──
+                                Un chantier se pose sur UNE section : la
+                                choisir trente fois, ligne à ligne, c'est
+                                trente occasions de se tromper. Et la section
+                                commande la fixation — un mât rond se ceinture
+                                d'un collier, un profil carré se boulonne par
+                                une bride acier. Choisir l'une sans l'autre
+                                ferait facturer des colliers Ø60 sur du 80×80. */}
+                            {lignesEnsemble.length > 0 && (() => {
+                              const fixation = fixationDeSection(sectionSupport, niveauRemise);
+                              return (
+                                <div className="rounded border border-border bg-muted/30 p-1.5 space-y-1 text-[11px]">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium shrink-0">Section du support</span>
+                                    <Select
+                                      value={sectionSupport}
+                                      onValueChange={v => setSectionSupport(v as SectionSupport)}
+                                    >
+                                      <SelectTrigger className="h-7 w-44 text-[11px]"><SelectValue /></SelectTrigger>
+                                      <SelectContent>
+                                        {SECTIONS_SUPPORT.map(s => (
+                                          <SelectItem key={s} value={s}>{LIBELLE_SECTION[s]}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <span className="text-muted-foreground truncate">
+                                      fixation : {fixation.nom} — {formatMontant(fixation.prix)} l’unité
+                                    </span>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-4">
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <Checkbox
+                                        className="h-3.5 w-3.5"
+                                        checked={optionPartout('support')}
+                                        onCheckedChange={v => cocherOption('support', v === true)}
+                                      />
+                                      Tous les supports
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <Checkbox
+                                        className="h-3.5 w-3.5"
+                                        checked={optionPartout('fixations')}
+                                        onCheckedChange={v => cocherOption('fixations', v === true)}
+                                      />
+                                      Toutes les fixations
+                                    </label>
+                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                      <Checkbox
+                                        className="h-3.5 w-3.5"
+                                        checked={optionPartout('pano')}
+                                        onCheckedChange={v => cocherOption('pano', v === true)}
+                                      />
+                                      Tous les panonceaux proposés
+                                    </label>
+                                    <span className="text-muted-foreground">
+                                      {lignesEnsemble.length} ensemble(s) de police
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </div>
                         )}
 
@@ -4445,12 +4704,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                     /* Le niveau vient du contrat cadre Odoo :
                                        « TARIF R4 » y est écrit noir sur blanc.
                                        R4 à défaut, c'est le cas courant. */
-                                    const opts = {
-                                      taille: gammePanneau, classe: classePanneau,
-                                      niveau: niveauRemise,
-                                    };
-                                    const pan = prixPanneau(trouve.code, opts);
-                                    if (!pan) {
+                                    const ens = ensembleDeLigne(i);
+                                    if (!ens) {
                                       return (
                                         <p className="text-[11px] text-destructive">
                                           {trouve.code} en gamme {gammePanneau} classe {classePanneau} :
@@ -4458,55 +4713,152 @@ const [contratOdoo, setContratOdoo] = useState<
                                         </p>
                                       );
                                     }
-                                    // Le panonceau que le client demande presque
-                                    // toujours avec son panneau. M9z par défaut :
-                                    // la mention en toutes lettres, la plus courante.
-                                    /* Le panonceau proposé d'office n'a lieu
-                                       d'être que si le client n'en demande pas
-                                       un lui-même à la ligne suivante. */
-                                    const suivante = (result?.lignes ?? [])[i + 1];
-                                    const cSuiv = suivante && codeDansTexte(
-                                      [suivante.reference, suivante.description].filter(Boolean).join(' '));
-                                    const panonceauDemande = !!cSuiv
-                                      && formeDeCode(cSuiv.code) === FORME_PANONCEAU;
-                                    const pano = panonceauDemande
-                                      ? null
-                                      : panonceauPour('M9z', trouve.code, opts);
-                                    const hauteurs = [hauteurDeDimension(pan.dimension)];
-                                    if (pano) hauteurs.push(hauteurDeDimension(pano.dimension));
-                                    const sup = supportPour(hauteurs);
+                                    const { panneau: pan, panonceau: pano, support: sup, fixations: fix } = ens;
                                     const qte = quantiteDe(`d${i}`, l.quantite || 1);
-                                    const total = (pan.prix + (pano?.prix || 0)
-                                      + (sup?.prix || 0) + (sup?.prixColliers || 0)) * qte;
+                                    /* CE QUI EST COCHÉ, ET RIEN D'AUTRE.
+                                       Le total annonçait mât et colliers alors
+                                       que le devis ne les portait pas : il
+                                       promettait 91,33 € pour une ligne à
+                                       36,01 €. Il ne compte plus que ce qui
+                                       partira effectivement. */
+                                    const prisPano = !!optionsEnsemble[`d${i}:pano`] && !ens.panonceauDemande;
+                                    const prisSup = !!optionsEnsemble[`d${i}:support`];
+                                    const prisFix = !!optionsEnsemble[`d${i}:fixations`];
+                                    const total = (pan.prix
+                                      + (prisPano && pano ? pano.prix : 0)
+                                      + (prisSup && sup ? sup.prix : 0)
+                                      + (prisFix ? (fix.prix ?? 0) : 0)) * qte;
 
                                     return (
                                       <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-0.5 text-[11px]">
                                         <p className="font-medium text-primary">
-                                          Tarif {opts.niveau} — {trouve.code}{trouve.valeur ? ` « ${trouve.valeur} »` : ''}
+                                          Tarif {niveauRemise} — {trouve.code}{trouve.valeur ? ` « ${trouve.valeur} »` : ''}
                                           {niveauDepuisContrat(contratOdoo?.contrat)
                                             ? <span className="font-normal opacity-70"> (contrat cadre)</span>
                                             : <span className="font-normal opacity-70"> (défaut — le contrat ne le précise pas)</span>}
                                         </p>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 pl-5">
                                           <span className="flex-1 truncate">Panneau {pan.dimension}</span>
                                           <span className="font-semibold">{formatMontant(pan.prix)}</span>
                                         </div>
+
+                                        {/* ── LE PANONCEAU ─────────────────
+                                            Celui que le client DEMANDE a déjà
+                                            sa ligne au devis : la case le dit
+                                            et reste hors de portée, sans quoi
+                                            il se facturerait deux fois. */}
                                         {pano && (
-                                          <div className="flex gap-2">
-                                            <span className="flex-1 truncate">Panonceau {pano.dimension}</span>
-                                            <span className="font-semibold">{formatMontant(pano.prix)}</span>
-                                          </div>
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <Checkbox
+                                              className="h-3.5 w-3.5"
+                                              checked={ens.panonceauDemande || prisPano}
+                                              disabled={ens.panonceauDemande}
+                                              onCheckedChange={v =>
+                                                cocherOption('pano', v === true, [i])}
+                                            />
+                                            <span className="flex-1 truncate">
+                                              Panonceau {pano.dimension}
+                                              {ens.panonceauDemande
+                                                ? <span className="text-muted-foreground"> — demandé, déjà en ligne</span>
+                                                : <span className="text-muted-foreground"> — proposé</span>}
+                                            </span>
+                                            <span className={ens.panonceauDemande ? 'text-muted-foreground' : 'font-semibold'}>
+                                              {formatMontant(pano.prix)}
+                                            </span>
+                                          </label>
                                         )}
+
+                                        {/* ── LE SUPPORT ───────────────────
+                                            Sa section vient du sélecteur
+                                            général : un chantier se pose sur
+                                            une section, pas sur six. */}
                                         {sup && (
-                                          <div className="flex gap-2">
+                                          <label className="flex items-center gap-2 cursor-pointer">
+                                            <Checkbox
+                                              className="h-3.5 w-3.5"
+                                              checked={prisSup}
+                                              onCheckedChange={v =>
+                                                cocherOption('support', v === true, [i])}
+                                            />
                                             <span className="flex-1 truncate" title={sup.explication}>
-                                              Mât Ø60 {sup.longueur} m + {sup.colliers} collier(s)
+                                              {sup.libelle} {sup.longueur} m
+                                              {!sup.prixExact && (
+                                                <span className="text-warning"> — prix prolongé au ml</span>
+                                              )}
                                             </span>
-                                            <span className="font-semibold">
-                                              {formatMontant(sup.prix + sup.prixColliers)}
-                                            </span>
+                                            <span className="font-semibold">{formatMontant(sup.prix)}</span>
+                                          </label>
+                                        )}
+
+                                        {/* ── LES FIXATIONS — UNE PAR RAIL ──
+                                            Le nombre se LIT dans la table du
+                                            catalogue. Une cote absente se
+                                            signale au lieu de se deviner. */}
+                                        <label className={`flex items-center gap-2 ${fix.prix == null ? 'opacity-60' : 'cursor-pointer'}`}>
+                                          <Checkbox
+                                            className="h-3.5 w-3.5"
+                                            checked={prisFix && fix.prix != null}
+                                            disabled={fix.prix == null}
+                                            onCheckedChange={v =>
+                                              cocherOption('fixations', v === true, [i])}
+                                          />
+                                          <span className="flex-1 truncate" title={fix.explication}>
+                                            {fix.nombre != null
+                                              ? `${fix.nombre} × ${fix.nom}`
+                                              : `${fix.nom} — nombre de rails absent de la table`}
+                                          </span>
+                                          <span className="font-semibold">
+                                            {fix.prix != null ? formatMontant(fix.prix) : '—'}
+                                          </span>
+                                        </label>
+                                        {fix.aVerifier.length > 0 && (
+                                          <p className="pl-5 text-[10px] text-warning">
+                                            À vérifier — {fix.aVerifier
+                                              .map(v => `${v.famille ?? '?'}${v.cote ? ` ${v.cote}` : ''} : ${v.raison}`)
+                                              .join(' · ')}
+                                          </p>
+                                        )}
+
+                                        {/* ── HAUTEUR SOUS PANNEAU ─────────
+                                            2,10 m partout, sauf en pose basse
+                                            — B21 et J5 bordent l'obstacle
+                                            qu'ils signalent, ils ne
+                                            surplombent pas un trottoir. */}
+                                        {ens.poseBasse && (
+                                          <div className="flex items-center gap-1.5 pl-5">
+                                            <span className="text-muted-foreground shrink-0">HSP</span>
+                                            <Select
+                                              value={ens.hauteurLibre === ens.hauteurPanneau
+                                                ? 'panneau'
+                                                : ens.hauteurLibre === POSE.hauteurLibre ? 'standard' : 'libre'}
+                                              onValueChange={v => setHauteurSousPanneau(pr => ({
+                                                ...pr,
+                                                [`d${i}`]: v === 'panneau' ? ens.hauteurPanneau
+                                                  : v === 'standard' ? POSE.hauteurLibre
+                                                  : ens.hauteurLibre,
+                                              }))}
+                                            >
+                                              <SelectTrigger className="h-6 w-52 text-[10px]"><SelectValue /></SelectTrigger>
+                                              <SelectContent>
+                                                <SelectItem value="panneau">
+                                                  hauteur du panneau — {Math.round(ens.hauteurPanneau * 1000)} mm
+                                                </SelectItem>
+                                                <SelectItem value="standard">2,10 m — règle commune</SelectItem>
+                                                <SelectItem value="libre">valeur saisie</SelectItem>
+                                              </SelectContent>
+                                            </Select>
+                                            <input
+                                              type="number" step="0.05" min="0"
+                                              className="w-16 rounded border px-1 py-0.5 text-[10px]"
+                                              value={ens.hauteurLibre}
+                                              onChange={e => setHauteurSousPanneau(pr => ({
+                                                ...pr, [`d${i}`]: Number(e.target.value),
+                                              }))}
+                                            />
+                                            <span className="text-muted-foreground">m</span>
                                           </div>
                                         )}
+
                                         <div className="flex gap-2 border-t border-primary/20 pt-0.5">
                                           <span className="flex-1">Ensemble × {qte}</span>
                                           <span className="font-bold">{formatMontant(total)}</span>
@@ -4752,6 +5104,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                       <span className="text-muted-foreground"> — une par rail</span>
                                     </p>
                                   </div>
+                                  {/* Ce compte porte sur TOUTE la demande, y
+                                      compris les lignes sans ensemble de
+                                      police. Ce qui part au devis, ce sont les
+                                      fixations cochées ligne à ligne — mêmes
+                                      rails, même table. */}
+                                  <p className="text-[10px] text-muted-foreground">
+                                    Compte de contrôle sur toute la demande. Ce qui part au devis,
+                                    c’est la case « fixations » de chaque ensemble.
+                                  </p>
 
                                   {comptage.lignes.length > 0 && (
                                     <div className="space-y-0.5 text-[10px] text-muted-foreground">
@@ -4855,9 +5216,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                * 0,00 €. */
                               const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
                                 if (systemesDetectes.has(i)) return t + totalSystemeDe(i, l.quantite);
-                                if (!choixOdoo[i] && !produitDeLigne(i)) return t;
                                 const cle = `d${i}`;
-                                return t + puDeLigne(i) * quantiteDe(cle, l.quantite || 1);
+                                /* Les accessoires cochés partent au devis même
+                                   quand la ligne n'a retenu aucun article : ils
+                                   tiennent leur prix de la grille, pas d'une
+                                   fiche. Les omettre ici ferait mentir un total
+                                   qui promet de compter ce qui partira. */
+                                const options = totalOptionsDe(i, quantiteDe(cle, l.quantite || 1));
+                                if (!choixOdoo[i] && !produitDeLigne(i)) return t + options;
+                                return t + puDeLigne(i) * quantiteDe(cle, l.quantite || 1) + options;
                               }, 0);
                               const totalAcc = accompagnements.reduce((t, a) => {
                                 const p = produits.find(x => x.id === a.produitId);

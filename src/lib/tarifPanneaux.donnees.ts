@@ -2375,6 +2375,20 @@ export const SUP_PRIX: Record<string, { mat: Record<string, number>; collier: nu
   }
 };
 
+/**
+ * Sections de support proposables, dans l'ordre du tarif.
+ *
+ * `Ø60` est le mât galvanisé courant, tarifé à part dans `SUP_PRIX` ; les
+ * autres sont les renforts de `SUP_SECT`. Le choix de la section commande
+ * aussi la FIXATION : un mât rond se ceinture d'un collier, un profil carré
+ * ou rectangulaire se boulonne par une bride acier, et les tubes aluminium
+ * ont leur propre collier. Voir `fixationDeSection` dans `bridesDevis.ts`.
+ */
+export const SECTIONS_SUPPORT = [
+  'Ø60', '80x40', '80x80x2', '80x80x3', 'Ø76alu', 'Ø90alu',
+] as const;
+export type SectionSupport = typeof SECTIONS_SUPPORT[number];
+
 /** Prix des sections de renfort, par niveau et par section. */
 export const SUP_SECT: Record<string, Record<string, Record<string, number>>> = {
   "R0": {

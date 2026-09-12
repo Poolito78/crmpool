@@ -65,6 +65,45 @@ un encart sous les lignes donne le total.
 table → « à vérifier », hors du total. Un rail en trop se facture au client, un
 rail en moins manque sur le chantier. Voir `claude/brides-et-rails.md`.
 
+## L'ensemble de police est une somme d'options (septembre 2026)
+
+Un panneau de police ne part plus seul au devis. L'encart de tarif de
+`AnalyseDocumentDialog` porte, **une case par ligne**, le panonceau proposé, le
+support et les fixations ; seul ce qui est coché part au devis, et le total de
+l'écran ne compte que cela — il annonçait 91,33 € pour une ligne qui en
+facturait 36,01.
+
+- **Un seul calcul** : `ensembleDeLigne(i)` sert l'affichage ET
+  `handleCreerDevis`. Deux calculs finiraient par se contredire.
+- **La section commande la fixation** : sélecteur unique pour toute l'affaire
+  (`sectionSupport`), et `fixationDeSection` (`bridesDevis.ts`) en déduit
+  l'article — collier galvanisé sur Ø60, bride acier sur les profils carrés,
+  collier alu sur les tubes. Les cases « tous les supports » / « toutes les
+  fixations » cochent d'un geste.
+- **Les fixations se comptent par les rails**, jamais « une par élément porté »
+  comme le faisait `supportPour`. La fonction ne les compte plus du tout :
+  `fixationsPour` s'en charge, et une cote hors table se signale au lieu de se
+  deviner — la case reste alors hors de portée.
+- **Le panonceau que le client demande a déjà sa ligne** : la case le dit et
+  reste désactivée, sans quoi il se facturerait deux fois. Sa hauteur compte en
+  revanche dans la longueur du mât — elle était purement ignorée.
+- **`SUP_SECT` est troué** (pas de 2 m ni de 3 m en 80×40, rien au-delà de 4 m
+  en alu) : une longueur absente se prolonge depuis la plus proche inférieure au
+  mètre linéaire du tarif, et l'écran l'annonce. Vérifié : 1,5 m + 1 × 6,95
+  donne 18,60 là où le tarif porte 18,58.
+
+### La hauteur sous panneau
+
+2,10 m et 0,50 m d'ancrage partout, **sauf en pose basse**. Les chevrons B21 et
+les balises J5 bordent l'obstacle qu'ils signalent : `estPoseBasse` les
+reconnaît, la hauteur sous panneau y vaut par défaut **la hauteur du panneau**
+— un B21a de 650 se pose à 650 mm, un J5 de 500 à 500 mm — et un sélecteur
+permet de revenir à 2,10 m ou de saisir la valeur du terrain.
+
+⚠️ **Le J5 n'a aucune grille dans `TARIFS`** et `codeDansTexte` ne le reconnaît
+pas : la règle l'attend, mais il n'atteint pas encore le chiffrage. C'est
+voulu — on ne lui invente pas un prix de triangle.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
@@ -79,9 +118,15 @@ rail en moins manque sur le chantier. Voir `claude/brides-et-rails.md`.
 
 ## Ce qui reste ouvert
 
-1. **Poser les lignes de brides au devis** : il manque la règle de choix de la
-   référence. Le profil du panneau en désigne la moitié (BP → P25, BTR → P50) ;
-   reste la section du mât — du mât présent au devis, ou demandée à l'écran ?
+1. **La RÉFÉRENCE de la bride** reste à trancher. La section est désormais
+   demandée à l'écran, et l'article s'en déduit par famille (collier galva,
+   bride acier, collier alu) avec son prix — mais pas encore par référence
+   catalogue : le profil du panneau en désigne la moitié (BP → P25, BTR → P50)
+   et cette moitié-là n'est pas lue. Les lignes partent donc au devis en ligne
+   libre, sans `produitId`.
+1bis. **Le J5 n'est ni détecté ni tarifé** : `codeDansTexte` ne le reconnaît
+   pas et `TARIFS` ne le porte pas. La règle de pose basse l'attend
+   (`estPoseBasse`), le chiffrage ne l'atteint pas.
 2. **Panonceau 350×350** : 1 rail page AB, 2 rails page B. On retient 2. À
    trancher sur le catalogue papier.
 3. **Familles de rails non saisies** : fluviaux, décors spécifiques, points de

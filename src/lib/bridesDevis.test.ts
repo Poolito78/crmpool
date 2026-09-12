@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { compterBrides, familleRails, railsDuPanneau } from '@/lib/bridesDevis';
+import {
+  compterBrides, familleRails, railsDuPanneau, fixationDeSection, fixationsPour,
+} from '@/lib/bridesDevis';
 
 describe('familleRails', () => {
   it('reconnait les familles dans le bon ordre', () => {
@@ -197,5 +199,39 @@ describe('les articles crees pour une affaire, quand ils annoncent un kit rail',
     expect(r.brides).toBe(0);
     expect(r.aVerifier.map(v => v.raison))
       .toEqual(['cote absente de la table', 'famille inconnue']);
+  });
+});
+
+describe('fixations d’un ensemble', () => {
+  it('la section commande l’article de fixation', () => {
+    expect(fixationDeSection('\u00d860', 'R4').nom).toBe('Collier galvanis\u00e9 \u00d860');
+    expect(fixationDeSection('\u00d860', 'R4').prix).toBeCloseTo(1.94);
+    expect(fixationDeSection('80x40', 'R4').nom).toBe('Bride acier');
+    expect(fixationDeSection('80x40', 'R4').prix).toBeCloseTo(3.24);
+    expect(fixationDeSection('80x80x3', 'R4').nom).toBe('Bride acier');
+    expect(fixationDeSection('\u00d876alu', 'R4').nom).toBe('Collier alu');
+    expect(fixationDeSection('\u00d876alu', 'R4').prix).toBeCloseTo(12.02);
+  });
+
+  it('compte une fixation par rail, panonceau compris', () => {
+    // AB3a 700 : 2 rails. Panonceau 500x150 : 1 rail.
+    const f = fixationsPour([
+      { texte: 'AB3A 700 (P)', quantite: 1 },
+      { texte: 'M9z 500x150', quantite: 1 },
+    ], { section: '\u00d860', niveau: 'R4' });
+    expect(f.nombre).toBe(3);
+    expect(f.prix).toBeCloseTo(5.82);
+    expect(f.aVerifier).toEqual([]);
+  });
+
+  it('un B21a1 porte quatre rails, quelle que soit sa cote', () => {
+    expect(fixationsPour([{ texte: 'B21a1 650 (P)', quantite: 1 }]).nombre).toBe(4);
+  });
+
+  it('n’invente rien quand la table ne dit pas les rails', () => {
+    const f = fixationsPour([{ texte: 'GEAF000000-1 PANNEAU SPECIFIQUE 1200 KIT RAIL', quantite: 2 }]);
+    expect(f.nombre).toBeNull();
+    expect(f.prix).toBeNull();
+    expect(f.aVerifier).toHaveLength(1);
   });
 });

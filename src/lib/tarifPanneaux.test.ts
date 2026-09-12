@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   prixPanneau, panonceauPour, supportPour, formeDeCode, codeDansTexte,
   hauteurDeDimension, groupePanonceau, niveauDepuisContrat, estCodeChantier,
+  estPoseBasse,
 } from './tarifPanneaux';
 
 describe('niveau de tarif lu dans le contrat cadre', () => {
@@ -153,9 +154,32 @@ describe('support', () => {
     expect(supportPour([0.65, 0.5])?.longueur).toBe(4);
   });
 
-  it('compte un collier par élément porté', () => {
-    expect(supportPour([0.65])?.colliers).toBe(1);
-    expect(supportPour([0.65, 0.15])?.colliers).toBe(2);
+  it('raccourcit le mât quand le panneau se pose bas', () => {
+    // Un B21a de 650 se pose à 650 mm sous panneau, pas à 2,10 m :
+    // 0,50 + 0,65 + 0,65 = 1,80 → 2 m au lieu de 3,50.
+    expect(supportPour([0.65], { hauteurLibre: 0.65 })?.longueur).toBe(2);
+  });
+
+  it('chiffre les autres sections, et prolonge au ml ce que la table n’a pas', () => {
+    // Le 80×40 R4 porte 3,5 m à 25,57 €.
+    const s = supportPour([0.65], { section: '80x40' });
+    expect(s?.longueur).toBe(3.5);
+    expect(s?.prix).toBeCloseTo(25.57);
+    expect(s?.prixExact).toBe(true);
+
+    // Il ne porte NI 2 m NI 3 m : 1,5 m + 0,5 × 6,95 = 15,13.
+    const court = supportPour([0.65], { hauteurLibre: 0.65, section: '80x40' });
+    expect(court?.longueur).toBe(2);
+    expect(court?.prix).toBeCloseTo(15.13);
+    expect(court?.prixExact).toBe(false);
+  });
+
+  it('reconnaît les panneaux qui se posent bas', () => {
+    expect(estPoseBasse('B21a1')).toBe(true);
+    expect(estPoseBasse('B21A2')).toBe(true);
+    expect(estPoseBasse('J5 500')).toBe(true);
+    expect(estPoseBasse('B14')).toBe(false);
+    expect(estPoseBasse('AB3a')).toBe(false);
   });
 });
 
