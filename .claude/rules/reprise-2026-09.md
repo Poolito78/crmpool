@@ -68,10 +68,9 @@ rail en moins manque sur le chantier. Voir `claude/brides-et-rails.md`.
 ## L'ensemble de police est une somme d'options (septembre 2026)
 
 Un panneau de police ne part plus seul au devis. L'encart de tarif de
-`AnalyseDocumentDialog` porte, **une case par ligne**, le panonceau proposé, le
-support et les fixations ; seul ce qui est coché part au devis, et le total de
-l'écran ne compte que cela — il annonçait 91,33 € pour une ligne qui en
-facturait 36,01.
+`AnalyseDocumentDialog` porte, **une case par ligne**, le support et les
+fixations ; seul ce qui est coché part au devis, et le total de l'écran ne
+compte que cela — il annonçait 91,33 € pour une ligne qui en facturait 36,01.
 
 - **Un seul calcul** : `ensembleDeLigne(i)` sert l'affichage ET
   `handleCreerDevis`. Deux calculs finiraient par se contredire.
@@ -84,9 +83,14 @@ facturait 36,01.
   comme le faisait `supportPour`. La fonction ne les compte plus du tout :
   `fixationsPour` s'en charge, et une cote hors table se signale au lieu de se
   deviner — la case reste alors hors de portée.
-- **Le panonceau que le client demande a déjà sa ligne** : la case le dit et
-  reste désactivée, sans quoi il se facturerait deux fois. Sa hauteur compte en
-  revanche dans la longueur du mât — elle était purement ignorée.
+- ⚠️ **AUCUN PANONCEAU N'EST PROPOSÉ.** Un M9z partait d'office sous chaque
+  panneau : il s'affichait, mais surtout il allongeait le mât de sa hauteur et
+  ajoutait un rail, donc une bride — un « AB4 STOP » seul annonçait un mât de
+  3,50 m et trois colliers pour un ensemble qui n'en demande que deux.
+  `ensembleDeLigne` ne retient donc un panonceau **que si la ligne suivante en
+  nomme un**. Celui-là a déjà sa ligne au devis (le reprendre le facturerait
+  deux fois) et ne paraît à l'encart, en gris, que parce qu'il pèse sur le mât
+  et sur les brides.
 - **`SUP_SECT` est troué** (pas de 2 m ni de 3 m en 80×40, rien au-delà de 4 m
   en alu) : une longueur absente se prolonge depuis la plus proche inférieure au
   mètre linéaire du tarif, et l'écran l'annonce. Vérifié : 1,5 m + 1 × 6,95

@@ -243,9 +243,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      sans changer la fixation ferait facturer des colliers Ø60 sur du 80×80. */
   const [sectionSupport, setSectionSupport] = useState<SectionSupport>('Ø60');
   /* CE QUI PART AU DEVIS, LIGNE PAR LIGNE.
-     Clés `d3:pano`, `d3:support`, `d3:fixations`. Rien n'est coché d'office :
-     l'encart chiffre ce qui accompagne le panneau, il ne le vend pas à la
-     place du chargé d'affaires. */
+     Clés `d3:support`, `d3:fixations`. Rien n'est coché d'office : l'encart
+     chiffre ce qui accompagne le panneau, il ne le vend pas à la place du
+     chargé d'affaires. Le panonceau n'y figure pas : on n'en propose aucun
+     que le client n'ait demandé, et celui qu'il demande a déjà sa ligne. */
   const [optionsEnsemble, setOptionsEnsemble] = useState<Record<string, boolean>>({});
   /* Hauteur libre sous panneau imposée à la main, par ligne. Absente = la
      règle s'applique : 2,10 m, ou la hauteur du panneau en pose basse. */
@@ -1835,10 +1836,12 @@ const [contratOdoo, setContratOdoo] = useState<
   const ensembleDeLigne = useCallback((i: number): {
     code: string;
     panneau: Chiffre;
-    /** Le panonceau de l'ensemble, proposé d'office ou demandé par le client. */
+    /**
+     * Le panonceau que le client DEMANDE à la ligne suivante, jamais un
+     * panonceau proposé : il a déjà sa ligne au devis et n'est compté ici que
+     * pour la hauteur du mât et le nombre de brides.
+     */
     panonceau: Chiffre | null;
-    /** Vrai quand le client le demande lui-même : il a déjà sa ligne au devis. */
-    panonceauDemande: boolean;
     hauteurPanneau: number;
     hauteurLibre: number;
     poseBasse: boolean;
@@ -1860,17 +1863,24 @@ const [contratOdoo, setContratOdoo] = useState<
     const panneau = prixPanneau(trouve.code, opts);
     if (!panneau) return null;
 
-    /* Le panonceau proposé d'office n'a lieu d'être que si le client n'en
-       demande pas un lui-même à la ligne suivante. Mais celui qu'il demande
-       COMPTE QUAND MÊME dans la hauteur portée et dans les brides : il est
-       sur le même mât. Il était purement ignoré, et le mât sortait trop court. */
+    /* ⚠️ ON NE PROPOSE PAS UN PANONCEAU QUE PERSONNE N'A DEMANDÉ.
+       Un M9z partait d'office sous chaque panneau. Il ne se contentait pas de
+       s'afficher : il allongeait le mât de sa hauteur et ajoutait un rail,
+       donc une bride. Un « AB4 STOP » seul sortait ainsi avec un mât de
+       3,50 m et trois colliers là où l'ensemble n'en demande que deux.
+       Le panonceau n'existe donc QUE si la ligne suivante en nomme un — et
+       celui-là compte, lui, dans la hauteur portée et dans les brides : il
+       est sur le même mât. Il a déjà sa ligne au devis, on ne le facture pas
+       une seconde fois ici. */
     const suivante = (result?.lignes ?? [])[i + 1];
     const cSuiv = suivante ? codeDansTexte(texteDemande(suivante, i + 1)) : null;
-    const panonceauDemande = !!cSuiv && formeDeCode(cSuiv.code) === FORME_PANONCEAU;
-    const codePano = panonceauDemande && cSuiv ? cSuiv.code : 'M9z';
-    const panonceau = panonceauPour(codePano, trouve.code, {
-      ...opts, mention: panonceauDemande ? (suivante?.description || '') : '',
-    });
+    const codePano = cSuiv && formeDeCode(cSuiv.code) === FORME_PANONCEAU
+      ? cSuiv.code : null;
+    const panonceau = codePano
+      ? panonceauPour(codePano, trouve.code, {
+        ...opts, mention: suivante?.description || '',
+      })
+      : null;
 
     const hauteurPanneau = hauteurDeDimension(panneau.dimension);
     const poseBasse = estPoseBasse(trouve.code);
@@ -1886,13 +1896,15 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Une fixation par rail, et le nombre de rails se LIT dans la table du
        catalogue. Le code et la cote suffisent à l'y retrouver. */
     const elements = [{ texte: `${trouve.code} ${panneau.dimension}`, quantite: 1 }];
-    if (panonceau) elements.push({ texte: `${codePano} ${panonceau.dimension}`, quantite: 1 });
+    if (panonceau && codePano) {
+      elements.push({ texte: `${codePano} ${panonceau.dimension}`, quantite: 1 });
+    }
     const fixations = fixationsPour(elements, {
       niveau: niveauRemise, section: sectionSupport,
     });
 
     return {
-      code: trouve.code, panneau, panonceau, panonceauDemande,
+      code: trouve.code, panneau, panonceau,
       hauteurPanneau, hauteurLibre, poseBasse, support, fixations,
     };
   }, [result, texteDemande, gammePanneau, classePanneau, niveauRemise,
@@ -1912,7 +1924,7 @@ const [contratOdoo, setContratOdoo] = useState<
    * ne plus dire la même chose.
    */
   const cocherOption = useCallback(
-    (option: 'pano' | 'support' | 'fixations', valeur: boolean, lignes?: number[]) => {
+    (option: 'support' | 'fixations', valeur: boolean, lignes?: number[]) => {
       const cibles = lignes ?? lignesEnsemble;
       setOptionsEnsemble(prev => {
         const suite = { ...prev };
@@ -1923,7 +1935,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
   /** Vrai quand TOUTES les lignes de police portent l'option. */
   const optionPartout = useCallback(
-    (option: 'pano' | 'support' | 'fixations') =>
+    (option: 'support' | 'fixations') =>
       lignesEnsemble.length > 0
       && lignesEnsemble.every(i => !!optionsEnsemble[`d${i}:${option}`]),
     [lignesEnsemble, optionsEnsemble]);
@@ -1933,9 +1945,6 @@ const [contratOdoo, setContratOdoo] = useState<
     const ens = ensembleDeLigne(i);
     if (!ens) return 0;
     let t = 0;
-    if (optionsEnsemble[`d${i}:pano`] && ens.panonceau && !ens.panonceauDemande) {
-      t += ens.panonceau.prix;
-    }
     if (optionsEnsemble[`d${i}:support`] && ens.support) t += ens.support.prix;
     if (optionsEnsemble[`d${i}:fixations`] && ens.fixations.prix != null) {
       t += ens.fixations.prix;
@@ -3015,16 +3024,9 @@ const [contratOdoo, setContratOdoo] = useState<
       const tva = l.tva ?? 20;
       const out: LigneDevis[] = [];
 
-      /* Le panonceau que le client demande a déjà sa propre ligne : le
-         reprendre ici le facturerait deux fois. */
-      if (optionsEnsemble[`d${i}:pano`] && ens.panonceau && !ens.panonceauDemande) {
-        out.push({
-          id: generateId(),
-          description: `Panonceau ${ens.panonceau.dimension} — classe ${classePanneau}`,
-          quantite: qte, unite: 'u', prixUnitaireHT: ens.panonceau.prix,
-          tva, remise: 0, note: ens.panonceau.explication,
-        });
-      }
+      /* Aucune ligne de panonceau ici : on n'en propose pas, et celui que le
+         client demande a déjà la sienne — la reprendre le facturerait deux
+         fois. Il ne compte que pour la hauteur du mât et les brides. */
       if (optionsEnsemble[`d${i}:support`] && ens.support) {
         out.push({
           id: generateId(),
@@ -4154,14 +4156,6 @@ const [contratOdoo, setContratOdoo] = useState<
                                       />
                                       Toutes les fixations
                                     </label>
-                                    <label className="flex items-center gap-1.5 cursor-pointer">
-                                      <Checkbox
-                                        className="h-3.5 w-3.5"
-                                        checked={optionPartout('pano')}
-                                        onCheckedChange={v => cocherOption('pano', v === true)}
-                                      />
-                                      Tous les panonceaux proposés
-                                    </label>
                                     <span className="text-muted-foreground">
                                       {lignesEnsemble.length} ensemble(s) de police
                                     </span>
@@ -4721,11 +4715,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                        promettait 91,33 € pour une ligne à
                                        36,01 €. Il ne compte plus que ce qui
                                        partira effectivement. */
-                                    const prisPano = !!optionsEnsemble[`d${i}:pano`] && !ens.panonceauDemande;
                                     const prisSup = !!optionsEnsemble[`d${i}:support`];
                                     const prisFix = !!optionsEnsemble[`d${i}:fixations`];
                                     const total = (pan.prix
-                                      + (prisPano && pano ? pano.prix : 0)
                                       + (prisSup && sup ? sup.prix : 0)
                                       + (prisFix ? (fix.prix ?? 0) : 0)) * qte;
 
@@ -4742,30 +4734,19 @@ const [contratOdoo, setContratOdoo] = useState<
                                           <span className="font-semibold">{formatMontant(pan.prix)}</span>
                                         </div>
 
-                                        {/* ── LE PANONCEAU ─────────────────
-                                            Celui que le client DEMANDE a déjà
-                                            sa ligne au devis : la case le dit
-                                            et reste hors de portée, sans quoi
-                                            il se facturerait deux fois. */}
+                                        {/* ── LE PANONCEAU DEMANDÉ ─────────
+                                            On n'en propose aucun : celui-ci,
+                                            le client l'a écrit, il a donc
+                                            déjà sa ligne au devis. Il ne
+                                            paraît ici que parce qu'il pèse
+                                            sur le mât et sur les brides. */}
                                         {pano && (
-                                          <label className="flex items-center gap-2 cursor-pointer">
-                                            <Checkbox
-                                              className="h-3.5 w-3.5"
-                                              checked={ens.panonceauDemande || prisPano}
-                                              disabled={ens.panonceauDemande}
-                                              onCheckedChange={v =>
-                                                cocherOption('pano', v === true, [i])}
-                                            />
+                                          <div className="flex gap-2 pl-5 text-muted-foreground">
                                             <span className="flex-1 truncate">
-                                              Panonceau {pano.dimension}
-                                              {ens.panonceauDemande
-                                                ? <span className="text-muted-foreground"> — demandé, déjà en ligne</span>
-                                                : <span className="text-muted-foreground"> — proposé</span>}
+                                              Panonceau {pano.dimension} — demandé, déjà en ligne
                                             </span>
-                                            <span className={ens.panonceauDemande ? 'text-muted-foreground' : 'font-semibold'}>
-                                              {formatMontant(pano.prix)}
-                                            </span>
-                                          </label>
+                                            <span>{formatMontant(pano.prix)}</span>
+                                          </div>
                                         )}
 
                                         {/* ── LE SUPPORT ───────────────────
