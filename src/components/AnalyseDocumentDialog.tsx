@@ -3384,7 +3384,12 @@ const [contratOdoo, setContratOdoo] = useState<
   return (
     <>
       <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v); }}>
-        <DialogContent mobileFullscreen className="sm:max-w-3xl lg:max-w-5xl sm:max-h-[85vh] overflow-y-auto flex flex-col p-4 sm:p-5 [&>button]:z-20">
+        {/* LARGE, ET JAMAIS DE DÉFILEMENT HORIZONTAL. Plafonné à 5xl, le
+            dialogue faisait déborder la rangée gamme / classe / tarif /
+            section du support : une barre horizontale apparaissait et la
+            section se lisait coupée. Il prend désormais presque tout l'écran,
+            et les rangées de réglages passent à la ligne. */}
+        <DialogContent mobileFullscreen className="sm:max-w-[96vw] xl:max-w-7xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col p-4 sm:p-5 [&>button]:z-20">
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
@@ -4015,7 +4020,10 @@ const [contratOdoo, setContratOdoo] = useState<
                             vaut 46,62 € ; le même en normale, 67,06 €. */}
                         {(result?.lignes ?? []).some(l =>
                           codeDansTexte([l.reference, l.description].filter(Boolean).join(' '))) && (
-                          <div className="flex items-end gap-2 pt-1">
+                          <div className="space-y-2 pt-1">
+                            {/* Une rangée qui passe à la ligne : sur un écran
+                                étroit elle débordait du dialogue. */}
+                            <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
                             <div className="space-y-1">
                               <Label className="text-xs">Gamme</Label>
                               <Select value={gammePanneau} onValueChange={v => setGammePanneau(v as Taille)}>
@@ -4046,7 +4054,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                 pas, et il arrive qu'on doive en imposer un
                                 autre : le contrat CCI10019 a lui-même été forcé
                                 sur le devis AF035816. */}
-                            <div className="flex items-center gap-2 pb-1.5 text-[11px]">
+                            <div className="flex flex-wrap items-center gap-2 pb-1.5 text-[11px]">
                               {/* ⚠️ **LE SABLIER SE MET LÀ OÙ L'ON AGIT.** Il existait
                                   déjà sur « Articles demandés », mais cette section est
                                   plus BAS que les sélecteurs : on changeait la classe,
@@ -4130,13 +4138,14 @@ const [contratOdoo, setContratOdoo] = useState<
                                 >↺</button>
                               )}
                             </div>
+                            </div>
                             {/* COPIE LOCALE DES GRILLES.
                                 Les quatre grilles vivent dans Supabase, pas dans
                                 Odoo à chaque appel. Odoo reste la source : cette
                                 copie se refait à la demande, et sa date doit
                                 rester visible — une grille périmée ressemble
                                 trait pour trait à une grille à jour. */}
-                            <div className="flex items-center gap-2 pb-1.5 text-[10px]">
+                            <div className="flex flex-wrap items-center gap-2 text-[10px]">
                               <span className={grilleMaj ? 'text-muted-foreground' : 'text-warning'}>
                                 {grilleMaj === null
                                   ? 'Grilles R1–R4 : vérification…'
@@ -4165,7 +4174,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               const fixation = fixationDeSection(sectionSupport, niveauRemise);
                               return (
                                 <div className="rounded border border-border bg-muted/30 p-1.5 space-y-1 text-[11px]">
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex flex-wrap items-center gap-2">
                                     <span className="font-medium shrink-0">Section du support</span>
                                     <Select
                                       value={sectionSupport}
@@ -4178,7 +4187,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                         ))}
                                       </SelectContent>
                                     </Select>
-                                    <span className="text-muted-foreground truncate">
+                                    <span className="text-muted-foreground">
                                       fixation : {fixation.nom} — {formatMontant(fixation.prix)} l’unité
                                     </span>
                                   </div>
