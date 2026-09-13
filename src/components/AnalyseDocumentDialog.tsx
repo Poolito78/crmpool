@@ -1906,8 +1906,16 @@ const [contratOdoo, setContratOdoo] = useState<
     const hauteurLibre = hauteurSousPanneau[`d${i}`]
       ?? (poseBasse ? hauteurPanneau : POSE.hauteurLibre);
 
+    /* ⚠️ DÉCOCHÉ, LE CLIENT N'EN VEUT PAS DU TOUT. Le panonceau demandé sur la
+       ligne et décoché ne se pose pas : il sort du mât et des brides comme du
+       devis, sans quoi on facturerait un mât trop long et un collier de trop
+       pour un panonceau qui n'existe pas. Celui de la ligne suivante n'a pas
+       de case : il est posé. */
+    const panonceauPose = !!panonceau
+      && (!panonceauSurLaLigne || (optionsEnsemble[`d${i}:pano`] ?? true));
+
     const portes = [hauteurPanneau];
-    if (panonceau) portes.push(hauteurDeDimension(panonceau.dimension));
+    if (panonceau && panonceauPose) portes.push(hauteurDeDimension(panonceau.dimension));
     const support = supportPour(portes, {
       niveau: niveauRemise, hauteurLibre, section: sectionSupport,
     });
@@ -1915,7 +1923,7 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Une fixation par rail, et le nombre de rails se LIT dans la table du
        catalogue. Le code et la cote suffisent à l'y retrouver. */
     const elements = [{ texte: `${trouve.code} ${panneau.dimension}`, quantite: 1 }];
-    if (panonceau && codePano) {
+    if (panonceau && codePano && panonceauPose) {
       elements.push({ texte: `${codePano} ${panonceau.dimension}`, quantite: 1 });
     }
     const fixations = fixationsPour(elements, {
@@ -1927,7 +1935,7 @@ const [contratOdoo, setContratOdoo] = useState<
       hauteurPanneau, hauteurLibre, poseBasse, support, fixations,
     };
   }, [result, texteDemande, gammePanneau, classePanneau, niveauRemise,
-    sectionSupport, hauteurSousPanneau]);
+    sectionSupport, hauteurSousPanneau, optionsEnsemble]);
 
   /** Les lignes de demande qui forment un ensemble de police. */
   const lignesEnsemble = useMemo(
