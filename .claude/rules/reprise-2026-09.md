@@ -54,6 +54,16 @@ retouché.
   pré-sélection par `suggestions`. Ne jamais borner `produits` aux candidats
   d'un rapprochement : la recherche manuelle devient aveugle.
 
+## La proposition Odoo retenue d'office : ISOSIGN d'abord
+
+Odoo mélange sous un même code les articles **ISOSIGN** (« IS AB4 », segment
+`.IS.` dans la référence) et ceux de **Sud Ouest Signalisation** (« SO AB4 »,
+`AB4.600.C2.BRUT`, sans `.IS.`). Les SO ne se prennent **jamais par défaut** :
+`variantesParDefaut` (`variantFunnel.ts`) écarte tout ce qui n'est pas
+ISOSIGN dès qu'une variante ISOSIGN existe (`estIsosign`), sauf si la demande
+nomme SO. Sans variante ISOSIGN, les SO restent proposés plutôt qu'une ligne
+sans prix. Le choix à la main reste libre.
+
 ## Les brides
 
 **Une bride par rail.** Le nombre de rails se lit dans

@@ -157,6 +157,29 @@ describe('reprise d’office d’une proposition Odoo', () => {
       .toContain('KC1.800.600.C1.BTR.R.IS.BRUT');
   });
 
+  /* ⚠️ Odoo rendait le SO AB4 (Sud Ouest Signalisation) en tête sur « AB4
+     STOP », et c'est lui qui partait au devis. ISOSIGN d'abord. */
+  const AB4 = [
+    { reference: 'AB4.600.C2.BRUT', description: 'SO AB4' },
+    { reference: 'AB4.600.C2.BTR.IS.BRUT', description: 'IS AB4' },
+    { reference: 'AB4.600.C2.R.BRUT', description: 'SO AB4' },
+    { reference: 'AB4.1000.C2.BRUT', description: 'SO AB4' },
+    { reference: 'AB4.1000.C2.IS.BRUT', description: 'IS AB4 1000 C2' },
+  ];
+
+  it('retient la gamme ISOSIGN plutôt que Sud Ouest Signalisation', () => {
+    expect(variantesParDefaut(AB4, 'AB4 STOP 600 C2')[0]).toBe('AB4.600.C2.BTR.IS.BRUT');
+    expect(variantesParDefaut(AB4, 'AB4 STOP')).not.toContain('AB4.600.C2.BRUT');
+  });
+
+  it('garde SO quand la demande le nomme, ou quand rien d’ISOSIGN n’existe', () => {
+    // Nommé par la demande, SO reste dans la course (l'entonnoir tranche ensuite).
+    const soDemande = variantesParDefaut(AB4, 'AB4 STOP SO 600');
+    expect(soDemande.some((r) => !r.includes('.IS.'))).toBe(true);
+    const seulementSO = AB4.filter((c) => c.description.startsWith('SO'));
+    expect(variantesParDefaut(seulementSO, 'AB4 STOP').length).toBeGreaterThan(0);
+  });
+
   /* ⚠️ Une liste vide vaut « aucune proposition », donc une ligne au devis
      SANS PRIX. On préfère toujours rendre ce qu'Odoo a proposé. */
   it('ne filtre jamais jusqu’au vide', () => {

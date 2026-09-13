@@ -393,8 +393,24 @@ export function variantesParDefaut(
 ): string[] {
   const toutes = candidates.map((c) => c.reference);
   if (candidates.length < 2) return toutes;
-  const { matches } = buildFunnel({ candidates, query: demande });
-  return matches.length ? matches : toutes;
+  /* ⚠️ **ISOSIGN D'ABORD.** Odoo mélange deux gammes sous le même code : les
+     articles ISOSIGN (« IS AB4 », segment `.IS.` dans la référence) et ceux
+     de Sud Ouest Signalisation (« SO AB4 », AB4.600.C2.BRUT). Sur « AB4
+     STOP » il rendait le SO en premier, et c'est lui qui partait au devis.
+     Dès qu'une variante ISOSIGN existe, les autres sont écartées — sauf si la
+     demande nomme SO elle-même. */
+  const nommeSO = /\b(SOS?|SUD\s*OUEST)\b/i.test(demande);
+  const isosign = nommeSO ? candidates : candidates.filter(estIsosign);
+  const pool = isosign.length ? isosign : candidates;
+  if (pool.length < 2) return pool.map((c) => c.reference);
+  const { matches } = buildFunnel({ candidates: pool, query: demande });
+  return matches.length ? matches : pool.map((c) => c.reference);
+}
+
+/** Article de la gamme ISOSIGN : segment `IS` dans la référence, ou désignation « IS … ». */
+export function estIsosign(c: CandidateProduit): boolean {
+  if (c.reference.toUpperCase().split('.').some((s) => classifySegment(s) === 'marque')) return true;
+  return /^IS\b/i.test(String(c.description || '').trim());
 }
 
 export function buildFunnel({
