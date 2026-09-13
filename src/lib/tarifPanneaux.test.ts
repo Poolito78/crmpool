@@ -2,8 +2,29 @@ import { describe, it, expect } from 'vitest';
 import {
   prixPanneau, panonceauPour, supportPour, formeDeCode, codeDansTexte,
   hauteurDeDimension, groupePanonceau, niveauDepuisContrat, estCodeChantier,
-  estPoseBasse,
+  estPoseBasse, panonceauDansTexte,
 } from './tarifPanneaux';
+
+describe('panonceau écrit sur la ligne du panneau', () => {
+  it('lit le M9c accolé à l’AB3a et sa mention', () => {
+    expect(panonceauDansTexte('AB3a+M9c Cédez le passage', 'AB3A'))
+      .toEqual({ code: 'M9C', mention: 'Cédez le passage' });
+    expect(panonceauDansTexte('B14 30 + M9z RAPPEL', 'B14'))
+      .toEqual({ code: 'M9Z', mention: 'RAPPEL' });
+  });
+
+  it('lit la classe fixe quel que soit la casse du code', () => {
+    // La table porte « M4c », la lecture d'une demande rend « M4C ».
+    expect(panonceauPour('M4C', 'B14', { taille: 'P', classe: 2 })?.dimension)
+      .toBe(panonceauPour('M4c', 'B14', { taille: 'P', classe: 2 })?.dimension);
+  });
+
+  it('ne voit aucun panonceau quand la ligne n’en nomme pas', () => {
+    expect(panonceauDansTexte('AB4 STOP', 'AB4')).toBeNull();
+    // Un second panneau n'est pas un panonceau.
+    expect(panonceauDansTexte('AB3a + B14 30', 'AB3A')).toBeNull();
+  });
+});
 
 describe('niveau de tarif lu dans le contrat cadre', () => {
   it('lit le niveau du contrat de REFLEX', () => {

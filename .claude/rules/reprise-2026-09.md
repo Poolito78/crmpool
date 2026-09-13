@@ -87,10 +87,16 @@ compte que cela — il annonçait 91,33 € pour une ligne qui en facturait 36,0
   panneau : il s'affichait, mais surtout il allongeait le mât de sa hauteur et
   ajoutait un rail, donc une bride — un « AB4 STOP » seul annonçait un mât de
   3,50 m et trois colliers pour un ensemble qui n'en demande que deux.
-  `ensembleDeLigne` ne retient donc un panonceau **que si la ligne suivante en
-  nomme un**. Celui-là a déjà sa ligne au devis (le reprendre le facturerait
-  deux fois) et ne paraît à l'encart, en gris, que parce qu'il pèse sur le mât
-  et sur les brides.
+  `ensembleDeLigne` ne retient donc un panonceau **que si le client en nomme
+  un**, de deux façons :
+  - **sur la ligne du panneau** — « AB3a+M9c Cédez le passage »
+    (`panonceauDansTexte`, qui cherche après le code du panneau) : la ligne ne
+    désigne que le panneau, le panonceau part donc avec l'ensemble, d'office ;
+  - **à la ligne suivante** : il y a déjà sa ligne au devis (le reprendre le
+    facturerait deux fois) et ne paraît à l'encart, en gris, que parce qu'il
+    pèse sur le mât et sur les brides.
+- **`PANO_CLASS` se lit sans casse** : la table écrit « M4c », la lecture d'une
+  demande rend « M4C » ; toute classe fixe était ratée.
 - **`SUP_SECT` est troué** (pas de 2 m ni de 3 m en 80×40, rien au-delà de 4 m
   en alu) : une longueur absente se prolonge depuis la plus proche inférieure au
   mètre linéaire du tarif, et l'écran l'annonce. Vérifié : 1,5 m + 1 × 6,95

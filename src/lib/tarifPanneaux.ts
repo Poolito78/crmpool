@@ -108,7 +108,11 @@ export const LETTRES_UNE_LIGNE = 12;
  */
 export function classePanonceau(code: string, mention?: string): number {
   const k = String(code || '').replace(/\s.*/, '');
-  const fixe = PANO_CLASS[k];
+  /* La table écrit « M4c », `codeDansTexte` rend « M4C » : une lecture
+     sensible à la casse ratait toute classe fixe, et un M4c à pictogramme
+     retombait au format étroit. */
+  const cle = Object.keys(PANO_CLASS).find(c => c.toUpperCase() === k.toUpperCase());
+  const fixe = cle != null ? PANO_CLASS[cle] : undefined;
   if (fixe != null) return fixe;
 
   if (/^M(9Z|4Z)/i.test(k)) {
@@ -392,6 +396,34 @@ export function hauteurDeDimension(dimension: string): number {
  * elle distingue une limitation à 30 d'une limitation à 50, qui sont deux
  * articles et deux prix identiques mais deux marchandises différentes.
  */
+const MOTIF_CODE = /\b([ABC]K\d{1,2}[A-Z]?\d?|K[A-Z]{0,2}\d{1,3}[A-Z]?\d?|EB\d{1,2}|AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/;
+
+/**
+ * Le panonceau écrit SUR LA MÊME LIGNE que son panneau — « AB3a+M9c Cédez le
+ * passage » — et la mention qui le suit.
+ *
+ * `codeDansTexte` ne rend que le premier code : le panneau. Le panonceau
+ * accolé passait donc inaperçu, ni compté sur le mât, ni facturé. On cherche
+ * ici, APRÈS le code du panneau, le premier code dont la forme est un
+ * panonceau ; ce qui le suit est sa mention (elle dimensionne les M9z).
+ */
+export function panonceauDansTexte(
+  texte: string,
+  codePanneau: string,
+): { code: string; mention: string } | null {
+  const t = String(texte || '').toUpperCase();
+  const debut = t.indexOf(codePanneau.toUpperCase());
+  if (debut < 0) return null;
+  const global = new RegExp(MOTIF_CODE.source, 'g');
+  global.lastIndex = debut + codePanneau.length;
+  for (let m = global.exec(t); m; m = global.exec(t)) {
+    if (formeDeCode(m[1]) !== FORME_PANONCEAU) continue;
+    const fin = m.index + m[1].length;
+    return { code: m[1], mention: String(texte).slice(fin).trim() };
+  }
+  return null;
+}
+
 export function codeDansTexte(texte: string): { code: string; valeur?: string } | null {
   const t = String(texte || '').toUpperCase();
   /* La lettre de variante peut être suivie d'un chiffre : B21a2, B21a1, M9z1,
@@ -410,7 +442,7 @@ export function codeDansTexte(texte: string): { code: string; valeur?: string } 
      « C\d » mordait sur le segment de CLASSE, et l'AK3 ressortait en carré
      C2 : mauvaise forme, mauvaise grille, et le sélecteur de gamme s'affichait
      pour un panneau qui n'en relève pas. La placer d'abord règle les deux. */
-  const m = t.match(/\b([ABC]K\d{1,2}[A-Z]?\d?|K[A-Z]{0,2}\d{1,3}[A-Z]?\d?|EB\d{1,2}|AB\d{1,2}[A-Z]?\d?|A\d{1,3}[A-Z]?\d?|B\d{1,3}[A-Z]?\d?|CE\d{1,3}[A-Z]?\d?|C\d{1,3}[A-Z]?\d?|M\d{1,2}[A-Z]?\d?|E\d{1,3}[A-Z]?\d?)\b/);
+  const m = t.match(MOTIF_CODE);
   if (!m) return null;
   const code = m[1];
   // Une valeur entre guillemets ou juste après : « B14 « 30 » ».
