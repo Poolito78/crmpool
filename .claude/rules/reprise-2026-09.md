@@ -101,7 +101,9 @@ compte que cela — il annonçait 91,33 € pour une ligne qui en facturait 36,0
   un**, de deux façons :
   - **sur la ligne du panneau** — « AB3a+M9c Cédez le passage »
     (`panonceauDansTexte`, qui cherche après le code du panneau) : la ligne ne
-    désigne que le panneau, le panonceau part donc avec l'ensemble, d'office ;
+    désigne que le panneau, le panonceau a donc sa **case, cochée par défaut**
+    (`d{i}:pano`, clé absente = coché) et part en ligne sous le panneau ;
+    la décocher le retire du devis ;
   - **à la ligne suivante** : il y a déjà sa ligne au devis (le reprendre le
     facturerait deux fois) et ne paraît à l'encart, en gris, que parce qu'il
     pèse sur le mât et sur les brides.
