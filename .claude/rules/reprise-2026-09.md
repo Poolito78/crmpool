@@ -108,6 +108,15 @@ compte que cela — il annonçait 91,33 € pour une ligne qui en facturait 36,0
   - **à la ligne suivante** : il y a déjà sa ligne au devis (le reprendre le
     facturerait deux fois) et ne paraît à l'encart, en gris, que parce qu'il
     pèse sur le mât et sur les brides.
+- ⚠️ **Une ligne chiffrée à la grille part SOUS SA RÉFÉRENCE, pas en négoce.**
+  Panonceau d'option et panneau sans article partaient en ligne libre, sans
+  référence : Odoo les créait en « GE NEGOCE ISO » (devis AF037419). La
+  référence se déduit du chiffrage — `M9C.350.150.C1.BTR.IS.BRUT`, code,
+  cotes, classe, BTR, IS, BRUT — et `articlePolice` ne la retient **que si
+  l'article existe au catalogue** (une référence fabriquée se ferait
+  rapprocher d'une voisine chez Odoo). Le panneau sans article part au prix de
+  la grille, plus à 0 €. Et la recherche Odoo du panneau retire le panonceau
+  accolé (« AB3a+M9c ») qui la brouillait.
 - **`PANO_CLASS` se lit sans casse** : la table écrit « M4c », la lecture d'une
   demande rend « M4C » ; toute classe fixe était ratée.
 - ⚠️ **Sous un AB3a, la page du catalogue l'emporte sur la table de groupe**

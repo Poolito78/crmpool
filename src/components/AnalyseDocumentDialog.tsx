@@ -2066,7 +2066,17 @@ const [contratOdoo, setContratOdoo] = useState<
       niveau: niveauRemise,
     });
     const mm = pan?.dimension.match(/(\d+)/)?.[1];
-    return `${brut}${mm ? ` ${mm}` : ''} C${classePanneau}`;
+    /* « AB3a+M9c Cédez le passage » : le panonceau accolé n'est pas le
+       panneau. L'envoyer avec lui brouillait la recherche — aucun AB3A
+       n'était retenu, et la ligne partait en négoce. Le panneau se cherche
+       seul ; le panonceau reçoit sa propre référence au devis. */
+    const accole = panonceauDansTexte(brut, trouve.code);
+    const haut = brut.toUpperCase();
+    const coupe = accole
+      ? haut.indexOf(accole.code, haut.indexOf(trouve.code) + trouve.code.length)
+      : -1;
+    const panneauSeul = coupe > 0 ? brut.slice(0, coupe).replace(/[\s+&,/-]+$/, '') : brut;
+    return `${panneauSeul}${mm ? ` ${mm}` : ''} C${classePanneau}`;
   }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo,
       texteDemande]);
 
@@ -3036,6 +3046,27 @@ const [contratOdoo, setContratOdoo] = useState<
     };
 
     /**
+     * L'ARTICLE DU CATALOGUE QUE DÉSIGNE UN ÉLÉMENT CHIFFRÉ À LA GRILLE.
+     *
+     * Un panonceau ou un panneau chiffré à la grille partait en ligne libre,
+     * sans référence : Odoo le créait en négoce (« GE NEGOCE ISO »), et le
+     * devis AF037419 en a porté trois. La référence se déduit pourtant du
+     * chiffrage — code, cotes, classe — dans la forme du catalogue ISOSIGN,
+     * brut et bord tombé rebordé : M9C.350.150.C1.BTR.IS.BRUT.
+     *
+     * ⚠️ **ON NE LA RETIENT QUE SI L'ARTICLE EXISTE AU CATALOGUE.** Une
+     * référence fabriquée qu'Odoo ne connaît pas se ferait rapprocher « par
+     * ressemblance » d'une voisine — un C2 pour un C1.
+     */
+    const articlePolice = (code: string, dimension: string): Produit | undefined => {
+      const cotes = dimension.match(/\d+/g);
+      if (!cotes?.length) return undefined;
+      const ref = `${code}.${cotes.join('.')}.C${classePanneau}.BTR.IS.BRUT`.toUpperCase();
+      return produits.find(p =>
+        (p.referenceOdoo || '').toUpperCase() === ref || (p.reference || '').toUpperCase() === ref);
+    };
+
+    /**
      * LES ACCESSOIRES COCHÉS D'UN ENSEMBLE DE POLICE.
      *
      * L'encart de tarif chiffrait panonceau, mât et colliers, puis le devis
@@ -3063,10 +3094,15 @@ const [contratOdoo, setContratOdoo] = useState<
          décocher le retire du devis. */
       if (ens.panonceauSurLaLigne && ens.panonceau && ens.codePanonceau
           && (optionsEnsemble[`d${i}:pano`] ?? true)) {
+        const article = articlePolice(ens.codePanonceau, ens.panonceau.dimension);
         out.push({
           id: generateId(),
-          description: `Panonceau ${ens.codePanonceau} ${ens.panonceau.dimension} — classe ${classePanneau}`,
-          quantite: qte, unite: 'u', prixUnitaireHT: ens.panonceau.prix,
+          produitId: article?.id,
+          referenceOdoo: article ? (article.referenceOdoo || article.reference) : undefined,
+          description: article
+            ? designationProduit(article)
+            : `Panonceau ${ens.codePanonceau} ${ens.panonceau.dimension} — classe ${classePanneau}`,
+          quantite: qte, unite: article?.unite || 'u', prixUnitaireHT: ens.panonceau.prix,
           tva, remise: 0, note: ens.panonceau.explication,
         });
       }
@@ -3131,6 +3167,28 @@ const [contratOdoo, setContratOdoo] = useState<
         }, ...lignesOptionsEnsemble(i, l)];
       }
       const p = produitDeLigne(i);
+      /* AUCUN ARTICLE RETENU, MAIS UN PANNEAU DE POLICE CHIFFRÉ À LA GRILLE.
+         La ligne partait avec le seul texte du document (« Cédez le
+         passage »), à 0 €, et Odoo la créait en négoce. Elle part désormais
+         au prix que l'encart affiche, et sous l'article que le chiffrage
+         désigne quand il existe au catalogue. */
+      const ens = p ? null : ensembleDeLigne(i);
+      if (ens) {
+        const police = articlePolice(ens.code, ens.panneau.dimension);
+        return [{
+          id: generateId(),
+          produitId: police?.id,
+          referenceOdoo: police ? (police.referenceOdoo || police.reference) : undefined,
+          description: libelleManuel[i]
+            || (police ? designationProduit(police) : `${ens.code} ${ens.panneau.dimension} — classe ${classePanneau}`),
+          quantite: quantiteDe(cle, l.quantite),
+          unite: police?.unite || 'u',
+          prixUnitaireHT: prixManuel[cle] ?? ens.panneau.prix,
+          tva: l.tva ?? 20,
+          remise: 0,
+          note: l.description || undefined,
+        }, ...lignesOptionsEnsemble(i, l)];
+      }
       return [{
         id: generateId(),
         produitId: p?.id,
@@ -5290,7 +5348,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                    fiche. Les omettre ici ferait mentir un total
                                    qui promet de compter ce qui partira. */
                                 const options = totalOptionsDe(i, quantiteDe(cle, l.quantite || 1));
-                                if (!choixOdoo[i] && !produitDeLigne(i)) return t + options;
+                                if (!choixOdoo[i] && !produitDeLigne(i)) {
+                                  /* Panneau de police sans article : il part
+                                     au prix de la grille, le total aussi. */
+                                  const ens = ensembleDeLigne(i);
+                                  const panneau = ens
+                                    ? (prixManuel[cle] ?? ens.panneau.prix) * quantiteDe(cle, l.quantite || 1)
+                                    : 0;
+                                  return t + options + panneau;
+                                }
                                 return t + puDeLigne(i) * quantiteDe(cle, l.quantite || 1) + options;
                               }, 0);
                               const totalAcc = accompagnements.reduce((t, a) => {
