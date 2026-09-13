@@ -3389,7 +3389,21 @@ const [contratOdoo, setContratOdoo] = useState<
             section du support : une barre horizontale apparaissait et la
             section se lisait coupée. Il prend désormais presque tout l'écran,
             et les rangées de réglages passent à la ligne. */}
-        <DialogContent mobileFullscreen className="sm:max-w-[96vw] xl:max-w-7xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col p-4 sm:p-5 [&>button]:z-20">
+        {/* ⚠️ **UN CLIC SUR UNE NOTIFICATION FERMAIT L'ANALYSE ET L'EFFAÇAIT.**
+            Choisir un article ouvre « Retenir « … » comme tag ? » : cette
+            notification vit HORS du dialogue, Radix prenait donc le clic sur
+            « Retenir » pour un clic à l'extérieur, fermait le dialogue, et
+            `reset()` jetait toute l'analyse. Un clic dans une notification ne
+            ferme plus rien ; et une fois l'analyse faite, un clic égaré à côté
+            non plus — on ferme par la croix ou Échap. */}
+        <DialogContent
+          mobileFullscreen
+          className="sm:max-w-[96vw] xl:max-w-7xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col p-4 sm:p-5 [&>button]:z-20"
+          onInteractOutside={(e) => {
+            const cible = e.target as HTMLElement | null;
+            if (cible?.closest?.('[data-sonner-toaster]') || result) e.preventDefault();
+          }}
+        >
           <DialogHeader className="shrink-0">
             <DialogTitle className="flex items-center gap-2">
               <ScanText className="w-5 h-5 text-primary" />
