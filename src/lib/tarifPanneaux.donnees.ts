@@ -2301,6 +2301,32 @@ export const PANO_CLASS: Record<string, number> = {
   "M7": 2
 };
 
+/**
+ * Dimensions du panonceau POUR UN PANNEAU PRÉCIS, quand le catalogue lui
+ * consacre sa propre page — elles l'emportent alors sur `PANO_TABLE`.
+ *
+ * ⚠️ **LE GROUPE NE SUFFIT PAS SOUS UN AB3a.** La page « Pour AB3a » du
+ * catalogue ne suit pas la règle générale : un M9c « Cédez le passage » y
+ * reste à 350x150 en gamme P là où la table de groupe donnait 500x150, et un
+ * M5a y passe à 500x500 en gamme N au lieu de 700x350. Le M9c n'existe
+ * d'ailleurs que sous un AB3a.
+ *
+ * Gammes M, P, N, G (500, 700, 1000, 1250) : la page ne porte pas de TG, et
+ * `panonceauPour` redescend alors à la G, comme pour toute gamme absente.
+ * La classe de rétroréflexion reste celle du panneau — classe 2 par défaut
+ * sur les AB, classe 1 si le client la demande.
+ */
+export const PANO_PAR_PANNEAU: Record<string, Record<string, string[]>> = {
+  "AB3A": {
+    "M1": ["350x150", "500x150", "700x200", "900x250"],
+    "M4D1": ["350x150", "350x150", "500x200", "500x300"],
+    "M4D2": ["350x150", "350x150", "500x200", "500x300"],
+    "M5A": ["350x250", "500x350", "500x500", "700x700"],
+    "M7": ["350x350", "500x500", "700x700", "900x900"],
+    "M9C": ["350x150", "350x150", "500x200", "500x300"]
+  }
+};
+
 /** Prix des mâts Ø60 galvanisés, par longueur en mètres. */
 export const SUP_PRIX: Record<string, { mat: Record<string, number>; collier: number; leml: number }> = {
   "R0": {

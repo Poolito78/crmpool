@@ -19,6 +19,40 @@ describe('panonceau écrit sur la ligne du panneau', () => {
       .toBe(panonceauPour('M4c', 'B14', { taille: 'P', classe: 2 })?.dimension);
   });
 
+  it('dimensionne le M9c d’après la page « Pour AB3a » du catalogue', () => {
+    // 500 (M), 700 (P), 1000 (N), 1250 (G). La table de groupe donnait
+    // 500x150 en gamme P : la page du catalogue dit 350x150.
+    const dim = (taille: 'M' | 'P' | 'N' | 'G' | 'TG') =>
+      panonceauPour('M9C', 'AB3A', { taille, classe: 2 })?.dimension;
+    expect(dim('M')).toBe('350x150');
+    expect(dim('P')).toBe('350x150');
+    expect(dim('N')).toBe('500x200');
+    expect(dim('G')).toBe('500x300');
+    // Pas de TG sur la page : on redescend à la G.
+    expect(dim('TG')).toBe('500x300');
+  });
+
+  it('suit la page AB3a pour les autres panonceaux qu’elle porte', () => {
+    const sousAB3a = (code: string, taille: 'M' | 'P' | 'N' | 'G') =>
+      panonceauPour(code, 'AB3a', { taille, classe: 2 })?.dimension;
+    expect(sousAB3a('M5a', 'N')).toBe('500x500');
+    expect(sousAB3a('M5a', 'G')).toBe('700x700');
+    expect(sousAB3a('M4d1', 'P')).toBe('350x150');
+    expect(sousAB3a('M4d2', 'G')).toBe('500x300');
+    expect(sousAB3a('M1', 'N')).toBe('700x200');
+    expect(sousAB3a('M7', 'P')).toBe('500x500');
+    // Hors de la page, la table de groupe reste la règle.
+    expect(panonceauPour('M5a', 'B14', { taille: 'N', classe: 2 })?.dimension).toBe('700x350');
+  });
+
+  it('chiffre le panonceau dans la classe demandée', () => {
+    const c2 = panonceauPour('M9C', 'AB3A', { taille: 'P', classe: 2 });
+    const c1 = panonceauPour('M9C', 'AB3A', { taille: 'P', classe: 1 });
+    expect(c2?.dimension).toBe('350x150');
+    expect(c1?.dimension).toBe('350x150');
+    expect(c1?.prix).not.toBe(c2?.prix);
+  });
+
   it('ne voit aucun panonceau quand la ligne n’en nomme pas', () => {
     expect(panonceauDansTexte('AB4 STOP', 'AB4')).toBeNull();
     // Un second panneau n'est pas un panonceau.

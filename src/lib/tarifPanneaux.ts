@@ -1,5 +1,5 @@
 import {
-  TARIFS, PANO_TABLE, PANO_CLASS, SUP_PRIX, SUP_SECT, SECTIONS_SUPPORT,
+  TARIFS, PANO_TABLE, PANO_CLASS, PANO_PAR_PANNEAU, SUP_PRIX, SUP_SECT, SECTIONS_SUPPORT,
   LONGUEURS_MAT, POSE, TAILLES,
   type NiveauTarif, type Gamme, type Taille, type GrilleForme, type SectionSupport,
 } from '@/lib/tarifPanneaux.donnees';
@@ -227,7 +227,12 @@ export function panonceauPour(
      dans PANO_CLASS : tout retombait donc en classe 0, et un M4c à
      pictogramme sortait au format d'un M1 sur une ligne. */
   const groupe = groupePanonceau(codePanneau);
-  const dims = PANO_TABLE[groupe]?.[String(classePanonceau(codePanonceau, mention))];
+  /* La page propre au panneau l'emporte sur la table de groupe : sous un AB3a,
+     le catalogue ne suit pas la règle générale. Voir `PANO_PAR_PANNEAU`. */
+  const propre = PANO_PAR_PANNEAU[String(codePanneau || '').toUpperCase().replace(/[\s-].*/, '')]
+    ?.[String(codePanonceau || '').toUpperCase().replace(/\s.*/, '')];
+  const dims = propre
+    ?? PANO_TABLE[groupe]?.[String(classePanonceau(codePanonceau, mention))];
   if (!dims) return null;
 
   const depart = Math.max(0, Math.min(4, TAILLES.indexOf(taille)));

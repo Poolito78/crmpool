@@ -97,6 +97,11 @@ compte que cela — il annonçait 91,33 € pour une ligne qui en facturait 36,0
     pèse sur le mât et sur les brides.
 - **`PANO_CLASS` se lit sans casse** : la table écrit « M4c », la lecture d'une
   demande rend « M4C » ; toute classe fixe était ratée.
+- ⚠️ **Sous un AB3a, la page du catalogue l'emporte sur la table de groupe**
+  (`PANO_PAR_PANNEAU`) : M9c 350x150 en P (et non 500x150), M5a 500x500 en N.
+  Le panonceau prend la **classe de rétroréflexion du panneau** : classe 2 par
+  défaut sur les AB, classe 1 si le client la demande — c'est le sélecteur de
+  classe commun, la classe n'est pas lue dans le texte de la ligne.
 - **`SUP_SECT` est troué** (pas de 2 m ni de 3 m en 80×40, rien au-delà de 4 m
   en alu) : une longueur absente se prolonge depuis la plus proche inférieure au
   mètre linéaire du tarif, et l'écran l'annonce. Vérifié : 1,5 m + 1 × 6,95
