@@ -566,6 +566,34 @@ export default function Devis() {
       statut, lignes, referenceAffaire, chantier, systeme, notes, conditions, fraisPortHT, fraisPortTVA,
       modeCalcul, surfaceGlobaleM2]);
 
+  /**
+   * Crée dans Odoo un devis de la LISTE, sans l'ouvrir.
+   *
+   * `preparerOdoo` lit le formulaire ouvert : depuis la liste il n'y en a pas,
+   * c'est donc le devis ENREGISTRÉ qui part — ses lignes, son client, son
+   * contact. Même envoi (`lancerOdoo`), même dialogue de suivi, rendu au
+   * niveau de la page.
+   */
+  const creerDevisOdooDepuisListe = useCallback(async (d: DevisType) => {
+    try {
+      const client = clients.find(c => c.id === d.clientId);
+      if (!client) { toast.error('Client introuvable'); return; }
+      const odooNom = promptOdooPartnerName(client.id, client.societe || client.nom);
+      if (odooNom === null) return;
+      const contact = (client.contacts || []).find(ct => ct.id === d.contactId);
+      const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+      const opts = { surface: d.surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
+      await lancerOdoo(
+        buildOdooPayload(d, client, produits, opts),
+        genererScriptOdoo(d, client, produits, opts),
+        { dryRun: false },
+      );
+    } catch (err) {
+      toast.error('Erreur lors de la préparation du devis Odoo');
+      console.error(err);
+    }
+  }, [clients, produits, lancerOdoo]);
+
 
   // Archive
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
@@ -1993,6 +2021,7 @@ export default function Devis() {
                             { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
                             { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
                             { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                            { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
                             { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                             { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
                           ]} />
@@ -2232,6 +2261,7 @@ export default function Devis() {
                       { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
                       { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
                       { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                      { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
                       { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                       { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
                     ]} />
