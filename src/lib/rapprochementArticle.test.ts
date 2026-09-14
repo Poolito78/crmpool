@@ -392,6 +392,34 @@ describe('un code nomme ferme les autres familles', () => {
     });
   });
 
+  /* ⚠️ « J 4 1 flèche » restait « à choisir » et Odoo proposait un C1A
+     « FLECHE DROITE » : il fallait J4#1CHEVRON.400.400.C2.BTR.IS.BRUT. */
+  describe('balise J4 : code séparé, déclinaison après #, flèche = chevron', () => {
+    const POL = 'SIGNALISATION POLICE / Rectangle (M) / Bddp';
+    const J4 = [
+      cat('J4#1CHEVRON.600.600.C2.BTR.IS.BRUT', 'IS J4', POL),
+      cat('J4#1CHEVRON.400.400.C2.BTR.IS.BRUT', 'IS J4', POL),
+      cat('J4#2CHEVRONS.400.400.C2.BTR.IS.BRUT', 'IS J4', POL),
+      cat('C1AFTYPE#FLECHE DROITE.500.C2.BTR.ST.IS.BRUT', 'IS C1A FTYPE', POL),
+    ];
+
+    it('recolle « J 4 » et le reconnaît sous J4#…', () => {
+      expect(codesEnTete('J 4 1 flèche', J4)).toEqual(['J4']);
+      expect(codesEnTete('de 2 ml', J4)).toEqual([]);
+    });
+
+    it('retient le J4 à un chevron, petit format, jamais le C1A', () => {
+      const r = rapprocherArticle('J 4 1 flèche', J4);
+      expect(r.confiance).toBe('sure');
+      expect(r.meilleur?.reference).toBe('J4#1CHEVRON.400.400.C2.BTR.IS.BRUT');
+    });
+
+    it('suit le nombre de flèches demandé', () => {
+      expect(rapprocherArticle('J4 2 flèches', J4).meilleur?.reference)
+        .toBe('J4#2CHEVRONS.400.400.C2.BTR.IS.BRUT');
+    });
+  });
+
   /* ⚠️ Le filtre ne doit jamais vider la liste : une ligne sans candidat ne
      se rattrape pas, elle part au devis vide. */
   it('ne filtre pas jusqu’au vide', () => {

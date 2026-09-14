@@ -456,11 +456,23 @@ export function noter(
   /* LE CODE NOMMÉ EN TÊTE, ÉCRIT TEL QUE LA RÉFÉRENCE LE PORTE. Voir
      `codesEnTete`. Le premier code est le sujet de la ligne, le suivant un
      accessoire accolé (« AB3a+M9c ») : il ne passe pas le seuil à lui seul. */
-  const rang = codes.indexOf(codeDeReference(produit.reference));
+  const codeRef = codeDeReference(produit.reference);
+  let rang = codes.indexOf(codeRef);
+  if (rang < 0) rang = codes.indexOf(codeRef.split('#')[0]);
   if (rang >= 0) {
     score += rang === 0 ? BONUS_CODE : BONUS_CODE_SECOND;
     raisons.push(`code « ${codes[rang]} »`);
     caracteristiqueCommune = true;
+  }
+
+  /* LE CLIENT DIT « FLÈCHE », LE CATALOGUE DIT « CHEVRON ». « J 4 1 flèche »
+     désigne J4#1CHEVRON ; J4#2CHEVRONS en porte deux. Le nombre départage les
+     familles sans en éliminer aucune. */
+  const chevrons = /#(\d+)CHEVRONS?$/.exec(codeRef)?.[1];
+  const demandes = /(\d+)\s*(?:fleche|chevron)s?\b/.exec(sansAccents(demandeTexte))?.[1];
+  if (chevrons && demandes) {
+    if (chevrons === demandes) { score += 20; raisons.push(`${chevrons} chevron(s)`); }
+    else score -= 20;
   }
 
   // Recouvrement de vocabulaire, pour départager à caractéristiques égales.
@@ -544,9 +556,14 @@ function famillesParCode(produits: Produit[]): Map<string, Set<string>> {
     const code = codeDeReference(p.reference);
     const famille = familleDeCategorie(p.categorie);
     if (!code || !famille) continue;
-    const s = m.get(code);
-    if (s) s.add(famille);
-    else m.set(code, new Set([famille]));
+    /* « J4#1CHEVRON » se nomme aussi « J4 » : le client écrit le code du
+       panneau, jamais la déclinaison qu'Odoo accole derrière le #. */
+    for (const cle of new Set([code, code.split('#')[0]])) {
+      if (!cle) continue;
+      const s = m.get(cle);
+      if (s) s.add(famille);
+      else m.set(cle, new Set([famille]));
+    }
   }
   cacheFamilles.set(produits, m);
   return m;
@@ -563,7 +580,7 @@ function famillesParCode(produits: Produit[]): Map<string, Set<string>> {
 export function famillesAttendues(demandeTexte: string, produits: Produit[]): Set<string> {
   const table = famillesParCode(produits);
   const out = new Set<string>();
-  for (const brut of sansAccents(demandeTexte).toUpperCase().split(/[^A-Z0-9#]+/)) {
+  for (const brut of jetonsRecolles(demandeTexte, table)) {
     if (brut.length < 2 || !/^[A-Z]/.test(brut) || !/\d/.test(brut)) continue;
     const familles = table.get(brut);
     if (familles) for (const f of familles) out.add(f);
@@ -594,9 +611,33 @@ const BONUS_CODE = 60;
 const BONUS_CODE_SECOND = 45;
 const MOTS_EN_TETE = 3;
 
+/**
+ * Les mots de la demande en majuscules, codes recollés.
+ *
+ * « J 4 1 flèche » : le client a séparé la lettre du chiffre, et « J4 »
+ * n'apparaissait jamais. On recolle une à trois lettres et le nombre qui les
+ * suit **seulement si le résultat est un code du catalogue** — « de 2 ml » ne
+ * devient pas « DE2 ».
+ */
+function jetonsRecolles(texte: string, table: Map<string, Set<string>>): string[] {
+  const bruts = sansAccents(texte).toUpperCase().split(/[^A-Z0-9#]+/).filter(Boolean);
+  const out: string[] = [];
+  for (let k = 0; k < bruts.length; k++) {
+    const a = bruts[k];
+    const b = bruts[k + 1];
+    if (b && /^[A-Z]{1,3}$/.test(a) && /^\d{1,2}$/.test(b) && table.has(a + b)) {
+      out.push(a + b);
+      k++;
+      continue;
+    }
+    out.push(a);
+  }
+  return out;
+}
+
 export function codesEnTete(demandeTexte: string, produits: Produit[]): string[] {
   const table = famillesParCode(produits);
-  const significatifs = sansAccents(demandeTexte).toUpperCase().split(/[^A-Z0-9#]+/)
+  const significatifs = jetonsRecolles(demandeTexte, table)
     .filter(m => m.length > 1 && !/^\d+$/.test(m) && !LIAISONS.has(m.toLowerCase()))
     .slice(0, MOTS_EN_TETE);
   const out: string[] = [];
@@ -632,7 +673,10 @@ export function rapprocherArticle(
        fois la marchandise. */
     || (caracteristiques(`${a.p.reference} ${a.p.description}`).conditionnement ?? 0)
        - (caracteristiques(`${b.p.reference} ${b.p.description}`).conditionnement ?? 0)
-    || a.p.reference.length - b.p.reference.length);
+    || a.p.reference.length - b.p.reference.length
+    /* Puis le plus petit format : J4#1CHEVRON 400×400 avant 600×600. La
+       variante reste modifiable ; on ne l'impose qu'à égalité parfaite. */
+    || premiereCote(a.p.reference) - premiereCote(b.p.reference));
 
   /* La famille que le code impose ferme les autres — voir `famillesAttendues`.
      Appliqué APRÈS la notation : le filtre ne change pas les scores, il retire
@@ -665,6 +709,12 @@ export function rapprocherArticle(
       ? `au mieux : ${tete.pourquoi}`
       : 'rapprochement par le libellé seul',
   };
+}
+
+/** Première cote d'une référence (400 de J4#1CHEVRON.400.400…), l'infini à défaut. */
+function premiereCote(reference: string): number {
+  const s = reference.split('.').find(x => /^\d{3,4}$/.test(x));
+  return s ? Number(s) : Number.POSITIVE_INFINITY;
 }
 
 /** « Ø60, 3500 mm » — pour expliquer ce qu'on cherchait. */

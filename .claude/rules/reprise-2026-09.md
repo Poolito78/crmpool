@@ -56,6 +56,9 @@ retouché.
   exactement comme le premier segment de la référence (B1, jamais B14), dans
   les trois premiers mots significatifs ; la variante suit ensuite l'écran.
   Un code en fin de phrase (« au style des panneaux KC1 ») reste proposé.
+  « J 4 » se recolle en « J4 » (seulement si c'est un code du catalogue), un
+  code se reconnaît aussi avant le `#` (J4#1CHEVRON), et « N flèche(s) »
+  départage les familles N CHEVRON(S). À égalité, le plus petit format.
 - Le sélecteur reçoit le catalogue **entier** par `produits` et la
   pré-sélection par `suggestions`. Ne jamais borner `produits` aux candidats
   d'un rapprochement : la recherche manuelle devient aveugle.
