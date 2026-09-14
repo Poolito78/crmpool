@@ -38,6 +38,30 @@ porter (mesures sur la base, historique des régressions).
 
 ---
 
+## `grilleTarif.ts` — le niveau de tarif R0-R4 du client et du devis
+
+Fiche client → onglet **Tarifs** : niveau R0-R4, liste de prix et contrat-cadre
+lus chez Odoo (`odoo-prix` en mode `ficheTarifs`, même identification que la
+tarification), conditions de règlement et remises revendeur. Le niveau n'est
+qu'une valeur de DÉPART : le devis le reprend quand on choisit le client, et
+son sélecteur d'en-tête le change pour ce devis seul (colonne
+`devis.niveau_tarif`). Un devis enregistré sans niveau le garde à l'ouverture.
+
+- **Signalisation ISOSIGN** (catalogue ISOSIGN) : `grille_contrat` du niveau,
+  par gabarit — `gabaritsGrille` est la COPIE de `ContratCadre.gabarits`
+  (`odoo-prix`), à tenir alignée.
+- **Plastique STI** (article présent dans `ARTICLES_PLASTIQUE`) : R0 = public,
+  R1-R4 = net remisé du barème.
+- Le reste, et tout article hors grille : prix fiche, **compté et annoncé**
+  « hors grille — à vérifier ».
+
+⚠️ **R0 n'a pas de grille chez Odoo** (la synchro ne trouve que R1-R4 ; elle
+tente désormais R0). On ne le déduit PAS de R4 ÷ 0,65 : vrai sur les panneaux,
+faux sur les fixations (BOUCHON8040). Sans grille R0, la fiche article tarife.
+Mesuré le 15/09/2026 : les prix fiche sont très loin des grilles —
+`SG80401_5.3000.IS.BRUT` 89,43 € en fiche pour 22 € en R4, `AB4.600.C1.BRUT`
+0 € en fiche pour 47,29 € en R1.
+
 ## `odoo-prix` (Edge Function) — qui tarife
 
 ⚠️ **LE CONTRAT-CADRE TARIFE DÈS QU'IL EST RATTACHÉ ; SANS CONTRAT, LA LISTE

@@ -47,6 +47,18 @@ export interface Client {
   remisesParCategorie?: Record<string, number>;
   contacts?: Contact[];
   delaiReglement?: string;
+  /**
+   * Niveau de tarif R0-R4 des devis de ce client (onglet Tarifs). Il n'est
+   * qu'une valeur de DÉPART : chaque devis le reprend et peut le changer.
+   * `null` = prix de la fiche article. Voir `grilleTarif.ts`.
+   */
+  niveauTarif?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4' | null;
+  /** Liste de prix Odoo du client, telle que lue lors de la dernière récupération. */
+  listePrixOdoo?: string;
+  /** Intitulé du ou des contrats-cadres Odoo rattachés, même lecture. */
+  contratCadreOdoo?: string;
+  /** Date ISO de cette lecture : une information Odoo périmée doit se voir. */
+  tarifsOdooMaj?: string;
   // Comptabilité / identification légale
   siret?: string;
   codeApe?: string;
@@ -494,6 +506,11 @@ export interface Devis {
    * commandes d'un même site.
    */
   chantier?: string;
+  /**
+   * Niveau de tarif appliqué à CE devis — pré-rempli depuis la fiche client,
+   * modifiable. `null` = prix de la fiche article. Voir `grilleTarif.ts`.
+   */
+  niveauTarif?: 'R0' | 'R1' | 'R2' | 'R3' | 'R4' | null;
   systeme?: string;
   notes?: string;
   conditions?: string;
@@ -586,6 +603,10 @@ function dbToClient(r: any): Client {
     remisesParCategorie: (r.remises_par_categorie as Record<string, number>) || {},
     contacts: (r.contacts as Contact[]) || [],
     delaiReglement: r.delai_reglement || undefined,
+    niveauTarif: /^R[0-4]$/.test(r.niveau_tarif || '') ? r.niveau_tarif : undefined,
+    listePrixOdoo: r.liste_prix_odoo || undefined,
+    contratCadreOdoo: r.contrat_cadre_odoo || undefined,
+    tarifsOdooMaj: r.tarifs_odoo_maj || undefined,
     siret: r.siret || undefined,
     codeApe: r.code_ape || undefined,
     libelleApe: r.libelle_ape || undefined,
@@ -617,6 +638,10 @@ function clientToDb(c: Client, userId: string): Record<string, unknown> {
     remises_par_categorie: c.remisesParCategorie || {},
     contacts: c.contacts || [],
     ...(c.delaiReglement !== undefined ? { delai_reglement: c.delaiReglement } : {}),
+    ...(c.niveauTarif !== undefined ? { niveau_tarif: c.niveauTarif || null } : {}),
+    ...(c.listePrixOdoo !== undefined ? { liste_prix_odoo: c.listePrixOdoo || null } : {}),
+    ...(c.contratCadreOdoo !== undefined ? { contrat_cadre_odoo: c.contratCadreOdoo || null } : {}),
+    ...(c.tarifsOdooMaj !== undefined ? { tarifs_odoo_maj: c.tarifsOdooMaj || null } : {}),
     ...(c.siret !== undefined ? { siret: c.siret } : {}),
     ...(c.codeApe !== undefined ? { code_ape: c.codeApe } : {}),
     ...(c.libelleApe !== undefined ? { libelle_ape: c.libelleApe } : {}),
@@ -830,6 +855,7 @@ function dbToDevis(r: any): Devis {
     lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
     referenceAffaire: r.reference_affaire || undefined,
     chantier: r.chantier || undefined,
+    niveauTarif: /^R[0-4]$/.test(r.niveau_tarif || '') ? r.niveau_tarif : undefined,
     systeme: r.systeme || undefined,
     notes: r.notes || undefined,
     conditions: r.conditions || undefined,
@@ -869,6 +895,7 @@ function devisToDb(d: Devis, userId: string) {
        migré — et l'écriture étant en « fire-and-forget », la perte serait
        silencieuse. */
     ...(d.chantier !== undefined ? { chantier: d.chantier || null } : {}),
+    ...(d.niveauTarif !== undefined ? { niveau_tarif: d.niveauTarif || null } : {}),
     systeme: d.systeme || null,
     notes: d.notes || null,
     conditions: d.conditions || null,

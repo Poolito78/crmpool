@@ -149,6 +149,7 @@ explication.
 `produitTags` (les mots du client, jamais affichés dans un devis) ·
 `indexProduits` (index catalogue en WeakMap, deux caches) ·
 `bridesDevis` + `railsPanneaux.donnees` (une bride par rail, jamais devinée) ·
+`grilleTarif` (niveau R0-R4 : grille Odoo pour ISOSIGN, barème STI pour le plastique) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

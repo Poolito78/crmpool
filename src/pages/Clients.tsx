@@ -2,7 +2,7 @@ import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerTotalDevis, formatDate, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Client, type AdresseLivraison, type Contact } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check, Settings } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, MapPin, ChevronDown, ChevronUp, Filter, ArrowLeft, FileText, UserPlus, X, Mail, ChevronsUpDown, Bot, Loader2, CalendarClock, TrendingUp, ShoppingCart, CheckCircle2, XCircle, Clock, Building2, LayoutList, Table2, Check, Settings, RefreshCw } from 'lucide-react';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif } from '@/lib/grilleTarif';
 import { toast } from 'sonner';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -181,7 +183,8 @@ export default function Clients() {
   const [siretLoading, setSiretLoading] = useState(false);
   const [sortCol, setSortCol] = useState<'societe' | 'ville' | 'adresses' | 'devis' | 'encours' | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
-  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite'>('infos');
+  const [clientDialogTab, setClientDialogTab] = useState<'infos' | 'crm' | 'comptabilite' | 'tarifs'>('infos');
+  const [tarifsOdooEnCours, setTarifsOdooEnCours] = useState(false);
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
   const [crmActionDialogOpen, setCrmActionDialogOpen] = useState(false);
 
@@ -371,7 +374,7 @@ export default function Clients() {
     if (contacts.length === 0 && (c.nom || c.email || c.telephone)) {
       contacts = [{ id: generateId(), nom: c.nom || '', prenom: '', email: c.email || '', telephone: c.telephone || '', telephoneMobile: c.telephoneMobile || '', fonction: '' }];
     }
-    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '' });
+    setForm({ nom: c.nom, email: c.email, telephone: c.telephone, telephoneMobile: c.telephoneMobile || '', adresse: c.adresse, ville: c.ville, codePostal: c.codePostal, societe: c.societe || '', notes: c.notes || '', adressesLivraison: c.adressesLivraison || [], estRevendeur: c.estRevendeur || false, remisesParCategorie: c.remisesParCategorie || {}, contacts, delaiReglement: c.delaiReglement || '45J FDM', siret: c.siret || '', codeApe: c.codeApe || '', libelleApe: c.libelleApe || '', formeJuridique: c.formeJuridique || '', tvaIntra: c.tvaIntra || '', rcs: c.rcs || '', trancheEffectif: c.trancheEffectif || '', dateCreationEntreprise: c.dateCreationEntreprise || '', capitalSocial: c.capitalSocial || '', niveauTarif: c.niveauTarif ?? null, listePrixOdoo: c.listePrixOdoo || '', contratCadreOdoo: c.contratCadreOdoo || '', tarifsOdooMaj: c.tarifsOdooMaj || '' });
     setSiretOpen(false);
     setSiretResults([]);
     setSiretQuery('');
@@ -487,6 +490,53 @@ export default function Clients() {
     // Sinon texte normal
     const text = e.clipboardData.getData('text/plain');
     if (text?.trim()) setIaText(text.trim());
+  }
+
+  /**
+   * Lit chez Odoo ce qui tarife ce client : liste de prix, contrat-cadre, et
+   * le niveau R que le NOM du contrat annonce (« … TARIF R4 … »).
+   *
+   * Le niveau n'est remplacé que si Odoo en annonce un : un contrat muet ne
+   * doit pas effacer un niveau choisi à la main.
+   */
+  async function recupererTarifsOdoo() {
+    const email = form.email || (form.contacts || []).find(ct => ct.email)?.email || '';
+    if (!form.societe?.trim() && !email) {
+      toast.error('Renseignez la société ou un e-mail pour retrouver le client dans Odoo');
+      return;
+    }
+    setTarifsOdooEnCours(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('odoo-prix', {
+        body: { ficheTarifs: true, client: { email, societe: form.societe, nom: form.nom, ville: form.ville } },
+      });
+      if (error) throw error;
+      /* Une fonction pas encore redéployée ignore `ficheTarifs` et répond
+         comme à une tarification vide : le dire plutôt que « introuvable ». */
+      if (data && 'prix' in data && !('listePrix' in data)) {
+        toast.error('La fonction odoo-prix doit être redéployée : .\\deploy-function.ps1 odoo-prix');
+        return;
+      }
+      if (!data?.partenaire) {
+        toast.warning(data?.message || 'Client introuvable dans Odoo.');
+        return;
+      }
+      const niveau = estNiveauTarif(data.niveau) ? data.niveau : null;
+      setForm(prev => ({
+        ...prev,
+        listePrixOdoo: data.listePrix || '',
+        contratCadreOdoo: data.contratCadre || '',
+        tarifsOdooMaj: new Date().toISOString(),
+        ...(niveau ? { niveauTarif: niveau } : {}),
+      }));
+      toast.success(niveau
+        ? `Odoo (${data.partenaire}) : niveau ${niveau} lu dans le contrat-cadre`
+        : `Odoo (${data.partenaire}) : aucun niveau R dans le contrat-cadre — à choisir`);
+    } catch (e) {
+      toast.error(`Odoo injoignable : ${(e as Error).message}`);
+    } finally {
+      setTarifsOdooEnCours(false);
+    }
   }
 
   function save(silent = false): boolean {
@@ -911,6 +961,7 @@ export default function Clients() {
           <div className="flex gap-1 border-b border-border -mt-2 mb-2">
             <button type="button" onClick={() => setClientDialogTab('infos')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'infos' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Infos</button>
             <button type="button" onClick={() => setClientDialogTab('comptabilite')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'comptabilite' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Comptabilité</button>
+            <button type="button" onClick={() => setClientDialogTab('tarifs')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'tarifs' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Tarifs</button>
             {editingClient && <button type="button" onClick={() => setClientDialogTab('crm')} className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 -mb-px ${clientDialogTab === 'crm' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CRM</button>}
           </div>
 
@@ -1092,6 +1143,134 @@ export default function Clients() {
               <p className="text-xs text-muted-foreground italic">Ces informations peuvent être pré-remplies via la recherche entreprise (onglet Infos).</p>
             </div>
           )}
+
+          {/* ── Onglet Tarifs ───────────────────────────────────────────────────
+               Tout ce qui décide du prix d'un devis pour ce client : niveau
+               R0-R4 (valeur de départ de chaque devis, modifiable dans le
+               devis), ce qu'Odoo applique, conditions de règlement, remises
+               revendeur. Masqué plutôt que démonté : les champs restent dans
+               `form` quel que soit l'onglet. */}
+          <div className={clientDialogTab !== 'tarifs' ? 'hidden' : 'space-y-5 py-2'}>
+            <div className="rounded-lg border border-border p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <h3 className="font-semibold text-sm">Niveau de tarif</h3>
+                  <p className="text-xs text-muted-foreground">Pré-rempli dans chaque devis de ce client, et modifiable devis par devis.</p>
+                </div>
+                <Button type="button" size="sm" variant="outline" onClick={recupererTarifsOdoo} disabled={tarifsOdooEnCours}>
+                  {tarifsOdooEnCours ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5 mr-1" />}
+                  Récupérer d'Odoo
+                </Button>
+              </div>
+              <div className="w-full sm:w-80">
+                <Select
+                  value={form.niveauTarif || 'aucun'}
+                  onValueChange={v => setForm(prev => ({ ...prev, niveauTarif: estNiveauTarif(v) ? v : null }))}
+                >
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="aucun">Non défini — prix de la fiche article</SelectItem>
+                    {NIVEAUX_TARIF.map(n => <SelectItem key={n} value={n}>{LIBELLE_NIVEAU[n]}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+                <li><span className="font-medium text-foreground">Signalisation ISOSIGN</span> (police, temporaire, supports, fixations…) : grille « TARIF Rn » d'Odoo.</li>
+                <li><span className="font-medium text-foreground">Plastique STI</span> : prix public en R0, prix net remisé en R1 à R4.</li>
+                <li>Article absent de la grille, ISOMARK, ISOFLOOR : prix de la fiche article.</li>
+              </ul>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border pt-3 text-sm">
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Liste de prix Odoo</p>
+                  <p className="font-medium break-words">{form.listePrixOdoo || '—'}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Contrat-cadre Odoo</p>
+                  <p className="font-medium break-words">{form.contratCadreOdoo || '—'}</p>
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Lu chez Odoo le</p>
+                  <p className="font-medium">{form.tarifsOdooMaj ? new Date(form.tarifsOdooMaj).toLocaleString('fr-FR') : 'jamais'}</p>
+                </div>
+              </div>
+            </div>
+            {/* Conditions de règlement */}
+            <div className="border-t border-border pt-3">
+              <Label className="text-sm font-semibold text-muted-foreground">Conditions de règlement</Label>
+              <div className="mt-2">
+                <select
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-9"
+                  value={form.delaiReglement || '45J FDM'}
+                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
+                >
+                  {DELAI_REGLEMENT_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-muted-foreground italic">
+                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === (form.delaiReglement || '45J FDM'))?.conditions}
+                </p>
+              </div>
+            </div>
+
+            {/* Catégorie Revendeur */}
+            <div className="border-t border-border pt-4">
+              <div className="flex items-center gap-3 mb-3">
+                <Checkbox
+                  id="estRevendeur"
+                  checked={form.estRevendeur || false}
+                  onCheckedChange={(checked) => {
+                    const isRevendeur = checked === true;
+                    setForm(prev => ({
+                      ...prev,
+                      estRevendeur: isRevendeur,
+                      remisesParCategorie: isRevendeur && Object.keys(prev.remisesParCategorie || {}).length === 0
+                        ? categories.reduce((acc, cat) => ({ ...acc, [cat]: 30 }), {} as Record<string, number>)
+                        : prev.remisesParCategorie || {},
+                    }));
+                  }}
+                />
+                <Label htmlFor="estRevendeur" className="text-base font-semibold cursor-pointer">
+                  Client revendeur
+                </Label>
+                {form.estRevendeur && (
+                  <Badge variant="secondary" className="text-xs">Remise auto 30%</Badge>
+                )}
+              </div>
+              {form.estRevendeur && (
+                <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
+                  <p className="text-xs text-muted-foreground">Remise par catégorie de produit (%) — modifiable individuellement :</p>
+                  {categories.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {categories.map(cat => (
+                        <div key={cat} className="flex items-center gap-2">
+                          <Label className="text-xs min-w-[100px] truncate" title={cat}>{cat}</Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="0"
+                            max="100"
+                            className="h-7 text-xs w-20"
+                            value={form.remisesParCategorie?.[cat] ?? 30}
+                            onChange={e => setForm(prev => ({
+                              ...prev,
+                              remisesParCategorie: {
+                                ...prev.remisesParCategorie,
+                                [cat]: parseFloat(e.target.value) || 0,
+                              },
+                            }))}
+                          />
+                          <span className="text-xs text-muted-foreground">%</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Aucune catégorie de produit définie. Ajoutez des catégories aux produits pour configurer les remises.</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* ── Onglet Infos (form) ─────────────────────────────────────────── */}
           <div className={clientDialogTab !== 'infos' ? 'hidden' : ''}>
@@ -1292,83 +1471,6 @@ export default function Clients() {
               />
             </div>
 
-            {/* Conditions de règlement */}
-            <div className="border-t border-border pt-3">
-              <Label className="text-sm font-semibold text-muted-foreground">Conditions de règlement</Label>
-              <div className="mt-2">
-                <select
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm h-9"
-                  value={form.delaiReglement || '45J FDM'}
-                  onChange={e => setForm(prev => ({ ...prev, delaiReglement: e.target.value }))}
-                >
-                  {DELAI_REGLEMENT_OPTIONS.map(opt => (
-                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                  ))}
-                </select>
-                <p className="mt-1 text-xs text-muted-foreground italic">
-                  {DELAI_REGLEMENT_OPTIONS.find(o => o.value === (form.delaiReglement || '45J FDM'))?.conditions}
-                </p>
-              </div>
-            </div>
-
-            {/* Catégorie Revendeur */}
-            <div className="border-t border-border pt-4">
-              <div className="flex items-center gap-3 mb-3">
-                <Checkbox
-                  id="estRevendeur"
-                  checked={form.estRevendeur || false}
-                  onCheckedChange={(checked) => {
-                    const isRevendeur = checked === true;
-                    setForm(prev => ({
-                      ...prev,
-                      estRevendeur: isRevendeur,
-                      remisesParCategorie: isRevendeur && Object.keys(prev.remisesParCategorie || {}).length === 0
-                        ? categories.reduce((acc, cat) => ({ ...acc, [cat]: 30 }), {} as Record<string, number>)
-                        : prev.remisesParCategorie || {},
-                    }));
-                  }}
-                />
-                <Label htmlFor="estRevendeur" className="text-base font-semibold cursor-pointer">
-                  Client revendeur
-                </Label>
-                {form.estRevendeur && (
-                  <Badge variant="secondary" className="text-xs">Remise auto 30%</Badge>
-                )}
-              </div>
-              {form.estRevendeur && (
-                <div className="bg-muted/30 rounded-lg border border-border p-3 space-y-2">
-                  <p className="text-xs text-muted-foreground">Remise par catégorie de produit (%) — modifiable individuellement :</p>
-                  {categories.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                      {categories.map(cat => (
-                        <div key={cat} className="flex items-center gap-2">
-                          <Label className="text-xs min-w-[100px] truncate" title={cat}>{cat}</Label>
-                          <Input
-                            type="number"
-                            step="1"
-                            min="0"
-                            max="100"
-                            className="h-7 text-xs w-20"
-                            value={form.remisesParCategorie?.[cat] ?? 30}
-                            onChange={e => setForm(prev => ({
-                              ...prev,
-                              remisesParCategorie: {
-                                ...prev.remisesParCategorie,
-                                [cat]: parseFloat(e.target.value) || 0,
-                              },
-                            }))}
-                          />
-                          <span className="text-xs text-muted-foreground">%</span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">Aucune catégorie de produit définie. Ajoutez des catégories aux produits pour configurer les remises.</p>
-                  )}
-                </div>
-              )}
-            </div>
-
             {/* Contacts */}
             <div className="border-t border-border pt-4 space-y-2">
               <div className="flex items-center justify-between">
@@ -1545,7 +1647,7 @@ export default function Clients() {
           </div>{/* end infos tab wrapper */}
           <div className="sticky bottom-0 bg-background flex justify-end gap-2 pt-3 pb-1 border-t border-border mt-2">
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
-            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite') && (
+            {(clientDialogTab === 'infos' || clientDialogTab === 'comptabilite' || clientDialogTab === 'tarifs') && (
               returnDevisId ? (
                 <Button onClick={() => { if (save(true)) { setDialogOpen(false); navigate(`/devis?editDevis=${returnDevisId}`); } }}>
                   <ArrowLeft className="w-4 h-4 mr-2" /> Enregistrer & retour au devis

@@ -8,6 +8,9 @@ import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif, prixAuNiveau, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
+import { chargerGrille } from '@/lib/grilleTarif.charger';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
@@ -365,6 +368,10 @@ export default function Devis() {
   const [dateEnvoi, setDateEnvoi] = useState('');
   const [referenceAffaire, setReferenceAffaire] = useState('');
   const [chantier, setChantier] = useState('');
+  /* Niveau de tarif du devis : pré-rempli depuis la fiche client, modifiable.
+     '' = prix de la fiche article. Voir `grilleTarif.ts`. */
+  const [niveauTarif, setNiveauTarif] = useState<NiveauTarif | ''>('');
+  const [grilles, setGrilles] = useState<Partial<Record<NiveauTarif, GrilleTarif>>>({});
   const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -733,6 +740,10 @@ export default function Devis() {
     setDateEnvoi(d.dateEnvoi || '');
     setReferenceAffaire(d.referenceAffaire || '');
     setChantier(d.chantier || '');
+    /* Un devis sans niveau enregistré le garde : lui imposer celui de la
+       fiche client changerait ses prix à l'ouverture, sans que personne
+       l'ait demandé. */
+    setNiveauTarif(d.niveauTarif || '');
     setSysteme(d.systeme || '');
     setNotes(d.notes || '');
     setConditions(d.conditions || 'Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -766,7 +777,7 @@ export default function Devis() {
         const diff = getVarianteDiff(prod, l.variantesChoisies);
         if (diff !== 0) {
           const cl = clients.find(c => c.id === d.clientId);
-          maj = { ...maj, prixUnitaireHT: getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur) };
+          maj = { ...maj, prixUnitaireHT: getPrixLigne(prod, l.quantite, l.variantesChoisies, cl?.estRevendeur, d.niveauTarif ?? null) };
         }
       }
 
@@ -806,6 +817,7 @@ export default function Devis() {
     setStatut('brouillon');
     setDateEnvoi('');
     setReferenceAffaire('');
+    setNiveauTarif('');
     setSysteme('');
     setNotes('');
     setConditions('Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -928,7 +940,7 @@ export default function Devis() {
       const conso = l.consommation ?? prod?.consommation;
       if (prod && conso && prod.poids) {
         const quantite = calcQuantiteSurface(prod, surf, l.consommation);
-        const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur);
+        const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null);
         return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
       }
       return l;
@@ -1125,8 +1137,7 @@ export default function Devis() {
         const p = produitParId(produits, l.produitId);
         if (p && p.paliersPrix && p.paliersPrix.length > 0) {
           const client = clients.find(c => c.id === clientId);
-          const palierPrix = getPrixPourQuantite(p, value as number);
-          updated.prixUnitaireHT = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+          updated.prixUnitaireHT = prixDeBase(p, value as number, client?.estRevendeur);
         }
       }
       return updated;
@@ -1226,11 +1237,93 @@ export default function Devis() {
   }
 
   /** Prix unitaire HT final = palier + diff variantes */
-  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean): number {
-    const palier = getPrixPourQuantite(produit, quantite);
-    const base = isRevendeur ? palier.prixRevendeur : palier.prixHT;
+  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
+    const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
+  }
+
+  /**
+   * Prix unitaire de base d'un article, variantes non comprises.
+   *
+   * Le NIVEAU DE TARIF du devis passe d'abord (grille Odoo pour la
+   * signalisation ISOSIGN, barème STI pour le plastique) ; ce qu'il ne tarife
+   * pas garde le prix de la fiche article, palier et revendeur compris.
+   * Seul point de vérité : chaque recalcul de prix du devis passe ici.
+   */
+  function prixDeBase(
+    produit: typeof produits[0],
+    quantite: number,
+    isRevendeur?: boolean,
+    niveau: NiveauTarif | null = niveauTarif || null,
+    grille: GrilleTarif | undefined = niveau ? grilles[niveau] : undefined,
+  ): number {
+    if (niveau) {
+      const r = prixAuNiveau(produit, niveau, grille);
+      if (r) return r.prix;
+    }
+    const palier = getPrixPourQuantite(produit, quantite);
+    return isRevendeur ? palier.prixRevendeur : palier.prixHT;
+  }
+
+  /* La grille du niveau courant se charge dès que le devis s'ouvre : un
+     article choisi ensuite doit la trouver déjà là. */
+  useEffect(() => {
+    if (!dialogOpen || !niveauTarif || grilles[niveauTarif]) return;
+    const n = niveauTarif;
+    chargerGrille(n)
+      .then(g => setGrilles(prev => (prev[n] ? prev : { ...prev, [n]: g })))
+      .catch(e => toast.error(`Grille ${n} illisible : ${(e as Error).message}`));
+  }, [dialogOpen, niveauTarif, grilles]);
+
+  /**
+   * Change le niveau de tarif du devis et re-tarife ses lignes d'article.
+   *
+   * La grille est attendue AVANT de toucher aux lignes : re-tarifer sans elle
+   * rendrait le prix fiche aux articles ISOSIGN, puis les laisserait ainsi.
+   * Ce que le niveau ne tarife pas est compté et annoncé — un prix fiche
+   * resté sur une ligne ne se voit pas sur le total.
+   */
+  async function appliquerNiveauTarif(
+    n: NiveauTarif | '',
+    estRevendeur: boolean | undefined,
+    opts: { remiseAZero?: boolean; silencieux?: boolean } = {},
+  ) {
+    setNiveauTarif(n);
+    const niveau = n || null;
+    let grille: GrilleTarif | undefined;
+    if (niveau) {
+      try {
+        grille = await chargerGrille(niveau);
+        const g = grille;
+        setGrilles(prev => (prev[niveau] ? prev : { ...prev, [niveau]: g }));
+      } catch (e) {
+        toast.error(`Grille ${niveau} illisible : ${(e as Error).message} — seul le plastique STI est tarifé au niveau`);
+      }
+    }
+    const estArticle = (l: LigneDevis) =>
+      !!l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte';
+    let auNiveau = 0;
+    let horsNiveau = 0;
+    for (const l of lignes) {
+      if (!estArticle(l)) continue;
+      const p = produitParId(produits, l.produitId!);
+      if (!p) continue;
+      if (niveau && prixAuNiveau(p, niveau, grille)) auNiveau++; else horsNiveau++;
+    }
+    setLignes(prev => prev.map(l => {
+      if (!estArticle(l)) return l;
+      const p = produitParId(produits, l.produitId!);
+      if (!p) return l;
+      const base = prixDeBase(p, l.quantite, estRevendeur, niveau, grille);
+      const prixUnitaireHT = Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+      return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
+    }));
+    if (!opts.silencieux && niveau && auNiveau + horsNiveau > 0) {
+      const msg = `Niveau ${niveau} : ${auNiveau} ligne(s) tarifée(s)`
+        + (horsNiveau ? `, ${horsNiveau} hors grille au prix fiche — à vérifier` : '');
+      if (horsNiveau) toast.warning(msg); else toast.success(msg);
+    }
   }
 
   /**
@@ -1292,8 +1385,7 @@ export default function Devis() {
       setLignes(prev => prev.map(l => {
         if (l.id !== ligneId) return l;
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
-        const palierPrix = getPrixPourQuantite(p, quantite);
-        const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+        const prix = prixDeBase(p, quantite, client?.estRevendeur);
         // Initialise les variantes : première option de chaque dimension
         const variantesChoisies: Record<string, string> = {};
         if (p.variantes) {
@@ -1319,14 +1411,9 @@ export default function Devis() {
     }
     prevClientIdRef.current = clientId;
     const client = clients.find(c => c.id === clientId);
-    setLignes(prev => prev.map(l => {
-      if (!l.produitId) return l;
-      const p = produitParId(produits, l.produitId);
-      if (!p) return l;
-      const palierPrix = getPrixPourQuantite(p, l.quantite);
-      const prix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
-      return { ...l, prixUnitaireHT: prix, remise: 0 };
-    }));
+    /* Le niveau de la fiche client pré-remplit celui du devis ; le sélecteur
+       de l'en-tête permet ensuite de le changer pour ce devis seulement. */
+    void appliquerNiveauTarif(client?.niveauTarif || '', client?.estRevendeur, { remiseAZero: true });
   }, [clientId, dialogOpen, clients, produits]);
 
   function save(silent = false): string | null {
@@ -1337,7 +1424,7 @@ export default function Devis() {
     if (editingId) {
       const existing = devis.find(d => d.id === editingId);
       updateDevis(prev => prev.map(d => d.id === editingId ? {
-        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       } : d));
       if (!silent) {
         toast.success('Devis modifié');
@@ -1348,7 +1435,7 @@ export default function Devis() {
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,
-        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+        dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
       };
       updateDevis(prev => [...prev, newDevis]);
       if (!silent) {
@@ -1521,12 +1608,12 @@ export default function Devis() {
     autoSaveRef.current = setTimeout(() => {
       if ((clientId || statut === 'système') && lignes.length > 0) {
         updateDevis(prev => prev.map(d => d.id === editingId ? {
-          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
+          ...d, clientId, contactId: contactId || undefined, dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions, moContent: moContent || undefined, probabiliteReussite, dateRealisation: dateRealisation || undefined, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, modeCalcul: 'standard', surfaceGlobaleM2: surfaceGlobaleM2 || undefined
         } : d));
       }
     }, 500);
     return () => clearTimeout(autoSaveRef.current);
-  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
+  }, [clientId, dateCreation, dateValidite, statut, dateEnvoi, lignes, referenceAffaire, chantier, niveauTarif, notes, conditions, moContent, probabiliteReussite, dateRealisation, fraisPortHT, fraisPortTVA, fraisPortAuto, adresseLivraisonId, editingId, dialogOpen, modeCalcul, surfaceGlobaleM2]);
 
   // Chargement pièces jointes pour la sidebar
   useEffect(() => {
@@ -2325,7 +2412,7 @@ export default function Devis() {
                       const preview: DevisType = {
                         id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
                         clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
-                        dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier, systeme: systeme || undefined, notes, conditions,
+                        dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions,
                         fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined,
                       };
                       setPreviewOptions(prev => ({ ...prev, showConso: modeCalcul === 'surface' || prev.showConso }));
@@ -2631,6 +2718,30 @@ export default function Devis() {
                       {[0, 25, 50, 75, 100].map(p => <option key={p} value={p}>{p}%</option>)}
                     </select>
                   </div>
+                  {(() => {
+                    const clientCourant = clients.find(c => c.id === clientId);
+                    const niveauFiche = clientCourant?.niveauTarif || '';
+                    return (
+                      <div className="w-56">
+                        <Label className="text-xs">Niveau de tarif</Label>
+                        <Select
+                          value={niveauTarif || 'aucun'}
+                          onValueChange={v => void appliquerNiveauTarif(estNiveauTarif(v) ? v : '', clientCourant?.estRevendeur)}
+                        >
+                          <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="aucun">Prix fiche article</SelectItem>
+                            {NIVEAUX_TARIF.map(n => <SelectItem key={n} value={n}>{LIBELLE_NIVEAU[n]}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        {clientCourant && niveauFiche !== niveauTarif && (
+                          <p className="mt-0.5 text-[11px] text-amber-600">
+                            Fiche client : {niveauFiche || 'non défini'}
+                          </p>
+                        )}
+                      </div>
+                    );
+                  })()}
                   <div className="w-40">
                     <Label className="text-xs">Date de réalisation</Label>
                     <Input type="date" value={dateRealisation} onChange={e => setDateRealisation(e.target.value)} className="h-8 text-sm" />
@@ -2930,8 +3041,7 @@ export default function Devis() {
                                 return sum + (o?.prixDiff ?? 0);
                               }, 0);
                               const client = clients.find(c => c.id === clientId);
-                              const palierPrix = getPrixPourQuantite(prod, li.quantite);
-                              const basePrix = client?.estRevendeur ? palierPrix.prixRevendeur : palierPrix.prixHT;
+                              const basePrix = prixDeBase(prod, li.quantite, client?.estRevendeur);
                               return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
                             }));
                           }}

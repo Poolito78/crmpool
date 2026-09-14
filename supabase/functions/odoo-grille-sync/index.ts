@@ -106,7 +106,7 @@ class Odoo {
 
 /** Niveau lisible dans l'intitulé : « CCI10019 TARIF R4 - 35 % … » → « R4 ». */
 function niveauDeLIntitule(nom: string): string | null {
-  const m = String(nom || "").toUpperCase().match(/\bTARIF\s*(R[1-4])\b/);
+  const m = String(nom || "").toUpperCase().match(/\bTARIF\s*(R[0-4])\b/);
   return m ? m[1] : null;
 }
 
@@ -205,7 +205,10 @@ serve(async (req) => {
     const corps = await req.json().catch(() => ({}));
     const niveaux: string[] = Array.isArray(corps?.niveaux) && corps.niveaux.length
       ? corps.niveaux.map((n: unknown) => String(n).toUpperCase())
-      : ["R1", "R2", "R3", "R4"];
+      /* R0 est tenté aussi : s'il existe un contrat « TARIF R0 » chez Odoo,
+         le tarif public se recopie comme les autres ; sinon rien ne se
+         passe, et le R0 laisse la fiche article tarifer. */
+      : ["R0", "R1", "R2", "R3", "R4"];
     const contratId = Number(corps?.contratId) || 0;
 
     const od = new Odoo();

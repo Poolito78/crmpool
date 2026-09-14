@@ -1733,7 +1733,13 @@ serve(async (req) => {
 
     const demandees = (lignes || []).filter((l: any) => l?.reference);
     const aChercher = (recherches || []).filter((r: any) => (r?.texte || '').trim().length >= 2);
-    if (!client || (!demandees.length && !aChercher.length)) {
+    /* Mode « fiche tarifs » : la fiche client MonCRM (onglet Tarifs) veut
+       savoir ce qu'Odoo applique à ce client — liste de prix, contrat-cadre,
+       niveau R — sans rien tarifer. Il suit le MÊME chemin d'identification
+       que la tarification (partenaire, porteur, groupe), sans quoi la fiche
+       et le devis pourraient désigner deux contrats différents. */
+    const ficheTarifs = !!corps?.ficheTarifs;
+    if (!client || (!ficheTarifs && !demandees.length && !aChercher.length)) {
       return repondre({ prix: {}, contrat: null, partenaire: null });
     }
 
@@ -1841,6 +1847,20 @@ serve(async (req) => {
     const famille = await famillePartenaire(od, partenaire, porteur, societe);
     await cadre.charger(...famille);
     chrono("contrat cadre chargé");
+    if (ficheTarifs) {
+      return repondre({
+        partenaire: partenaire.name,
+        partenaireId: partenaire.id,
+        societe,
+        porteur: porteur.name || "",
+        listePrix: contrat || "",
+        contratCadre: cadre.intitule,
+        contratCadreActif: cadre.actif,
+        /* Le niveau se lit dans le NOM du contrat-cadre, jamais choisi ici :
+           vide quand aucun contrat n'en annonce. */
+        niveau: niveauDuNom(cadre.intitule),
+      });
+    }
     /* Le niveau imposé REMPLACE le contrat du client : c'est tout l'intérêt
        du forçage. S'il n'aboutit pas — intitulé introuvable, grille vide —
        on garde le contrat rattaché plutôt que de perdre toute tarification,

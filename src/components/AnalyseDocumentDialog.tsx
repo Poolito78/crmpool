@@ -1822,8 +1822,11 @@ const [contratOdoo, setContratOdoo] = useState<
     () => niveauForce
       || niveauDepuisContrat(contratOdoo?.cadre)
       || niveauDepuisContrat(contratOdoo?.contrat)
+      /* Le niveau de la fiche client (onglet Tarifs) passe après ce qu'Odoo
+         annonce, mais avant le R4 par défaut, qui n'est qu'une supposition. */
+      || clients.find(c => c.id === creerDevisClientId)?.niveauTarif
       || 'R4',
-    [niveauForce, contratOdoo],
+    [niveauForce, contratOdoo, clients, creerDevisClientId],
   );
 
   /**
