@@ -372,6 +372,8 @@ export default function Devis() {
      '' = prix de la fiche article. Voir `grilleTarif.ts`. */
   const [niveauTarif, setNiveauTarif] = useState<NiveauTarif | ''>('');
   const [grilles, setGrilles] = useState<Partial<Record<NiveauTarif, GrilleTarif>>>({});
+  /* Numéro du dernier changement de niveau demandé — voir `appliquerNiveauTarif`. */
+  const appelNiveauRef = useRef(0);
   const [systeme, setSysteme] = useState('');
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
@@ -1295,6 +1297,12 @@ export default function Devis() {
     opts: { remiseAZero?: boolean; silencieux?: boolean } = {},
   ) {
     setNiveauTarif(n);
+    /* ⚠️ **SEUL LE DERNIER CHANGEMENT DEMANDÉ RE-TARIFE.** La grille se charge
+       en asynchrone : choisir le client (niveau R2 de sa fiche) puis R3 au
+       sélecteur lançait deux appels, et celui dont la grille arrivait EN
+       DERNIER écrivait les prix. DEV-2026-093 affichait « R3 » avec ses 18
+       lignes au prix R2 — l'AB3A à 41,55 € au lieu de 38,78 €. */
+    const jeton = ++appelNiveauRef.current;
     const niveau = n || null;
     let grille: GrilleTarif | undefined;
     let grilleR4: GrilleTarif | undefined = grilles.R4;
@@ -1313,6 +1321,7 @@ export default function Devis() {
         toast.error(`Grille ${niveau} illisible : ${(e as Error).message} — seul le plastique STI est tarifé au niveau`);
       }
     }
+    if (jeton !== appelNiveauRef.current) return;   // un choix plus récent a pris la main
     const estArticle = (l: LigneDevis) =>
       !!l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte';
     let auNiveau = 0;
