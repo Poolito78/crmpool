@@ -429,6 +429,33 @@ export function panonceauDansTexte(
   return null;
 }
 
+/**
+ * Le code écrit sans sa lettre, rendu complet quand la demande le permet.
+ *
+ * ⚠️ **« B6- » : LA LETTRE MANQUE, ET C'EST ELLE QUI FAIT LE PANNEAU.** Le
+ * catalogue n'a pas de B6 : il a B6A1, B6D, B6B1… Sur « B6- + M6i
+ * stationnement interdit sauf véhicules électriques », seul le M6I était
+ * reconnu — le panonceau devenait l'article de la ligne, et le devis sortait
+ * sans panneau. Règle donnée par le métier (14/09/2026) :
+ *  - avec le panonceau M6i (recharge électrique) → **B6D** ;
+ *  - sinon « arrêt et stationnement interdits » → **B6D**,
+ *    « stationnement interdit » → **B6A1** ;
+ *  - sinon on ne devine pas : le texte reste tel quel, la ligne à vérifier.
+ *
+ * Le texte affiché à l'écran n'est pas réécrit : seul le calcul lit ceci.
+ */
+export function normaliserCodes(texte: string): string {
+  const t = String(texte || '');
+  const tronque = /\bB6(?![A-Za-z0-9])-?/i;
+  if (!tronque.test(t)) return t;
+  const plat = t.normalize('NFD').replace(/\p{Diacritic}/gu, '').toLowerCase();
+  let code: string | null = null;
+  if (/\bm6i\b/.test(plat)) code = 'B6D';
+  else if (/arret\s+et\s+(?:de\s+)?stationnement/.test(plat)) code = 'B6D';
+  else if (/stationnement\s+interdit/.test(plat)) code = 'B6A1';
+  return code ? t.replace(tronque, code) : t;
+}
+
 export function codeDansTexte(texte: string): { code: string; valeur?: string } | null {
   const t = String(texte || '').toUpperCase();
   /* La lettre de variante peut être suivie d'un chiffre : B21a2, B21a1, M9z1,

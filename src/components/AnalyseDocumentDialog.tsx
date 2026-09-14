@@ -21,7 +21,7 @@ import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
 import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
 import {
-  codeDansTexte, estCodeChantier, prixPanneau, panonceauPour, panonceauDansTexte,
+  codeDansTexte, normaliserCodes, estCodeChantier, prixPanneau, panonceauPour, panonceauDansTexte,
   supportPour, hauteurDeDimension,
   formeDeCode, niveauDepuisContrat, estPoseBasse, POSE, SECTIONS_SUPPORT, LIBELLE_SECTION,
   FORME_PANONCEAU, type Taille, type SectionSupport, type Chiffre, type Support,
@@ -1610,8 +1610,11 @@ const [contratOdoo, setContratOdoo] = useState<
   const texteDemande = useCallback((
     l: { reference?: string; description?: string },
     i: number,
-  ) => libelleManuel[i]
-    ?? [l.reference, l.description].filter(Boolean).join(' ').trim(),
+  ) => normaliserCodes(libelleManuel[i]
+    ?? [l.reference, l.description].filter(Boolean).join(' ').trim()),
+  /* ⚠️ Le code tronqué (« B6- ») est complété ICI, pour tout le calcul —
+     rapprochement, grille, panonceau, recherche Odoo. Le champ affiché, lui,
+     garde le texte du client. Voir `normaliserCodes`. */
   [libelleManuel]);
 
   /**
@@ -1789,8 +1792,8 @@ const [contratOdoo, setContratOdoo] = useState<
   const porteurDeLigne = useCallback((i: number): string | null => {
     for (let k = i - 1; k >= 0; k--) {
       const lk = (result?.lignes ?? [])[k];
-      const ck = codeDansTexte(
-        [lk?.reference, lk?.description].filter(Boolean).join(' '));
+      const ck = codeDansTexte(normaliserCodes(
+        [lk?.reference, lk?.description].filter(Boolean).join(' ')));
       const fk = ck && formeDeCode(ck.code);
       if (fk && fk !== FORME_PANONCEAU) return ck!.code;
     }
@@ -4454,7 +4457,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                         chaque touche. */}
                                     <input
                                       key={`lib-${i}`}
-                                      defaultValue={texteDemande(l, i)}
+                                      defaultValue={libelleManuel[i]
+                                        ?? [l.reference, l.description].filter(Boolean).join(' ').trim()}
                                       onBlur={e => {
                                         const v = e.target.value.trim();
                                         const origine = [l.reference, l.description]
@@ -4468,7 +4472,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                       onKeyDown={e => {
                                         if (e.key === 'Enter') e.currentTarget.blur();
                                         if (e.key === 'Escape') {
-                                          e.currentTarget.value = texteDemande(l, i);
+                                          e.currentTarget.value = libelleManuel[i]
+                                            ?? [l.reference, l.description].filter(Boolean).join(' ').trim();
                                           e.currentTarget.blur();
                                         }
                                       }}

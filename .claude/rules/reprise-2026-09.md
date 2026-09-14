@@ -63,6 +63,11 @@ retouché.
   « B14 **limitation** de vitesse » exigeait une finition « LIMITATION », ne
   trouvait rien et laissait le B14 450 C1. Ne contraint que L + chiffre, BRUT,
   ou une finition réellement portée par une variante.
+- ⚠️ **Code tronqué « B6- »** (`normaliserCodes`, `tarifPanneaux.ts`) : le
+  catalogue n'a pas de B6 seul. Règle métier : avec M6i → **B6D** ; sinon
+  « arrêt et stationnement interdits » → B6D, « stationnement interdit » →
+  B6A1 ; sinon rien. Appliqué dans `texteDemande` (calcul), pas au champ
+  affiché. Le panneau part au devis et le M6I en ligne panonceau dessous.
 - Le sélecteur reçoit le catalogue **entier** par `produits` et la
   pré-sélection par `suggestions`. Ne jamais borner `produits` aux candidats
   d'un rapprochement : la recherche manuelle devient aveugle.
