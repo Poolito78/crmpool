@@ -93,6 +93,51 @@ describe('liens proposés', () => {
   });
 });
 
+describe('plusieurs fiches techniques', () => {
+  /* Fiche technique ET fiche de sécurité : les deux partent dans le mail,
+     dans l'ordre de la fiche article, avant la photo. */
+  it('propose chaque fiche, dans l’ordre, avant la photo', () => {
+    const liens = liensDuProduit(
+      produit({
+        id: 'p1', ficheUrl: 'https://ex/ft.pdf', ficheLinkLabel: 'Fiche technique',
+        fichesSupplementaires: [{ url: 'https://ex/fds.pdf', label: 'Fiche de sécurité' }],
+      }),
+      { imageUrl: 'https://ex/photo.webp', origine: ORIGINE },
+    );
+    expect(liens.map(l => l.cible)).toEqual(['fiche', 'fiche', 'image', 'page']);
+    expect(liens.map(l => l.id)).toEqual(['p1:fiche', 'p1:fiche:2', 'p1:image', 'p1:page']);
+    expect(liens.filter(l => l.cible === 'fiche').map(l => l.label))
+      .toEqual(['Fiche technique', 'Fiche de sécurité']);
+  });
+
+  it('numérote les fiches suivantes qui n’ont pas de libellé', () => {
+    const liens = liensDuProduit(produit({
+      id: 'p1', ficheUrl: 'https://ex/ft.pdf', fichesSupplementaires: [{ url: 'https://ex/b.pdf' }],
+    }), { origine: ORIGINE });
+    expect(liens[1].label).toBe('Fiche technique 2 — Article de démonstration');
+  });
+
+  /* LE RANG SUIT LA LIGNE DE LA FICHE ARTICLE, même quand la première est
+     vide : c'est lui qui dit quelle fiche renommer. */
+  it('garde le rang d’une fiche quand la première n’a pas d’adresse', () => {
+    const liens = liensDuProduit(produit({
+      id: 'p1', ficheUrl: '', fichesSupplementaires: [{ url: 'https://ex/b.pdf', label: 'B' }],
+    }), { origine: ORIGINE });
+    const [fiche] = liens;
+    expect(fiche.rang).toBe(1);
+    expect(fiche.id).toBe('p1:fiche:2');
+  });
+
+  it('qualifie un article du devis par sa seule fiche supplémentaire', () => {
+    const r = articlesLiesDuDevis(
+      [{ produitId: 'p1' }],
+      [produit({ id: 'p1', description: 'Flowseal EPW', fichesSupplementaires: [{ url: 'https://ex/fds.pdf' }] })],
+      () => undefined,
+    );
+    expect(r).toHaveLength(1);
+  });
+});
+
 describe('adresse de la fiche publique', () => {
   it('ne double pas la barre oblique', () => {
     expect(urlFichePublique('p1', 'https://crmpool.vercel.app/')).toBe('https://crmpool.vercel.app/p/p1');

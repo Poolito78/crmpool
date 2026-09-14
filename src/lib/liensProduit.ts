@@ -18,6 +18,10 @@
  * TROIS DESTINATIONS, ET ELLES NE SE REMPLACENT PAS :
  *  - `fiche` : la fiche technique du fabricant (PDF SharePoint ou site
  *    fournisseur), saisie sur l'article. C'est le document qui engage.
+ *    UN ARTICLE PEUT EN PORTER PLUSIEURS (fiche technique, fiche de sécurité,
+ *    notice de pose) : la première vit dans `ficheUrl`, les suivantes dans
+ *    `fichesSupplementaires`. `fichesDuProduit` les rend en une seule liste,
+ *    et chaque lien garde son `rang` pour qu'on sache laquelle renommer.
  *  - `image` : la photo de l'article. Un client reconnaît un panneau à sa
  *    photo bien avant sa référence.
  *  - `page`  : la fiche publique du CRM (`/p/<uuid>`), qui rassemble la
@@ -35,6 +39,8 @@ export interface LienProduit {
   /** Texte affiché dans le mail. Éditable par l'utilisateur. */
   label: string;
   url: string;
+  /** Pour une `fiche` : sa place dans `fichesDuProduit` (0 = `ficheUrl`). */
+  rang?: number;
 }
 
 /** L'article tel qu'il est nécessaire ici — volontairement minimal. */
@@ -44,6 +50,29 @@ export interface ProduitLiable {
   description: string;
   ficheUrl?: string;
   ficheLinkLabel?: string;
+  fichesSupplementaires?: { url: string; label?: string }[];
+}
+
+/** Ce qui porte des fiches : l'article, ou le formulaire de la fiche article. */
+export type FichesLiables = Pick<ProduitLiable, 'ficheUrl' | 'ficheLinkLabel' | 'fichesSupplementaires'>;
+
+/**
+ * Toutes les fiches techniques de l'article, la première en tête.
+ *
+ * On garde les emplacements vides : le `rang` d'une fiche doit rester celui
+ * de sa ligne dans la fiche article, sinon renommer la troisième modifierait
+ * la deuxième dès que la première n'a pas d'adresse.
+ */
+export function fichesDuProduit(p: FichesLiables): { url: string; label: string }[] {
+  return [
+    { url: p.ficheUrl ?? '', label: p.ficheLinkLabel ?? '' },
+    ...(p.fichesSupplementaires ?? []).map(f => ({ url: f.url ?? '', label: f.label ?? '' })),
+  ];
+}
+
+/** Vrai quand au moins une fiche technique a une adresse. */
+export function aUneFiche(p: FichesLiables): boolean {
+  return fichesDuProduit(p).some(f => f.url.trim());
 }
 
 export const LIBELLE_CIBLE: Record<CibleLien, string> = {
@@ -91,17 +120,23 @@ export function liensDuProduit(
   const nom = designation(p);
   const liens: LienProduit[] = [];
 
-  const fiche = p.ficheUrl?.trim();
-  if (fiche) {
+  fichesDuProduit(p).forEach((f, rang) => {
+    const url = f.url.trim();
+    if (!url) return;
     liens.push({
-      id: `${p.id}:fiche`,
+      // La première garde l'identifiant d'avant : `p1:fiche`, puis `p1:fiche:2`.
+      id: rang === 0 ? `${p.id}:fiche` : `${p.id}:fiche:${rang + 1}`,
       produitId: p.id,
       cible: 'fiche',
-      // Le libellé saisi sur l'article gagne : il a été écrit pour être lu.
-      label: p.ficheLinkLabel?.trim() || `${LIBELLE_CIBLE.fiche} — ${nom}`,
-      url: fiche,
+      /* Le libellé saisi sur l'article gagne : il a été écrit pour être lu.
+         À défaut, les suivantes portent leur numéro — deux liens au même
+         texte ne se distinguent pas dans un mail. */
+      label: f.label.trim()
+        || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''} — ${nom}`,
+      url,
+      rang,
     });
-  }
+  });
 
   const image = opts?.imageUrl?.trim();
   if (image) {
@@ -161,7 +196,7 @@ export function articlesLiesDuDevis<P extends ProduitLiable>(
     if (!p) continue;
     vus.add(p.id);
     const photo = photoDe(p.id);
-    if (!p.ficheUrl?.trim() && !photo?.url?.trim()) continue;
+    if (!aUneFiche(p) && !photo?.url?.trim()) continue;
     const liens = liensDuProduit(p, { imageUrl: photo?.url, imageLibelle: photo?.libelle })
       .filter(x => x.cible !== 'page');
     if (liens.length) out.push({ nom: designation(p), liens });

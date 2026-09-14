@@ -97,7 +97,7 @@ appliquée. En oublier un cause une perte de données silencieuse.
 
 | Type | Notes |
 |---|---|
-| `Produit` | `prixAchat` = prix achat conditionné. `paliersPrix?: PrixPalier[]` = prix par quantité. `prixHT` = prix public. `ficheUrl?` + `ficheLinkLabel?` = fiche technique injectée dans les mails. Distinct de `ProduitFournisseur.prixAchat` (prix/kg catalogue). |
+| `Produit` | `prixAchat` = prix achat conditionné. `paliersPrix?: PrixPalier[]` = prix par quantité. `prixHT` = prix public. `ficheUrl?` + `ficheLinkLabel?` = première fiche technique injectée dans les mails ; les suivantes dans `fichesSupplementaires?: FicheTechnique[]` (colonne jsonb `fiches_supplementaires`) — lire les deux via `fichesDuProduit` (`liensProduit.ts`). Distinct de `ProduitFournisseur.prixAchat` (prix/kg catalogue). |
 | `ComposantProduit` | Trois modes de quantité : `quantite`, `poidsKg` (poids → qté via `produit.poids`), `consommationPct` (% d'un composant de base). Les trois doivent être gérés partout où un coût de composant est calculé. |
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`, **optionnel** (voir garde-fous). `prixAchatLigne` = coût d'achat d'une ligne libre. |
 | `ProduitFournisseur` | Lie un article à un fournisseur. `prixAchat` = prix au kg du catalogue fournisseur — **différent** de `Produit.prixAchat`. |

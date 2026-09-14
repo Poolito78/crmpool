@@ -6,12 +6,12 @@ import {
   useProduitImages, occupation, formatOctets, estImageAcceptee,
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
-import { liensDuProduit, copierLiens, LIBELLE_CIBLE } from '@/lib/liensProduit';
+import { liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
 } from '@/lib/categorieDocuments';
-import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate } from '@/lib/store';
+import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
@@ -115,7 +115,26 @@ const emptyProduit = {
   reference: '', referenceOdoo: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
+  fichesSupplementaires: undefined as FicheTechnique[] | undefined,
 };
+
+/* LES FICHES TECHNIQUES SE SAISISSENT EN UNE LISTE, mais la première reste
+   dans `ficheUrl` / `ficheLinkLabel` — ce que lisent déjà la fiche publique,
+   les mails et le devis. Supprimer la première fait donc remonter la
+   suivante à sa place. */
+type FormFiches = { ficheUrl: string; ficheLinkLabel: string; fichesSupplementaires?: FicheTechnique[] };
+
+function ecrireFiches<F extends FormFiches>(f: F, liste: FicheTechnique[]): F {
+  const suivantes = liste.slice(1);
+  return {
+    ...f,
+    ficheUrl: liste[0]?.url ?? '',
+    ficheLinkLabel: liste[0]?.label ?? '',
+    /* Un article qui n'a jamais eu de fiche supplémentaire n'en reçoit pas
+       une liste vide : la colonne ne part en base que si on l'a touchée. */
+    fichesSupplementaires: suivantes.length || f.fichesSupplementaires !== undefined ? suivantes : undefined,
+  };
+}
 
 // Coefficient pilote le prix revendeur : prixRevendeur = prixAchat × coefficient
 // Prix public déduit : prixHT = prixRevendeur / (1 - remise/100)
@@ -884,7 +903,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2862,46 +2881,71 @@ export default function Produits() {
                donc rendue AVANT le garde-fou ci-dessous — sinon on ne pourrait
                plus la renseigner à la création d'un article, alors qu'on le
                pouvait dans l'onglet Informations d'où elle vient. */
+            const fiches = fichesDuProduit(form);
+            const majFiche = (i: number, patch: Partial<FicheTechnique>) => setForm(p => {
+              const liste = fichesDuProduit(p);
+              liste[i] = { ...liste[i], ...patch };
+              return ecrireFiches(p, liste);
+            });
             const blocFiche = (
               <div className="space-y-2 rounded-md border border-border p-3 bg-muted/20">
                 <p className="text-xs font-medium flex items-center gap-1.5 text-muted-foreground">
                   <ExternalLink className="w-3.5 h-3.5" />
-                  Fiche technique
-                  <span className="font-normal">(incluse dans les mails et les devis)</span>
+                  {fiches.length > 1 ? 'Fiches techniques' : 'Fiche technique'}
+                  <span className="font-normal">(incluse{fiches.length > 1 ? 's' : ''} dans les mails et les devis)</span>
                 </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <div>
-                    <Label className="text-xs">Texte affiché dans le mail</Label>
-                    <Input
-                      value={form.ficheLinkLabel || ''}
-                      onChange={e => setForm(p => ({ ...p, ficheLinkLabel: e.target.value }))}
-                      placeholder="Ex : ISOSIGN Tarif Public 2025.pdf"
-                    />
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <div className="flex-1">
-                      <Label className="text-xs">URL (lien)</Label>
-                      <Input
-                        type="url"
-                        value={form.ficheUrl || ''}
-                        onChange={e => setForm(p => ({ ...p, ficheUrl: e.target.value }))}
-                        placeholder="https://..."
-                      />
+                {fiches.map((f, i) => (
+                  <div key={i} className={`space-y-1 ${i > 0 ? 'pt-2 border-t border-border/60' : ''}`}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <Label className="text-xs">Texte affiché dans le mail</Label>
+                        <Input
+                          value={f.label}
+                          onChange={e => majFiche(i, { label: e.target.value })}
+                          placeholder={i === 0 ? 'Ex : ISOSIGN Tarif Public 2025.pdf' : 'Ex : Fiche de données de sécurité'}
+                        />
+                      </div>
+                      <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                          <Label className="text-xs">URL (lien)</Label>
+                          <Input
+                            type="url"
+                            value={f.url}
+                            onChange={e => majFiche(i, { url: e.target.value })}
+                            placeholder="https://..."
+                          />
+                        </div>
+                        {f.url && (
+                          <a href={f.url} target="_blank" rel="noopener noreferrer"
+                            className="p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0 mb-0.5"
+                            title="Tester le lien">
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                        {(fiches.length > 1 || f.url || f.label) && (
+                          <button
+                            type="button"
+                            onClick={() => setForm(p => ecrireFiches(p, fichesDuProduit(p).filter((_, j) => j !== i)))}
+                            className="p-2 rounded-md border border-border hover:bg-destructive/10 text-muted-foreground hover:text-destructive shrink-0 mb-0.5"
+                            title="Retirer cette fiche">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {form.ficheUrl && (
-                      <a href={form.ficheUrl} target="_blank" rel="noopener noreferrer"
-                        className="p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0 mb-0.5"
-                        title="Tester le lien">
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
+                    {f.url && f.label && (
+                      <p className="text-xs text-muted-foreground">
+                        Aperçu dans le mail : <span className="text-primary underline">{f.label}</span>
+                      </p>
                     )}
                   </div>
-                </div>
-                {form.ficheUrl && form.ficheLinkLabel && (
-                  <p className="text-xs text-muted-foreground">
-                    Aperçu dans le mail : <span className="text-primary underline">{form.ficheLinkLabel}</span>
-                  </p>
-                )}
+                ))}
+                <Button
+                  type="button" size="sm" variant="outline" className="h-7 text-xs"
+                  onClick={() => setForm(p => ecrireFiches(p, [...fichesDuProduit(p), { url: '', label: '' }]))}
+                >
+                  <Plus className="w-3.5 h-3.5 mr-1" />Ajouter une fiche technique
+                </Button>
               </div>
             );
 
@@ -3298,7 +3342,7 @@ export default function Produits() {
                   /* On part du formulaire, pas de l'article enregistré : un
                      libellé qu'on vient de taper doit se voir tout de suite. */
                   const liens = liensDuProduit(
-                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel },
+                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel, fichesSupplementaires: form.fichesSupplementaires },
                     { imageUrl: principale?.url, imageLibelle: principale?.libelle },
                   );
                   return (
@@ -3342,7 +3386,12 @@ export default function Produits() {
                                   const v = e.target.value.trim();
                                   if (v === l.label) return;
                                   if (l.cible === 'fiche') {
-                                    setForm(prev => ({ ...prev, ficheLinkLabel: v }));
+                                    const rang = l.rang ?? 0;
+                                    setForm(prev => {
+                                      const liste = fichesDuProduit(prev);
+                                      liste[rang] = { ...liste[rang], label: v };
+                                      return ecrireFiches(prev, liste);
+                                    });
                                     toast.success("Libellé de la fiche technique modifié — pensez à enregistrer l'article.");
                                   } else if (principale) {
                                     const err = await renommerImage(principale, v);
@@ -3360,7 +3409,7 @@ export default function Produits() {
                           </li>
                         ))}
                       </ul>
-                      {!form.ficheUrl?.trim() && (
+                      {!aUneFiche(form) && (
                         <p className="text-[11px] text-muted-foreground">
                           Aucune fiche technique sur cet article : renseignez son adresse
                           dans le bloc « Fiche technique » en haut de cet onglet pour

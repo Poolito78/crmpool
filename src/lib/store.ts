@@ -159,6 +159,13 @@ export interface VarianteDimension {
   options: VarianteOption[];
 }
 
+/** Un lien vers un document technique de l'article (PDF SharePoint, site fabricant). */
+export interface FicheTechnique {
+  url: string;
+  /** Texte affiché du lien dans les mails. */
+  label?: string;
+}
+
 export interface Produit {
   id: string;
   reference: string;
@@ -194,6 +201,8 @@ export interface Produit {
   lignesKit?: LigneKit[];
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
+  /** Fiches au-delà de la première (`ficheUrl`), dans l'ordre d'ajout. */
+  fichesSupplementaires?: FicheTechnique[];
   /** Catalogue commercial : ISOFLOOR, ISOMARK ou ISOSIGN. */
   catalogue?: string;
   /** Référence du même article dans Odoo, quand elle diffère. */
@@ -730,6 +739,7 @@ function dbToProduit(r: any): Produit {
     lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
+    fichesSupplementaires: r.fiches_supplementaires ? (Array.isArray(r.fiches_supplementaires) ? r.fiches_supplementaires : JSON.parse(r.fiches_supplementaires)) : undefined,
     catalogue: r.catalogue || undefined,
     referenceOdoo: r.reference_odoo || undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
@@ -784,6 +794,13 @@ function produitToDb(p: Produit, userId: string) {
     lignes_kit: p.lignesKit && p.lignesKit.length > 0 ? p.lignesKit : null,
     fiche_url: p.ficheUrl || null,
     fiche_link_label: p.ficheLinkLabel || null,
+    /* Envoyée seulement quand la fiche article l'a touchée : un article chargé
+       sans la colonne ne la réécrit pas, et vider la liste la remet à null. */
+    ...(p.fichesSupplementaires !== undefined ? {
+      fiches_supplementaires: p.fichesSupplementaires.filter(f => f.url?.trim()).length
+        ? p.fichesSupplementaires.filter(f => f.url?.trim())
+        : null,
+    } : {}),
     catalogue: p.catalogue || null,
     reference_odoo: p.referenceOdoo || null,
     date_creation: p.dateCreation,

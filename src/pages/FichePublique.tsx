@@ -26,6 +26,8 @@ interface FichePubliqueData {
   categorie: string | null;
   fiche_url: string | null;
   fiche_link_label: string | null;
+  /** Absent tant que la fonction en base n'a pas été mise à jour. */
+  fiches_supplementaires?: Array<{ url: string; label?: string }> | null;
   images: Array<{ url: string; nom: string | null }>;
 }
 
@@ -78,7 +80,15 @@ export default function FichePublique() {
 
   const images = fiche.images ?? [];
   const image = images[principale];
-  const libelleFiche = fiche.fiche_link_label?.trim() || 'Fiche technique du fabricant';
+  const fichesTechniques = [
+    { url: fiche.fiche_url ?? '', label: fiche.fiche_link_label ?? '' },
+    ...(fiche.fiches_supplementaires ?? []),
+  ]
+    .map((f, i) => ({
+      url: (f.url ?? '').trim(),
+      label: f.label?.trim() || (i === 0 ? 'Fiche technique du fabricant' : `Fiche technique ${i + 1}`),
+    }))
+    .filter(f => f.url);
 
   return (
     <div className="min-h-screen bg-neutral-50">
@@ -136,16 +146,21 @@ export default function FichePublique() {
           </div>
         )}
 
-        {fiche.fiche_url && (
-          <a
-            href={fiche.fiche_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#FF2E17] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
-          >
-            <ExternalLink className="w-4 h-4" />
-            {libelleFiche}
-          </a>
+        {fichesTechniques.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {fichesTechniques.map(f => (
+              <a
+                key={f.url}
+                href={f.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 rounded-lg bg-[#FF2E17] px-4 py-2.5 text-sm font-medium text-white hover:opacity-90 transition-opacity"
+              >
+                <ExternalLink className="w-4 h-4" />
+                {f.label}
+              </a>
+            ))}
+          </div>
         )}
 
         <p className="text-xs text-neutral-400 pt-4 border-t">
