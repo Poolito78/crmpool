@@ -50,6 +50,12 @@ retouché.
   une cote, pas le laquage L1000.
 - Les seaux de résultats sont plafonnés **séparément** : plafonner avant de
   trier ferait disparaître les BRUT quand assez de laquées les précèdent.
+- ⚠️ **Un code IISR nommé en tête retient l'article local d'office**
+  (`codesEnTete`, `rapprochementArticle.ts`) : « B1 sens interdit » restait
+  « à choisir » alors qu'Odoo trouvait B1.650.C2.BTR.IS.BRUT. Code écrit
+  exactement comme le premier segment de la référence (B1, jamais B14), dans
+  les trois premiers mots significatifs ; la variante suit ensuite l'écran.
+  Un code en fin de phrase (« au style des panneaux KC1 ») reste proposé.
 - Le sélecteur reçoit le catalogue **entier** par `produits` et la
   pré-sélection par `suggestions`. Ne jamais borner `produits` aux candidats
   d'un rapprochement : la recherche manuelle devient aveugle.

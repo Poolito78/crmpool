@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   caracteristiques, couleurs, memeFamille, rapprocherArticle, tagsReconnus,
-  famillesAttendues,
+  famillesAttendues, codesEnTete,
 } from './rapprochementArticle';
 import type { Produit } from './store';
 
@@ -358,6 +358,38 @@ describe('un code nomme ferme les autres familles', () => {
        — un panneau « au style KC1 » n'est pas un KC1 de catalogue. Proposer
        sans affirmer est ici la bonne réponse. */
     expect(r.confiance).toBe('douteux');
+  });
+
+  /* ⚠️ « B1 sens interdit » restait « à choisir » (10 points sur 55) alors
+     qu'Odoo trouvait B1.650.C2.BTR.IS.BRUT : le code en tête suffit. */
+  describe('un code nommé en tête retient sa famille', () => {
+    const POLICE = [
+      cat('B1.650.C2.BTR.IS.BRUT', 'IS B1', 'SIGNALISATION POLICE / Rond (B) / Bddp'),
+      cat('B14.650.C2.BTR.IS.BRUT', 'IS B14', 'SIGNALISATION POLICE / Rond (B) / Bddp'),
+      cat('AB3A.700.C2.BTR.IS.BRUT', 'IS AB3A', 'SIGNALISATION POLICE / Triangle (A)'),
+      cat('M9C.350.150.C2.BTR.IS.BRUT', 'IS M9C', 'SIGNALISATION POLICE / Panonceaux'),
+      cat('C2.500.BRUT', 'IS C2', 'SIGNALISATION POLICE / Carre (C)'),
+    ];
+
+    it('retient le B1 d’office, jamais le B14', () => {
+      const r = rapprocherArticle('B1 sens interdit', POLICE);
+      expect(r.confiance).toBe('sure');
+      expect(r.meilleur?.reference).toBe('B1.650.C2.BTR.IS.BRUT');
+      expect(r.candidats.map(c => c.reference)).not.toContain('B14.650.C2.BTR.IS.BRUT');
+    });
+
+    it('retient le panneau, pas le panonceau accolé', () => {
+      expect(rapprocherArticle('AB3a+M9c Cédez le passage', POLICE).meilleur?.reference)
+        .toBe('AB3A.700.C2.BTR.IS.BRUT');
+    });
+
+    it('ne prend pas une classe pour un code', () => {
+      expect(codesEnTete('B1 650 C2', POLICE)).toEqual(['B1']);
+    });
+
+    it('lit le code derrière une quantité et un nom commun', () => {
+      expect(codesEnTete('2 panneaux B1', POLICE)).toEqual(['B1']);
+    });
   });
 
   /* ⚠️ Le filtre ne doit jamais vider la liste : une ligne sans candidat ne

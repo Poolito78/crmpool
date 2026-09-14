@@ -343,6 +343,8 @@ export function noter(
   demandeTexte: string,
   produit: Produit,
   tagsArticle: readonly string[] = [],
+  /** Codes nommés en tête de la demande, dans l'ordre — voir `codesEnTete`. */
+  codes: readonly string[] = [],
 ): { score: number; pourquoi: string } | null {
   const cible = caracteristiques(`${produit.reference} ${produit.description}`);
 
@@ -448,6 +450,16 @@ export function noter(
   if (tagsVus.length) {
     score += BONUS_TAG;
     raisons.push(`tag « ${tagsVus.join(' », « ')} »`);
+    caracteristiqueCommune = true;
+  }
+
+  /* LE CODE NOMMÉ EN TÊTE, ÉCRIT TEL QUE LA RÉFÉRENCE LE PORTE. Voir
+     `codesEnTete`. Le premier code est le sujet de la ligne, le suivant un
+     accessoire accolé (« AB3a+M9c ») : il ne passe pas le seuil à lui seul. */
+  const rang = codes.indexOf(codeDeReference(produit.reference));
+  if (rang >= 0) {
+    score += rang === 0 ? BONUS_CODE : BONUS_CODE_SECOND;
+    raisons.push(`code « ${codes[rang]} »`);
     caracteristiqueCommune = true;
   }
 
@@ -559,6 +571,43 @@ export function famillesAttendues(demandeTexte: string, produits: Produit[]): Se
   return out;
 }
 
+/**
+ * ⚠️ **UN CODE IISR NOMMÉ EN TÊTE DÉSIGNE L'ARTICLE, MÊME SANS TAG.**
+ *
+ * « B1 sens interdit » ne partageait qu'un mot avec B1.650.C2.BTR.IS.BRUT
+ * (« IS B1 ») : 10 points sur 55, la ligne restait « à choisir » alors
+ * qu'Odoo, lui, trouvait l'article. L'AB3A de la ligne voisine ne passait que
+ * grâce à un tag. Or un code écrit exactement comme le premier segment d'une
+ * référence du catalogue — B1, et non B14 — dit la famille sans ambiguïté. La
+ * variante (cote, classe, IS) se choisit ensuite d'après l'écran
+ * (`varianteSelonDemande`).
+ *
+ * ⚠️ **EN TÊTE SEULEMENT** : parmi les trois premiers mots significatifs
+ * (quantités et liaisons ignorées). « panneau personnalisé … avec le style des
+ * panneaux KC1 » ne désigne pas un KC1 de catalogue : on le propose, on ne le
+ * retient pas.
+ *
+ * Les jetons de classe (C1, C2V) et de RAL (L7002) ne sont jamais des codes :
+ * « B1 650 C2 » ne doit pas promouvoir une famille « C2 ».
+ */
+const BONUS_CODE = 60;
+const BONUS_CODE_SECOND = 45;
+const MOTS_EN_TETE = 3;
+
+export function codesEnTete(demandeTexte: string, produits: Produit[]): string[] {
+  const table = famillesParCode(produits);
+  const significatifs = sansAccents(demandeTexte).toUpperCase().split(/[^A-Z0-9#]+/)
+    .filter(m => m.length > 1 && !/^\d+$/.test(m) && !LIAISONS.has(m.toLowerCase()))
+    .slice(0, MOTS_EN_TETE);
+  const out: string[] = [];
+  for (const m of significatifs) {
+    if (!/^[A-Z]/.test(m) || !/\d/.test(m)) continue;
+    if (/^C\dV?$/.test(m) || /^L\d{4}$/.test(m)) continue;
+    if (table.has(m) && !out.includes(m)) out.push(m);
+  }
+  return out;
+}
+
 export function rapprocherArticle(
   demandeTexte: string,
   produits: Produit[],
@@ -571,9 +620,10 @@ export function rapprocherArticle(
 
   const demande = caracteristiques(texte);
 
+  const codes = codesEnTete(texte, produits);
   let notes: { p: Produit; score: number; pourquoi: string }[] = [];
   for (const p of produits) {
-    const n = noter(demande, texte, p, tags?.get(p.id));
+    const n = noter(demande, texte, p, tags?.get(p.id), codes);
     if (n && n.score > 0) notes.push({ p, score: n.score, pourquoi: n.pourquoi });
   }
   notes.sort((a, b) => b.score - a.score
