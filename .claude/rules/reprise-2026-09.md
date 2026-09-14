@@ -174,6 +174,8 @@ voulu — on ne lui invente pas un prix de triangle.
    trancher sur le catalogue papier.
 3. **Familles de rails non saisies** : fluviaux, décors spécifiques, points de
    rassemblement, volets d'occultation, J10.
-4. **Assistant IA du devis** : la requête n'atteint pas la fonction — aucun
-   journal Supabase, pas même en préflight. Le message d'erreur affiche
-   désormais le détail ; le lire avant de chercher côté serveur.
+4. **Assistant IA du devis** (14 sept.) : la requête atteignait bien la
+   fonction, qui rendait 500 — Groq a retiré `llama-3.3-70b-versatile` et le
+   repli visait `gemini-2.0-flash`, arrêté le 11. `devis-assistant` essaie
+   désormais les modèles Gemini 3.x puis Groq, et le dialogue affiche le détail
+   de chaque tentative. **À déployer** : `.\deploy-function.ps1 devis-assistant`.

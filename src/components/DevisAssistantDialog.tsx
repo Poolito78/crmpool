@@ -178,7 +178,26 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
       const { data, error } = await supabase.functions.invoke('devis-assistant', {
         body: { message: userContent, history, devisContext: `${devisContext || ''}${CATALYST_TABLE}`, produitsCatalog },
       });
-      if (error) throw error;
+      if (error) {
+        /* `error.message` ne vaut que « Edge Function returned a non-2xx
+           status code » : la raison (modèle retiré, quota, clé) est dans le
+           corps de la réponse, qu'il faut lire soi-même. */
+        let detail = error.message;
+        const ctx = (error as { context?: Response }).context;
+        if (ctx && typeof ctx.json === 'function') {
+          try {
+            const corps = await ctx.json();
+            if (corps?.error) detail = String(corps.error);
+            if (Array.isArray(corps?.essais) && corps.essais.length) {
+              detail += ' — ' + corps.essais
+                .map((x: { modele: string; status: number; message: string }) =>
+                  `${x.modele}: ${x.status} ${String(x.message).slice(0, 120)}`)
+                .join(' | ');
+            }
+          } catch { /* corps illisible : le message brut fera l'affaire */ }
+        }
+        throw new Error(detail);
+      }
       const raw: string = data.response || 'Erreur de réponse.';
       const { clean, lignes } = parseSuggestedLignes(raw);
       setMessages(prev => [...prev, {
