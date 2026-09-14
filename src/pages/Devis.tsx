@@ -1257,9 +1257,10 @@ export default function Devis() {
     isRevendeur?: boolean,
     niveau: NiveauTarif | null = niveauTarif || null,
     grille: GrilleTarif | undefined = niveau ? grilles[niveau] : undefined,
+    grilleR4: GrilleTarif | undefined = grilles.R4,
   ): number {
     if (niveau) {
-      const r = prixAuNiveau(produit, niveau, grille);
+      const r = prixAuNiveau(produit, niveau, grille, grilleR4);
       if (r) return r.prix;
     }
     const palier = getPrixPourQuantite(produit, quantite);
@@ -1269,11 +1270,15 @@ export default function Devis() {
   /* La grille du niveau courant se charge dès que le devis s'ouvre : un
      article choisi ensuite doit la trouver déjà là. */
   useEffect(() => {
-    if (!dialogOpen || !niveauTarif || grilles[niveauTarif]) return;
-    const n = niveauTarif;
-    chargerGrille(n)
-      .then(g => setGrilles(prev => (prev[n] ? prev : { ...prev, [n]: g })))
-      .catch(e => toast.error(`Grille ${n} illisible : ${(e as Error).message}`));
+    if (!dialogOpen || !niveauTarif) return;
+    /* En R0, la police se déduit de R4 : il faut les deux grilles. */
+    const aCharger: NiveauTarif[] = niveauTarif === 'R0' ? ['R0', 'R4'] : [niveauTarif];
+    for (const n of aCharger) {
+      if (grilles[n]) continue;
+      chargerGrille(n)
+        .then(g => setGrilles(prev => (prev[n] ? prev : { ...prev, [n]: g })))
+        .catch(e => toast.error(`Grille ${n} illisible : ${(e as Error).message}`));
+    }
   }, [dialogOpen, niveauTarif, grilles]);
 
   /**
@@ -1292,11 +1297,18 @@ export default function Devis() {
     setNiveauTarif(n);
     const niveau = n || null;
     let grille: GrilleTarif | undefined;
+    let grilleR4: GrilleTarif | undefined = grilles.R4;
     if (niveau) {
       try {
         grille = await chargerGrille(niveau);
         const g = grille;
         setGrilles(prev => (prev[niveau] ? prev : { ...prev, [niveau]: g }));
+        if (niveau === 'R4') grilleR4 = grille;
+        else if (niveau === 'R0' && !grilleR4) {
+          const g4 = await chargerGrille('R4');
+          grilleR4 = g4;
+          setGrilles(prev => (prev.R4 ? prev : { ...prev, R4: g4 }));
+        }
       } catch (e) {
         toast.error(`Grille ${niveau} illisible : ${(e as Error).message} — seul le plastique STI est tarifé au niveau`);
       }
@@ -1309,13 +1321,13 @@ export default function Devis() {
       if (!estArticle(l)) continue;
       const p = produitParId(produits, l.produitId!);
       if (!p) continue;
-      if (niveau && prixAuNiveau(p, niveau, grille)) auNiveau++; else horsNiveau++;
+      if (niveau && prixAuNiveau(p, niveau, grille, grilleR4)) auNiveau++; else horsNiveau++;
     }
     setLignes(prev => prev.map(l => {
       if (!estArticle(l)) return l;
       const p = produitParId(produits, l.produitId!);
       if (!p) return l;
-      const base = prixDeBase(p, l.quantite, estRevendeur, niveau, grille);
+      const base = prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
       const prixUnitaireHT = Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
       return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
     }));

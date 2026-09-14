@@ -60,10 +60,37 @@ describe('prixAuNiveau', () => {
     expect(prixAuNiveau(isosign('BOUCHON8040'), 'R0', undefined)).toBeNull();
   });
 
-  it('plastique STI : public en R0, net remisé en R1-R4, sans grille', () => {
+  it('plastique STI : public −30 % à tous les niveaux, R0 compris', () => {
     const p = { reference: 'ISOFAB4400C2SF', catalogue: 'ISOSIGN' };
-    expect(prixAuNiveau(p, 'R0')).toEqual({ prix: 148.4, source: 'sti', detail: 'STI public' });
-    expect(prixAuNiveau(p, 'R3')).toEqual({ prix: 103.88, source: 'sti', detail: 'STI net' });
+    const attendu = { prix: 103.88, source: 'sti', detail: 'STI public −30 %' };
+    expect(prixAuNiveau(p, 'R0')).toEqual(attendu);
+    expect(prixAuNiveau(p, 'R3')).toEqual(attendu);
+  });
+
+  it('catégorie PLASTIQUE hors barème : public de la fiche −30 %', () => {
+    const p = { reference: 'BUTEE182NJ.ALTER', catalogue: 'ISOSIGN', categorie: 'PLASTIQUE / Equipements de sécurité au sol', prixHT: 92.86 };
+    expect(prixAuNiveau(p, 'R0')).toEqual({ prix: 65, source: 'sti', detail: 'fiche publique −30 %' });
+  });
+
+  it('plastique sans aucun prix public : rien, jamais deviné', () => {
+    const p = { reference: 'PLOTALUDF', catalogue: 'ISOSIGN', categorie: 'PLASTIQUE / Balisage permanent', prixHT: 0 };
+    expect(prixAuNiveau(p, 'R2', grille)).toBeNull();
+  });
+
+  it('police en R0 : R4 ÷ 0,65 faute de grille R0', () => {
+    const r4 = indexerGrille([{ codification: 'B*.650.C2.BRUT', prix: 46.618, priorite: 150 }]);
+    const b14 = { reference: 'B14.650.C2.BTR.IS.BRUT', catalogue: 'ISOSIGN', categorie: 'SIGNALISATION POLICE / Cercle' };
+    expect(prixAuNiveau(b14, 'R0', undefined, r4))
+      .toEqual({ prix: 71.72, source: 'grille', detail: 'B*.650.C2.BRUT (R4 ÷ 0,65)' });
+  });
+
+  it('R0 : ni les rails ni ce qui n’est pas police ne se déduisent de R4', () => {
+    const r4 = indexerGrille([
+      { codification: 'RailBTR.800.Sans.IS.BRUT', prix: 10, priorite: 50 },
+      { codification: 'BOUCHON8040', prix: 1.4, priorite: 60 },
+    ]);
+    expect(prixAuNiveau({ reference: 'RailBTR.800.Sans.IS.BRUT', catalogue: 'ISOSIGN', categorie: 'SIGNALISATION POLICE' }, 'R0', undefined, r4)).toBeNull();
+    expect(prixAuNiveau({ reference: 'BOUCHON8040', catalogue: 'ISOSIGN', categorie: 'ELEMENTS DE FIXATION / Accessoires Mats' }, 'R0', undefined, r4)).toBeNull();
   });
 
   it('ISOMARK / ISOFLOOR : le niveau ne tarife pas', () => {

@@ -1176,7 +1176,7 @@ export default function Clients() {
               </div>
               <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
                 <li><span className="font-medium text-foreground">Signalisation ISOSIGN</span> (police, temporaire, supports, fixations…) : grille « TARIF Rn » d'Odoo.</li>
-                <li><span className="font-medium text-foreground">Plastique STI</span> : prix public en R0, prix net remisé en R1 à R4.</li>
+                <li><span className="font-medium text-foreground">Plastique STI</span> : prix public −30 %, quel que soit le niveau (R0 compris).</li>
                 <li>Article absent de la grille, ISOMARK, ISOFLOOR : prix de la fiche article.</li>
               </ul>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 border-t border-border pt-3 text-sm">

@@ -15,15 +15,19 @@ export type { NiveauTarif };
  *
  *   signalisation ISOSIGN   grille du contrat « TARIF Rn » d'Odoo, recopiée
  *                           dans `grille_contrat` par `odoo-grille-sync`
- *   plastique STI           barème STI (`transportPlastique.donnees.ts`) :
- *                           R0 = prix public, R1-R4 = prix net remisé
+ *   plastique STI           prix public − 30 %, À TOUS LES NIVEAUX, R0
+ *                           compris (règle ISOSIGN) : public du barème STI
+ *                           (`transportPlastique.donnees.ts`), sinon celui de
+ *                           la fiche article
  *   tout le reste           rien — la fiche article continue de tarifer
  *
- * ⚠️ **ON NE DÉDUIT JAMAIS UN NIVEAU D'UN AUTRE.** R4 = R0 − 35 % se vérifie
- * sur les panneaux, pas sur les fixations (BOUCHON8040 : R4 1,40 €, R1
- * 1,51 €, deux R0 différents selon qu'on part de l'un ou de l'autre). Un
- * article absent de la grille rend `null` : la ligne garde son prix fiche,
- * et l'écran le compte « hors grille ».
+ * ⚠️ **UN SEUL NIVEAU SE DÉDUIT D'UN AUTRE : LE R0 DE LA POLICE.** Odoo n'a
+ * pas de grille R0 ; sur la police, R4 = R0 − 35 % (règle ISOSIGN, vérifiée
+ * au centime sur les panneaux) et le R0 remonte donc de R4. Ailleurs le
+ * rapport est faux (BOUCHON8040 : R4 1,40 €, R1 1,51 €, deux R0 différents
+ * selon qu'on part de l'un ou de l'autre), rails de police compris — voir
+ * `estPoliceDeduite`. Un article que rien ne tarife rend `null` : la ligne
+ * garde son prix fiche, et l'écran le compte « hors grille ».
  *
  * ⚠️ `gabaritsGrille` est la COPIE de `ContratCadre.gabarits`
  * (`supabase/functions/odoo-prix/index.ts`) : une règle changée d'un côté
@@ -131,11 +135,19 @@ export interface PrixNiveau {
   detail: string;
 }
 
-type ProduitTarifable = Pick<Produit, 'reference' | 'referenceOdoo' | 'catalogue'>;
+type ProduitTarifable = Pick<Produit, 'reference' | 'referenceOdoo' | 'catalogue'>
+  & Partial<Pick<Produit, 'categorie' | 'prixHT'>>;
 
-/** L'article relève-t-il du barème plastique STI ? */
+/** Remise du plastique STI sur le prix public, quel que soit le niveau. */
+export const REMISE_PLASTIQUE_STI = 0.30;
+
+/**
+ * L'article relève-t-il du plastique STI ? Présent au barème STI, ou rangé
+ * dans la catégorie Odoo PLASTIQUE — 664 articles, dont 450 au barème.
+ */
 export function estPlastiqueSti(p: ProduitTarifable): boolean {
-  return !!(articlePlastique(p.referenceOdoo || '') || articlePlastique(p.reference));
+  return !!(articlePlastique(p.referenceOdoo || '') || articlePlastique(p.reference))
+    || /^PLASTIQUE\b/i.test(String(p.categorie || '').trim());
 }
 
 /**
@@ -149,16 +161,55 @@ export function prixAuNiveau(
   p: ProduitTarifable,
   niveau: NiveauTarif,
   grille?: GrilleTarif,
+  /** Grille R4, lue seulement en R0 pour en déduire la police. */
+  grilleR4?: GrilleTarif,
 ): PrixNiveau | null {
-  const sti = articlePlastique(p.referenceOdoo || '') || articlePlastique(p.reference);
-  if (sti) {
-    if (niveau === 'R0') {
-      return sti.public > 0 ? { prix: sti.public, source: 'sti', detail: 'STI public' } : null;
-    }
-    return sti.net > 0 ? { prix: sti.net, source: 'sti', detail: 'STI net' } : null;
+  if (estPlastiqueSti(p)) {
+    /* Toujours public − 30 %, R0 compris. Le public du barème STI d'abord,
+       celui de la fiche sinon ; ni l'un ni l'autre → rien, jamais deviné. */
+    const sti = articlePlastique(p.referenceOdoo || '') || articlePlastique(p.reference);
+    const duBareme = !!sti && sti.public > 0;
+    const publicHT = duBareme ? sti!.public : (Number(p.prixHT) || 0);
+    if (publicHT <= 0) return null;
+    return {
+      prix: Math.round(publicHT * (1 - REMISE_PLASTIQUE_STI) * 100) / 100,
+      source: 'sti',
+      detail: duBareme ? 'STI public −30 %' : 'fiche publique −30 %',
+    };
   }
   if (String(p.catalogue || '').toUpperCase() !== 'ISOSIGN') return null;
   const code = p.referenceOdoo || p.reference;
   const g = prixDansGrille(grille, code);
-  return g ? { prix: Math.round(g.prix * 100) / 100, source: 'grille', detail: g.gabarit } : null;
+  if (g) return { prix: Math.round(g.prix * 100) / 100, source: 'grille', detail: g.gabarit };
+  /* R0 n'a pas de grille chez Odoo. Sur la police — et là seulement — R4 est
+     R0 − 35 % : on remonte donc de la grille R4. */
+  if (niveau === 'R0' && estPoliceDeduite(p)) {
+    const g4 = prixDansGrille(grilleR4, code);
+    if (g4) {
+      return {
+        prix: Math.round((g4.prix / COEF_R4_SUR_R0) * 100) / 100,
+        source: 'grille',
+        detail: `${g4.gabarit} (R4 ÷ 0,65)`,
+      };
+    }
+  }
+  return null;
+}
+
+/** R4 = R0 × 0,65 sur la signalisation police (règle ISOSIGN). */
+export const COEF_R4_SUR_R0 = 0.65;
+
+/**
+ * La police dont le R0 se déduit de R4 : catégorie SIGNALISATION POLICE,
+ * rails exceptés.
+ *
+ * ⚠️ Les RAILS sont rangés en police mais ne suivent pas le rapport : mesuré
+ * le 15/09/2026, 44 rails sur 44 donnent un R0 différent selon qu'on remonte
+ * de R4 (÷ 0,65) ou de R1 (÷ 0,80) — RailBTR.4000 : 67,75 € contre 59,29 €.
+ * Les 12 panneaux rapprochés tombent juste au centime. Un rail en R0 garde
+ * donc le prix de sa fiche, annoncé « à vérifier ».
+ */
+export function estPoliceDeduite(p: ProduitTarifable): boolean {
+  if (!/^SIGNALISATION POLICE\b/i.test(String(p.categorie || '').trim())) return false;
+  return !/^RAIL/i.test(p.referenceOdoo || p.reference || '');
 }

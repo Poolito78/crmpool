@@ -50,14 +50,24 @@ son sélecteur d'en-tête le change pour ce devis seul (colonne
 - **Signalisation ISOSIGN** (catalogue ISOSIGN) : `grille_contrat` du niveau,
   par gabarit — `gabaritsGrille` est la COPIE de `ContratCadre.gabarits`
   (`odoo-prix`), à tenir alignée.
-- **Plastique STI** (article présent dans `ARTICLES_PLASTIQUE`) : R0 = public,
-  R1-R4 = net remisé du barème.
+- **Plastique STI** (article du barème `ARTICLES_PLASTIQUE`, ou catégorie
+  PLASTIQUE) : **toujours public − 30 %, à tous les niveaux, R0 compris**
+  (règle ISOSIGN, 15/09/2026). Public du barème, sinon de la fiche ; aucun des
+  deux → prix fiche, annoncé hors grille.
 - Le reste, et tout article hors grille : prix fiche, **compté et annoncé**
   « hors grille — à vérifier ».
 
 ⚠️ **R0 n'a pas de grille chez Odoo** (la synchro ne trouve que R1-R4 ; elle
-tente désormais R0). On ne le déduit PAS de R4 ÷ 0,65 : vrai sur les panneaux,
-faux sur les fixations (BOUCHON8040). Sans grille R0, la fiche article tarife.
+tente désormais R0). **Sur la POLICE, R0 = R4 ÷ 0,65** (règle ISOSIGN,
+`estPoliceDeduite`) — rails exceptés : 44 rails sur 44 ne suivent pas le
+rapport. Ailleurs (fixations : BOUCHON8040) il est faux, et la fiche article
+(prix public) tarife.
+
+**L'analyse de document suit le même calcul** quand un niveau est forcé au
+sélecteur (R0 compris) : `prixDetail` et `prixOdoo` passent par
+`prixAuNiveau`, et seul ce qu'il ne couvre pas retombe sur Odoo (en R0 : sur
+le prix public de la fiche). Sans niveau forcé, le contrat du client tarife
+comme avant.
 Mesuré le 15/09/2026 : les prix fiche sont très loin des grilles —
 `SG80401_5.3000.IS.BRUT` 89,43 € en fiche pour 22 € en R4, `AB4.600.C1.BRUT`
 0 € en fiche pour 47,29 € en R1.

@@ -46,6 +46,8 @@ import {
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
 import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
+import { prixAuNiveau, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
+import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat,
   appliquerPrix, type PropositionPrix, type CibleEcriture,
@@ -214,7 +216,23 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      ne le portent pas, et un chargé d'affaires peut avoir à en imposer un
      autre : le contrat CCI10019 lui-même a été forcé sur ce devis. Vide =
      on s'en remet au contrat. */
-  const [niveauForce, setNiveauForce] = useState<'' | 'R1' | 'R2' | 'R3' | 'R4'>('');
+  const [niveauForce, setNiveauForce] = useState<'' | NiveauTarif>('');
+  /* MÊME PRINCIPE QUE LE DEVIS : un niveau forcé tarifie par `prixAuNiveau`
+     (grille du niveau pour ISOSIGN, R4 ÷ 0,65 pour la police en R0, plastique
+     STI au public − 30 %), et seul ce que ce calcul ne couvre pas retombe sur
+     la réponse d'Odoo. Deux calculs différents pour un même « R2 »
+     finiraient par annoncer deux prix. */
+  const [grillesNiveau, setGrillesNiveau] = useState<Partial<Record<NiveauTarif, GrilleTarif>>>({});
+  useEffect(() => {
+    if (!open || !niveauForce) return;
+    const aCharger: NiveauTarif[] = niveauForce === 'R0' ? ['R0', 'R4'] : [niveauForce];
+    for (const n of aCharger) {
+      if (grillesNiveau[n]) continue;
+      chargerGrille(n)
+        .then(g => setGrillesNiveau(prev => (prev[n] ? prev : { ...prev, [n]: g })))
+        .catch(e => toast.error(`Grille ${n} illisible : ${(e as Error).message}`));
+    }
+  }, [open, niveauForce, grillesNiveau]);
   /* Synchronisation des grilles R1-R4 depuis Odoo vers la copie Supabase.
      `null` tant qu'on n'a pas regardé, sinon la date de la dernière réussie. */
   const [grilleMaj, setGrilleMaj] = useState<string | null>(null);
@@ -2531,7 +2549,9 @@ const [contratOdoo, setContratOdoo] = useState<
       recherches: aChercher,
       /* Niveau imposé : Odoo ira lire la grille de CE niveau au lieu de
          celle rattachée au client. Rien n'est copié en local. */
-      niveau: niveauForce || undefined,
+      /* R0 n'a pas de contrat chez Odoo : l'imposer n'y chargerait rien, et
+         le calcul local (`prixAuNiveau`) s'en charge. */
+      niveau: niveauForce && niveauForce !== 'R0' ? niveauForce : undefined,
       /* Niveau affiché, envoyé comme FILET : il ne sert que si le client
          n'a aucun contrat rattaché. Sans lui, l'absence de rattachement
          faisait retomber la tarification sur la liste de prix, qui
@@ -2841,6 +2861,18 @@ const [contratOdoo, setContratOdoo] = useState<
     if (prixImpose !== undefined && prixImpose !== null) {
       return { retenu: prixImpose, contrat, catalogue, source: 'règle' as const, remise };
     }
+    /* Niveau forcé : le même calcul que le devis. */
+    if (niveauForce) {
+      const auNiveau = prixAuNiveau(p, niveauForce, grillesNiveau[niveauForce], grillesNiveau.R4);
+      if (auNiveau) return { retenu: auNiveau.prix, contrat, catalogue, source: 'contrat' as const, remise };
+      /* R0 = prix public : ce que la grille ne couvre pas prend la fiche, pas
+         le contrat du client — sauf gamme remisée, traitée plus bas. */
+      if (niveauForce === 'R0' && !remise) {
+        return catalogue > SEUIL_PRIX_FACTICE
+          ? { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const, remise }
+          : { retenu: 0, contrat, catalogue, source: 'absent' as const, remise };
+      }
+    }
     /* Le tarif ISOMARK doit primer sur le contrat quand il diffère — une remise
        oubliée dans Odoo y fait apparaître un prix qui n'est pas celui annoncé
        au client. Mais il faut le VRAI tarif ISOMARK, qui vit dans une liste de
@@ -2879,7 +2911,7 @@ const [contratOdoo, setContratOdoo] = useState<
       return { retenu: 0, contrat, catalogue, source: 'absent' as const, remise };
     }
     return { retenu: catalogue, contrat, catalogue, source: 'catalogue' as const, remise };
-  }, [contratOdoo, clients, creerDevisClientId]);
+  }, [contratOdoo, clients, creerDevisClientId, niveauForce, grillesNiveau]);
 
   /**
    * Prix d'un article venu d'Odoo, remise de gamme comprise.
@@ -2901,10 +2933,27 @@ const [contratOdoo, setContratOdoo] = useState<
                source: remise.libelle as any,
                remise };
     }
+    /* Niveau forcé : le même calcul que le devis. Un article trouvé chez Odoo
+       hors gamme remisée est tenu pour ISOSIGN — les gammes ISOMARK et
+       ISOFLOOR sont sorties juste au-dessus. */
+    if (niveauForce) {
+      const auNiveau = prixAuNiveau(
+        { reference: odoo.reference, catalogue: 'ISOSIGN', categorie: odoo.categorie, prixHT: odoo.fiche },
+        niveauForce, grillesNiveau[niveauForce], grillesNiveau.R4,
+      );
+      if (auNiveau) {
+        return { retenu: auNiveau.prix, contrat: odoo.contrat, catalogue: odoo.fiche,
+                 source: 'contrat' as any, remise: null as PrixGamme | null };
+      }
+      if (niveauForce === 'R0') {
+        return { retenu: odoo.fiche > SEUIL_PRIX_FACTICE ? odoo.fiche : 0, contrat: odoo.contrat,
+                 catalogue: odoo.fiche, source: 'contrat' as any, remise: null as PrixGamme | null };
+      }
+    }
     return { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
              catalogue: odoo.fiche, source: 'contrat' as any,
              remise: null as PrixGamme | null };
-  }, []);
+  }, [niveauForce, grillesNiveau]);
 
   /** Prix effectivement appliqué, correction manuelle comprise. */
   const prixDe = useCallback((
@@ -4214,7 +4263,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                   remplacent rien puisque rien ne tarifait. */}
                               <Select
                                 value={niveauForce || 'auto'}
-                                onValueChange={v => setNiveauForce(v === 'auto' ? '' : v as 'R1' | 'R2' | 'R3' | 'R4')}
+                                onValueChange={v => setNiveauForce(estNiveauTarif(v) ? v : '')}
                               >
                                 <SelectTrigger className="h-7 w-56 text-[11px]"><SelectValue /></SelectTrigger>
                                 <SelectContent>
@@ -4223,6 +4272,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       ? `Contrat cadre${niveauRemise ? ` — ${niveauRemise}` : ''}`
                                       : `${niveauRemise} — automatique`}
                                   </SelectItem>
+                                  <SelectItem value="R0">R0 — tarif public</SelectItem>
                                   <SelectItem value="R1">R1 — 20 %</SelectItem>
                                   <SelectItem value="R2">R2 — 25 %</SelectItem>
                                   <SelectItem value="R3">R3 — 30 %</SelectItem>
