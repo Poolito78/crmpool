@@ -31,7 +31,7 @@ import {
   HC_AGGLO_DEFAUT,
 } from '@/lib/compositionPanneau';
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
-import { variantesParDefaut } from '@/lib/variantFunnel';
+import { variantesParDefaut, varianteSelonDemande } from '@/lib/variantFunnel';
 import { chantierDansTexte } from '@/lib/chantierDemande';
 import { compterBrides, fixationsPour, fixationDeSection, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -231,6 +231,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      `clients` ; la demande, elle, est presque toujours la même. On compare ce
      qu'on s'apprête à envoyer plutôt que ce qui a bougé dans React. */
   const cleOdooRef = useRef<string>('');
+  /** Lignes dont la proposition Odoo a été retenue D'OFFICE, pas cliquée : elles
+      suivent la classe et la gamme de l'écran quand on en change. */
+  const odooDOfficeRef = useRef<Set<number>>(new Set());
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const cacheOdooRef = useRef<Map<string, any>>(new Map());
   /* La demande actuellement en vol, avec de quoi l'abandonner. */
@@ -1112,6 +1115,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
+    odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({});
     setLibelleManuel({});
@@ -2080,11 +2084,40 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo,
       texteDemande]);
 
+  /** Articles par code de référence (AB3A → AB3A.*), IS et SO confondus. */
+  const produitsParCode = useMemo(() => {
+    const m = new Map<string, typeof produits>();
+    for (const p of produits) {
+      const code = (p.reference || '').split('.')[0].trim().toUpperCase();
+      if (!code) continue;
+      const l = m.get(code);
+      if (l) l.push(p); else m.set(code, [p]);
+    }
+    return m;
+  }, [produits]);
+
+  /* ⚠️ **L'ARTICLE RETENU D'OFFICE OBÉIT À LA CLASSE ET À LA GAMME DE
+     L'ÉCRAN, ISOSIGN D'ABORD.** Un tag appris sur un C1 (« cédez passage »
+     → AB3A.700.C1) retenait ce C1 sur la demande suivante, Classe 2 à
+     l'écran : les règles métier ne s'appliquaient qu'aux propositions Odoo.
+     Voir `varianteSelonDemande`. Un choix fait à la main n'est jamais
+     corrigé. */
+  const varianteDOffice = useMemo(() => {
+    const m = new Map<number, typeof produits[number]>();
+    (result?.lignes || []).forEach((l, i) => {
+      const auto = rapprochements.get(i)?.meilleur;
+      if (!auto) return;
+      const code = (auto.reference || '').split('.')[0].trim().toUpperCase();
+      m.set(i, varianteSelonDemande(auto, produitsParCode.get(code) ?? [], texteRechercheOdoo(l, i)));
+    });
+    return m;
+  }, [result, rapprochements, produitsParCode, texteRechercheOdoo]);
+
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
     if (choisi) return produitParId(produits, choisi);
-    return rapprochements.get(i)?.meilleur;
-  }, [choixProduit, produits, rapprochements]);
+    return varianteDOffice.get(i) ?? rapprochements.get(i)?.meilleur;
+  }, [choixProduit, produits, rapprochements, varianteDOffice]);
 
   /* ── Devis fournisseur ─────────────────────────────────────────────────── */
 
@@ -2712,7 +2745,11 @@ const [contratOdoo, setContratOdoo] = useState<
       lignes.forEach((l, i) => {
         /* Une ligne système est déjà chiffrée par ses composants : lui coller
            en plus un article Odoo la ferait compter deux fois. */
-        if (n[i] || refusOdoo.has(i) || produitDeLigne(i) || systemesDetectes.has(i)) return;
+        /* ⚠️ Une proposition retenue D'OFFICE se réévalue : changer la classe
+           à l'écran la laissait sur l'ancienne (un C1 pour une demande C2).
+           Seul un clic la fige. */
+        if ((n[i] && !odooDOfficeRef.current.has(i)) || refusOdoo.has(i)
+            || produitDeLigne(i) || systemesDetectes.has(i)) return;
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -2743,7 +2780,10 @@ const [contratOdoo, setContratOdoo] = useState<
           props.map(t => ({ reference: t.reference, description: t.designation })),
           texteRechercheOdoo(l, i),
         ));
-        n[i] = props.find(t => gardees.has(t.reference)) ?? props[0];
+        const choix = props.find(t => gardees.has(t.reference)) ?? props[0];
+        odooDOfficeRef.current.add(i);
+        if (n[i]?.reference === choix.reference) return;
+        n[i] = choix;
         change = true;
       });
       return change ? n : prev;
@@ -4449,6 +4489,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                     {!sysRap && !choixProduit[i] && rap?.confiance === 'sure' && candidats.length > 1 && (
                                       <span className="ml-auto text-[11px] text-warning">
                                         {rap.pourquoi} · {candidats.length} candidats
+                                        {retenu && rap.meilleur && retenu.id !== rap.meilleur.id
+                                          && ` · ${rap.meilleur.reference} → ${retenu.reference} (classe et gamme de l’écran)`}
                                       </span>
                                     )}
                                     {sysRap && (
@@ -5055,6 +5097,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                               type="button"
                                               onClick={() => {
                                                 const retire = choixOdoo[i]?.reference === t.reference;
+                                                // Cliqué : le choix ne suit plus l'écran.
+                                                odooDOfficeRef.current.delete(i);
                                                 setChoixOdoo(prev => {
                                                   const n = { ...prev };
                                                   // Un second clic retire le choix.

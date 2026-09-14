@@ -64,6 +64,12 @@ ISOSIGN dès qu'une variante ISOSIGN existe (`estIsosign`), sauf si la demande
 nomme SO. Sans variante ISOSIGN, les SO restent proposés plutôt qu'une ligne
 sans prix. Le choix à la main reste libre.
 
+⚠️ **La règle vaut aussi pour l'article LOCAL retenu d'office** (tag,
+rapprochement) : un tag « cédez passage » appris sur AB3A.700.C1 retenait le C1
+avec Classe 2 à l'écran. `varianteSelonDemande` le ramène à la variante
+conforme (classe, gamme, IS), et une proposition Odoo retenue d'office se
+réévalue quand la classe change. Seul un clic fige le choix.
+
 ## Les brides
 
 **Une bride par rail.** Le nombre de rails se lit dans

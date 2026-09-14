@@ -407,6 +407,47 @@ export function variantesParDefaut(
   return matches.length ? matches : pool.map((c) => c.reference);
 }
 
+/**
+ * L'article retenu d'office, ramené à la variante que la demande désigne.
+ *
+ * ⚠️ **UN TAG DÉSIGNE UN MODÈLE, PAS UNE CLASSE.** « cédez passage » a été
+ * appris sur AB3A.700.C1.BTR.IS.BRUT le jour où le client voulait du C1. Le
+ * rapprochement local le retenait ensuite d'office, sur une demande où
+ * l'écran portait Classe 2 : les règles de `variantesParDefaut` — classe et
+ * gamme choisies à l'écran, ISOSIGN d'abord — ne s'appliquaient qu'aux
+ * propositions Odoo, jamais à l'article local. Même défaut pour un SO retenu
+ * par ressemblance quand l'IS existe.
+ *
+ * `famille` : les articles qui partagent le code de la référence (AB3A.*), IS
+ * et SO confondus. `demande` : le texte ENRICHI de la gamme et de la classe
+ * (`texteRechercheOdoo`). On garde l'article tant qu'il satisfait les règles ;
+ * sinon on prend, parmi les variantes conformes, la plus proche de lui — même
+ * profil, même finition — pour ne changer que ce que la règle impose.
+ *
+ * Ne touche qu'aux références déclinées (classe ou marque IS) : une résine ou
+ * une bride n'a pas de variante à corriger.
+ */
+export function varianteSelonDemande<T extends CandidateProduit>(
+  retenu: T,
+  famille: readonly T[],
+  demande: string,
+): T {
+  if (famille.length < 2) return retenu;
+  const { byCategory } = parseReference(retenu.reference);
+  if (!byCategory.film && !byCategory.marque) return retenu;
+  const gardees = new Set(variantesParDefaut([...famille], demande));
+  if (gardees.has(retenu.reference)) return retenu;
+  const siens = new Set(retenu.reference.toUpperCase().split('.'));
+  let meilleur = retenu;
+  let proche = -1;
+  for (const f of famille) {
+    if (!gardees.has(f.reference)) continue;
+    const communs = f.reference.toUpperCase().split('.').filter((s) => siens.has(s)).length;
+    if (communs > proche) { meilleur = f; proche = communs; }
+  }
+  return meilleur;
+}
+
 /** Article de la gamme ISOSIGN : segment `IS` dans la référence, ou désignation « IS … ». */
 export function estIsosign(c: CandidateProduit): boolean {
   if (c.reference.toUpperCase().split('.').some((s) => classifySegment(s) === 'marque')) return true;

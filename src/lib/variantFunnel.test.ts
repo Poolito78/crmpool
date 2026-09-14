@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildFunnel, classifySegment, variantesParDefaut } from './variantFunnel';
+import { buildFunnel, classifySegment, variantesParDefaut, varianteSelonDemande } from './variantFunnel';
 
 /** Références réelles du catalogue (table `produits`), copiées telles quelles. */
 const KD22 = [
@@ -178,6 +178,37 @@ describe('reprise d’office d’une proposition Odoo', () => {
     expect(soDemande.some((r) => !r.includes('.IS.'))).toBe(true);
     const seulementSO = AB4.filter((c) => c.description.startsWith('SO'));
     expect(variantesParDefaut(seulementSO, 'AB4 STOP').length).toBeGreaterThan(0);
+  });
+
+  /* ⚠️ Le tag « cédez passage » appris sur le C1 retenait le C1 d'office alors
+     que l'écran portait Classe 2. */
+  describe('varianteSelonDemande', () => {
+    const AB3A = [
+      { reference: 'AB3A.700.C1.BTR.IS.BRUT', description: 'IS AB3A' },
+      { reference: 'AB3A.700.C2.BTR.IS.BRUT', description: 'IS AB3A' },
+      { reference: 'AB3A.700.C2.BRUT', description: 'SO AB3A' },
+      { reference: 'AB3A.1000.C2.BTR.IS.BRUT', description: 'IS AB3A' },
+    ];
+
+    it('ramène un article retenu en C1 à la classe 2 de l’écran', () => {
+      expect(varianteSelonDemande(AB3A[0], AB3A, 'AB3a 700 C2').reference)
+        .toBe('AB3A.700.C2.BTR.IS.BRUT');
+    });
+
+    it('préfère ISOSIGN à un SO retenu par ressemblance', () => {
+      expect(varianteSelonDemande(AB3A[2], AB3A, 'AB3a 700 C2').reference)
+        .toBe('AB3A.700.C2.BTR.IS.BRUT');
+    });
+
+    it('garde l’article quand il est déjà conforme', () => {
+      expect(varianteSelonDemande(AB3A[0], AB3A, 'AB3a 700 C1')).toBe(AB3A[0]);
+    });
+
+    it('ne touche pas à un article sans déclinaison', () => {
+      const resine = { reference: 'FLOWFASTF107', description: 'Resine' };
+      expect(varianteSelonDemande(resine, [resine, { reference: 'FLOWFASTPRIMER107.20' }], 'resine C2'))
+        .toBe(resine);
+    });
   });
 
   /* ⚠️ Une liste vide vaut « aucune proposition », donc une ligne au devis
