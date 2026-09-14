@@ -137,9 +137,14 @@ serve(async (req) => {
        à faire le tour du catalogue en appels successifs, sans tenir de curseur
        ni risquer d'oublier une tranche. */
     const champs = "id, reference, reference_odoo, prix_ht, prix_achat, prix_vente_maj, prix_achat_maj";
+    /* Chaque valeur est mise ENTRE GUILLEMETS dans le filtre `or`.
+     * La virgule y sépare les conditions : « GRANITGRIS0,5/1 » nu coupait le
+     * filtre en deux, PostgREST le rejetait, et la fiche restait sans stock
+     * sans que rien ne le dise. */
+    const cite = (r: string) => `"${r.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
     const { data: lot, error: err } = demandees.length
       ? await sb.from("produits").select(champs)
-          .or(demandees.map(r => `reference.eq.${r},reference_odoo.eq.${r}`).join(","))
+          .or(demandees.map(r => `reference.eq.${cite(r)},reference_odoo.eq.${cite(r)}`).join(","))
           .limit(demandees.length * 2)
       : await sb.from("produits").select(champs)
           .order("stock_odoo_maj", { ascending: true, nullsFirst: true })

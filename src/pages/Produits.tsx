@@ -112,7 +112,7 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
 
 const emptyProduit = {
-  reference: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
+  reference: '', referenceOdoo: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
 };
@@ -884,7 +884,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -1824,6 +1824,16 @@ export default function Produits() {
                 <Label>Catégorie</Label>
                 <Input list="produit-categories-list" value={form.categorie} onChange={e => setForm(p => ({ ...p, categorie: e.target.value }))} placeholder="Choisir ou saisir…" autoComplete="off" />
                 <datalist id="produit-categories-list">{categoriesList.map(c => <option key={c} value={c} />)}</datalist>
+              </div>
+              {/* La référence de l'article CHEZ ODOO, quand elle diffère de la
+                  nôtre. Les anciennes fiches MonCRM (GRANITEGRIS58) portent
+                  un code qu'Odoo ne connaît pas (GRANITGRIS5/8) : sans ce
+                  lien, stock et envoi vers Odoo cherchaient un article
+                  inexistant, et la fiche restait à zéro sans rien dire. */}
+              <div>
+                <Label>Référence Odoo</Label>
+                <Input value={form.referenceOdoo} onChange={e => setForm(p => ({ ...p, referenceOdoo: e.target.value.trim() }))} placeholder={form.reference || 'Identique à la référence'} />
+                <p className="text-[10px] text-muted-foreground mt-0.5">À remplir seulement si Odoo nomme l'article autrement.</p>
               </div>
             </div>
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
@@ -3455,6 +3465,17 @@ export default function Produits() {
                   </div>
                   <div><Label>Stock minimum</Label><InputNombre decimales={0} value={form.stockMin} onChange={v => setForm(p => ({ ...p, stockMin: v }))} /></div>
                 </div>
+
+                {/* Aucun stock Odoo connu : on le DIT. Un zéro muet laissait
+                    croire à un magasin vide alors qu'Odoo en comptait 33 sous
+                    une autre référence. */}
+                {editing && editing.stockOdoo === undefined && (
+                  <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs">
+                    Aucun stock Odoo trouvé pour « <strong>{editing.referenceOdoo || editing.reference}</strong> ».
+                    {' '}Si Odoo nomme cet article autrement, renseigner sa référence dans
+                    {' '}<button type="button" className="underline font-medium" onClick={() => setProduitTab('infos')}>Informations → Référence Odoo</button>.
+                  </div>
+                )}
 
                 {/* Disponible à la vente */}
                 <label className="flex items-center gap-2.5 px-1 cursor-pointer select-none">
