@@ -120,3 +120,80 @@ export function getRalInfo(text: string): { hex: string; dark: boolean; white?: 
   if (!c) return undefined;
   return { ...c, num: m[1], quartz: RAL_QUARTZ[m[1]] };
 }
+
+// ── Noms français des teintes RAL Classic ─────────────────────────────────
+const RAL_NOMS: Record<string, string> = {
+  '1000':'Beige vert', '1001':'Beige', '1002':'Jaune sable', '1003':'Jaune de sécurité', '1004':'Jaune or',
+  '1005':'Jaune miel', '1006':'Jaune maïs', '1007':'Jaune narcisse', '1011':'Beige brun', '1012':'Jaune citron',
+  '1013':'Blanc perlé', '1014':'Ivoire', '1015':'Ivoire clair', '1016':'Jaune soufre', '1017':'Jaune safran',
+  '1018':'Jaune zinc', '1019':'Beige gris', '1020':'Jaune olive', '1021':'Jaune colza', '1023':'Jaune signalisation',
+  '1024':'Jaune ocre', '1026':'Jaune brillant', '1027':'Jaune curry', '1028':'Jaune melon', '1032':'Jaune genêt',
+  '1033':'Jaune dahlia', '1034':'Jaune pastel', '1035':'Beige nacré', '1036':'Or nacré', '1037':'Jaune soleil',
+  '2000':'Orangé jaune', '2001':'Orangé rouge', '2002':'Orangé sang', '2003':'Orangé pastel', '2004':'Orangé pur',
+  '2005':'Orangé brillant', '2007':'Orangé clair brillant', '2008':'Orangé rouge clair', '2009':'Orangé signalisation',
+  '2010':'Orangé de sécurité', '2011':'Orangé foncé', '2012':'Orangé saumon', '2013':'Orangé nacré',
+  '3000':'Rouge feu', '3001':'Rouge de sécurité', '3002':'Rouge carmin', '3003':'Rouge rubis', '3004':'Rouge pourpre',
+  '3005':'Rouge vin', '3007':'Rouge noir', '3009':'Rouge oxyde', '3011':'Rouge brun', '3012':'Rouge beige',
+  '3013':'Rouge tomate', '3014':'Vieux rose', '3015':'Rose clair', '3016':'Rouge corail', '3017':'Rosé',
+  '3018':'Rouge fraise', '3020':'Rouge signalisation', '3022':'Rouge saumon', '3024':'Rouge brillant',
+  '3026':'Rouge clair brillant', '3027':'Rouge framboise', '3028':'Rouge pur', '3031':'Rouge oriental',
+  '3032':'Rouge rubis nacré', '3033':'Rose nacré',
+  '4001':'Lilas rouge', '4002':'Violet rouge', '4003':'Violet bruyère', '4004':'Violet bordeaux', '4005':'Lilas bleu',
+  '4006':'Pourpre signalisation', '4007':'Violet pourpre', '4008':'Violet de sécurité', '4009':'Violet pastel',
+  '4010':'Télémagenta', '4011':'Violet nacré', '4012':'Mûre nacré',
+  '5000':'Bleu violet', '5001':'Bleu vert', '5002':'Bleu outremer', '5003':'Bleu saphir', '5004':'Bleu noir',
+  '5005':'Bleu de sécurité', '5007':'Bleu brillant', '5008':'Bleu gris', '5009':'Bleu azur', '5010':'Bleu gentiane',
+  '5011':'Bleu acier', '5012':'Bleu clair', '5013':'Bleu cobalt', '5014':'Bleu pigeon', '5015':'Bleu ciel',
+  '5017':'Bleu signalisation', '5018':'Bleu turquoise', '5019':'Bleu capri', '5020':'Bleu océan', '5021':"Bleu d'eau",
+  '5022':'Bleu nocturne', '5023':'Bleu distant', '5024':'Bleu pastel', '5025':'Gentiane nacré', '5026':'Bleu nuit nacré',
+  '6000':'Vert patine', '6001':'Vert émeraude', '6002':'Vert feuillage', '6003':'Vert olive', '6004':'Vert bleu',
+  '6005':'Vert mousse', '6006':'Olive gris', '6007':'Vert bouteille', '6008':'Vert brun', '6009':'Vert sapin',
+  '6010':'Vert herbe', '6011':'Vert réséda', '6012':'Vert noir', '6013':'Vert jonc', '6014':'Olive jaune',
+  '6015':'Olive noir', '6016':'Vert turquoise', '6017':'Vert mai', '6018':'Vert jaune', '6019':'Vert blanc',
+  '6020':'Vert oxyde chromique', '6021':'Vert pâle', '6022':'Olive brun', '6024':'Vert signalisation',
+  '6025':'Vert fougère', '6026':'Vert opale', '6027':'Vert clair', '6028':'Vert pin', '6029':'Vert menthe',
+  '6032':'Vert de sécurité', '6033':'Turquoise menthe', '6034':'Turquoise pastel', '6035':'Vert nacré',
+  '6036':'Vert opal nacré', '6037':'Vert pur', '6038':'Vert brillant',
+  '7000':'Gris petit-gris', '7001':'Gris argent', '7002':'Gris olive', '7003':'Gris mousse', '7004':'Gris de sécurité',
+  '7005':'Gris souris', '7006':'Gris beige', '7008':'Gris kaki', '7009':'Gris vert', '7010':'Gris tente',
+  '7011':'Gris fer', '7012':'Gris basalte', '7013':'Gris brun', '7015':'Gris ardoise', '7016':'Gris anthracite',
+  '7021':'Gris noir', '7022':"Gris terre d'ombre", '7023':'Gris béton', '7024':'Gris graphite', '7026':'Gris granit',
+  '7030':'Gris pierre', '7031':'Gris bleu', '7032':'Gris silex', '7033':'Gris ciment', '7034':'Gris jaune',
+  '7035':'Gris clair', '7036':'Gris platine', '7037':'Gris poussière', '7038':'Gris agate', '7039':'Gris quartz',
+  '7040':'Gris fenêtre', '7042':'Gris signalisation A', '7043':'Gris signalisation B', '7044':'Gris soie',
+  '7045':'Télégris 1', '7046':'Télégris 2', '7047':'Télégris 4', '7048':'Gris souris nacré',
+  '8000':'Brun vert', '8001':'Brun terre de Sienne', '8002':'Brun de sécurité', '8003':'Brun argile',
+  '8004':'Brun cuivré', '8007':'Brun fauve', '8008':'Brun olive', '8011':'Brun noisette', '8012':'Brun rouge',
+  '8014':'Brun sépia', '8015':'Marron', '8016':'Brun acajou', '8017':'Brun chocolat', '8019':'Brun gris',
+  '8022':'Brun noir', '8023':'Brun orangé', '8024':'Brun beige', '8025':'Brun pâle', '8028':'Brun terre',
+  '8029':'Cuivre nacré',
+  '9001':'Blanc crème', '9002':'Blanc gris', '9003':'Blanc de sécurité', '9004':'Noir de sécurité', '9005':'Noir foncé',
+  '9006':'Aluminium blanc', '9007':'Aluminium gris', '9010':'Blanc pur', '9011':'Noir graphite',
+  '9016':'Blanc signalisation', '9017':'Noir signalisation', '9018':'Blanc papyrus', '9022':'Gris clair nacré',
+  '9023':'Gris foncé nacré',
+};
+
+/**
+ * Nomme en toutes lettres la teinte d'un libellé de variante.
+ *
+ * Le sélecteur dit « RAL 7042 » ; le chantier, lui, commande du « gris
+ * signalisation A ». Deux teintes voisines se confondent vite sur un code à
+ * quatre chiffres, beaucoup moins sur un nom.
+ *
+ * Plus strict que `getRalInfo` : on ne nomme que ce qui est EXPLICITEMENT une
+ * teinte RAL (« RAL 7042 », ou un libellé fait des seuls quatre chiffres).
+ * Un « seau de 1000 ml » ne doit pas devenir du « Beige vert ». Un code Quartz
+ * sans RAL (« 340 (Pastel Yellow) ») porte déjà son nom : il est rendu tel
+ * quel. Un numéro RAL absent de la table n'est pas nommé — on ne devine pas.
+ */
+export function libelleTeinte(label: string): string | undefined {
+  const texte = String(label || '').trim();
+  const ral = texte.match(/RAL\s*(\d{4})/i) ?? texte.match(/^(\d{4})$/);
+  if (ral) {
+    const nom = RAL_NOMS[ral[1]];
+    return nom ? `RAL ${ral[1]} ${nom}` : undefined;
+  }
+  const quartz = texte.match(/^(\d{3,4})\b/);
+  if (quartz && QUARTZ_COLORS[quartz[1]]) return texte;
+  return undefined;
+}

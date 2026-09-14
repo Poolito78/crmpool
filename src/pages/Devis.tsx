@@ -31,6 +31,7 @@ import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
+import { getRalInfo, libelleTeinte } from '@/lib/ralColors';
 import VarianteSelect from '@/components/VarianteSelect';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 
@@ -2905,6 +2906,10 @@ export default function Devis() {
                       ? Math.round(surfaceVal * consoLigne * 1000) / 1000 : null;
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
                     const hasAutoCalc = !!(surfaceVal > 0 && consoLigne != null && consoLigne > 0 && prod?.poids && prod.poids > 0);
+                    // Teinte choisie en toutes lettres (« RAL 7042 Gris signalisation A »), lue sur la ligne elle-même
+                    const teintesLigne = Object.values(l.variantesChoisies || {})
+                      .map(v => ({ texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
+                      .filter((t): t is { texte: string; hex: string | undefined } => !!t.texte);
 
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
                     const variantEls = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
@@ -3109,9 +3114,28 @@ export default function Devis() {
                                 </div>
                               )}
                             </div>
-                            {/* Infos marges */}
-                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null) && (
+                            {/* Infos marges, stock Odoo, teinte */}
+                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
+                                {teintesLigne.map((t, k) => (
+                                  <span key={`teinte-${k}`} className="inline-flex items-center gap-1 font-medium text-foreground">
+                                    {t.hex && <span className="inline-block w-3 h-3 rounded-sm border border-black/20" style={{ backgroundColor: t.hex }} />}
+                                    {t.texte}
+                                  </span>
+                                ))}
+                                {/* Stock Odoo : jamais deviné. Sans lecture, on le dit. */}
+                                {prod && (prod.stockOdoo == null ? (
+                                  <span className="text-muted-foreground/70" title={`Aucun stock Odoo connu pour « ${prod.referenceOdoo || prod.reference} » : la référence diffère peut-être chez Odoo (champ « Référence Odoo » de la fiche article).`}>
+                                    Stock Odoo : inconnu
+                                  </span>
+                                ) : (
+                                  <span
+                                    className={`font-medium ${prod.stockOdoo >= l.quantite && prod.stockOdoo > 0 ? 'text-emerald-600 dark:text-emerald-400' : prod.stockOdoo > 0 ? 'text-orange-500' : 'text-destructive'}`}
+                                    title={prod.stockOdooMaj ? `Lu chez Odoo le ${new Date(prod.stockOdooMaj).toLocaleString('fr-FR')}` : undefined}>
+                                    Stock Odoo : {prod.stockOdoo} dispo
+                                    {prod.stockOdooPrevu != null && prod.stockOdooPrevu !== prod.stockOdoo && <span className="font-normal text-muted-foreground"> · {prod.stockOdooPrevu} prévu</span>}
+                                  </span>
+                                ))}
                                 {canAchat && tauxMarque !== null && <span className={tauxMarque < 0 ? 'text-destructive font-medium' : 'text-emerald-600 dark:text-emerald-400 font-medium'}>Marge: {tauxMarque.toFixed(1)}%</span>}
                                 {canAchat && coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
