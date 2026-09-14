@@ -36,7 +36,13 @@ Exemples FORMAT 2 :
 - "ratio 1:3 pour 4,8 kg/m²" → { "value": null, "values": [{"label":"Composant 1","value":1.2},{"label":"Composant 2","value":3.6}], "explanation": "Total=4 parts, 1 part=1,2 kg/m², 3 parts=3,6 kg/m²" }
 - "A=2B et A+B=6" → { "value": null, "values": [{"label":"A","value":4},{"label":"B","value":2}], "explanation": "A=2B → 2B+B=6 → B=2, A=4" }`;
 
-async function callGroq(message: string, history: any[], groqKey: string): Promise<{ value: number | null; values?: {label: string; value: number}[]; explanation: string }> {
+/* Mêmes listes que `devis-assistant` : `gemini-2.0-flash`, arrêté par Google
+   le 11 septembre 2026, rendait 404 et le repli ne servait plus à rien. On
+   essaie chaque modèle à tour de rôle, et l'erreur finale les cite tous. */
+const MODELES_GROQ = ["llama-3.1-8b-instant", "meta-llama/llama-4-scout-17b-16e-instruct"];
+const MODELES_GEMINI = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
+
+async function callGroq(message: string, history: any[], groqKey: string, modele: string): Promise<{ value: number | null; values?: {label: string; value: number}[]; explanation: string }> {
   const messages = [
     { role: "system", content: SYSTEM_PROMPT },
     ...history,
@@ -46,25 +52,25 @@ async function callGroq(message: string, history: any[], groqKey: string): Promi
     method: "POST",
     headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: "llama-3.1-8b-instant",
+      model: modele,
       max_tokens: 400,
       temperature: 0,
       response_format: { type: "json_object" },
       messages,
     }),
   });
-  if (!response.ok) throw new Error(`Groq error ${response.status}`);
+  if (!response.ok) throw new Error(`${modele} ${response.status}`);
   const data = await response.json();
   return JSON.parse(data.choices?.[0]?.message?.content ?? '{}');
 }
 
-async function callGemini(message: string, history: any[], geminiKey: string): Promise<{ value: number | null; values?: {label: string; value: number}[]; explanation: string }> {
+async function callGemini(message: string, history: any[], geminiKey: string, modele: string): Promise<{ value: number | null; values?: {label: string; value: number}[]; explanation: string }> {
   const contents = [
     ...history.map((m: any) => ({ role: m.role === "assistant" ? "model" : "user", parts: [{ text: m.content }] })),
     { role: "user", parts: [{ text: message }] },
   ];
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent?key=${geminiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -75,7 +81,7 @@ async function callGemini(message: string, history: any[], geminiKey: string): P
       }),
     }
   );
-  if (!response.ok) throw new Error(`Gemini error ${response.status}`);
+  if (!response.ok) throw new Error(`${modele} ${response.status}`);
   const data = await response.json();
   const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   return JSON.parse(text);
@@ -91,21 +97,24 @@ Deno.serve(async (req) => {
     const groqKey = Deno.env.get("GROQ_API_KEY") ?? "";
     const geminiKey = Deno.env.get("GEMINI_API_KEY") ?? null;
 
-    let result: { value: number | null; values?: {label: string; value: number}[]; explanation: string };
-
-    try {
-      result = await callGroq(message, history, groqKey);
-    } catch {
-      if (geminiKey) {
-        result = await callGemini(message, history, geminiKey);
-      } else {
-        throw new Error("AI indisponible");
+    const essais: string[] = [];
+    const tentatives: (() => ReturnType<typeof callGroq>)[] = [
+      ...(groqKey ? MODELES_GROQ.map(m => () => callGroq(message, history, groqKey, m)) : []),
+      ...(geminiKey ? MODELES_GEMINI.map(m => () => callGemini(message, history, geminiKey, m)) : []),
+    ];
+    for (const essayer of tentatives) {
+      try {
+        const result = await essayer();
+        return new Response(JSON.stringify(result), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      } catch (e) {
+        essais.push((e as Error).message);
       }
     }
-
-    return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    throw new Error(essais.length
+      ? `IA indisponible — ${essais.join(" | ")}`
+      : "IA indisponible (aucune clé GROQ_API_KEY ni GEMINI_API_KEY)");
   } catch (err: any) {
     return new Response(JSON.stringify({ error: err.message }), {
       status: 500,
