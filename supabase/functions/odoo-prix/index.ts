@@ -749,6 +749,12 @@ class ContratCadre {
 
     const out: string[] = [];
     for (const s of suffixes) out.push(famille + s);
+    /* LA FAMILLE IISR S'ARRÊTE AU `#` : « J4#1CHEVRON » est un J4. La grille
+       R3 cote « J4.400.400.C2.BTR.IS.BRUT » sans étoile, quand R1 et R2
+       écrivent « J4*… » ; sans la famille nue, le J4#1CHEVRON sortait hors
+       barème en R3. Même règle que `gabaritsGrille` (src/lib/grilleTarif.ts). */
+    const racine = famille.split("#")[0];
+    if (racine && racine !== famille) for (const s of suffixes) out.push(racine + s);
     /* Préfixes étoilés, du plus long au plus court : la forme la plus
        précise l'emporte.
        

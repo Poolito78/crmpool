@@ -109,6 +109,14 @@ export function gabaritsGrille(code: string): string[] {
   ])];
   const out: string[] = [];
   for (const s of suffixes) out.push(famille + s);
+  /* LA FAMILLE IISR S'ARRÊTE AU `#`. « J4#1CHEVRON » est un J4, « B14#30km/h »
+     un B14 : ce qui suit le `#` est la mention, pas la famille. Or toutes les
+     grilles n'écrivent pas la famille de la même façon — R1 et R2 cotent
+     « J4*.400.400.C2.BTR.IS.BRUT », R3 « J4.400.400.C2.BTR.IS.BRUT », sans
+     étoile. Sans la famille nue, le J4#1CHEVRON 400 C2 ne trouvait rien en
+     R3 et retombait sur sa fiche : 123,22 € au lieu de 29,73 €. */
+  const racine = famille.split('#')[0];
+  if (racine && racine !== famille) for (const s of suffixes) out.push(racine + s);
   for (let i = famille.length; i >= 1; i--) {
     for (const s of suffixes) out.push(famille.slice(0, i) + '*' + s);
   }

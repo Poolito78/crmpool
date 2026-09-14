@@ -37,6 +37,14 @@ describe('prixDansGrille', () => {
     expect(prixDansGrille(grille, 'BOUCHON8080')?.prix).toBe(1.9);
   });
 
+  it('la famille s’arrête au # : un J4#1CHEVRON se cote en J4, étoile ou non', () => {
+    const r3 = indexerGrille([{ codification: 'J4.400.400.C2.BTR.IS.BRUT', prix: 29.729, priorite: 160 }]);
+    expect(prixDansGrille(r3, 'J4#1CHEVRON.400.400.C2.BTR.IS.BRUT'))
+      .toEqual({ prix: 29.729, gabarit: 'J4.400.400.C2.BTR.IS.BRUT' });
+    const r1 = indexerGrille([{ codification: 'J4*.400.400.C2.BTR.IS.BRUT', prix: 33.976, priorite: 160 }]);
+    expect(prixDansGrille(r1, 'J4#1CHEVRON.400.400.C2.BTR.IS.BRUT')?.prix).toBe(33.976);
+  });
+
   it('ne devine rien hors grille', () => {
     expect(prixDansGrille(grille, 'A14.1000.C3.BRUT')).toBeNull();
     expect(prixDansGrille(undefined, 'BOUCHON8040')).toBeNull();
