@@ -59,6 +59,10 @@ retouché.
   « J 4 » se recolle en « J4 » (seulement si c'est un code du catalogue), un
   code se reconnaît aussi avant le `#` (J4#1CHEVRON), et « N flèche(s) »
   départage les familles N CHEVRON(S). À égalité, le plus petit format.
+- ⚠️ **Un mot en L d'une demande n'est pas un RAL** (`buildFunnel`) :
+  « B14 **limitation** de vitesse » exigeait une finition « LIMITATION », ne
+  trouvait rien et laissait le B14 450 C1. Ne contraint que L + chiffre, BRUT,
+  ou une finition réellement portée par une variante.
 - Le sélecteur reçoit le catalogue **entier** par `produits` et la
   pré-sélection par `suggestions`. Ne jamais borner `produits` aux candidats
   d'un rapprochement : la recherche manuelle devient aveugle.

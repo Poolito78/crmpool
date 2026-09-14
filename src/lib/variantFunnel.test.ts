@@ -200,6 +200,21 @@ describe('reprise d’office d’une proposition Odoo', () => {
         .toBe('AB3A.700.C2.BTR.IS.BRUT');
     });
 
+    /* ⚠️ « limitation » était lu comme un RAL : aucune variante ne restait,
+       et le B14 450 C1 retenu d'office n'était jamais corrigé. */
+    it('ne prend pas « limitation » pour un RAL', () => {
+      const B14 = [
+        { reference: 'B14#5km/h.450.C1.BTR.IS.BRUT', description: 'IS B14' },
+        { reference: 'B14#5km/h.650.C2.BTR.IS.BRUT', description: 'IS B14' },
+        { reference: 'B14#5km/h.650.C2.BTR.IS.L7016', description: 'IS B14' },
+        { reference: 'B14#5km/h.650.C2.BTR.ST.IS.L1017', description: 'IS B14' },
+      ];
+      expect(varianteSelonDemande(B14[0], B14, 'B14 limitation de vitesse 650 C2').reference)
+        .toBe('B14#5km/h.650.C2.BTR.IS.BRUT');
+      // Un vrai RAL tapé reste une contrainte.
+      expect(variantesParDefaut(B14, 'B14 650 C2 L7016')).toEqual(['B14#5km/h.650.C2.BTR.IS.L7016']);
+    });
+
     it('garde l’article quand il est déjà conforme', () => {
       expect(varianteSelonDemande(AB3A[0], AB3A, 'AB3a 700 C1')).toBe(AB3A[0]);
     });

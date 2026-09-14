@@ -499,6 +499,14 @@ export function buildFunnel({
   for (const token of tokens) {
     const category = classifySegment(token);
     if (category === 'dimension') { nombres.push(token); continue; }
+    /* ⚠️ **« LIMITATION » N'EST PAS UN RAL.** `classifySegment` range tout
+       segment en L parmi les finitions — juste dans une RÉFÉRENCE, faux dans
+       une phrase de client. « B14 limitation de vitesse 650 C2 » exigeait une
+       finition « LIMITATION », ne trouvait rien, et la reprise d'office
+       gardait le B14 450 C1. Un mot en L ne contraint donc que s'il a la
+       forme d'un RAL (L + chiffre, BRUT) ou existe sur une variante. */
+    if (category === 'ral' && token !== RAL_DEFAULT && !/^L\d/.test(token)
+        && !parsed.some((p) => (p.byCategory.ral ?? '').toUpperCase() === token)) continue;
     if (category !== 'autre') typedByCategory[category] = token;
   }
   if (estPanonceau) {
