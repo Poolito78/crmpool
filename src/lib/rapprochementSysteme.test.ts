@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche,
+  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -249,8 +249,16 @@ describe('zones d’un système nommé dans l’en-tête', () => {
     expect(zoneDeDemande('flèche 3000 x 1400 mm', 2)?.surfaceM2).toBe(1.12);
   });
 
-  it('des logos en mm, un rectangle par pièce', () => {
+  /* Logo piéton : 0,129 m² de blanc pour 1 000 mm de haut. */
+  it('des logos piéton : leur surface peinte', () => {
+    expect(surfacePictogramme('logo piéton', 1)).toBe(0.129);
     expect(zoneDeDemande('logo piéton 1000×400mm', 20))
+      .toMatchObject({ surfaceM2: 2.58, maximum: false });
+    expect(surfacePictogramme('logo piéton', 2)).toBe(0.516);
+  });
+
+  it('un logo inconnu reste compté à son rectangle, un maximum', () => {
+    expect(zoneDeDemande('logo vélo 1000×400mm', 20))
       .toMatchObject({ surfaceM2: 8, maximum: true });
   });
 

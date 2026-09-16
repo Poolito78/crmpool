@@ -201,6 +201,28 @@ export function surfaceFleche(longueurM: number): number | undefined {
   return Math.round(FLECHE_REFERENCE.surfaceM2 * r * r * 100) / 100;
 }
 
+/**
+ * Les pictogrammes dont on connaît la surface peinte, pour une hauteur de
+ * référence. Comme la flèche, un pictogramme agrandi garde sa forme : sa
+ * surface croît au CARRÉ de la hauteur.
+ *
+ * Logo piéton : 1 000 mm de haut, ≈ 368 mm de large, 0,129 m² de blanc
+ * (règle du chargé d'affaires). Un logo absent de cette table reste compté à
+ * son rectangle, et l'écran le dit : un maximum, jamais une surface devinée.
+ */
+export const PICTOGRAMMES: readonly { nom: string; motif: RegExp; hauteurM: number; surfaceM2: number }[] = [
+  { nom: 'piéton', motif: /\bpietons?\b/, hauteurM: 1, surfaceM2: 0.129 },
+];
+
+/** Surface peinte d'un pictogramme connu de `hauteurM` mètres, au millième. */
+export function surfacePictogramme(texte: string, hauteurM: number): number | undefined {
+  if (!(hauteurM > 0)) return undefined;
+  const p = PICTOGRAMMES.find(x => x.motif.test(normaliser(texte)));
+  if (!p) return undefined;
+  const r = hauteurM / p.hauteurM;
+  return Math.round(p.surfaceM2 * r * r * 1000) / 1000;
+}
+
 export interface ZoneDemande {
   surfaceM2: number;
   bande: boolean;
@@ -284,6 +306,16 @@ export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDema
     const div = r[3] === 'mm' ? 1000 : r[3] === 'cm' ? 100 : 1;
     const a = enNombre(r[1]) / div;
     const b = enNombre(r[2]) / div;
+    /* Un pictogramme connu : sa surface peinte, la plus grande cote étant
+       sa hauteur. */
+    const hauteur = Math.max(a, b);
+    const unitaire = surfacePictogramme(t, hauteur);
+    if (unitaire) {
+      const surface = unitaire * q;
+      return fin(surface, false,
+        `${q} logo${q > 1 ? 's' : ''} de ${enFrancais(hauteur)} m × ${enFrancais(unitaire)} m² = ${enFrancais(surface)} m²`,
+        false);
+    }
     const surface = a * b * q;
     return fin(surface, false,
       `${enFrancais(a)} m × ${enFrancais(b)} m` + (q > 1 ? ` × ${q}` : '') + ` = ${enFrancais(surface)} m²`,

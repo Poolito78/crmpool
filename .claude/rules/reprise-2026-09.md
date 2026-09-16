@@ -177,8 +177,9 @@ voulu — on ne lui invente pas un prix de triangle.
 - **La surface d'un tracé se calcule** (`traceDansTexte`) : « 0,10 m de largeur
   x 965 ml » → 96,5 m². Une **flèche** se chiffre à sa surface peinte
   (`surfaceFleche`) : 0,123 m² pour 1 400 mm, au carré de la longueur —
-  **0,56 m² pour 3 m** (règle du chargé d'affaires). Seuls les logos restent
-  comptés au rectangle (maximum).
+  **0,56 m² pour 3 m** (règle du chargé d'affaires). Le **logo piéton**
+  aussi (`PICTOGRAMMES`) : 0,129 m² pour 1 000 mm de haut. Un logo absent de
+  la table reste compté au rectangle (maximum).
 - ⚠️ SNL Concrete 1,255 kg et pigments 0,2 kg **n'ont pas d'article** : lignes
   libres sans prix. `SNLC2` porte « 2,510 kg » mais un poids saisi à 1,165.
 - **Système nommé mais absent de la base** (`ressembleASysteme`) : la table est
