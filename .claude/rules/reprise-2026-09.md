@@ -182,9 +182,13 @@ voulu — on ne lui invente pas un prix de triangle.
   relue, puis `SystemeIntrouvable` cherche la fiche dans le dossier (choisi une
   fois, droit mémorisé en IndexedDB), la fait lire par Gemini, montre les
   dosages à relire, et n'enregistre qu'au clic.
-- ⚠️ Une ligne qui ne nomme que la couleur (« Ligne jaune 0,10 m x 965 ml »)
-  sous une section « Flowfast 319 Concrete » n'est PAS rattachée au système :
-  le nom doit figurer sur la ligne.
+- **Système nommé une fois pour tout le document** (`systemeDocument`,
+  `AnalyseDocumentDialog`) : « un système Flowfast 319 Concrete : » puis des
+  lignes « Ligne jaune 0,10 m de largeur » (la lecture range les 965 ml dans
+  la QUANTITÉ). Les lignes de tracé deviennent des ZONES (`zoneDeDemande`) et
+  le chantier se chiffre en un bloc (`chiffrerZones`) : composants communs
+  additionnés puis mis en seaux, un pigment par teinte, le jaune avec le sien.
+  Au devis : en-tête, note des zones, composants — portés par la 1re zone.
 
 ## Pièges d'implémentation rencontrés
 

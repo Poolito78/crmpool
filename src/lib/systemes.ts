@@ -274,6 +274,131 @@ export function declinerSysteme(
   });
 }
 
+/* ── Un système, plusieurs zones ─────────────────────────────────────────── */
+
+/** Une zone d'un même chantier : une ligne jaune, des flèches bleues… */
+export interface ZoneSysteme {
+  id: string;
+  libelle: string;
+  surfaceM2: number;
+  bande: boolean;
+  couleur?: string;
+}
+
+export interface LigneChiffreeSysteme {
+  /** Clé stable de la ligne — composant, et zone pour un pigment. */
+  cle: string;
+  composant: SystemeComposant;
+  /** La zone, pour une ligne qui lui est propre (le pigment de sa teinte). */
+  zone?: ZoneSysteme;
+  libelle: string;
+  quantiteKg: number;
+  contenants?: number;
+  kits?: number;
+  explication: string;
+}
+
+/* Le mot entier : « Flowfast 319 Unpigmented » est une résine, pas un pigment. */
+const EST_PIGMENT = /\bpigments?\b/i;
+
+/**
+ * Chiffre un système sur plusieurs zones, comme le devis Odoo AF037640 :
+ * primaire, quartz, résine, charge et finition une fois pour tout le
+ * chantier ; le PIGMENT une fois par teinte.
+ *
+ * Chaque zone se décline d'abord seule — une bande se prépare en petits
+ * mélanges, une surface pleine de plus de 50 m² au kilo — puis on additionne
+ * les kilogrammes avant de les convertir en contenants : 117,5 kg de 319 font
+ * six seaux de 20 kg, pas un seau par zone arrondi quatre fois.
+ *
+ * La teinte choisit le pigment : une zone jaune prend le pigment jaune que la
+ * fiche dose à part (0,1 kg/m²), les autres les pigments standards. Un pigment
+ * de teinte ne sert jamais une zone d'une autre couleur.
+ */
+export function chiffrerZones(
+  systeme: Systeme,
+  zones: ZoneSysteme[],
+  options: {
+    temperatureSupport?: number;
+    poidsParProduit?: (produitId?: string) => number | undefined;
+    conditionnelsRetenus?: Set<string>;
+  } = {},
+): LigneChiffreeSysteme[] {
+  const { poidsParProduit } = options;
+  const utiles = zones.filter(z => z.surfaceM2 > 0);
+  if (!utiles.length) return [];
+
+  const teinteDe = (c: SystemeComposant) =>
+    EST_PIGMENT.test(c.role) || EST_PIGMENT.test(c.libelle)
+      ? ['jaune', 'blanc', 'vert', 'bleu', 'rouge', 'noir', 'gris', 'orange']
+        .find(t => new RegExp(`\\b${t}`, 'i').test(`${c.role} ${c.libelle}`))
+      : undefined;
+
+  const cumul = new Map<string, LigneChiffreeSysteme>();
+  const pigments: LigneChiffreeSysteme[] = [];
+
+  for (const z of utiles) {
+    /* Le pigment de la teinte de la zone, s'il existe, remplace les
+       pigments standards ; ceux des autres teintes sont écartés. */
+    const specifique = systeme.composants.find(c => z.couleur && teinteDe(c) === z.couleur);
+    const retenus = new Set(options.conditionnelsRetenus ?? []);
+    if (specifique) retenus.add(specifique.id);
+    const composants = systeme.composants.filter(c => {
+      const pig = EST_PIGMENT.test(c.role) || EST_PIGMENT.test(c.libelle);
+      if (!pig) return true;
+      const teinte = teinteDe(c);
+      if (specifique) return c.id === specifique.id;
+      return !teinte;
+    }).map(c => (c.id === specifique?.id ? { ...c, obligatoire: true } : c));
+
+    const declinees = declinerSysteme({ ...systeme, composants }, z.surfaceM2, {
+      ...options, conditionnelsRetenus: retenus, bande: z.bande,
+    });
+
+    for (const ls of declinees) {
+      const c = ls.composant;
+      if (EST_PIGMENT.test(c.role) || EST_PIGMENT.test(c.libelle)) {
+        pigments.push({
+          cle: `${c.id}:${z.id}`, composant: c, zone: z,
+          libelle: `${c.libelle} — ${z.couleur ?? z.libelle}`,
+          quantiteKg: ls.quantiteKg, contenants: ls.contenants, kits: ls.kits,
+          explication: `${z.libelle} : ${ls.explication}`,
+        });
+        continue;
+      }
+      const prec = cumul.get(c.id);
+      if (prec) {
+        prec.quantiteKg += ls.quantiteKg;
+        prec.kits = (prec.kits ?? 0) + (ls.kits ?? 0) || undefined;
+      } else {
+        cumul.set(c.id, {
+          cle: c.id, composant: c, libelle: c.libelle,
+          quantiteKg: ls.quantiteKg, kits: ls.kits, explication: '',
+        });
+      }
+    }
+  }
+
+  const surfaceTotale = utiles.reduce((s, z) => s + z.surfaceM2, 0);
+  const communs = [...cumul.values()].map(l => {
+    const kg = Math.round(l.quantiteKg * 1000) / 1000;
+    const poids = poidsParProduit?.(l.composant.produitId) ?? l.composant.conditionnementKg;
+    const contenants = kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined;
+    const c = l.composant;
+    const explication = kg <= 0
+      ? 'aucun dosage calculable dans la fiche'
+      : l.kits
+        ? `${l.kits} kits de ${systeme.surfaceKitM2} m² × ${c.consommation} kg/m² = ${kg} kg`
+        : c.consommation != null
+          ? `${c.consommation} kg/m² × ${Math.round(surfaceTotale * 1000) / 1000} m² = ${kg} kg`
+          : `${kg} kg`;
+    return { ...l, quantiteKg: kg, contenants, explication };
+  });
+
+  /* L'ordre de la fiche, les pigments à la suite de leur composant. */
+  return [...communs, ...pigments].sort((a, b) => a.composant.ordre - b.composant.ordre);
+}
+
 /* ── Hook ────────────────────────────────────────────────────────────────── */
 
 export function useSystemes() {

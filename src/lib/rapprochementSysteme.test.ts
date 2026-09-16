@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte,
+  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -224,5 +224,32 @@ describe('tracés : la surface d’une bande', () => {
     expect(r?.nom).toBe('Flowfast 319 Concrete');
     expect(r?.trace?.bande).toBe(true);
     expect(surfaceDeDemande(r, 1)).toBe(96.5);
+  });
+});
+
+describe('zones d’un système nommé dans l’en-tête', () => {
+  it('la longueur rangée dans la quantité', () => {
+    expect(zoneDeDemande('Ligne jaune 0,10 m de largeur', 965))
+      .toMatchObject({ surfaceM2: 96.5, bande: true, couleur: 'jaune', maximum: false });
+    expect(zoneDeDemande('Ligne blanche 0.10m de largeur', 485)?.couleur).toBe('blanc');
+  });
+
+  it('le tracé complet, la quantité ne compte qu’une fois', () => {
+    expect(zoneDeDemande('Ligne jaune 0,10 m de largeur x 965ml', 965)?.surfaceM2).toBe(96.5);
+    expect(zoneDeDemande('Ligne jaune 0,10 m de largeur x 965ml', 1)?.surfaceM2).toBe(96.5);
+  });
+
+  it('des flèches : la quantité est le nombre de tracés', () => {
+    expect(zoneDeDemande('Flèches bleu dimension 3ml x 1,40m', 16))
+      .toMatchObject({ surfaceM2: 67.2, bande: false, couleur: 'bleu', maximum: true });
+  });
+
+  it('des logos en mm, un rectangle par pièce', () => {
+    expect(zoneDeDemande('logo piéton 1000×400mm', 20))
+      .toMatchObject({ surfaceM2: 8, maximum: true });
+  });
+
+  it('un seau de primaire n’est pas une zone', () => {
+    expect(zoneDeDemande('Flowfast 107 primaire 20 kg', 4)).toBeUndefined();
   });
 });

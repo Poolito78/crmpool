@@ -36,11 +36,15 @@ import { chantierDansTexte } from '@/lib/chantierDemande';
 import { compterBrides, fixationsPour, fixationDeSection, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
-import { useSystemes, declinerSysteme, kitsPour, type Systeme, type LigneSysteme } from '@/lib/systemes';
+import {
+  useSystemes, declinerSysteme, kitsPour, chiffrerZones,
+  type Systeme, type LigneSysteme, type ZoneSysteme, type LigneChiffreeSysteme,
+} from '@/lib/systemes';
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import {
-  rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
+  rapprocherSysteme, surfaceDeDemande, zoneDeDemande,
+  type RapprochementSysteme, type ZoneDemande,
 } from '@/lib/rapprochementSysteme';
 import {
   articlePlastique, chiffrerTransport, departement,
@@ -681,6 +685,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [surfaceSysteme, setSurfaceSysteme] = useState<Record<number, number>>({});
   /** Composants facultatifs cochés. Clé : « <indice>:<id du composant> ». */
   const [optionsSysteme, setOptionsSysteme] = useState<Record<string, boolean>>({});
+  /** Variante choisie pour le système nommé une fois pour tout le document. */
+  const [varianteDocument, setVarianteDocument] = useState('');
 
   /* ── Devis fournisseur : reprise des prix d'achat ──────────────────────── */
   /** Fournisseur auquel rattacher l'offre. */
@@ -1137,7 +1143,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
-    setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({});
+    setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
     setLibelleManuel({});
     /* Les options d'ensemble sont indexées sur le RANG de la ligne : gardées
        d'une analyse à l'autre, elles cocheraient le support d'un panneau qui
@@ -1710,6 +1716,63 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [result, systemes, texteDemande]);
 
   /**
+   * LE SYSTÈME NOMMÉ UNE FOIS POUR TOUT LE DOCUMENT.
+   *
+   * « Merci de chiffrer un système Flowfast 319 Concrete : » puis « Ligne
+   * jaune 0,10 m de largeur x 965 ml », « Flèches bleu 3 ml x 1,40 m x 16 » :
+   * c'est ainsi qu'on écrit une demande de marquage, et c'est ainsi que le
+   * devis Odoo AF037640 a été monté. Aucune ligne ne nomme le système, et
+   * chacune partait au rapprochement d'articles — « Ligne jaune » ne trouvait
+   * rien, le système ne ressortait pas du tout.
+   *
+   * Le système se cherche donc dans le document entier, et les lignes qui
+   * décrivent un tracé en deviennent les ZONES : une surface chacune, un
+   * seul chiffrage pour le chantier (`chiffrerZones`).
+   */
+  const systemeDocument = useMemo(() => {
+    const lignes = result?.lignes || [];
+    if (!systemes.length || !lignes.length) return null;
+    const corps = [texte, result?.notes, ...lignes.map((l, i) => texteDemande(l, i))]
+      .filter(Boolean).join('\n');
+    const rap = rapprocherSysteme(corps, systemes);
+    if (!rap) return null;
+    const zones = new Map<number, ZoneDemande>();
+    lignes.forEach((l, i) => {
+      if (systemesDetectes.has(i)) return;
+      const z = zoneDeDemande(texteDemande(l, i), l.quantite);
+      if (z) zones.set(i, z);
+    });
+    return zones.size ? { rap, zones } : null;
+  }, [result, systemes, texte, texteDemande, systemesDetectes]);
+
+  /** La ligne est chiffrée par un système — le sien, ou celui du document. */
+  const estLigneSysteme = useCallback(
+    (i: number) => systemesDetectes.has(i) || !!systemeDocument?.zones.has(i),
+    [systemesDetectes, systemeDocument]);
+
+  /** La variante retenue pour le système du document. */
+  const systemeDuDocument = useMemo((): Systeme | undefined => {
+    if (!systemeDocument) return undefined;
+    const { rap } = systemeDocument;
+    return (varianteDocument && rap.variantes.find(v => v.id === varianteDocument)) || rap.retenu;
+  }, [systemeDocument, varianteDocument]);
+
+  /** Les zones, surface et libellé corrigés à la main compris. */
+  const zonesDocument = useMemo((): ZoneSysteme[] => {
+    if (!systemeDocument) return [];
+    return [...systemeDocument.zones.entries()].map(([i, z]) => {
+      const l = result?.lignes?.[i];
+      return {
+        id: String(i),
+        libelle: libelleManuel[i] || l?.description || l?.reference || `zone ${i + 1}`,
+        surfaceM2: surfaceSysteme[i] ?? z.surfaceM2,
+        bande: z.bande,
+        couleur: z.couleur,
+      };
+    });
+  }, [systemeDocument, result, libelleManuel, surfaceSysteme]);
+
+  /**
    * Lignes qui nomment un système que la base ne connaît pas.
    *
    * « Flowfast 319 Concrete » est arrivé dans le dossier des fiches avant
@@ -1720,10 +1783,10 @@ const [contratOdoo, setContratOdoo] = useState<
   const systemesManquants = useMemo(() => {
     const s = new Set<number>();
     (result?.lignes || []).forEach((l, i) => {
-      if (!systemesDetectes.has(i) && ressembleASysteme(texteDemande(l, i), systemes)) s.add(i);
+      if (!estLigneSysteme(i) && ressembleASysteme(texteDemande(l, i), systemes)) s.add(i);
     });
     return s;
-  }, [result, systemes, systemesDetectes, texteDemande]);
+  }, [result, systemes, estLigneSysteme, texteDemande]);
 
   const baseRelue = useRef<unknown>(null);
   useEffect(() => {
@@ -1737,7 +1800,7 @@ const [contratOdoo, setContratOdoo] = useState<
     (result?.lignes || []).forEach((l, i) => {
       /* Une ligne système ne cherche pas d'article : la balayer contre les
          22 634 références ne produirait qu'un faux candidat à écarter. */
-      if (systemesDetectes.has(i)) return;
+      if (estLigneSysteme(i)) return;
       /* Les mots du client comptent ici aussi : « plot PVC » doit retrouver
          le PLASTOBLOC dès qu'on le lui a appris une fois, sans quoi le tag ne
          servirait qu'à la recherche à la main — c'est-à-dire jamais quand
@@ -1745,7 +1808,7 @@ const [contratOdoo, setContratOdoo] = useState<
       m.set(i, rapprocherArticle(texteDemande(l, i), produits, 20, tagsParProduit));
     });
     return m;
-  }, [result, produits, systemesDetectes, texteDemande, tagsParProduit]);
+  }, [result, produits, estLigneSysteme, texteDemande, tagsParProduit]);
 
   /** Variante retenue pour une ligne : le choix de l'utilisateur, sinon celle
       que l'épaisseur désigne. Rien tant que la variante reste à trancher. */
@@ -2457,12 +2520,19 @@ const [contratOdoo, setContratOdoo] = useState<
         }
       }
     });
+    /* Les composants du système du document, pour la même raison. */
+    for (const v of systemeDocument?.rap.variantes ?? []) {
+      for (const c of v.composants) {
+        const pc = c.produitId ? produitParId(produits, c.produitId) : undefined;
+        if (pc) refs.add(pc.referenceOdoo || pc.reference);
+      }
+    }
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
       if (p) refs.add(p.referenceOdoo || p.reference);
     }
     return [...refs];
-  }, [result, accompagnements, produits, produitDeLigne, systemesDetectes]);
+  }, [result, accompagnements, produits, produitDeLigne, systemesDetectes, systemeDocument]);
 
   useEffect(() => {
     const cli = clients.find(c => c.id === creerDevisClientId);
@@ -2529,7 +2599,7 @@ const [contratOdoo, setContratOdoo] = useState<
            ne peut ramener qu'un homonyme — le mot « système » y trouve un kit
            de crochets pour panneau. Elle se chiffre par ses composants, qui
            portent chacun leur propre référence. */
-        texte: systemesDetectes.has(i) ? '' : texteRechercheOdoo(l, i),
+        texte: estLigneSysteme(i) ? '' : texteRechercheOdoo(l, i),
         quantite: quantiteManuelle[`d${i}`] ?? (l.quantite || 1),
       }))
       .filter(r => r.texte.length >= 2)
@@ -2559,7 +2629,7 @@ const [contratOdoo, setContratOdoo] = useState<
        un système à chiffrer. On interroge donc Odoo dès qu'il y a de quoi
        reconnaître le client ET quelque chose à tarifer, système compris. */
     const aTarifer = referencesDuDevis.length || aChercher.length
-      || systemesDetectes.size;
+      || systemesDetectes.size || systemeDocument;
     if (!critere || !aTarifer) {
       /* L'écran est vidé : la demande précédente n'est plus « appliquée ».
          Sans cet oubli, y revenir — retirer un article puis le remettre —
@@ -2771,7 +2841,7 @@ const [contratOdoo, setContratOdoo] = useState<
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce,
       gammePanneau, classePanneau, libelleManuel, nomAgglo, hcAgglo, mentionAgglo,
-      systemesDetectes]);
+      systemesDetectes, estLigneSysteme, systemeDocument]);
 
   /**
    * Retient d'office la meilleure proposition Odoo.
@@ -2803,7 +2873,7 @@ const [contratOdoo, setContratOdoo] = useState<
            à l'écran la laissait sur l'ancienne (un C1 pour une demande C2).
            Seul un clic la fige. */
         if ((n[i] && !odooDOfficeRef.current.has(i)) || refusOdoo.has(i)
-            || produitDeLigne(i) || systemesDetectes.has(i)) return;
+            || produitDeLigne(i) || estLigneSysteme(i)) return;
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -2843,7 +2913,7 @@ const [contratOdoo, setContratOdoo] = useState<
       return change ? n : prev;
     });
   }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo,
-      systemesDetectes, texteDemande]);
+      estLigneSysteme, texteDemande]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -2996,6 +3066,44 @@ const [contratOdoo, setContratOdoo] = useState<
   /** Quantité effectivement retenue pour une ligne. */
   const quantiteDe = useCallback((cle: string, defaut: number) =>
     quantiteManuelle[cle] ?? defaut, [quantiteManuelle]);
+
+  /**
+   * Le chiffrage du système du document : composants communs une fois,
+   * pigment par teinte. Un seul calcul pour l'écran et pour le devis.
+   */
+  const chiffrageDocument = useMemo((): LigneChiffreeSysteme[] => {
+    const sys = systemeDuDocument;
+    if (!sys || !zonesDocument.length) return [];
+    const retenus = new Set(
+      sys.composants.filter(c => !c.obligatoire && optionsSysteme[`doc:${c.id}`]).map(c => c.id));
+    return chiffrerZones(sys, zonesDocument, {
+      conditionnelsRetenus: retenus,
+      poidsParProduit: (produitId) => {
+        if (!produitId) return undefined;
+        const p = produitParId(produits, produitId);
+        return p?.poids && p.poids > 0 ? p.poids : undefined;
+      },
+    });
+  }, [systemeDuDocument, zonesDocument, optionsSysteme, produits]);
+
+  const quantiteDocument = useCallback((ls: LigneChiffreeSysteme) =>
+    quantiteManuelle[`doc:${ls.cle}`] ?? ls.contenants ?? Math.round(ls.quantiteKg * 100) / 100,
+  [quantiteManuelle]);
+
+  const produitDocument = useCallback((ls: LigneChiffreeSysteme) =>
+    ls.composant.produitId ? produitParId(produits, ls.composant.produitId) : undefined,
+  [produits]);
+
+  const totalDocument = useMemo(() => chiffrageDocument.reduce((t, ls) =>
+    t + quantiteDocument(ls) * prixDe(produitDocument(ls), undefined, `doc:${ls.cle}`), 0),
+  [chiffrageDocument, quantiteDocument, prixDe, produitDocument]);
+
+  const surfaceDocument = useMemo(
+    () => Math.round(zonesDocument.reduce((s, z) => s + z.surfaceM2, 0) * 1000) / 1000,
+    [zonesDocument]);
+
+  /** La première zone porte le chiffrage du système ; les autres, rien. */
+  const premiereZone = systemeDocument ? Math.min(...systemeDocument.zones.keys()) : -1;
 
   /**
    * LE PRIX UNITAIRE D'UNE LIGNE DEMANDÉE — UN SEUL CALCUL.
@@ -3252,8 +3360,54 @@ const [contratOdoo, setContratOdoo] = useState<
       return out;
     };
 
+    /** Le système du document, en un bloc : en-tête, zones, composants. */
+    const blocDocument = (): LigneDevis[] => {
+      const sys = systemeDuDocument;
+      if (!sys || !chiffrageDocument.length) return [];
+      const fr = (n: number) => String(Math.round(n * 100) / 100).replace('.', ',');
+      const entete: LigneDevis = {
+        id: generateId(), type: 'groupe',
+        description: `${sys.nom}${sys.variante ? ` — ${sys.variante}` : ''} · ${fr(surfaceDocument)} m²`,
+        quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+      };
+      /* Les zones, comme la note du devis Odoo : c'est d'elles que sortent
+         les quantités, le client doit pouvoir les relire. */
+      const zones: LigneDevis = {
+        id: generateId(), type: 'texte',
+        description: zonesDocument.map(z => {
+          const zd = systemeDocument?.zones.get(Number(z.id));
+          const calcul = surfaceSysteme[Number(z.id)] == null && zd ? zd.calcul : `${fr(z.surfaceM2)} m²`;
+          return `${z.libelle} : ${calcul}`;
+        }).join('\n'),
+        quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+      };
+      const composants = chiffrageDocument.map((ls): LigneDevis => {
+        const p = produitDocument(ls);
+        return {
+          id: generateId(),
+          produitId: p?.id,
+          description: p
+            ? `${designationProduit(p)}${ls.zone ? ` — ${ls.zone.couleur ?? ls.zone.libelle}` : ''}`
+            : ls.libelle,
+          quantite: quantiteDocument(ls),
+          unite: p?.unite || (ls.contenants ? 'u' : 'kg'),
+          prixUnitaireHT: prixDe(p, undefined, `doc:${ls.cle}`),
+          tva: p?.tva ?? 20,
+          remise: 0,
+          consommation: ls.composant.consommation,
+          note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
+        };
+      });
+      return [entete, zones, ...composants];
+    };
+
     const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => {
       const cle = `d${i}`;
+      if (systemeDocument?.zones.has(i)) {
+        /* Une zone ne part pas seule : la première porte le bloc entier. Sans
+           variante tranchée, rien ne part — mieux qu'un chiffrage au hasard. */
+        return i === premiereZone ? blocDocument() : [];
+      }
       /* UNE LIGNE SYSTÈME S'ÉCLATE EN SES COMPOSANTS.
        *
        * Elle ne désigne aucun article : la laisser passer telle quelle
@@ -4516,7 +4670,156 @@ const [contratOdoo, setContratOdoo] = useState<
                                 </span>
                               )}
                             </Label>
+                            {/* ── LE SYSTÈME DU DOCUMENT ───────────────────
+                                Nommé une fois, en tête de la demande ; les
+                                lignes de tracé en sont les zones. Un seul
+                                chiffrage, comme le devis Odoo : primaire,
+                                quartz, résine, charge et finition pour tout
+                                le chantier, un pigment par teinte. */}
+                            {systemeDocument && (() => {
+                              const { rap } = systemeDocument;
+                              const sys = systemeDuDocument;
+                              const facultatifs = (sys?.composants ?? [])
+                                .filter(c => !c.obligatoire && !/\bpigments?\b/i.test(`${c.role} ${c.libelle}`));
+                              return (
+                                <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 space-y-1.5 text-[11px]">
+                                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/15 text-primary">système</span>
+                                    <span className="font-medium">{rap.nom}</span>
+                                    <span className="text-muted-foreground">
+                                      nommé dans la demande · {systemeDocument.zones.size} zone(s) · {surfaceDocument.toLocaleString('fr-FR')} m²
+                                    </span>
+                                    {rap.variantes.length > 1 && (
+                                      <Select value={sys?.id ?? ''} onValueChange={setVarianteDocument}>
+                                        <SelectTrigger className="ml-auto h-7 w-56 text-[11px]">
+                                          <SelectValue placeholder="— variante à choisir —" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {rap.variantes.map(v => (
+                                            <SelectItem key={v.id} value={v.id}>{v.variante || v.nom}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    )}
+                                  </div>
+
+                                  {!sys ? (
+                                    <p className="text-warning">Choisissez la variante : les dosages en dépendent.</p>
+                                  ) : (
+                                    <>
+                                      {facultatifs.length > 0 && (
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1">
+                                          {facultatifs.map(c => (
+                                            <label key={c.id} className="flex items-center gap-1 cursor-pointer">
+                                              <input
+                                                type="checkbox"
+                                                checked={!!optionsSysteme[`doc:${c.id}`]}
+                                                onChange={e => setOptionsSysteme(pr => ({
+                                                  ...pr, [`doc:${c.id}`]: e.target.checked,
+                                                }))}
+                                              />
+                                              <span title={c.condition || c.phraseSource}>
+                                                {c.libelle}{c.consommation != null ? ` · ${c.consommation} kg/m²` : ''}
+                                              </span>
+                                            </label>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      <div className="space-y-1">
+                                        {chiffrageDocument.map(ls => {
+                                          const p = produitDocument(ls);
+                                          const cle = `doc:${ls.cle}`;
+                                          const q = quantiteDocument(ls);
+                                          const pu = prixDe(p, undefined, cle);
+                                          return (
+                                            <div key={ls.cle} className="flex items-center gap-1.5">
+                                              <span
+                                                className="flex-1 min-w-0 truncate"
+                                                title={[ls.composant.role, ls.composant.phraseSource, ls.explication]
+                                                  .filter(Boolean).join('\n')}
+                                              >
+                                                <span className="text-muted-foreground">{ls.composant.role} · </span>
+                                                {p ? designationProduit(p) : ls.libelle}
+                                                {p && ls.zone && <span className="text-primary"> — {ls.zone.couleur ?? ls.zone.libelle}</span>}
+                                              </span>
+                                              <span className="w-48 shrink-0 truncate text-right text-muted-foreground" title={ls.explication}>
+                                                {ls.kits ? `${ls.kits} kit(s) · ` : ''}{ls.quantiteKg ? `${ls.quantiteKg} kg` : '—'}
+                                              </span>
+                                              <Input
+                                                type="number" min={0} step="1" value={q}
+                                                onChange={e => setQuantiteManuelle(pr => ({
+                                                  ...pr, [cle]: Math.max(0, Number(e.target.value) || 0),
+                                                }))}
+                                                className="h-6 w-14 shrink-0 text-[11px]"
+                                              />
+                                              <span className="w-16 shrink-0 text-muted-foreground">
+                                                {p?.poids ? `× ${p.poids} kg` : ls.composant.conditionnementKg ? `× ${ls.composant.conditionnementKg} kg` : 'kg'}
+                                              </span>
+                                              <span className="w-44 shrink-0 text-right">
+                                                {p
+                                                  ? <>{formatMontant(pu)} → <strong className="text-foreground">{formatMontant(pu * q)}</strong></>
+                                                  : <span className="text-destructive">sans article — prix à saisir</span>}
+                                              </span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+
+                                      <div className="flex items-center justify-between border-t border-primary/20 pt-1">
+                                        <span className="text-muted-foreground">
+                                          {chiffrageDocument.length} ligne(s) · {surfaceDocument.toLocaleString('fr-FR')} m²
+                                          {systemeDocument && [...systemeDocument.zones.values()].some(z => z.maximum)
+                                            && ' · logos et flèches comptés au rectangle (maximum)'}
+                                        </span>
+                                        <span>
+                                          <strong className="text-foreground">{formatMontant(totalDocument)}</strong>
+                                          {surfaceDocument > 0 && <> — {formatMontant(totalDocument / surfaceDocument)}/m²</>}
+                                        </span>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              );
+                            })()}
+
                             {(result?.lignes ?? []).map((l, i) => {
+                              /* Une zone du système du document : sa surface,
+                                 rien d'autre — le chiffrage est au-dessus. */
+                              const zone = systemeDocument?.zones.get(i);
+                              if (zone) {
+                                const surface = surfaceSysteme[i] ?? zone.surfaceM2;
+                                const kits = systemeDuDocument
+                                  ? kitsPour(systemeDuDocument, surface, zone.bande) : undefined;
+                                return (
+                                  <div key={i} className="rounded-lg border border-primary/20 p-2 flex flex-wrap items-center gap-2 text-xs">
+                                    <span className="px-1.5 py-0.5 rounded text-[10px] bg-primary/10 text-primary">zone</span>
+                                    <span className="font-medium">
+                                      {libelleManuel[i] || [l.reference, l.description].filter(Boolean).join(' ')}
+                                    </span>
+                                    {surfaceSysteme[i] == null && (
+                                      <span className="text-muted-foreground">
+                                        {zone.calcul}{zone.maximum ? ' (maximum)' : ''}
+                                      </span>
+                                    )}
+                                    <span className="ml-auto flex items-center gap-1">
+                                      <Input
+                                        type="number" min={0} step="0.1" value={surface}
+                                        onChange={e => setSurfaceSysteme(pr => ({
+                                          ...pr, [i]: Math.max(0, Number(e.target.value) || 0),
+                                        }))}
+                                        className="h-7 w-24 text-xs"
+                                      />
+                                      <span className="text-muted-foreground">m²</span>
+                                      {kits ? (
+                                        <span className="text-primary">
+                                          · {kits} petit{kits > 1 ? 's' : ''} mélange{kits > 1 ? 's' : ''}{zone.bande ? ' (bande)' : ''}
+                                        </span>
+                                      ) : null}
+                                    </span>
+                                  </div>
+                                );
+                              }
                               const candidats = candidatsPour(i);
                               const retenu = produitDeLigne(i);
                               const rap = rapprochements.get(i);
@@ -5368,7 +5671,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                 (result?.lignes || []).map((l, i) => {
                                   /* Une ligne système est chiffrée par ses
                                      composants : ses panneaux y sont déjà. */
-                                  if (systemesDetectes.has(i)) return null;
+                                  if (estLigneSysteme(i)) return null;
                                   const p = produitDeLigne(i);
                                   const odoo = choixOdoo[i];
                                   const texte = p
@@ -5502,6 +5805,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                * 0,00 €. */
                               const totalDemande = (result?.lignes ?? []).reduce((t, l, i) => {
                                 if (systemesDetectes.has(i)) return t + totalSystemeDe(i, l.quantite);
+                                if (systemeDocument?.zones.has(i)) return i === premiereZone ? t + totalDocument : t;
                                 const cle = `d${i}`;
                                 /* Les accessoires cochés partent au devis même
                                    quand la ligne n'a retenu aucun article : ils

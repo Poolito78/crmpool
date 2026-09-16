@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { declinerSysteme, kitsPour, type Systeme, type SystemeComposant } from './systemes';
+import { declinerSysteme, kitsPour, chiffrerZones, type Systeme, type SystemeComposant } from './systemes';
 
 function composant(p: Partial<SystemeComposant>): SystemeComposant {
   return {
@@ -134,5 +134,52 @@ describe('petits mélanges', () => {
     expect(kitsPour(CONCRETE, 50)).toBe(10);
     const l = declinerSysteme(CONCRETE, 50);
     expect(l.find(x => x.composant.id === 'c')!.contenants).toBe(10);
+  });
+});
+
+/* Le devis AF037640, tel que la fiche le chiffre : quatre zones d'un même
+   Flowfast 319 Concrete, le jaune avec son pigment propre. */
+describe('un système, plusieurs zones', () => {
+  const AVEC_JAUNE: Systeme = {
+    ...CONCRETE,
+    composants: [
+      ...CONCRETE.composants,
+      composant({
+        id: 'j', libelle: 'Pigment de teinte complémentaire (jaune)', role: 'couche teintée - pigment jaune',
+        consommation: 0.1, auKit: true, obligatoire: false, produitId: 'p-jaune', ordre: 1,
+      }),
+    ],
+  };
+  const poidsZ = (id?: string) => (id === 'p107' || id === 'p319' ? 20 : id === 'p-jaune' ? 0.5 : undefined);
+  const zones = [
+    { id: 'z1', libelle: 'Ligne jaune', surfaceM2: 96.5, bande: true, couleur: 'jaune' },
+    { id: 'z2', libelle: 'Ligne blanche', surfaceM2: 48.5, bande: true, couleur: 'blanc' },
+    { id: 'z3', libelle: 'Ligne verte', surfaceM2: 5, bande: true, couleur: 'vert' },
+    { id: 'z4', libelle: 'Flèches bleues', surfaceM2: 67.2, bande: false, couleur: 'bleu' },
+  ];
+  const l = chiffrerZones(AVEC_JAUNE, zones, { poidsParProduit: poidsZ });
+  const par = (cle: string) => l.find(x => x.cle === cle)!;
+
+  it('additionne la résine avant de la mettre en seaux', () => {
+    // 20 + 10 + 1 kits en bande, puis 67,2 m² au kilo : 77,5 + 33,6 kg
+    expect(par('r').quantiteKg).toBeCloseTo(111.1);
+    expect(par('r').contenants).toBe(6);
+  });
+
+  it('compte le SNL Concrete en sacs de 1,255 kg', () => {
+    expect(par('c').contenants).toBe(Math.ceil((31 * 1.255 + 67.2 * 0.251) / 1.255 - 1e-9));
+  });
+
+  it('dose le primaire sur la surface totale', () => {
+    expect(par('pr').quantiteKg).toBeCloseTo(0.5 * 217.2);
+  });
+
+  it('donne à chaque teinte son pigment, le jaune le sien', () => {
+    expect(par('j:z1').contenants).toBe(20);         // 20 kits × 0,5 kg
+    expect(l.find(x => x.cle === 'g:z1')).toBeUndefined();
+    expect(par('g:z2').contenants).toBe(10);
+    expect(par('g:z3').contenants).toBe(1);
+    expect(par('g:z2').libelle).toBe('Pigments — blanc');
+    expect(l.find(x => x.cle === 'j:z2')).toBeUndefined();
   });
 });

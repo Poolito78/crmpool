@@ -57,6 +57,8 @@ export function normaliser(texte: string): string {
     .toLowerCase()
     /* « m² » s'écrit aussi « m2 » : une seule forme à chercher ensuite. */
     .replace(/²/g, '2')
+    /* « 1000×400 mm » : le signe de multiplication est un x. */
+    .replace(/×/g, 'x')
     /* Flowcrete écrit ses gammes en anglais, ceux qui les vendent écrivent en
        français : « Flowshield Comfort » se demande « flowshield confort », et
        le système n'était pas reconnu pour une lettre. Les deux graphies sont
@@ -166,6 +168,89 @@ export function traceDansTexte(texte: string): DimensionsTrace | undefined {
       + (nombre > 1 ? ` × ${nombre}` : '')
       + ` = ${enFrancais(surfaceM2)} m²`,
   };
+}
+
+/* ── Zones d'un système nommé une fois pour tout le document ─────────────── */
+
+/**
+ * La teinte d'une zone, au masculin : « Ligne jaune », « bandes blanches ».
+ * Elle choisit le pigment — le jaune a le sien, dosé à part.
+ */
+export function couleurDansTexte(texte: string): string | undefined {
+  const m = normaliser(texte).match(
+    /\b(jaune|blanc|vert|bleu|rouge|noir|gris|orange)(?:he|e)?s?\b/);
+  return m?.[1];
+}
+
+/** Les mots d'un tracé : ce qui distingue une zone d'un article. */
+const MOTS_TRACE = /\b(lignes?|bandes?|fleches?|logos?|pictogrammes?|pictos?|marquages?|passages?|zones?|damiers?|chevrons?|bordures?|allees?|cheminements?)\b/;
+
+export interface ZoneDemande {
+  surfaceM2: number;
+  bande: boolean;
+  couleur?: string;
+  /** « 965 ml × 0,1 m = 96,5 m² », à afficher tel quel. */
+  calcul: string;
+  /** La surface est celle d'un rectangle englobant : un maximum. */
+  maximum: boolean;
+}
+
+/**
+ * La zone que décrit une ligne quand le système est nommé ailleurs — « Merci
+ * de chiffrer un système Flowfast 319 Concrete : » suivi de « Ligne jaune
+ * 0,10 m de largeur x 965 ml ».
+ *
+ * La lecture du document range souvent la longueur dans la QUANTITÉ : la
+ * ligne devient « Ligne jaune 0,10 m de largeur », quantité 965. On recolle
+ * donc les deux :
+ *   - largeur écrite sans longueur → la quantité est la longueur en ml ;
+ *   - tracé complet (« 3 ml x 1,40 m ») → la quantité est le nombre de
+ *     tracés, sauf si elle répète la longueur ;
+ *   - « logo 1000×400 mm », quantité 20 → vingt rectangles.
+ *
+ * Rien n'est rendu pour une ligne qui ne parle pas d'un tracé : un « seau de
+ * primaire » ne devient pas une zone.
+ */
+export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDemande | undefined {
+  const t = normaliser(texte);
+  if (!MOTS_TRACE.test(t)) return undefined;
+  const q = quantite && quantite > 0 ? quantite : 1;
+  const couleur = couleurDansTexte(t);
+  const fin = (surface: number, bande: boolean, calcul: string, maximum: boolean): ZoneDemande => ({
+    surfaceM2: Math.round(surface * 1000) / 1000, bande, calcul, maximum,
+    ...(couleur ? { couleur } : {}),
+  });
+
+  const trace = traceDansTexte(t);
+  if (trace) {
+    const nombre = trace.nombre > 1 || q === trace.longueurMl ? trace.nombre : trace.nombre * q;
+    const surface = trace.longueurMl * trace.largeurM * nombre;
+    return fin(surface, trace.bande,
+      `${enFrancais(trace.longueurMl)} ml × ${enFrancais(trace.largeurM)} m`
+        + (nombre > 1 ? ` × ${nombre}` : '') + ` = ${enFrancais(surface)} m²`,
+      !trace.bande);
+  }
+
+  /* Largeur seule : la longueur est dans la quantité. */
+  if (q > 1) {
+    const avecLongueur = traceDansTexte(`${t} x ${q} ml`);
+    if (avecLongueur) {
+      return fin(avecLongueur.surfaceM2, avecLongueur.bande, avecLongueur.calcul, !avecLongueur.bande);
+    }
+  }
+
+  /* Un logo, un pictogramme : ses cotes en mm, une pièce par unité. */
+  const r = t.match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/);
+  if (r) {
+    const div = r[3] === 'mm' ? 1000 : r[3] === 'cm' ? 100 : 1;
+    const a = enNombre(r[1]) / div;
+    const b = enNombre(r[2]) / div;
+    const surface = a * b * q;
+    return fin(surface, false,
+      `${enFrancais(a)} m × ${enFrancais(b)} m` + (q > 1 ? ` × ${q}` : '') + ` = ${enFrancais(surface)} m²`,
+      true);
+  }
+  return undefined;
 }
 
 /* ── Rapprochement ───────────────────────────────────────────────────────── */
