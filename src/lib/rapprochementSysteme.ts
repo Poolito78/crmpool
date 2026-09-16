@@ -185,6 +185,22 @@ export function couleurDansTexte(texte: string): string | undefined {
 /** Les mots d'un tracé : ce qui distingue une zone d'un article. */
 const MOTS_TRACE = /\b(lignes?|bandes?|fleches?|logos?|pictogrammes?|pictos?|marquages?|passages?|zones?|damiers?|chevrons?|bordures?|allees?|cheminements?)\b/;
 
+/**
+ * La flèche de référence : 0,123 m² peints pour 1 400 mm de long.
+ *
+ * Une flèche plus grande est la même, agrandie : sa surface croît au CARRÉ
+ * de la longueur. 0,123 × (3000 / 1400)² = 0,564 — on retient 0,56 m² pour
+ * une flèche de 3 m (arrondi au centième, règle du chargé d'affaires).
+ */
+export const FLECHE_REFERENCE = { longueurM: 1.4, surfaceM2: 0.123 } as const;
+
+/** Surface peinte d'une flèche de `longueurM` mètres, au centième. */
+export function surfaceFleche(longueurM: number): number | undefined {
+  if (!(longueurM > 0)) return undefined;
+  const r = longueurM / FLECHE_REFERENCE.longueurM;
+  return Math.round(FLECHE_REFERENCE.surfaceM2 * r * r * 100) / 100;
+}
+
 export interface ZoneDemande {
   surfaceM2: number;
   bande: boolean;
@@ -222,6 +238,29 @@ export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDema
   });
 
   const trace = traceDansTexte(t);
+
+  /* UNE FLÈCHE SE CHIFFRE À SA SURFACE, PAS À SON RECTANGLE : 16 flèches de
+     3 m × 1,40 m comptaient 67,2 m², pour moins de 9 m² peints. */
+  if (/\bfleches?\b/.test(t)) {
+    let longueurM: number | undefined = trace?.longueurMl;
+    if (longueurM == null) {
+      const r = t.match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/);
+      const div = r?.[3] === 'mm' ? 1000 : r?.[3] === 'cm' ? 100 : 1;
+      const m = t.match(/(\d+(?:[.,]\d+)?)\s*(mm|cm|m)\b/);
+      if (r) longueurM = Math.max(enNombre(r[1]), enNombre(r[2])) / div;
+      else if (m) longueurM = enNombre(m[1]) / (m[2] === 'mm' ? 1000 : m[2] === 'cm' ? 100 : 1);
+    }
+    const unitaire = longueurM ? surfaceFleche(longueurM) : undefined;
+    if (unitaire) {
+      const nombre = trace && trace.nombre > 1 ? trace.nombre
+        : q === trace?.longueurMl ? 1 : q;
+      const surface = unitaire * nombre;
+      return fin(surface, false,
+        `${nombre} flèche${nombre > 1 ? 's' : ''} de ${enFrancais(longueurM!)} m × ${enFrancais(unitaire)} m² = ${enFrancais(surface)} m²`,
+        false);
+    }
+  }
+
   if (trace) {
     const nombre = trace.nombre > 1 || q === trace.longueurMl ? trace.nombre : trace.nombre * q;
     const surface = trace.longueurMl * trace.largeurM * nombre;

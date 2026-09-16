@@ -175,7 +175,10 @@ voulu — on ne lui invente pas un prix de triangle.
   ≤ 0,15 m) passe toujours en kits ; une surface pleine au-delà de 50 m²
   revient au kilo (`kitsPour`).
 - **La surface d'un tracé se calcule** (`traceDansTexte`) : « 0,10 m de largeur
-  x 965 ml » → 96,5 m². Flèches « 3 ml x 1,40 m x 16 » → rectangle, un MAXIMUM.
+  x 965 ml » → 96,5 m². Une **flèche** se chiffre à sa surface peinte
+  (`surfaceFleche`) : 0,123 m² pour 1 400 mm, au carré de la longueur —
+  **0,56 m² pour 3 m** (règle du chargé d'affaires). Seuls les logos restent
+  comptés au rectangle (maximum).
 - ⚠️ SNL Concrete 1,255 kg et pigments 0,2 kg **n'ont pas d'article** : lignes
   libres sans prix. `SNLC2` porte « 2,510 kg » mais un poids saisi à 1,165.
 - **Système nommé mais absent de la base** (`ressembleASysteme`) : la table est

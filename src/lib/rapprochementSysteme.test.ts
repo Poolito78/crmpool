@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande,
+  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -239,9 +239,14 @@ describe('zones d’un système nommé dans l’en-tête', () => {
     expect(zoneDeDemande('Ligne jaune 0,10 m de largeur x 965ml', 1)?.surfaceM2).toBe(96.5);
   });
 
-  it('des flèches : la quantité est le nombre de tracés', () => {
+  /* 0,123 m² pour une flèche de 1 400 mm, au carré de la longueur :
+     0,123 × (3000 / 1400)² = 0,564, retenu 0,56 m² par flèche de 3 m. */
+  it('des flèches : leur surface peinte, pas leur rectangle', () => {
+    expect(surfaceFleche(3)).toBe(0.56);
     expect(zoneDeDemande('Flèches bleu dimension 3ml x 1,40m', 16))
-      .toMatchObject({ surfaceM2: 67.2, bande: false, couleur: 'bleu', maximum: true });
+      .toMatchObject({ surfaceM2: 8.96, bande: false, couleur: 'bleu', maximum: false });
+    expect(zoneDeDemande('Flèches bleu dimension 3ml x 1,40m x 16 unités', 1)?.surfaceM2).toBe(8.96);
+    expect(zoneDeDemande('flèche 3000 x 1400 mm', 2)?.surfaceM2).toBe(1.12);
   });
 
   it('des logos en mm, un rectangle par pièce', () => {

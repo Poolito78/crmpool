@@ -4770,7 +4770,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <span className="text-muted-foreground">
                                           {chiffrageDocument.length} ligne(s) · {surfaceDocument.toLocaleString('fr-FR')} m²
                                           {systemeDocument && [...systemeDocument.zones.values()].some(z => z.maximum)
-                                            && ' · logos et flèches comptés au rectangle (maximum)'}
+                                            && ' · logos comptés au rectangle (maximum)'}
                                         </span>
                                         <span>
                                           <strong className="text-foreground">{formatMontant(totalDocument)}</strong>
