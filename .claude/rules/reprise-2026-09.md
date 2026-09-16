@@ -165,6 +165,27 @@ permet de revenir à 2,10 m ou de saisir la valeur du terrain.
 pas : la règle l'attend, mais il n'atteint pas encore le chiffrage. C'est
 voulu — on ne lui invente pas un prix de triangle.
 
+## Les systèmes résine : petits mélanges et fiches du dossier (16 sept.)
+
+- **Flowfast 319 Concrete** est en base (migration `20260916120000`), tiré de
+  `Fiches système\Flowfast 319 Concrete`. Couche teintée en **kits de 5 m²**
+  (319 Unp. 2,5 kg + SNL Concrete 1,255 kg + pigments 0,2 kg) :
+  `systemes.surface_kit_m2` / `kit_surface_max_m2` (50),
+  `systeme_composants.au_kit` / `conditionnement_kg`. Une **bande** (largeur
+  ≤ 0,15 m) passe toujours en kits ; une surface pleine au-delà de 50 m²
+  revient au kilo (`kitsPour`).
+- **La surface d'un tracé se calcule** (`traceDansTexte`) : « 0,10 m de largeur
+  x 965 ml » → 96,5 m². Flèches « 3 ml x 1,40 m x 16 » → rectangle, un MAXIMUM.
+- ⚠️ SNL Concrete 1,255 kg et pigments 0,2 kg **n'ont pas d'article** : lignes
+  libres sans prix. `SNLC2` porte « 2,510 kg » mais un poids saisi à 1,165.
+- **Système nommé mais absent de la base** (`ressembleASysteme`) : la table est
+  relue, puis `SystemeIntrouvable` cherche la fiche dans le dossier (choisi une
+  fois, droit mémorisé en IndexedDB), la fait lire par Gemini, montre les
+  dosages à relire, et n'enregistre qu'au clic.
+- ⚠️ Une ligne qui ne nomme que la couleur (« Ligne jaune 0,10 m x 965 ml »)
+  sous une section « Flowfast 319 Concrete » n'est PAS rattachée au système :
+  le nom doit figurer sur la ligne.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

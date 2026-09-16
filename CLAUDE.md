@@ -150,6 +150,7 @@ explication.
 `indexProduits` (index catalogue en WeakMap, deux caches) ·
 `bridesDevis` + `railsPanneaux.donnees` (une bride par rail, jamais devinée) ·
 `grilleTarif` (niveau R0-R4 : grille Odoo pour ISOSIGN, barème STI pour le plastique) ·
+`fichesSysteme` (système absent de la base → dossier des fiches, lu puis relu avant import) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

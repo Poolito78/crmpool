@@ -36,7 +36,9 @@ import { chantierDansTexte } from '@/lib/chantierDemande';
 import { compterBrides, fixationsPour, fixationDeSection, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
-import { useSystemes, declinerSysteme, type Systeme, type LigneSysteme } from '@/lib/systemes';
+import { useSystemes, declinerSysteme, kitsPour, type Systeme, type LigneSysteme } from '@/lib/systemes';
+import { ressembleASysteme } from '@/lib/fichesSysteme';
+import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import {
   rapprocherSysteme, surfaceDeDemande, type RapprochementSysteme,
 } from '@/lib/rapprochementSysteme';
@@ -703,7 +705,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const chercheFaitePour = useRef<string | null>(null);
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
 
-  const { systemes } = useSystemes();
+  const { systemes, recharger: rechargerSystemes } = useSystemes();
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
 const [contratOdoo, setContratOdoo] = useState<
@@ -1707,6 +1709,29 @@ const [contratOdoo, setContratOdoo] = useState<
     return m;
   }, [result, systemes, texteDemande]);
 
+  /**
+   * Lignes qui nomment un système que la base ne connaît pas.
+   *
+   * « Flowfast 319 Concrete » est arrivé dans le dossier des fiches avant
+   * d'arriver en base : la ligne se chiffrait alors comme un article. On relit
+   * la table une fois — un collègue a pu l'ajouter depuis l'ouverture — puis
+   * `SystemeIntrouvable` cherche la fiche dans le dossier.
+   */
+  const systemesManquants = useMemo(() => {
+    const s = new Set<number>();
+    (result?.lignes || []).forEach((l, i) => {
+      if (!systemesDetectes.has(i) && ressembleASysteme(texteDemande(l, i), systemes)) s.add(i);
+    });
+    return s;
+  }, [result, systemes, systemesDetectes, texteDemande]);
+
+  const baseRelue = useRef<unknown>(null);
+  useEffect(() => {
+    if (!systemesManquants.size || baseRelue.current === result) return;
+    baseRelue.current = result;
+    void rechargerSystemes();
+  }, [systemesManquants, result, rechargerSystemes]);
+
   const rapprochements = useMemo(() => {
     const m = new Map<number, ReturnType<typeof rapprocherArticle>>();
     (result?.lignes || []).forEach((l, i) => {
@@ -1755,13 +1780,16 @@ const [contratOdoo, setContratOdoo] = useState<
     );
     return declinerSysteme(sys, surfaceDeLigne(i, quantite), {
       conditionnelsRetenus: retenus,
+      /* Une bande de 0,10 m se trace en petits mélanges, quelle que soit sa
+         longueur : un mélange de 20 kg prend avant d'être posé. */
+      bande: !!systemesDetectes.get(i)?.trace?.bande,
       poidsParProduit: (produitId) => {
         if (!produitId) return undefined;
         const p = produitParId(produits, produitId);
         return p?.poids && p.poids > 0 ? p.poids : undefined;
       },
     });
-  }, [systemeDeLigne, surfaceDeLigne, optionsSysteme, produits]);
+  }, [systemeDeLigne, surfaceDeLigne, optionsSysteme, produits, systemesDetectes]);
 
   /**
    * Quantité commandée pour un composant : des contenants entiers quand le
@@ -3107,7 +3135,9 @@ const [contratOdoo, setContratOdoo] = useState<
          mise en œuvre. Il ne compte pas dans les totaux. */
       const entete: LigneDevis = {
         id: generateId(), type: 'groupe',
-        description: `${sys.nom}${sys.variante ? ` — ${sys.variante}` : ''} · ${surface} m²`,
+        description: `${sys.nom}${sys.variante ? ` — ${sys.variante}` : ''} · ${
+          surfaceSysteme[i] == null && systemesDetectes.get(i)?.trace
+            ? systemesDetectes.get(i)!.trace!.calcul : `${surface} m²`}`,
         quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
       };
 
@@ -4558,6 +4588,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                     )}
                                   </div>
 
+                                  {!sysRap && systemesManquants.has(i) && rap?.confiance !== 'sure' && (
+                                    <SystemeIntrouvable
+                                      texte={texteDemande(l, i)}
+                                      systemes={systemes}
+                                      produits={produits}
+                                      onImporte={rechargerSystemes}
+                                    />
+                                  )}
+
                                   {/* ── LA DEMANDE NOMME UN SYSTÈME ─────────
                                       Pas un article : une mise en œuvre, qui
                                       se décline en primaire, couche de masse
@@ -4589,6 +4628,26 @@ const [contratOdoo, setContratOdoo] = useState<
                                             className="h-7 w-24 text-xs"
                                           />
                                           <span className="text-muted-foreground">m²</span>
+                                          {sysRap.trace && surfaceSysteme[i] == null && (
+                                            <span
+                                              className="text-muted-foreground"
+                                              title={sysRap.trace.nombre > 1
+                                                ? 'Surface du rectangle qui contient chaque tracé : un maximum, la surface peinte est plus petite.'
+                                                : undefined}
+                                            >
+                                              {sysRap.trace.calcul}
+                                              {sysRap.trace.nombre > 1 && ' (maximum)'}
+                                            </span>
+                                          )}
+                                          {sys && (() => {
+                                            const kits = kitsPour(sys, surface, !!sysRap.trace?.bande);
+                                            return kits ? (
+                                              <span className="text-primary">
+                                                {kits} petit{kits > 1 ? 's' : ''} mélange{kits > 1 ? 's' : ''} de {sys.surfaceKitM2} m²
+                                                {sysRap.trace?.bande ? ' (bande)' : ''}
+                                              </span>
+                                            ) : null;
+                                          })()}
                                           {sysRap.variantes.length > 1 && (
                                             <select
                                               className="ml-auto rounded border bg-background px-1 py-0.5 text-[11px]"

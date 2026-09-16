@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
+import { declinerSysteme, kitsPour, type Systeme, type SystemeComposant } from './systemes';
 
 function composant(p: Partial<SystemeComposant>): SystemeComposant {
   return {
@@ -94,5 +94,45 @@ describe('déclinaison d’un système sur une surface', () => {
 
   it('ne renvoie rien sans surface', () => {
     expect(declinerSysteme(ALPES, 0)).toEqual([]);
+  });
+});
+
+/* Flowfast 319 Concrete, fiche du dossier « Fiches système » : kits de 5 m²
+   (2,5 kg de 319, 1,255 kg de SNL Concrete, 0,2 kg de pigments), petits
+   mélanges jusqu'à 50 m² — et toujours pour une bande. */
+const CONCRETE: Systeme = {
+  id: 's3', nom: 'Flowfast 319 Concrete', support: 'tous', actif: true,
+  surfaceKitM2: 5, kitSurfaceMaxM2: 50,
+  composants: [
+    composant({ id: 'pr', libelle: 'Primaire Flowfast 107', role: 'primaire', consommation: 0.5, produitId: 'p107' }),
+    composant({ id: 'r', libelle: 'Flowfast 319 Unpigmented', role: 'couche teintée - liant', consommation: 0.5, auKit: true, produitId: 'p319' }),
+    composant({ id: 'c', libelle: 'SNL Concrete', role: 'couche teintée - charge', consommation: 0.251, auKit: true, conditionnementKg: 1.255 }),
+    composant({ id: 'g', libelle: 'Pigments', role: 'couche teintée - pigment', consommation: 0.04, auKit: true, conditionnementKg: 0.2 }),
+  ],
+};
+const poids = (id?: string) => (id === 'p107' || id === 'p319' ? 20 : undefined);
+
+describe('petits mélanges', () => {
+  it('une bande jaune de 965 ml × 0,10 m se prépare en 20 kits', () => {
+    const l = declinerSysteme(CONCRETE, 96.5, { bande: true, poidsParProduit: poids });
+    const par = (id: string) => l.find(x => x.composant.id === id)!;
+    expect(kitsPour(CONCRETE, 96.5, true)).toBe(20);
+    expect(par('r').quantiteKg).toBeCloseTo(50);     // 20 × 2,5 kg
+    expect(par('r').contenants).toBe(3);             // en seaux de 20 kg
+    expect(par('c').contenants).toBe(20);            // un sac de 1,255 kg par kit
+    expect(par('g').contenants).toBe(20);            // un sachet de 0,2 kg par kit
+    expect(par('pr').quantiteKg).toBeCloseTo(48.25); // le primaire reste au m²
+  });
+
+  it('une surface pleine au-delà de 50 m² revient au kilo', () => {
+    expect(kitsPour(CONCRETE, 96.5)).toBeUndefined();
+    const l = declinerSysteme(CONCRETE, 96.5, { poidsParProduit: poids });
+    expect(l.find(x => x.composant.id === 'r')!.quantiteKg).toBeCloseTo(48.25);
+  });
+
+  it('50 m² tout rond font 10 kits, pas 11', () => {
+    expect(kitsPour(CONCRETE, 50)).toBe(10);
+    const l = declinerSysteme(CONCRETE, 50);
+    expect(l.find(x => x.composant.id === 'c')!.contenants).toBe(10);
   });
 });

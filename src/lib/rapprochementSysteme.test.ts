@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte,
+  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -189,5 +189,40 @@ describe('chiffrage du devis DEV-2026-052 — HORUS, 30 m²', () => {
     const total = lignes.reduce(
       (s, l) => s + (l.contenants ?? 0) * (PRIX[l.composant.produitId ?? ''] ?? 0), 0);
     expect(total).toBeCloseTo(1357.56, 2);
+  });
+});
+
+describe('tracés : la surface d’une bande', () => {
+  it('« Ligne jaune 0,10 m de largeur x 965ml » fait 96,5 m², en bande', () => {
+    const t = traceDansTexte('Ligne jaune 0,10 m de largeur x 965ml');
+    expect(t).toMatchObject({ longueurMl: 965, largeurM: 0.1, nombre: 1, surfaceM2: 96.5, bande: true });
+    expect(t?.calcul).toBe('965 ml × 0,1 m = 96,5 m²');
+  });
+
+  it('« 0.10m » s’écrit aussi collé', () => {
+    expect(traceDansTexte('Ligne blanche 0.10m de largeur x 485 ml')?.surfaceM2).toBe(48.5);
+  });
+
+  it('une largeur en centimètres, ou sous-entendue après « bande »', () => {
+    expect(traceDansTexte('bande de 12 cm sur 100 ml')?.surfaceM2).toBe(12);
+    expect(traceDansTexte('bande 0,12 x 100 ml')?.surfaceM2).toBe(12);
+  });
+
+  it('des flèches se comptent, et ne sont pas des bandes', () => {
+    const t = traceDansTexte('Flèches bleu dimension 3ml x 1,40m x 16 unités');
+    expect(t).toMatchObject({ surfaceM2: 67.2, nombre: 16, bande: false });
+  });
+
+  it('pas de largeur, pas de surface : on ne la devine pas', () => {
+    expect(traceDansTexte('ligne jaune 965 ml')).toBeUndefined();
+  });
+
+  it('le système reconnu porte la surface du tracé', () => {
+    const concrete = systeme('Flowfast 319 Concrete', 'Aspect béton');
+    const route = systeme('Flowfast 319 Route', 'Marquage sur enrobé');
+    const r = rapprocherSysteme('Flowfast 319 Concrete ligne jaune 0,10 m de largeur x 965ml', [route, concrete]);
+    expect(r?.nom).toBe('Flowfast 319 Concrete');
+    expect(r?.trace?.bande).toBe(true);
+    expect(surfaceDeDemande(r, 1)).toBe(96.5);
   });
 });

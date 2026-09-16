@@ -54,6 +54,17 @@ export interface SystemeComposant {
   obligatoire: boolean;
   condition?: string;
   phraseSource?: string;
+  /**
+   * Le composant entre dans le PETIT MÉLANGE du système : sa quantité
+   * s'arrondit au kit entier. Voir `Systeme.surfaceKitM2`.
+   */
+  auKit?: boolean;
+  /**
+   * Le contenant, en kg, quand aucun article du catalogue ne le dit : le SNL
+   * Concrete se vend en sacs de 1,255 kg et n'a pas d'article. Le poids de
+   * l'article rattaché, lui, l'emporte toujours.
+   */
+  conditionnementKg?: number;
 }
 
 export interface Systeme {
@@ -73,6 +84,18 @@ export interface Systeme {
   description?: string;
   sourceFiche?: string;
   sourceDrive?: string;
+  /**
+   * Surface couverte par un petit mélange — 5 m² pour le Flowfast 319
+   * Concrete : 2,5 kg de résine, 1,255 kg de SNL Concrete, 0,2 kg de pigments.
+   * Une bande de 0,10 m ne se trace pas avec un mélange de 20 kg, qui prend
+   * avant d'être posé.
+   */
+  surfaceKitM2?: number;
+  /**
+   * Au-delà, une surface PLEINE se chiffre au kilo. Une bande se chiffre
+   * toujours en petits mélanges, quelle que soit sa longueur.
+   */
+  kitSurfaceMaxM2?: number;
   actif: boolean;
   composants: SystemeComposant[];
 }
@@ -94,10 +117,12 @@ function dbToComposant(r: any): SystemeComposant {
     obligatoire: r.obligatoire ?? true,
     condition: r.condition || undefined,
     phraseSource: r.phrase_source || undefined,
+    auKit: r.au_kit ?? false,
+    conditionnementKg: r.conditionnement_kg != null ? Number(r.conditionnement_kg) : undefined,
   };
 }
 
-function dbToSysteme(r: any): Systeme {
+export function dbToSysteme(r: any): Systeme {
   return {
     id: r.id,
     nom: r.nom,
@@ -108,6 +133,8 @@ function dbToSysteme(r: any): Systeme {
     description: r.description || undefined,
     sourceFiche: r.source_fiche || undefined,
     sourceDrive: r.source_drive || undefined,
+    surfaceKitM2: r.surface_kit_m2 != null ? Number(r.surface_kit_m2) : undefined,
+    kitSurfaceMaxM2: r.kit_surface_max_m2 != null ? Number(r.kit_surface_max_m2) : undefined,
     actif: r.actif ?? true,
     composants: ((r.systeme_composants as any[]) || [])
       .map(dbToComposant)
@@ -125,6 +152,27 @@ export interface LigneSysteme {
   contenants?: number;
   /** Ce qui a servi au calcul, à afficher pour que le chiffrage soit relisible. */
   explication: string;
+  /** Nombre de petits mélanges, quand le composant se prépare en kits. */
+  kits?: number;
+}
+
+/**
+ * Nombre de petits mélanges pour une surface, ou `undefined` quand le système
+ * se chiffre au kilo.
+ *
+ * Une bande se prépare TOUJOURS en petits mélanges ; une surface pleine
+ * seulement jusqu'au plafond du système — au-delà, un grand mélange se pose
+ * avant de prendre.
+ */
+export function kitsPour(systeme: Systeme, surfaceM2: number, bande = false): number | undefined {
+  const s = systeme.surfaceKitM2;
+  if (!s || !(s > 0) || !(surfaceM2 > 0)) return undefined;
+  if (!bande && systeme.kitSurfaceMaxM2 != null && surfaceM2 > systeme.kitSurfaceMaxM2) {
+    return undefined;
+  }
+  /* 96,5 m² font 19,3 kits : on en prépare 20. La tolérance évite qu'un
+     arrondi flottant — 50,000000001 — n'en ajoute un. */
+  return Math.ceil(surfaceM2 / s - 1e-9);
 }
 
 /**
@@ -145,10 +193,14 @@ export function declinerSysteme(
     poidsParProduit?: (produitId?: string) => number | undefined;
     /** Les composants conditionnels retenus, par identifiant. */
     conditionnelsRetenus?: Set<string>;
+    /** La demande est une bande (0,10 m, 0,12 m…) : petits mélanges d'office. */
+    bande?: boolean;
   } = {},
 ): LigneSysteme[] {
-  const { temperatureSupport, poidsParProduit, conditionnelsRetenus } = options;
+  const { temperatureSupport, poidsParProduit, conditionnelsRetenus, bande } = options;
   if (!(surfaceM2 > 0)) return [];
+  const kits = kitsPour(systeme, surfaceM2, bande);
+  const surfaceKit = systeme.surfaceKitM2 ?? 0;
 
   const retenus = systeme.composants.filter(
     c => c.obligatoire || conditionnelsRetenus?.has(c.id),
@@ -174,7 +226,14 @@ export function declinerSysteme(
     let kg = 0;
     let explication = '';
 
-    if (c.consommation != null) {
+    let kitsComposant: number | undefined;
+
+    if (c.consommation != null && c.auKit && kits) {
+      /* Le petit mélange se prépare entier : 20 kits de 5 m² pour 96,5 m². */
+      kitsComposant = kits;
+      kg = c.consommation * surfaceKit * kits;
+      explication = `${kits} kit${kits > 1 ? 's' : ''} de ${surfaceKit} m² × ${c.consommation} kg/m²`;
+    } else if (c.consommation != null) {
       kg = c.consommation * surfaceM2;
       explication = `${c.consommation} kg/m² × ${surfaceM2} m²`;
     } else if (c.ratioBase != null && masseBase > 0) {
@@ -203,12 +262,14 @@ export function declinerSysteme(
       explication = 'aucun dosage dans la fiche';
     }
 
-    const poids = poidsParProduit?.(c.produitId);
+    /* L'article du catalogue dit le contenant ; à défaut, la fiche. */
+    const poids = poidsParProduit?.(c.produitId) ?? c.conditionnementKg;
     return {
       composant: c,
       quantiteKg: Math.round(kg * 1000) / 1000,
-      contenants: kg > 0 && poids ? Math.ceil(kg / poids) : undefined,
+      contenants: kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined,
       explication,
+      ...(kitsComposant ? { kits: kitsComposant } : {}),
     };
   });
 }

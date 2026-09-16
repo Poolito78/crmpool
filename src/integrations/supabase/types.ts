@@ -1986,6 +1986,8 @@ export type Database = {
       }
       systeme_composants: {
         Row: {
+          au_kit: boolean
+          conditionnement_kg: number | null
           condition: string | null
           consommation: number | null
           created_at: string
@@ -2002,6 +2004,8 @@ export type Database = {
           systeme_id: string
         }
         Insert: {
+          au_kit?: boolean
+          conditionnement_kg?: number | null
           condition?: string | null
           consommation?: number | null
           created_at?: string
@@ -2018,6 +2022,8 @@ export type Database = {
           systeme_id: string
         }
         Update: {
+          au_kit?: boolean
+          conditionnement_kg?: number | null
           condition?: string | null
           consommation?: number | null
           created_at?: string
@@ -2057,10 +2063,12 @@ export type Database = {
           description: string | null
           famille: string | null
           id: string
+          kit_surface_max_m2: number | null
           nom: string
           source_drive: string | null
           source_fiche: string | null
           support: string
+          surface_kit_m2: number | null
           updated_at: string
           usage: string | null
           user_id: string
@@ -2072,10 +2080,12 @@ export type Database = {
           description?: string | null
           famille?: string | null
           id?: string
+          kit_surface_max_m2?: number | null
           nom: string
           source_drive?: string | null
           source_fiche?: string | null
           support?: string
+          surface_kit_m2?: number | null
           updated_at?: string
           usage?: string | null
           user_id?: string
@@ -2087,10 +2097,12 @@ export type Database = {
           description?: string | null
           famille?: string | null
           id?: string
+          kit_surface_max_m2?: number | null
           nom?: string
           source_drive?: string | null
           source_fiche?: string | null
           support?: string
+          surface_kit_m2?: number | null
           updated_at?: string
           usage?: string | null
           user_id?: string

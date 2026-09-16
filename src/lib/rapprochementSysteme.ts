@@ -38,6 +38,8 @@ export interface RapprochementSysteme {
   epaisseurMm?: number;
   /** Surface lue dans la demande, en m². Absente si la demande n'en porte pas. */
   surfaceM2?: number;
+  /** Les dimensions d'un tracé — « 0,10 m de largeur x 965 ml ». */
+  trace?: DimensionsTrace;
   /** À afficher tel quel : ce qui a été compris, ou ce qui manque. */
   pourquoi: string;
 }
@@ -60,7 +62,8 @@ export function normaliser(texte: string): string {
        le système n'était pas reconnu pour une lettre. Les deux graphies sont
        la même chose. */
     .replace(/\bcomfort\b/g, 'confort')
-    .replace(/(\d)\s*(mm|cm|m2)\b/g, '$1 $2')
+    /* « 965ml », « 0.10m » : le mètre et le mètre linéaire aussi. */
+    .replace(/(\d)\s*(mm|cm|ml|m2|m)\b/g, '$1 $2')
     .replace(/[^a-z0-9,.]+/g, ' ')
     .trim();
 }
@@ -91,7 +94,78 @@ export function epaisseurDansTexte(texte: string): number | undefined {
 /** Premier nombre suivi de « m² » ou « m2 », en mètres carrés. */
 export function surfaceDansTexte(texte: string): number | undefined {
   const m = normaliser(texte).match(/(\d+(?:[.,]\d+)?)\s*m2\b/);
-  return m ? parseFloat(m[1].replace(',', '.')) : undefined;
+  if (m) return parseFloat(m[1].replace(',', '.'));
+  return traceDansTexte(texte)?.surfaceM2;
+}
+
+/* ── Tracés : bandes, lignes, flèches ────────────────────────────────────── */
+
+/**
+ * Largeur au-delà de laquelle un tracé n'est plus une BANDE. Le marquage se
+ * demande en 0,10 m, parfois en 0,12 ou 0,15 m ; une flèche de 1,40 m n'en
+ * est pas une.
+ */
+export const LARGEUR_BANDE_MAX_M = 0.15;
+
+export interface DimensionsTrace {
+  longueurMl: number;
+  largeurM: number;
+  /** « x 16 unités » : le nombre de tracés identiques. 1 par défaut. */
+  nombre: number;
+  surfaceM2: number;
+  /** Largeur ≤ 0,15 m : on prépare de petits mélanges. */
+  bande: boolean;
+  /** « 965 ml × 0,1 m = 96,5 m² », à afficher tel quel. */
+  calcul: string;
+}
+
+const enNombre = (v: string) => parseFloat(v.replace(',', '.'));
+const enFrancais = (n: number) => String(Math.round(n * 1000) / 1000).replace('.', ',');
+
+/**
+ * Les dimensions d'un tracé : « Ligne jaune 0,10 m de largeur x 965ml »,
+ * « Flèches bleu dimension 3ml x 1,40m x 16 unités », « bande de 10 cm sur
+ * 120 ml ».
+ *
+ * La surface d'un marquage n'est presque jamais écrite : le client donne une
+ * longueur et une largeur, et c'est la surface qui fait la consommation. Rien
+ * n'est rendu sans une longueur ET une largeur — une largeur devinée ferait
+ * une surface fausse que rien ne signalerait.
+ *
+ * ⚠️ Pour une flèche, la surface rendue est celle du RECTANGLE qui la
+ * contient : un maximum, pas la surface peinte.
+ */
+export function traceDansTexte(texte: string): DimensionsTrace | undefined {
+  const t = normaliser(texte);
+  const ml = t.match(/(\d+(?:[.,]\d+)?)\s*ml\b/);
+  if (!ml) return undefined;
+  const longueurMl = enNombre(ml[1]);
+
+  let largeurM: number | undefined;
+  const m = t.match(/(\d+(?:[.,]\d+)?)\s*m\b/);
+  const cm = t.match(/(\d+(?:[.,]\d+)?)\s*cm\b/);
+  /* « bande 0,10 », « largeur 0,12 » : le mètre est sous-entendu. */
+  const nu = t.match(/\b(?:bandes?|largeur|larg)\s*(?:de\s*)?(0[.,]\d+)(?![\d.,])/);
+  if (m) largeurM = enNombre(m[1]);
+  else if (cm) largeurM = enNombre(cm[1]) / 100;
+  else if (nu) largeurM = enNombre(nu[1]);
+  if (!(longueurMl > 0) || !largeurM || !(largeurM > 0)) return undefined;
+
+  const n = t.match(/\bx\s*(\d+)\s*(?:unites?|u|pieces?|pcs?|fleches?)\b/)
+    ?? t.match(/\b(\d+)\s*(?:unites?|pieces?|fleches?)\b/);
+  const nombre = n ? parseInt(n[1], 10) : 1;
+
+  const surfaceM2 = Math.round(longueurMl * largeurM * nombre * 1000) / 1000;
+  return {
+    longueurMl,
+    largeurM,
+    nombre,
+    surfaceM2,
+    bande: largeurM <= LARGEUR_BANDE_MAX_M,
+    calcul: `${enFrancais(longueurMl)} ml × ${enFrancais(largeurM)} m`
+      + (nombre > 1 ? ` × ${nombre}` : '')
+      + ` = ${enFrancais(surfaceM2)} m²`,
+  };
 }
 
 /* ── Rapprochement ───────────────────────────────────────────────────────── */
@@ -137,6 +211,7 @@ export function rapprocherSysteme(
   const variantes = systemes.filter(s => s.nom === meilleurNom);
   const epaisseurMm = epaisseurDansTexte(demande);
   const surfaceM2 = surfaceDansTexte(demande);
+  const trace = traceDansTexte(demande);
 
   let retenu: Systeme | undefined;
   let pourquoi: string;
@@ -162,7 +237,10 @@ export function rapprocherSysteme(
       + variantes.map(v => v.variante).filter(Boolean).join(', ');
   }
 
-  return { nom: meilleurNom, variantes, retenu, epaisseurMm, surfaceM2, pourquoi };
+  return {
+    nom: meilleurNom, variantes, retenu, epaisseurMm, surfaceM2, pourquoi,
+    ...(trace ? { trace } : {}),
+  };
 }
 
 /**
