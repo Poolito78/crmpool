@@ -735,6 +735,14 @@ export default function Produits() {
      22 634 lignes deviennent ainsi 7 782. */
   const [modeleOuvert, setModeleOuvert] = useState<string | null>(null);
 
+  /* L'écriture part en tâche de fond : relire à l'instant même du clic
+     rendrait encore l'article supprimé. Une seconde et demie suffit. */
+  const [versionCatalogue, setVersionCatalogue] = useState(produits.length);
+  useEffect(() => {
+    const t = setTimeout(() => setVersionCatalogue(produits.length), 1500);
+    return () => clearTimeout(t);
+  }, [produits.length]);
+
   const serveur = useCatalogueServeur({
     page,
     parPage: PAR_PAGE,
@@ -745,7 +753,17 @@ export default function Produits() {
     actif: modeServeur,
     seulementModeles: !modeleOuvert,
     modeleCle: modeleOuvert,
+    /* Un article créé ou supprimé : la page se relit. Le nombre suffit —
+       une modification, elle, se voit sans relire (voir `affiches`). */
+    version: versionCatalogue,
   });
+
+  /* LA MODIFICATION SE VOIT TOUT DE SUITE.
+     La page vient de la base, la modification part vers elle en tâche de
+     fond : la ligne affichée restait l'ancienne jusqu'au rafraîchissement.
+     Le catalogue en mémoire, lui, est à jour dès le clic — il fait foi pour
+     les lignes qu'il connaît. */
+  const produitsParId = useMemo(() => new Map(produits.map(p => [p.id, p])), [produits]);
 
   // Ouvrir ou refermer un modèle remet au début : la pagination change d'objet.
   useEffect(() => { setPage(1); }, [modeleOuvert]);
@@ -755,9 +773,9 @@ export default function Produits() {
   const pageCourante = Math.min(page, nbPages);
   const affiches = useMemo(
     () => modeServeur
-      ? serveur.lignes
+      ? serveur.lignes.map(l => produitsParId.get(l.id) ?? l)
       : sortedFiltered.slice((pageCourante - 1) * PAR_PAGE, pageCourante * PAR_PAGE),
-    [modeServeur, serveur.lignes, sortedFiltered, pageCourante],
+    [modeServeur, serveur.lignes, sortedFiltered, pageCourante, produitsParId],
   );
 
   // Un nouveau filtre ou un nouveau tri renvoie au début : rester page 12
@@ -1663,7 +1681,7 @@ export default function Produits() {
           <div className="flex-none flex items-center justify-between gap-2 px-3 py-2 border-t border-border text-xs">
             <span className="text-muted-foreground">
               {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, totalLignes)}
-              {' sur '}{totalLignes} article{totalLignes > 1 ? 's' : ''}
+              {' sur '}{modeServeur && serveur.totalEstime ? '≈ ' : ''}{totalLignes} article{totalLignes > 1 ? 's' : ''}
             </span>
             <div className="flex items-center gap-1">
               <button
@@ -1700,7 +1718,7 @@ export default function Produits() {
           <div className="flex items-center justify-between gap-2 py-2 text-xs">
             <span className="text-muted-foreground">
               {(pageCourante - 1) * PAR_PAGE + 1}–{Math.min(pageCourante * PAR_PAGE, totalLignes)}
-              {' sur '}{totalLignes}
+              {' sur '}{modeServeur && serveur.totalEstime ? '≈ ' : ''}{totalLignes}
             </span>
             <div className="flex items-center gap-1">
               <button

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dbToProduitPublic, type Produit } from '@/lib/store';
 
@@ -64,6 +64,11 @@ export interface OptionsCatalogue {
   seulementModeles: boolean;
   /** Renseigné : on liste les variantes de ce modèle, et rien d'autre. */
   modeleCle: string | null;
+  /**
+   * Change quand le catalogue en mémoire gagne ou perd un article : la page
+   * se relit. Sans lui, un article créé n'apparaissait qu'au rafraîchissement.
+   */
+  version?: number;
 }
 
 /** Échappe les caractères qui ont un sens dans un motif PostgREST. */
@@ -101,6 +106,10 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
   const [total, setTotal] = useState(0);
   const [chargement, setChargement] = useState(false);
   const [erreur, setErreur] = useState<string | null>(null);
+  /** Le compte exact n'a pas abouti : `total` est une estimation. */
+  const [totalEstime, setTotalEstime] = useState(false);
+  /** La requête (hors page) dont `total` est le compte. */
+  const derniereCle = useRef<string | null>(null);
 
   // Sérialisé : évite de relancer la requête à chaque rendu sur un objet égal.
   const cleFiltres = JSON.stringify(o.filtres);
@@ -129,58 +138,78 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
     if (!o.actif) return;
     let annule = false;
 
+    /* ⚠️ LA PAGE ET LE COMPTE PARTENT SÉPARÉMENT.
+     *
+     * Les cinquante lignes se lisent en 14 ms par l'index des références ; le
+     * compte exact, lui, parcourt toute la table — 6 s à froid, au-delà des
+     * 8 s du `statement_timeout` dès que la base est occupée. Demandés
+     * ensemble, l'échec du compte emportait la page : « Lecture en base
+     * impossible (canceling statement due to statement timeout) », « Aucun
+     * produit », et il fallait rafraîchir. La page s'affiche donc d'abord ; le
+     * compte arrive ensuite, et s'il échoue on retient l'estimation du
+     * planificateur, jamais une liste vide. */
+    const construire = (colonnes: string, compte?: 'exact' | 'planned') => {
+      let q = supabase
+        .from('produits')
+        .select(colonnes, compte ? { count: compte, head: true } : undefined);
+
+      /* Odoo ne propose pas les déclinaisons dans la liste de vente : il
+         montre le modèle, et n'ouvre ses variantes qu'une fois celui-ci
+         choisi. Le catalogue passe ainsi de 22 634 lignes à 7 782. */
+      const termes = mots(rechercheDifferee);
+
+      /* CHERCHER, C'EST CHERCHER PARTOUT — Y COMPRIS DANS LES DÉCLINAISONS.
+         La vue « modèles » cache les variantes, et le modèle des A13A est
+         A13A.500 : chercher « A13A 700 » ne rendait donc RIEN, alors que
+         le catalogue porte trente A13A en 700. Dès qu'on tape quelque
+         chose, on lève la restriction et la liste montre les articles qui
+         répondent ; sans saisie, elle reste la liste de vente d'Odoo. */
+      if (o.modeleCle) q = q.eq('modele_cle', o.modeleCle);
+      else if (o.seulementModeles && termes.length === 0) q = q.eq('est_modele', true);
+
+      /* Un `or` par mot. PostgREST assemble les appels successifs avec ET :
+         chaque mot doit se trouver quelque part, mais pas forcément dans
+         le même champ ni dans l'ordre saisi.
+
+         `description_variante` en fait partie : c'est la désignation
+         qu'Odoo vend (« A11 1000 C1 BTR ST BRUT (MAGELLAN) »), la seule
+         qui distingue une déclinaison d'une autre. */
+      for (const m of termes) {
+        q = q.or(
+          `reference.ilike.%${m}%,description.ilike.%${m}%,description_variante.ilike.%${m}%,categorie.ilike.%${m}%`,
+        );
+      }
+
+      for (const [cle, val] of Object.entries(JSON.parse(filtresDifferes) as Record<string, string>)) {
+        const colonne = COLONNES_TEXTE[cle];
+        if (!colonne || !val) continue;
+        if (val === '!empty') {
+          /* `filter` plutôt que `not(...).neq(...)` : sur un schéma de cette
+             taille, la signature surchargée de `neq` fait renoncer TypeScript
+             à l'inférence (TS2589) et le typage de toute la requête tombe.
+             `filter` prend l'opérateur en texte, donc reste plat. Le nom de
+             colonne vient de COLONNES_TEXTE, il est validé au-dessus. */
+          q = q.filter(colonne, 'not.is', null);
+          q = q.filter(colonne, 'neq', '');
+          continue;
+        }
+        const m = motif(val);
+        if (m) q = q.ilike(colonne, `%${m}%`);
+      }
+      return q;
+    };
+
+    const debut = (o.page - 1) * o.parPage;
+    const cleRequete = JSON.stringify([rechercheDifferee, filtresDifferes, o.seulementModeles,
+      o.modeleCle, o.version]);
+
     (async () => {
       setChargement(true);
       setErreur(null);
+      let lus = 0;
+      let suite = false;
       try {
-        let q = supabase
-          .from('produits')
-          .select('*', { count: 'exact' });
-
-        /* Odoo ne propose pas les déclinaisons dans la liste de vente : il
-           montre le modèle, et n'ouvre ses variantes qu'une fois celui-ci
-           choisi. Le catalogue passe ainsi de 22 634 lignes à 7 782. */
-        const termes = mots(rechercheDifferee);
-
-        /* CHERCHER, C'EST CHERCHER PARTOUT — Y COMPRIS DANS LES DÉCLINAISONS.
-           La vue « modèles » cache les variantes, et le modèle des A13A est
-           A13A.500 : chercher « A13A 700 » ne rendait donc RIEN, alors que
-           le catalogue porte trente A13A en 700. Dès qu'on tape quelque
-           chose, on lève la restriction et la liste montre les articles qui
-           répondent ; sans saisie, elle reste la liste de vente d'Odoo. */
-        if (o.modeleCle) q = q.eq('modele_cle', o.modeleCle);
-        else if (o.seulementModeles && termes.length === 0) q = q.eq('est_modele', true);
-
-        /* Un `or` par mot. PostgREST assemble les appels successifs avec ET :
-           chaque mot doit se trouver quelque part, mais pas forcément dans
-           le même champ ni dans l'ordre saisi.
-
-           `description_variante` en fait partie : c'est la désignation
-           qu'Odoo vend (« A11 1000 C1 BTR ST BRUT (MAGELLAN) »), la seule
-           qui distingue une déclinaison d'une autre. */
-        for (const m of termes) {
-          q = q.or(
-            `reference.ilike.%${m}%,description.ilike.%${m}%,description_variante.ilike.%${m}%,categorie.ilike.%${m}%`,
-          );
-        }
-
-        for (const [cle, val] of Object.entries(JSON.parse(filtresDifferes) as Record<string, string>)) {
-          const colonne = COLONNES_TEXTE[cle];
-          if (!colonne || !val) continue;
-          if (val === '!empty') {
-            /* `filter` plutôt que `not(...).neq(...)` : sur un schéma de cette
-               taille, la signature surchargée de `neq` fait renoncer TypeScript
-               à l'inférence (TS2589) et le typage de toute la requête tombe.
-               `filter` prend l'opérateur en texte, donc reste plat. Le nom de
-               colonne vient de COLONNES_TEXTE, il est validé au-dessus. */
-            q = q.filter(colonne, 'not.is', null);
-            q = q.filter(colonne, 'neq', '');
-            continue;
-          }
-          const m = motif(val);
-          if (m) q = q.ilike(colonne, `%${m}%`);
-        }
-
+        let q = construire('*');
         const colTri = o.triCol ? COLONNES_BASE[o.triCol] : null;
         // « id » en second critère : sans lui, deux articles de même prix
         // pourraient changer de place d'une page à l'autre.
@@ -188,26 +217,49 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
           ? q.order(colTri, { ascending: o.triSens === 'asc' }).order('id')
           : q.order('reference').order('id');
 
-        const debut = (o.page - 1) * o.parPage;
-        const { data, count, error } = await q.range(debut, debut + o.parPage - 1);
+        /* Une ligne de plus que la page : elle dit s'il y a une suite, même
+           quand le compte n'arrive pas. */
+        const { data, error } = await q.range(debut, debut + o.parPage);
         if (annule) return;
         if (error) throw error;
-
-        setLignes((data || []).map(dbToProduitPublic));
-        setTotal(count ?? 0);
+        const rangs = (data || []) as unknown as Parameters<typeof dbToProduitPublic>[0][];
+        suite = rangs.length > o.parPage;
+        lus = Math.min(rangs.length, o.parPage);
+        setLignes(rangs.slice(0, o.parPage).map(dbToProduitPublic));
+        // En attendant le compte : au moins ce qu'on voit, et une page de plus s'il y en a.
+        /* Changer de page garde le compte déjà connu ; une autre recherche
+           repart de ce qu'on voit, en attendant le sien. */
+        const plancherVu = debut + lus + (suite ? 1 : 0);
+        setTotal(t => (cleRequete === derniereCle.current ? Math.max(t, plancherVu) : plancherVu));
+        derniereCle.current = cleRequete;
       } catch (e) {
         if (!annule) setErreur((e as Error).message);
+        return;
       } finally {
         if (!annule) setChargement(false);
       }
+
+      const plancher = debut + lus + (suite ? 1 : 0);
+      for (const mode of ['exact', 'planned'] as const) {
+        const { count, error } = await construire('id', mode);
+        if (annule) return;
+        if (!error && count != null) {
+          setTotal(Math.max(count, plancher));
+          setTotalEstime(mode !== 'exact');
+          return;
+        }
+        console.warn(`[catalogue] compte ${mode} impossible :`, error?.message);
+      }
+      setTotal(plancher);
+      setTotalEstime(true);
     })();
 
     return () => { annule = true; };
   }, [o.actif, o.page, o.parPage, rechercheDifferee, o.triCol, o.triSens, filtresDifferes,
-      o.seulementModeles, o.modeleCle]);
+      o.seulementModeles, o.modeleCle, o.version]);
 
   return useMemo(
-    () => ({ lignes, total, chargement: chargement || enAttente, erreur }),
-    [lignes, total, chargement, enAttente, erreur],
+    () => ({ lignes, total, totalEstime, chargement: chargement || enAttente, erreur }),
+    [lignes, total, totalEstime, chargement, enAttente, erreur],
   );
 }
