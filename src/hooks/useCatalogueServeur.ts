@@ -33,6 +33,9 @@ export const COLONNES_BASE: Record<string, string> = {
   consommation: 'consommation',
   stock: 'stock',
   disponibleVente: 'disponible_vente',
+  /* Trier sur la référence Odoo regroupe les articles créés dans MonCRM,
+     qui n'en ont pas. */
+  origine: 'reference_odoo',
 };
 
 /**
@@ -181,6 +184,13 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
       }
 
       for (const [cle, val] of Object.entries(JSON.parse(filtresDifferes) as Record<string, string>)) {
+        /* L'origine : un article importé d'Odoo porte sa référence Odoo, un
+           article créé dans MonCRM n'en a pas. */
+        if (cle === 'origine') {
+          if (val === 'odoo') q = q.filter('reference_odoo', 'not.is', null);
+          else if (val === 'crm') q = q.filter('reference_odoo', 'is', null);
+          continue;
+        }
         const colonne = COLONNES_TEXTE[cle];
         if (!colonne || !val) continue;
         if (val === '!empty') {

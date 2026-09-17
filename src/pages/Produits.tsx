@@ -86,8 +86,22 @@ function dateHeure(iso?: string): string {
   return d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
+/**
+ * D'où vient un article : importé d'Odoo, ou créé dans MonCRM.
+ *
+ * L'import Odoo renseigne `reference_odoo` sur chacune de ses lignes
+ * (22 585 articles) ; un article saisi ici n'en a pas (139). Deux fiches
+ * peuvent ainsi porter le même produit — FLOWFAST208, créé dans le CRM, et
+ * FLOWFAST208COVEMIX, venu d'Odoo — et la colonne dit laquelle est laquelle.
+ */
+type Origine = 'odoo' | 'crm';
+const origineProduit = (p: { referenceOdoo?: string }): Origine =>
+  p.referenceOdoo?.trim() ? 'odoo' : 'crm';
+const LIBELLE_ORIGINE: Record<Origine, string> = { odoo: 'Odoo', crm: 'CRM' };
+
 const COLUMNS = [
   { key: 'reference',    label: 'Réf.',            align: 'left'  as const },
+  { key: 'origine',      label: 'Origine',          align: 'center' as const },
   { key: 'description',  label: 'Description',      align: 'left'  as const },
   { key: 'categorie',    label: 'Catégorie',        align: 'left'  as const },
   { key: 'fournisseur',  label: 'Fournisseur',      align: 'left'  as const },
@@ -109,7 +123,7 @@ const COLUMNS = [
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
 
 const emptyProduit = {
   reference: '', referenceOdoo: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -179,6 +193,11 @@ export default function Produits() {
         // Filtre uniquement les clés valides (supprime les anciennes clés obsolètes)
         const validKeys = new Set(COLUMNS.map(c => c.key));
         const saved = new Set((JSON.parse(s) as ColKey[]).filter(k => validKeys.has(k)));
+        /* L'origine s'ajoute une seule fois : la masquer ensuite doit tenir. */
+        if (saved.size > 0 && !localStorage.getItem('produits_col_origine_vue')) {
+          saved.add('origine');
+          localStorage.setItem('produits_col_origine_vue', '1');
+        }
         if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); saved.add('stockOdoo'); saved.add('stockOdooPrevu'); saved.add('prixAchatMaj'); saved.add('prixVenteMaj'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
       }
     } catch {}
@@ -401,6 +420,13 @@ export default function Produits() {
   function renderProdFilter(colKey: ColKey) {
     const fVal = columnFilters[colKey] || '';
     const set = (v: string) => setColumnFilters(prev => ({ ...prev, [colKey]: v }));
+    if (colKey === 'origine') {
+      return <FilterChoiceInput value={fVal} onChange={set} options={[
+        { value: '', label: 'Toutes' },
+        { value: 'odoo', label: 'Odoo' },
+        { value: 'crm', label: 'CRM' },
+      ]} />;
+    }
     if (colKey === 'disponibleVente') {
       return <FilterChoiceInput value={fVal} onChange={set} options={[
         { value: '', label: 'Tous' },
@@ -626,7 +652,7 @@ export default function Produits() {
      Ce calcul est ici, AVANT le filtrage mémoire, et non plus après : le
      filtrage a besoin de savoir s'il sert à quelque chose. */
   const filtresActifs = Object.entries(columnFilters).filter(([, v]) => v);
-  const filtreHorsBase = filtresActifs.some(([k]) => !COLONNES_TEXTE[k]);
+  const filtreHorsBase = filtresActifs.some(([k]) => !COLONNES_TEXTE[k] && k !== 'origine');
   const triHorsBase = !!sortCol && !COLONNES_BASE[sortCol];
   const modeServeur = !filtreHorsBase && !triHorsBase;
 
@@ -683,6 +709,7 @@ export default function Produits() {
         case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
         case 'qteCommandeeF': if (isNonVide ? !(qteCommandeeFournParProduit[p.id] > 0) : !String(qteCommandeeFournParProduit[p.id] || 0).includes(v)) return false; break;
         case 'valeurStock':  if (isNonVide ? !(valeurStockParProduit[p.id] > 0) : !String(Math.round(valeurStockParProduit[p.id] || 0)).includes(v)) return false; break;
+        case 'origine':      if (!isNonVide && origineProduit(p) !== v) return false; break;
         case 'disponibleVente': if (isNonVide ? !(p.disponibleVente !== false) : !String(p.disponibleVente !== false ? 'oui' : 'non').includes(v)) return false; break;
       }
     }
@@ -714,6 +741,7 @@ export default function Produits() {
         case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
         case 'qteCommandeeF':   av = qteCommandeeFournParProduit[a.id] || 0; bv = qteCommandeeFournParProduit[b.id] || 0; break;
         case 'valeurStock':     av = valeurStockParProduit[a.id] || 0; bv = valeurStockParProduit[b.id] || 0; break;
+        case 'origine':      av = origineProduit(a); bv = origineProduit(b); break;
         case 'disponibleVente': av = (a.disponibleVente !== false ? 1 : 0); bv = (b.disponibleVente !== false ? 1 : 0); break;
       }
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
@@ -1359,13 +1387,13 @@ export default function Produits() {
               <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
                 <Upload className="w-4 h-4 mr-2 text-muted-foreground" /> Importer (Excel/CSV)
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}>
+              <DropdownMenuItem onClick={() => exportToExcel(produits.map(p => ({ Référence: p.reference, Origine: LIBELLE_ORIGINE[origineProduit(p)], 'Réf. Odoo': p.referenceOdoo || '', Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits', 'Produits')}>
                 <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter tout (Excel)
               </DropdownMenuItem>
               {selected.size > 0 && (
                 <DropdownMenuItem onClick={() => {
                   const sel = produits.filter(p => selected.has(p.id));
-                  exportToExcel(sel.map(p => ({ Référence: p.reference, Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits_selection', 'Produits');
+                  exportToExcel(sel.map(p => ({ Référence: p.reference, Origine: LIBELLE_ORIGINE[origineProduit(p)], 'Réf. Odoo': p.referenceOdoo || '', Description: p.description, 'Prix Achat': p.prixAchat, Coefficient: p.coefficient, 'Prix HT': p.prixHT, 'Coeff Revendeur': p.coeffRevendeur, 'Remise Revendeur %': p.remiseRevendeur, 'Prix Revendeur': p.prixRevendeur, 'TVA %': p.tva, Unité: p.unite, 'Poids (kg)': p.poids || '', 'Consommation (kg/m²)': p.consommation || '', Stock: p.stock, 'Stock Min': p.stockMin, Catégorie: p.categorie || '', Fournisseur: fournisseurs.find(f => f.id === p.fournisseurId)?.societe || '' })), 'produits_selection', 'Produits');
                 }}>
                   <Download className="w-4 h-4 mr-2 text-muted-foreground" /> Exporter la sélection ({selected.size})
                 </DropdownMenuItem>
@@ -1549,6 +1577,21 @@ export default function Produits() {
                         >{p.nbVariantes} décl.</button>
                       )}
                     </td>;
+                    case 'origine': {
+                      const o = origineProduit(p);
+                      return (
+                        <td className="px-2 py-2.5 text-center">
+                          <span
+                            className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-medium ${o === 'odoo'
+                              ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
+                              : 'bg-primary/15 text-primary'}`}
+                            title={o === 'odoo'
+                              ? `Importé d'Odoo — référence Odoo ${p.referenceOdoo}`
+                              : 'Créé dans MonCRM — aucune référence Odoo'}
+                          >{LIBELLE_ORIGINE[o]}</span>
+                        </td>
+                      );
+                    }
                     case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${designationProduit(p)}`}>{designationProduit(p)}</td>;
                     case 'categorie':    return <td className="px-2 py-2.5 text-muted-foreground max-w-[110px] truncate" title={p.categorie || ''}>{p.categorie || '—'}</td>;
                     case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
