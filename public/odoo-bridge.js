@@ -284,7 +284,23 @@
           [[["default_code", "=", payload.negoce_code || "NEG.ISO"]], ["id"]], { limit: 1 })
           .then(function (n) { payload._negId = n.length ? n[0].id : (payload.negoce_id || 0); })
           .catch(function () { payload._negId = payload.negoce_id || 0; });
+      })
+      .then(function () {
+        // Négoce par gamme : NEG.SH.ISO pour ISOMARK / ISOFLOOR, porté par la ligne
+        payload._negIds = {};
+        var codes = [];
+        payload.lines.forEach(function (l) { if (l.negoce && codes.indexOf(l.negoce) < 0) codes.push(l.negoce); });
+        if (!codes.length) return null;
+        return rpc("product.product", "search_read",
+          [[["default_code", "in", codes]], ["id", "default_code"]], { limit: codes.length + 5 })
+          .then(function (n) { n.forEach(function (p) { payload._negIds[p.default_code] = p.id; }); })
+          .catch(function () { return null; });
       });
+  }
+
+  /** Le code de négoce qui sera réellement utilisé pour une ligne. */
+  function negCode(l) {
+    return (l.negoce && payload._negIds && payload._negIds[l.negoce]) ? l.negoce : (payload.negoce_code || "NEG.ISO");
   }
 
   /* ---------- 3. choix du client ---------- */
@@ -314,8 +330,8 @@
       // Colonne code : ce qui sera VRAIMENT utilisé dans Odoo
       var codeCell;
       if (l.port) codeCell = '<span style="color:#666">frais de port</span>';
-      else if (!l.ref) codeCell = '<span style="color:#b45309">' + esc(payload.negoce_code || "NEG.ISO") + "</span>";
-      else if (!pid) codeCell = '<span style="color:#b45309">' + esc(l.ref) + " → " + esc(payload.negoce_code || "NEG.ISO") + "</span>";
+      else if (!l.ref) codeCell = '<span style="color:#b45309">' + esc(negCode(l)) + "</span>";
+      else if (!pid) codeCell = '<span style="color:#b45309">' + esc(l.ref) + " → " + esc(negCode(l)) + "</span>";
       else if (m && (m.kind === "fuzzy" || m.kind === "map"))
         codeCell = '<span style="color:#666">' + esc(l.ref) + "</span> → <b style=\"color:#7c3aed\">" + esc(m.code) + "</b>"
           + (m.kind === "fuzzy" ? ' <span style="color:#999">' + Math.round(m.score * 100) + "%</span>" : "");
@@ -488,7 +504,8 @@
               vals.display_type = "line_note"; vals.name = l.desc;
             } else {
               var trouve = !!(l.ref && resolved[l.ref]);
-              vals.product_id = trouve ? resolved[l.ref] : (l.port ? payload.port_id : payload._negId);
+              vals.product_id = trouve ? resolved[l.ref] : (l.port ? payload.port_id
+                : ((l.negoce && payload._negIds && payload._negIds[l.negoce]) || payload._negId));
               // La DESIGNATION d'Odoo reste celle d'Odoo quand l'article est
               // reconnu : envoyer le libelle MonCRM affichait « FLOWFAST 107
               // Primer (20 kg) » sur un article nomme autrement. Le libelle ne

@@ -450,6 +450,13 @@ export interface LigneDevis {
    * qu'on venait de le désigner.
    */
   referenceOdoo?: string;
+  /**
+   * La gamme d'une ligne SANS article — « ISOFLOOR » pour le SNL Concrete
+   * d'un système résine. Elle choisit l'article de négoce chez Odoo
+   * (`codeNegoce`, `odooSync.ts`) ; une ligne avec article prend la gamme
+   * de celui-ci.
+   */
+  gamme?: string;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

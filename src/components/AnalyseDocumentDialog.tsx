@@ -3271,6 +3271,9 @@ const [contratOdoo, setContratOdoo] = useState<
              d'affaires lit d'où sort la quantité. */
           surfaceM2: surface,
           consommation: ls.composant.consommation,
+          /* Un système est une mise en œuvre Flowcrete : un composant sans
+             article part en négoce ISOFLOOR (NEG.SH.ISO), pas ISOSIGN. */
+          ...(p ? {} : { gamme: 'ISOFLOOR' }),
           note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
         };
       });
@@ -3395,6 +3398,7 @@ const [contratOdoo, setContratOdoo] = useState<
           tva: p?.tva ?? 20,
           remise: 0,
           consommation: ls.composant.consommation,
+          ...(p ? {} : { gamme: 'ISOFLOOR' }),
           note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
         };
       });

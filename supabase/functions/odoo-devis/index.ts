@@ -149,6 +149,8 @@ interface Ligne {
   pu?: number;
   rem?: number;
   port?: boolean;
+  /** Article de négoce propre à la ligne (NEG.SH.ISO pour ISOMARK / ISOFLOOR). */
+  negoce?: string;
 }
 
 interface Payload {
@@ -380,14 +382,39 @@ serve(async (req) => {
       /* on garde l'identifiant de secours */
     }
 
+    /* LE NÉGOCE DÉPEND DE LA GAMME. Un article ISOMARK ou ISOFLOOR absent
+       d'Odoo part en NEG.SH.ISO, pas en NEG.ISO : la ligne porte son code.
+       Un code introuvable retombe sur le négoce du devis, et le rapport le
+       dit. */
+    const negIds: Record<string, number> = {};
+    const negManquants: string[] = [];
+    for (const code of [...new Set(payload.lines.map((l) => l.negoce).filter(Boolean))] as string[]) {
+      try {
+        const n = await o.kw(
+          "product.product",
+          "search_read",
+          [[["default_code", "=", code]], ["id"]],
+          { limit: 1, context: ctx },
+        ) as any[];
+        if (n.length) negIds[code] = n[0].id;
+        else negManquants.push(code);
+      } catch {
+        negManquants.push(code);
+      }
+    }
+    const negDe = (l: Ligne) => (l.negoce && negIds[l.negoce]) || negId;
+    const codeNegDe = (l: Ligne) =>
+      l.negoce && negIds[l.negoce] ? l.negoce : (payload.negoce_code || "NEG.ISO");
+
     const enNegoce = payload.lines
       .filter((l) => l.type === "product" && !l.port && !(l.ref && resolus[l.ref]))
-      .map((l) => (l.ref ? l.ref + " — " : "") + l.desc);
+      .map((l) => (l.ref ? l.ref + " — " : "") + l.desc + " [" + codeNegDe(l) + "]");
 
     const rapport = {
       client: { id: societe.id, nom: societe.name, ville: societe.city || "" },
       articles: Object.entries(resolus).map(([ref, id]) => ({ ref, id, par: comment[ref] })),
       negoce: enNegoce,
+      ...(negManquants.length ? { negoceIntrouvable: negManquants } : {}),
       lignes: payload.lines.length,
     };
 
@@ -488,7 +515,7 @@ serve(async (req) => {
         v.name = l.desc;
       } else {
         const resolu = !!(l.ref && resolus[l.ref]);
-        v.product_id = resolu ? resolus[l.ref as string] : (l.port ? payload.port_id : negId);
+        v.product_id = resolu ? resolus[l.ref as string] : (l.port ? payload.port_id : negDe(l));
         /* LA DÉSIGNATION D'ODOO RESTE CELLE D'ODOO.
          *
          * On envoyait toujours le libellé MonCRM : la commande affichait

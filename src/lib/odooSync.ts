@@ -7,6 +7,7 @@
 import type { Devis, Client, Produit } from './store';
 import { calculerTotalDevis } from './store';
 import { produitParId } from '@/lib/indexProduits';
+import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -44,6 +45,34 @@ const ODOO_PORT_PRODUCT_ID = 362577; // FRAIS DE PORT — service générique
 const ODOO_NEGOCE_CODE = 'NEG.ISO';
 const ODOO_NEGOCE_ID = 575933; // « GE NEGOCE ISO » — repli si la recherche par code échoue
 
+/**
+ * Le négoce des gammes ISOMARK et ISOFLOOR : « GE NEGOCE SH ISO ».
+ *
+ * Un article ISOMARK ou ISOFLOOR absent d'Odoo ne part pas dans le négoce
+ * ISOSIGN : le devis AF037640 porte ses SNL Concrete et ses pigments en
+ * NEG.SH.ISO, et c'est ce code qu'Odoo attend pour ces gammes.
+ */
+export const ODOO_NEGOCE_SH_CODE = 'NEG.SH.ISO';
+
+/**
+ * L'article de négoce d'une ligne, si elle doit partir en négoce.
+ *
+ * La gamme se lit sur l'article (catalogue, ou catégorie Odoo « ISOMARK /… »,
+ * « … / FLOORING / … », MMA, EPOXY…), à défaut sur la ligne elle-même.
+ * `undefined` = le négoce par défaut du devis (NEG.ISO).
+ */
+export function codeNegoce(
+  produit: Pick<Produit, 'catalogue' | 'categorie'> | undefined,
+  ligne?: { gamme?: string },
+): string | undefined {
+  const gamme = String(ligne?.gamme || '').toUpperCase();
+  if (estGamme(produit?.catalogue) || estGamme(gamme)) return ODOO_NEGOCE_SH_CODE;
+  const categorie = String(produit?.categorie || '').toUpperCase();
+  if (/^ISOMARK\b/.test(categorie)) return ODOO_NEGOCE_SH_CODE;
+  if (produit && niveauGamme(produit.categorie, produit.catalogue)) return ODOO_NEGOCE_SH_CODE;
+  return undefined;
+}
+
 interface LigneScript {
   type: 'section' | 'note' | 'product';
   desc: string;
@@ -52,6 +81,8 @@ interface LigneScript {
   pu?: number;    // prix unitaire HT AVANT remise
   rem?: number;   // remise % (sera calculée en net, remise=0 dans Odoo)
   port?: boolean; // ligne de frais de port (produit service dédié)
+  /** Article de négoce si la référence manque chez Odoo — défaut : celui du devis. */
+  negoce?: string;
 }
 
 function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
@@ -84,6 +115,7 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
         qty: l.quantite,
         pu: l.prixUnitaireHT,
         rem: l.remise ?? 0,
+        ...(codeNegoce(produit, l) ? { negoce: codeNegoce(produit, l) } : {}),
       });
     }
   }
@@ -280,10 +312,16 @@ const missing=refs.filter(r=>!prodMap[r]);
 console.log('Produits résolus:',Object.keys(prodMap).length+'/'+refs.length,prodMap);
 if(missing.length)console.warn('Références introuvables (→ '+${JSON.stringify(ODOO_NEGOCE_CODE)}+'):',missing);
 
-// 3a. Article négoce (repli) — recherché par code, id de secours si absent
+const lignes=${JSON.stringify(lignes)};
+// 3a. Articles négoce (repli) — NEG.ISO, et NEG.SH.ISO pour ISOMARK / ISOFLOOR
 const negList=await rpc('product.product','search_read',[[['default_code','=',${JSON.stringify(ODOO_NEGOCE_CODE)}]]],{fields:['id'],limit:1});
 const negId=negList.length?negList[0].id:${ODOO_NEGOCE_ID};
-console.log('Article négoce:',negId);
+const negIds={};
+for(const c of [...new Set(lignes.map(l=>l.negoce).filter(Boolean))]){
+  const n=await rpc('product.product','search_read',[[['default_code','=',c]]],{fields:['id'],limit:1});
+  if(n.length)negIds[c]=n[0].id; else console.warn('Article négoce introuvable, repli NEG.ISO :',c);
+}
+console.log('Article négoce:',negId,negIds);
 
 // 3b. TVA 20%
 const taxes=await rpc('account.tax','search_read',[[['name','ilike','20'],['type_tax_use','=','sale'],['active','=',true],['company_id','=',${ODOO_COMPANY_ID}]]],{fields:['id','name'],limit:5});
@@ -311,7 +349,6 @@ console.log('Commande créée ID:',orderId);
 ${noteText ? `await rpc('sale.order.line','create',[{order_id:orderId,display_type:'line_note',name:${JSON.stringify(noteText)},sequence:5}]);` : '// Pas de note système'}
 
 // 7. Lignes
-const lignes=${JSON.stringify(lignes)};
 let seq=10,ok=0,nArt=0,nNeg=0,errs=[],negLabels=[];
 for(const l of lignes){
   seq+=10;
@@ -324,7 +361,7 @@ for(const l of lignes){
     } else {
       const pid=l.ref?prodMap[l.ref]:null;
       // Article réel si résolu ; sinon frais de port dédié ; sinon repli négoce.
-      const finalId=pid||(l.port?${ODOO_PORT_PRODUCT_ID}:negId);
+      const finalId=pid||(l.port?${ODOO_PORT_PRODUCT_ID}:((l.negoce&&negIds[l.negoce])||negId));
       if(pid)nArt++; else if(!l.port){nNeg++;negLabels.push((l.ref?l.ref+' — ':'')+l.desc);}
       // Arrondi supérieur à 2 décimales
       const netPrice=Math.ceil((l.pu||0)*(1-((l.rem||0)/100))*100)/100;

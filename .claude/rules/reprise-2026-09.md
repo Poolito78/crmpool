@@ -194,6 +194,18 @@ voulu — on ne lui invente pas un prix de triangle.
   additionnés puis mis en seaux, un pigment par teinte, le jaune avec le sien.
   Au devis : en-tête, note des zones, composants — portés par la 1re zone.
 
+## Le négoce Odoo dépend de la gamme (17 sept.)
+
+Un article **ISOMARK / ISOFLOOR** absent d'Odoo part en **NEG.SH.ISO**, le
+reste en NEG.ISO. `codeNegoce` (`odooSync.ts`) lit la gamme sur l'article
+(catalogue, catégorie « ISOMARK /… », `niveauGamme`), à défaut sur
+`LigneDevis.gamme` — que l'analyse pose à « ISOFLOOR » sur les composants de
+système sans article. La ligne envoyée porte `negoce` ; `odoo-devis`, le pont
+et le script console résolvent chaque code, et retombent sur NEG.ISO si le
+code manque chez Odoo (`rapport.negoceIntrouvable`).
+⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis` — sans cela la
+fonction ignore `negoce` et tout part encore en NEG.ISO.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
