@@ -17,6 +17,9 @@ import { registerSW } from "virtual:pwa-register";
  * les cinq minutes) : sur un téléphone l'app installée reste ouverte des
  * heures, sans ça un déploiement resterait invisible toute la journée.
  */
+/** L'enregistrement du service worker, pour viser la version qui attend VRAIMENT. */
+let enregistrement: ServiceWorkerRegistration | undefined;
+
 const appliquerMiseAJour = registerSW({
   immediate: true,
   onNeedRefresh() {
@@ -24,6 +27,7 @@ const appliquerMiseAJour = registerSW({
   },
   onRegisteredSW(_url, registration) {
     if (!registration) return;
+    enregistrement = registration;
     const verifier = () => { registration.update().catch(() => { /* hors ligne */ }); };
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible') verifier();
@@ -31,6 +35,35 @@ const appliquerMiseAJour = registerSW({
     setInterval(verifier, 5 * 60 * 1000);
   },
 });
+
+/**
+ * Fait prendre la main à la version qui attend, puis recharge.
+ *
+ * ⚠️ `appliquerMiseAJour(true)` NE SUFFIT PAS. Il vise la version en attente
+ * que workbox-window a vue au CHARGEMENT de la page. Qu'un second déploiement
+ * arrive pendant que l'onglet est ouvert — la vérification tourne toutes les
+ * cinq minutes — et cette version-là est remplacée : le message part vers un
+ * service worker périmé, rien ne se passe, la bannière reste. « Je suis
+ * obligé de rafraîchir » : c'était cela.
+ *
+ * On écrit donc à `registration.waiting` tel qu'il est au moment du clic, et
+ * l'on recharge quoi qu'il arrive au bout de trois secondes.
+ */
+async function rechargerNouvelleVersion() {
+  let recharge = false;
+  const recharger = () => { if (!recharge) { recharge = true; window.location.reload(); } };
+  navigator.serviceWorker?.addEventListener('controllerchange', recharger);
+  setTimeout(recharger, 3000);
+  try {
+    const reg = enregistrement ?? await navigator.serviceWorker?.getRegistration();
+    await reg?.update().catch(() => { /* hors ligne */ });
+    const enAttente = reg?.waiting;
+    if (enAttente) enAttente.postMessage({ type: 'SKIP_WAITING' });
+    else appliquerMiseAJour(true);
+  } catch {
+    recharger();
+  }
+}
 
 // Bannière en DOM pur (et non en React) : elle doit pouvoir s'afficher même si
 // l'application n'est pas montée, par exemple pendant une erreur de rendu.
@@ -56,8 +89,7 @@ function afficherBanniereMiseAJour() {
   recharger.type = 'button';
   recharger.textContent = 'Recharger';
   recharger.style.cssText = 'padding:6px 12px;border:0;border-radius:8px;background:#cc0000;color:#fff;font:600 14px system-ui;cursor:pointer';
-  // `true` → on demande au nouveau SW de prendre la main, puis la page recharge.
-  recharger.onclick = () => { appliquerMiseAJour(true); };
+  recharger.onclick = () => { void rechargerNouvelleVersion(); };
 
   const plusTard = document.createElement('button');
   plusTard.type = 'button';

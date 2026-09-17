@@ -1343,74 +1343,87 @@ async function lireTout(table: string) {
   if (tout.length < TRANCHE) return tout;
 
   const estime = premiere.count ?? tout.length;
-  const departs: number[] = [];
-  for (let d = TRANCHE; d < estime; d += TRANCHE) departs.push(d);
 
-  /* UN LOT QUI ÉCHOUE NE DOIT PAS DISPARAÎTRE EN SILENCE.
+  /* ⚠️ **PAR PLAGES D'IDENTIFIANTS, JAMAIS PAR DÉCALAGE.**
    *
-   * Les vingt-trois tranches du catalogue partent ensemble. Il suffisait
-   * qu'une seule échoue — un incident réseau, une rafale de requêtes trop
-   * serrée — pour que mille articles manquent à l'appel, sans autre trace
-   * qu'une ligne dans la console. C'est ce qui s'est produit : la base en
-   * comptait 22 508, l'écran en affichait 21 508.
+   * `range(22000, 22999)` fait relire à Postgres les 22 000 lignes qui
+   * précèdent pour les jeter — et une ligne de produit pèse 2 Ko. Mesuré le
+   * 17/09/2026 : 1 s en moyenne par tranche, jusqu'à 7,9 s, et les tranches
+   * se bousculaient au démarrage au point de faire tomber tout le reste en
+   * `statement timeout` — le compte de la page Produits, les écritures d'une
+   * modification qu'on ne voyait plus qu'en rafraîchissant.
    *
-   * On réessaie donc chaque tranche, une fois, après un court répit. Et si
-   * le compte n'y est toujours pas, on le DIT plutôt que de rendre une liste
-   * amputée dont personne ne saura qu'elle l'est. */
+   * Les identifiants sont des UUID, répartis uniformément : on découpe leur
+   * espace en plages d'environ 700 lignes, et chacune se lit sur l'index de
+   * la clé primaire — 33 ms. Une plage plus pleine que prévu se poursuit à
+   * partir de son dernier identifiant (`gt`), si bien qu'aucune ligne ne peut
+   * échapper à la lecture, quelle que soit la justesse de l'estimation. */
+  const vus = new Set<string>(tout.map(r => r.id));
+  const nbPlages = Math.min(256, Math.max(2, Math.ceil(estime / 700)));
+  const bornes: (string | null)[] = [];
+  for (let i = 0; i <= nbPlages; i++) {
+    bornes.push(i === 0 || i === nbPlages ? null
+      : Math.floor((i * 0x100000000) / nbPlages).toString(16).padStart(8, '0') + '-0000-0000-0000-000000000000');
+  }
+
+  /* UNE PLAGE QUI ÉCHOUE NE DOIT PAS DISPARAÎTRE EN SILENCE.
+   *
+   * Il suffisait qu'une seule tranche échoue — un incident réseau, une rafale
+   * trop serrée — pour que mille articles manquent à l'appel, sans autre trace
+   * qu'une ligne dans la console : la base en comptait 22 508, l'écran
+   * 21 508. On réessaie donc deux fois, après un court répit, et si le compte
+   * n'y est toujours pas, on le DIT. */
   let abandons = 0;
-  const lireTranche = async (d: number, essai = 0): Promise<any[]> => {
-    const { data, error } = await supabase
-      .from(table as any)
-      .select('*')
-      .order('id')
-      .range(d, d + TRANCHE - 1);
+  const lireRequete = async (bas: string | null, haut: string | null, apres: string | null, essai = 0): Promise<any[] | null> => {
+    let q = supabase.from(table as any).select('*');
+    if (bas) q = q.gte('id', bas);
+    if (haut) q = q.lt('id', haut);
+    if (apres) q = q.gt('id', apres);
+    const { data, error } = await q.order('id').limit(TRANCHE);
     if (error) {
       if (essai < 2) {
         await new Promise(r => setTimeout(r, 300 * (essai + 1)));
-        return lireTranche(d, essai + 1);
+        return lireRequete(bas, haut, apres, essai + 1);
       }
-      console.error(`Lecture de ${table} (${d}) abandonnée :`, error.message);
-      abandons += TRANCHE;
-      return [];
+      console.error(`Lecture de ${table} (${bas ?? 'début'}) abandonnée :`, error.message);
+      return null;
     }
     return data || [];
   };
+  const lirePlage = async (bas: string | null, haut: string | null): Promise<any[]> => {
+    const lignes: any[] = [];
+    let apres: string | null = null;
+    for (;;) {
+      const lot = await lireRequete(bas, haut, apres);
+      if (!lot) { abandons += TRANCHE; break; }
+      lignes.push(...lot);
+      if (lot.length < TRANCHE) break;
+      apres = lot[lot.length - 1].id;
+    }
+    return lignes;
+  };
 
-  /* QUATRE TRANCHES À LA FOIS, PAS VINGT-TROIS.
+  /* QUATRE PLAGES À LA FOIS, PAS TRENTE-TROIS.
    *
-   * Lancées toutes ensemble, les vingt-trois tranches du catalogue reviennent
-   * en même temps — et le décodage de leur JSON occupe le fil d'exécution,
-   * celui-là même qui doit afficher les lettres qu'on tape. La recherche
-   * accrochait pendant tout le chargement.
-   *
-   * Par paquets de quatre, avec une respiration entre chaque, le total prend
-   * à peine plus longtemps et l'application reste utilisable pendant ce
-   * temps. Mieux vaut un chargement un peu plus long qu'une saisie qui
-   * bafouille. */
+   * Lancées toutes ensemble, elles reviennent en même temps — et le décodage
+   * de leur JSON occupe le fil d'exécution, celui-là même qui doit afficher
+   * les lettres qu'on tape. Par paquets de quatre, avec une respiration entre
+   * chaque, l'application reste utilisable pendant le chargement. */
   const CONCURRENCE = 4;
-  for (let i = 0; i < departs.length; i += CONCURRENCE) {
-    const paquet = departs.slice(i, i + CONCURRENCE);
-    const lots = await Promise.all(paquet.map(d => lireTranche(d)));
-    for (const lot of lots) tout.push(...lot);
-    // Une respiration : le navigateur reprend la main entre deux paquets.
-    if (i + CONCURRENCE < departs.length) await new Promise(r => setTimeout(r, 0));
+  const plages = bornes.slice(0, -1).map((b, i) => [b, bornes[i + 1]] as const);
+  for (let i = 0; i < plages.length; i += CONCURRENCE) {
+    const lots = await Promise.all(plages.slice(i, i + CONCURRENCE).map(([b, h]) => lirePlage(b, h)));
+    for (const lot of lots) {
+      for (const ligne of lot) {
+        if (vus.has(ligne.id)) continue;    // déjà dans la première tranche
+        vus.add(ligne.id);
+        tout.push(ligne);
+      }
+    }
+    if (i + CONCURRENCE < plages.length) await new Promise(r => setTimeout(r, 0));
   }
-
-  /* ⚠️ **UNE ESTIMATION PEUT ÊTRE BASSE, ET IL NE DOIT RIEN Y PARAÎTRE.**
-     `reltuples` date du dernier ANALYZE : il retarde sur la réalité après un
-     import. S'y fier pour décider de la fin, c'est le bug de mai — la base
-     comptait 22 508 lignes, l'écran en affichait 21 508 — remis au goût du
-     jour. On poursuit donc tant qu'une tranche revient PLEINE. Le prix est
-     d'une requête de plus, vide, sur les seules tables qui dépassent mille
-     lignes : le catalogue. C'est très au-dessous du parcours complet qu'on
-     vient de supprimer. */
-  let depart = (departs.length ? departs[departs.length - 1] : 0) + TRANCHE;
-  for (;;) {
-    const lot = await lireTranche(depart);
-    tout.push(...lot);
-    if (lot.length < TRANCHE) break;
-    depart += TRANCHE;
-  }
+  /* L'ordre par identifiant reste celui qu'on servait jusqu'ici. */
+  tout.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 
   /* On ne DÉDUIT plus ce qui manque d'un total qui pourrait être faux : on
      compte ce qu'on a réellement abandonné après ses deux tentatives. */

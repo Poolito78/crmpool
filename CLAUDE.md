@@ -196,8 +196,10 @@ statement due to statement timeout` sur `produits`. Ce n'est pas la taille de
 la table (53 Mo, 22 700 lignes, tranche lue en 100 ms) mais le **comptage
 exact** : `count: 'exact'` déclenche un parcours complet, mesuré à 1 450 ms
 *depuis le cache*, et à froid il dépasse les 8 s du `statement_timeout`.
-`lireTout` compte donc en `'estimated'` et reconnaît la fin à une **tranche
-courte**, jamais à un total. Détail dans l'en-tête de `lireTout` (`store.ts`).
+`lireTout` compte donc en `'estimated'`, lit **par plages d'UUID** (jamais
+par décalage : `range(22000, …)` relit 22 000 lignes, 1 s par tranche) et
+poursuit une plage pleine par `gt('id')`. Détail dans l'en-tête de `lireTout`
+(`store.ts`). La page Produits lit sa page SANS le compte, qui suit à part.
 
 ## Variables d'environnement
 
