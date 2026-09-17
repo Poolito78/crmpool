@@ -98,7 +98,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, updateClients, produits, updateProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
+  const { devis, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
@@ -472,6 +472,17 @@ export default function Devis() {
   const [moGenerating, setMoGenerating] = useState(false);
   const moPrintRef = useRef<HTMLDivElement>(null);
   const [lignes, setLignes] = useState<LigneDevis[]>([]);
+
+  /* UN ARTICLE CITÉ PAR LE DEVIS DOIT S'AFFICHER, CATALOGUE COMPLET OU NON.
+     Le devis DEV-2026-096 montrait « — Libre — » sur ses six lignes : leurs
+     articles existaient, mais la plage du catalogue qui les portait avait
+     été refusée par une base surchargée. On les lit alors un par un. */
+  useEffect(() => {
+    const manquants = lignes
+      .map(l => l.produitId)
+      .filter((id): id is string => !!id && !produitParId(produits, id));
+    if (manquants.length) void assurerProduits(manquants);
+  }, [lignes, produits, assurerProduits]);
   const [undoStack, setUndoStack] = useState<LigneDevis[][]>([]);
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);

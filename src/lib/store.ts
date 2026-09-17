@@ -1314,7 +1314,15 @@ export function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
  */
 const TRANCHE = 1000;
 
-async function lireTout(table: string) {
+async function lireTout(
+  table: string,
+  /**
+   * Reçoit, plus tard, les lignes des plages qui ont échoué au premier
+   * passage. Sans lui, une plage abandonnée est perdue jusqu'au prochain
+   * rechargement — et 700 articles d'un devis s'affichaient « — Libre — ».
+   */
+  rattrapage?: (lignes: any[]) => void,
+) {
   /* Une première tranche, qui rapporte aussi le nombre total de lignes.
      Les suivantes partent alors TOUTES EN MÊME TEMPS : enchaînées une par une,
      les 23 tranches du catalogue produits coûtaient une vingtaine d'allers-
@@ -1381,6 +1389,7 @@ async function lireTout(table: string) {
    * 21 508. On réessaie donc deux fois, après un court répit, et si le compte
    * n'y est toujours pas, on le DIT. */
   let abandons = 0;
+  const echouees: [string | null, string | null][] = [];
   const lireRequete = async (bas: string | null, haut: string | null, apres: string | null, essai = 0): Promise<any[] | null> => {
     let q = supabase.from(table as any).select('*');
     if (bas) q = q.gte('id', bas);
@@ -1402,7 +1411,9 @@ async function lireTout(table: string) {
     let apres: string | null = null;
     for (;;) {
       const lot = await lireRequete(bas, haut, apres);
-      if (!lot) { abandons += TRANCHE; break; }
+      /* Une plage à moitié lue est reprise en entier : les doublons sont
+         écartés à la réception. */
+      if (!lot) { abandons += TRANCHE; echouees.push([bas, haut]); return lignes; }
       lignes.push(...lot);
       if (lot.length < TRANCHE) break;
       apres = lot[lot.length - 1].id;
@@ -1434,7 +1445,35 @@ async function lireTout(table: string) {
 
   /* On ne DÉDUIT plus ce qui manque d'un total qui pourrait être faux : on
      compte ce qu'on a réellement abandonné après ses deux tentatives. */
-  if (abandons) {
+  if (abandons && rattrapage) {
+    /* ⚠️ **ON NE DEMANDE PLUS DE RECHARGER.** Recharger relit les 22 700
+       articles, sur une base qui vient justement de refuser d'en servir 700 :
+       c'est ajouter de la charge à la charge. Les plages manquées sont
+       relues seules, en arrière-plan, de plus en plus espacées. */
+    console.warn(`Lecture de ${table} : ${echouees.length} plage(s) à reprendre.`);
+    void (async () => {
+      let restantes = echouees.splice(0);
+      for (const attente of [5000, 20000, 60000, 180000]) {
+        if (!restantes.length) return;
+        await new Promise(r => setTimeout(r, attente));
+        const encore: typeof restantes = [];
+        for (const [bas, haut] of restantes) {
+          const avant = echouees.length;
+          const lignes = await lirePlage(bas, haut);
+          if (lignes.length) rattrapage(lignes);
+          if (echouees.length > avant) encore.push(...echouees.splice(avant));
+        }
+        restantes = encore;
+      }
+      if (restantes.length) {
+        console.error(`Lecture de ${table} incomplète après quatre reprises.`);
+        toast.error(
+          `Catalogue incomplet : ${restantes.length} plage(s) de « ${table} » n'ont pas pu être lues. La base est surchargée.`,
+          { duration: 12000 },
+        );
+      }
+    })();
+  } else if (abandons) {
     console.error(`Lecture de ${table} incomplète : ${abandons} ligne(s) abandonnée(s).`);
     toast.error(
       `Chargement incomplet : jusqu'à ${abandons} ligne(s) de « ${table} » manquent. Rechargez la page.`,
@@ -1466,6 +1505,50 @@ export function useStore() {
    * catalogue n'étaient pas toutes rentrées — plusieurs secondes. Compter se
    * demande à la base, qui répond sans rien transporter. */
   const [nbProduits, setNbProduits] = useState<number | null>(null);
+
+  /**
+   * Range en mémoire des articles lus hors du chargement principal.
+   *
+   * `setProduits` et non `updateProduits` : ces lignes viennent de la base,
+   * les réécrire n'aurait aucun sens. Un article déjà présent n'est pas
+   * remplacé — la version en mémoire peut porter une modification en cours
+   * d'enregistrement.
+   */
+  const ajouterProduitsLus = useCallback((lignes: any[]) => {
+    if (!lignes.length) return;
+    setProduits(prev => {
+      const connus = new Set(prev.map(p => p.id));
+      const nouveaux = lignes.filter(r => r?.id && !connus.has(r.id)).map(dbToProduit);
+      return nouveaux.length ? [...prev, ...nouveaux] : prev;
+    });
+  }, []);
+
+  /**
+   * Va chercher en base les articles cités qui manquent en mémoire.
+   *
+   * Un devis nomme ses articles par identifiant. Si le catalogue en mémoire
+   * est incomplet — plage refusée par une base surchargée, chargement pas
+   * encore fini — la ligne s'affichait « — Libre — » alors que son article
+   * existe. On le lit alors directement, par identifiant : une requête de
+   * quelques lignes, qui passe là où 22 700 ne passent pas.
+   */
+  const demandesProduits = useRef(new Set<string>());
+  const assurerProduits = useCallback(async (ids: string[]) => {
+    const aLire = [...new Set(ids.filter(Boolean))].filter(id => !demandesProduits.current.has(id));
+    if (!aLire.length) return;
+    aLire.forEach(id => demandesProduits.current.add(id));
+    for (let i = 0; i < aLire.length; i += 100) {
+      const paquet = aLire.slice(i, i + 100);
+      const { data, error } = await supabase.from('produits').select('*').in('id', paquet);
+      if (error) {
+        console.warn('[produits] lecture ciblée impossible :', error.message);
+        // On pourra réessayer au prochain affichage.
+        paquet.forEach(id => demandesProduits.current.delete(id));
+        continue;
+      }
+      ajouterProduitsLus(data || []);
+    }
+  }, [ajouterProduitsLus]);
   const userIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -1515,7 +1598,9 @@ export function useStore() {
         .then(({ count }) => { if (typeof count === 'number') setNbProduits(count); });
 
       // Le catalogue continue d'arriver en arrière-plan.
-      lireTout('produits').then(async pRes => {
+      /* Les articles arrivés après coup — plages reprises, ou articles
+         cités par un devis — s'ajoutent sans rien réécrire en base. */
+      lireTout('produits', lignes => ajouterProduitsLus(lignes)).then(async pRes => {
         /* Convertir 22 508 lignes d'un seul élan bloque le fil d'exécution
            une bonne fraction de seconde. On le fait par paquets, en rendant
            la main entre chacun. */
@@ -1524,7 +1609,15 @@ export function useStore() {
           for (const r of pRes.slice(i, i + 2000)) sortie.push(dbToProduit(r));
           if (i + 2000 < pRes.length) await new Promise(r => setTimeout(r, 0));
         }
-        setProduits(sortie);
+        /* On garde ce qu'une lecture ciblée a déjà apporté pendant le
+           chargement : un devis ouvert tôt a pu aller chercher ses articles,
+           et la plage qui les porte a pu échouer ici. */
+        setProduits(prev => {
+          if (!prev.length) return sortie;
+          const lus = new Set(sortie.map(p => p.id));
+          const enPlus = prev.filter(p => !lus.has(p.id));
+          return enPlus.length ? [...sortie, ...enPlus] : sortie;
+        });
         /* Le compte EXACT remplace l'estimation dès que le catalogue est là.
            Sans cela, le tableau de bord garderait à jamais le chiffre du
            planificateur — 22 723 au lieu de 22 634, une approximation qui n'a
@@ -1865,7 +1958,7 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────
