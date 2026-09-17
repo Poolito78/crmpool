@@ -181,7 +181,10 @@ voulu — on ne lui invente pas un prix de triangle.
   aussi (`PICTOGRAMMES`) : 0,129 m² pour 1 000 mm de haut. Un logo absent de
   la table reste compté au rectangle (maximum).
 - ⚠️ SNL Concrete 1,255 kg et pigments 0,2 kg **n'ont pas d'article** : lignes
-  libres sans prix. `SNLC2` porte « 2,510 kg » mais un poids saisi à 1,165.
+  libres sans prix. `SNLC2` (SNLC 319 Concrete 2,51 kg, ISOMARK) **n'existe
+  pas chez Odoo** : sa `reference_odoo` valait à tort SNLR1 (le SNL 319
+  **Road**) et l'envoi l'y rattachait — remise à NULL le 17/09, la ligne part
+  en NEG.SH.ISO.
 - **Système nommé mais absent de la base** (`ressembleASysteme`) : la table est
   relue, puis `SystemeIntrouvable` cherche la fiche dans le dossier (choisi une
   fois, droit mémorisé en IndexedDB), la fait lire par Gemini, montre les
