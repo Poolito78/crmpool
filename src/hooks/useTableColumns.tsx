@@ -55,8 +55,18 @@ export function useTableColumns<K extends string>(
       const s = localStorage.getItem(orderKey);
       if (s) {
         const saved = (JSON.parse(s) as K[]).filter(k => allKeys.includes(k));
-        const missing = allKeys.filter(k => !saved.includes(k));
-        return [...saved, ...missing];
+        /* UNE COLONNE NOUVELLE SE RANGE À CÔTÉ DE SA VOISINE, pas au bout.
+           La colonne « Origine », déclarée juste après « Réf. », tombait en
+           dix-septième position chez quiconque avait déjà un ordre
+           enregistré. On l'insère après la colonne qui la précède dans la
+           déclaration — ou en tête si elle ouvre la liste. */
+        const ordre = [...saved];
+        allKeys.forEach((k, i) => {
+          if (ordre.includes(k)) return;
+          const avant = allKeys.slice(0, i).reverse().find(x => ordre.includes(x));
+          ordre.splice(avant ? ordre.indexOf(avant) + 1 : 0, 0, k);
+        });
+        return ordre;
       }
     } catch { /* ignore */ }
     return [...allKeys];
