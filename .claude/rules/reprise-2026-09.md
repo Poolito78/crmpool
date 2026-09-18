@@ -221,6 +221,14 @@ fonction ignore `negoce` et tout part encore en NEG.ISO.
   ignore désormais `[data-sonner-toaster]`, et tout clic extérieur une fois
   l'analyse faite. Même garde à poser sur tout dialogue qui émet un toast à
   bouton.
+- ⚠️ **Une pièce jointe de .msg se lit dans la STRUCTURE, pas au flair**
+  (`lirePiecesJointesMsg`, `lireMsg.ts`) : le balayage binaire coupait le PDF
+  au PREMIER `%%EOF`, or un PDF linéarisé en porte un dès sa table de première
+  page — le fichier partait tronqué et pdf.js le refusait avec « Invalid Root
+  reference. » On lit désormais l'arbre du conteneur OLE : le dossier
+  `__attach_version1.0_#…`, son flux `37010102` pour les octets, `3707`/`3704`
+  pour le nom — qui devient celui affiché, au lieu de « piece-jointe-1.pdf ».
+  Le balayage reste en secours et garde le DERNIER `%%EOF`.
 - **Fonction Edge** : ne pas appeler `fields_get` à chaque page d'un traitement
   par lots — c'est ce qui faisait tomber `odoo-designations` en 500 une page
   sur sept. Passer le nom du champ dans le corps.

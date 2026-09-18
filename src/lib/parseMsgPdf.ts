@@ -1,7 +1,19 @@
 /**
  * Extraction de pièces jointes depuis un fichier .msg Outlook (format CFBF)
  *
- * Stratégie : balayage binaire des signatures connues dans le flux brut.
+ * On lit d'abord la structure du conteneur (`lirePiecesJointesMsg`) : chaque
+ * pièce jointe y est un dossier, ses octets sont exacts et son nom est celui
+ * qu'a choisi l'expéditeur.
+ *
+ * Le balayage binaire qui suit ne sert plus que de secours. Il découpait le
+ * PDF entre `%PDF-` et le PREMIER `%%EOF` — or un PDF linéarisé (le cas
+ * courant : Outlook, Adobe, toute pièce jointe « optimisée pour le web ») en
+ * porte un tout au début, juste après sa table de première page. La coupe
+ * emportait l'en-tête et laissait le corps du document derrière : pdf.js
+ * refusait le fichier avec « Invalid Root reference. » On garde désormais le
+ * DERNIER `%%EOF` avant le PDF suivant — la vraie fin du document.
+ *
+ * Signatures balayées :
  * - PDF  : %PDF- … %%EOF
  * - XLSX : PK\x03\x04 … PK\x05\x06 (ZIP Local File Header … End of Central Dir)
  * - XLS  : \xD0\xCF\x11\xE0 (CFBF header = vieux format Excel/Word)
@@ -37,10 +49,39 @@ export interface PdfExtrait {
   buffer: ArrayBuffer;
 }
 
+/** Type reconnu d'une pièce jointe, par son nom puis par ses premiers octets. */
+function typeDePiece(nom: string, buffer: ArrayBuffer): PdfExtrait['type'] | null {
+  if (/\.pdf$/i.test(nom)) return 'pdf';
+  if (/\.(xlsx|xlsm|xls|csv|ods)$/i.test(nom)) return 'xlsx';
+  // Nom absent ou trompeur : la signature du fichier tranche.
+  const tete = new Uint8Array(buffer, 0, Math.min(PDF_SIG.length, buffer.byteLength));
+  if (PDF_SIG.every((b, i) => tete[i] === b)) return 'pdf';
+  return null;
+}
+
 /**
  * Extrait les pièces jointes PDF et Excel d'un fichier .msg Outlook.
  */
 export async function extrairePJsDeMsg(file: File): Promise<PdfExtrait[]> {
+  try {
+    const { lirePiecesJointesMsg } = await import('@/lib/lireMsg');
+    const pjs = await lirePiecesJointesMsg(file);
+    /* Une seule pièce jointe vue suffit à faire foi : le message qui n'en
+       porte aucune d'exploitable (une image de signature, par exemple) n'a
+       rien à gagner au balayage binaire, qui ne trouverait que des morceaux. */
+    if (pjs.length > 0) {
+      return pjs
+        .map(pj => ({ name: pj.nom, buffer: pj.buffer, type: typeDePiece(pj.nom, pj.buffer) }))
+        .filter((pj): pj is PdfExtrait => pj.type !== null);
+    }
+  } catch (err) {
+    console.warn('[msg] structure illisible, repli sur le balayage binaire :', err);
+  }
+  return extrairePJsDeMsgHeuristique(file);
+}
+
+/** Ancienne méthode, conservée en secours. */
+async function extrairePJsDeMsgHeuristique(file: File): Promise<PdfExtrait[]> {
   const buffer = await file.arrayBuffer();
   const bytes  = new Uint8Array(buffer);
   const results: PdfExtrait[] = [];
@@ -51,13 +92,18 @@ export async function extrairePJsDeMsg(file: File): Promise<PdfExtrait[]> {
   while (true) {
     const start = indexOf(bytes, PDF_SIG, search);
     if (start === -1) break;
-    let end = indexOf(bytes, EOF_MARK, start + 100);
-    if (end === -1) {
-      const next = indexOf(bytes, PDF_SIG, start + 10);
-      end = next !== -1 ? next : bytes.length;
-    } else {
-      end += EOF_MARK.length;
+    const suivant = indexOf(bytes, PDF_SIG, start + 10);
+    const borne = suivant !== -1 ? suivant : bytes.length;
+    /* Le DERNIER `%%EOF` avant le PDF suivant : un document linéarisé ou
+       modifié en porte plusieurs, et seul le dernier ferme le fichier. */
+    let end = -1;
+    for (let pos = start + 100; ; ) {
+      const m = indexOf(bytes, EOF_MARK, pos);
+      if (m === -1 || m >= borne) break;
+      end = m + EOF_MARK.length;
+      pos = end;
     }
+    if (end === -1) end = borne;
     const slice = buffer.slice(start, end);
     if (slice.byteLength >= 100) {
       idxPdf++;

@@ -43,9 +43,22 @@ export interface MessageOutlook {
 
 interface Entree {
   nom: string;
-  type: number;   // 1 dossier, 2 flux, 5 racine
+  type: number;   // 0 libre, 1 dossier, 2 flux, 5 racine
   debut: number;
   taille: number;
+  /* Le répertoire est un arbre : chaque entrée porte ses deux voisins de même
+     niveau et son premier enfant. Sans eux on a la liste des flux, mais pas
+     leur appartenance — or c'est le dossier `__attach_version1.0_#…` qui dit
+     quels flux forment UNE pièce jointe. */
+  gauche: number;
+  droite: number;
+  enfant: number;
+}
+
+/** Pièce jointe d'un message : son nom d'origine et ses octets exacts. */
+export interface PieceJointeMsg {
+  nom: string;
+  buffer: ArrayBuffer;
 }
 
 class ErreurCFBF extends Error {}
@@ -155,18 +168,23 @@ class ConteneurOle {
     const brut = this.concatener(this.chaine(this.debutRepertoire));
     const v = new DataView(brut.buffer, brut.byteOffset, brut.byteLength);
     const entrees: Entree[] = [];
+    /* Une entrée libre est conservée (nom vide, type 0) : le rang dans ce
+       tableau EST l'identifiant que les liens de l'arbre désignent, en sauter
+       une décalerait tous les suivants. */
     for (let off = 0; off + 128 <= brut.length; off += 128) {
       const nlen = v.getUint16(off + 64, true);
-      if (nlen < 2) continue;
-      const nom = new TextDecoder('utf-16le').decode(
-        brut.subarray(off, off + Math.max(0, nlen - 2)),
-      );
+      const nom = nlen >= 2
+        ? new TextDecoder('utf-16le').decode(brut.subarray(off, off + (nlen - 2)))
+        : '';
       entrees.push({
         nom,
         type: brut[off + 66],
         debut: v.getUint32(off + 116, true),
         // taille sur 64 bits ; un .msg dépassant 4 Go n'existe pas en pratique
         taille: Number(v.getBigUint64(off + 120, true)),
+        gauche: v.getUint32(off + 68, true),
+        droite: v.getUint32(off + 72, true),
+        enfant: v.getUint32(off + 76, true),
       });
     }
     return entrees;
@@ -198,6 +216,58 @@ class ConteneurOle {
       return out;
     }
     return this.concatener(this.chaine(e.debut)).subarray(0, e.taille);
+  }
+
+  /** Entrées filles d'un dossier, par parcours de son arbre rouge-noir. */
+  private enfantsDe(e: Entree): Entree[] {
+    const out: Entree[] = [];
+    const vus = new Set<number>();
+    const pile = [e.enfant];
+    while (pile.length) {
+      const id = pile.pop()!;
+      if (id >= this.entrees.length || vus.has(id)) continue;  // 0xFFFFFFFF = pas de voisin
+      vus.add(id);
+      const n = this.entrees[id];
+      out.push(n);
+      pile.push(n.gauche, n.droite);
+    }
+    return out;
+  }
+
+  /**
+   * Pièces jointes du message, lues dans la structure.
+   *
+   * Chaque pièce jointe est un dossier `__attach_version1.0_#XXXXXXXX` dont le
+   * flux `__substg1.0_37010102` porte les octets et `3707`/`3704` le nom de
+   * fichier. On rend donc exactement ce qu'Outlook a rangé, nom compris.
+   */
+  piecesJointes(): PieceJointeMsg[] {
+    const racine = this.entrees.find(e => e.type === 5);
+    if (!racine) return [];
+    const out: PieceJointeMsg[] = [];
+    for (const dossier of this.enfantsDe(racine)) {
+      if (dossier.type !== 1 || !/^__attach_version1\.0_#/i.test(dossier.nom)) continue;
+      let donnees: Uint8Array | null = null;
+      let nomLong = '', nomCourt = '', extension = '';
+      for (const f of this.enfantsDe(dossier)) {
+        if (f.type !== 2) continue;
+        const m = /^__substg1\.0_([0-9A-Fa-f]{4})([0-9A-Fa-f]{4})$/.exec(f.nom);
+        if (!m) continue;
+        const prop = m[1].toUpperCase();
+        const type = m[2].toUpperCase();
+        if (prop === '3701' && type === '0102') donnees = this.flux(f);
+        else if (prop === '3707') nomLong = decoder(this.flux(f), type) || '';
+        else if (prop === '3704') nomCourt = decoder(this.flux(f), type) || '';
+        else if (prop === '3703') extension = decoder(this.flux(f), type) || '';
+      }
+      /* Un message joint à un message (`3701000D`) est un conteneur, pas un
+         fichier : il n'a pas de flux d'octets et sort d'ici sans bruit. */
+      if (!donnees || donnees.length === 0) continue;
+      const nom = (nomLong || nomCourt).trim()
+        || `piece-jointe-${out.length + 1}${extension.trim()}`;
+      out.push({ nom, buffer: donnees.slice().buffer });
+    }
+    return out;
   }
 }
 
@@ -278,4 +348,12 @@ export async function lireMsg(fichier: File): Promise<MessageOutlook> {
     societe: (valeurs.societe || '').trim(),
     texte: [entete, corps].filter(Boolean).join('\n\n'),
   };
+}
+
+/**
+ * Pièces jointes d'un .msg, avec leur nom d'origine.
+ * Lève la même erreur que `lireMsg` si le fichier n'est pas un conteneur OLE.
+ */
+export async function lirePiecesJointesMsg(fichier: File): Promise<PieceJointeMsg[]> {
+  return new ConteneurOle(await fichier.arrayBuffer()).piecesJointes();
 }
