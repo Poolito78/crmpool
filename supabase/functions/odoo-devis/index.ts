@@ -198,12 +198,60 @@ async function trouverClient(o: Odoo, nom: string, ctx: Record<string, unknown>)
 // --------------------------------------------------------------- articles
 
 /**
+ * Le conditionnement annoncé par un libellé, en kilos ou en litres.
+ *
+ * « FLOWFAST 107 Primer (20 kg) » → 20. On ne lit qu'un nombre COLLÉ à son
+ * unité : « Quartz 0,3- 0,8 (25 kg) » rend 25, pas 0,8.
+ */
+function conditionnement(texte: string): number | null {
+  const m = String(texte || "").match(/(\d+(?:[.,]\d+)?)\s*(kgs?|l|litres?)\b/i);
+  return m ? Number(m[1].replace(",", ".")) : null;
+}
+
+/**
+ * ⚠️ **UN SEAU DE 20 kg N'EST PAS UN FÛT DE 180 kg.**
+ *
+ * `FLOWFAST107` — « FLOWFAST 107 Primer (20 kg) » chez nous — ressemble à s'y
+ * méprendre à `FLOWFASTF107`, « FLOWFAST 107 CERAMIC PRIMER (180KG) » chez
+ * Odoo : un caractère d'écart. Le rapprochement les confondait, et treize
+ * unités commandées devenaient 2 340 kg au lieu de 260. Un devis muet, un
+ * chantier faux.
+ *
+ * Quand les DEUX libellés annoncent un conditionnement et qu'ils diffèrent, le
+ * candidat est écarté. Aucun des deux ne le dit : on ne tranche pas là-dessus.
+ * Un code exact, lui, fait foi — cette garde ne vaut que pour les devinettes.
+ */
+function conditionnementCompatible(notre: string, odoo: string): boolean {
+  const a = conditionnement(notre);
+  const b = conditionnement(odoo);
+  if (a === null || b === null) return true;
+  return Math.abs(a - b) <= Math.max(a, b) * 0.02;
+}
+
+/** Un article Odoo proposé à l'utilisateur quand la référence reste orpheline. */
+interface Proposition {
+  code: string;
+  nom: string;
+  /** 0 à 100 : la ressemblance, pour trier. */
+  note: number;
+  /** Renseigné quand c'est le conditionnement qui a fait écarter le candidat. */
+  ecart?: string;
+}
+
+/**
  * Chaque référence du devis vers son article Odoo.
  *
  * Quatre passes, reprises telles quelles du pont qui tourne aujourd'hui :
  * code exact, code à la casse près, code contenu (si unique), puis un
  * rapprochement à la ressemblance pour les codes qui ne diffèrent que par la
  * ponctuation — GRANITEGRIS051 chez nous, GRANITGRIS0,5/1 chez Odoo.
+ *
+ * ⚠️ **CE QUI RESTE ORPHELIN SE DIT, AVEC DES NOMS.** « Article Odoo non
+ * trouvé » ne donnait rien à faire : les articles ISOFLOOR du catalogue métier
+ * n'ont pas de `reference_odoo`, leurs lignes partaient en négoce devis après
+ * devis, et rien n'indiquait que `FLOWFAST31920` les attendait chez Odoo. Les
+ * meilleurs candidats remontent donc dans `propositions`, pour que l'écran
+ * propose de retenir la correspondance UNE fois — voir `Devis.tsx`.
  */
 async function resoudreArticles(
   o: Odoo,
@@ -216,7 +264,8 @@ async function resoudreArticles(
 
   const resolus: Record<string, number> = {};
   const comment: Record<string, string> = {};
-  if (!refs.length) return { resolus, comment, refs };
+  const propositions: Record<string, Proposition[]> = {};
+  if (!refs.length) return { resolus, comment, refs, propositions };
 
   // Passe 1 — code exact
   const p1 = await o.kw(
@@ -256,17 +305,25 @@ async function resoudreArticles(
     const p3 = await o.kw(
       "product.product",
       "search_read",
-      [ouBien(reste.map((r) => ["default_code", "ilike", r])), ["id", "default_code"]],
+      [ouBien(reste.map((r) => ["default_code", "ilike", r])), ["id", "default_code", "name"]],
       { limit: 500, context: ctx },
     ) as any[];
     for (const r of reste) {
       const hits = p3.filter((p) =>
         String(p.default_code || "").toLowerCase().includes(r.toLowerCase())
       );
-      if (hits.length === 1) {
-        resolus[r] = hits[0].id;
-        comment[r] = "code " + hits[0].default_code;
+      if (hits.length !== 1) continue;
+      if (!conditionnementCompatible(descOf[r] || "", hits[0].name || "")) {
+        propositions[r] = [{
+          code: String(hits[0].default_code || ""),
+          nom: String(hits[0].name || ""),
+          note: 0,
+          ecart: `${conditionnement(descOf[r] || "")} ≠ ${conditionnement(hits[0].name || "")}`,
+        }];
+        continue;
       }
+      resolus[r] = hits[0].id;
+      comment[r] = "code " + hits[0].default_code;
     }
   }
 
@@ -298,8 +355,25 @@ async function resoudreArticles(
             nd ? ressemblance(nd, nu(p.name)) : 0,
           ),
         })).sort((a, b) => b.s - a.s);
-        const premier = notes[0];
-        const second = notes[1];
+
+        /* Les meilleurs candidats, retenus ou non : c'est de là que sortira la
+           correspondance à enregistrer si personne ne l'emporte. */
+        propositions[r] = notes.slice(0, 4).filter((n) => n.s >= 0.5).map((n) => ({
+          code: String(n.p.default_code || ""),
+          nom: String(n.p.name || ""),
+          note: Math.round(n.s * 100),
+          ...(conditionnementCompatible(descOf[r] || "", n.p.name || "") ? {} : {
+            ecart: `${conditionnement(descOf[r] || "")} ≠ ${conditionnement(n.p.name || "")}`,
+          }),
+        }));
+
+        /* Le conditionnement d'abord : un candidat qui n'emballe pas la même
+           chose n'est pas un meilleur candidat, c'est un autre produit. */
+        const retenables = notes.filter((n) =>
+          conditionnementCompatible(descOf[r] || "", n.p.name || "")
+        );
+        const premier = retenables[0];
+        const second = retenables[1];
         if (premier && premier.s >= 0.82 && (!second || premier.s - second.s >= 0.04)) {
           resolus[r] = premier.p.id;
           comment[r] = "ressemblance " + premier.p.default_code
@@ -309,7 +383,10 @@ async function resoudreArticles(
     }
   }
 
-  return { resolus, comment, refs };
+  for (const r of Object.keys(propositions)) {
+    if (resolus[r]) delete propositions[r];
+  }
+  return { resolus, comment, refs, propositions };
 }
 
 // ----------------------------------------------------------------- serve
@@ -366,7 +443,7 @@ serve(async (req) => {
     }
 
     // ---- 2. les articles ----------------------------------------------
-    const { resolus, comment } = await resoudreArticles(o, payload.lines, ctx);
+    const { resolus, comment, propositions } = await resoudreArticles(o, payload.lines, ctx);
 
     // Article de repli : la désignation part alors dans le libellé de ligne.
     let negId = payload.negoce_id || 0;
@@ -410,11 +487,23 @@ serve(async (req) => {
       .filter((l) => l.type === "product" && !l.port && !(l.ref && resolus[l.ref]))
       .map((l) => (l.ref ? l.ref + " — " : "") + l.desc + " [" + codeNegDe(l) + "]");
 
+    /* Ce qu'Odoo POURRAIT porter, pour les références restées orphelines :
+       l'écran en fait une correspondance à enregistrer, et le devis suivant
+       part sous la bonne référence. */
+    const aRattacher = Object.entries(propositions)
+      .filter(([, props]) => props.length > 0)
+      .map(([ref, props]) => ({
+        ref,
+        desc: payload.lines.find((l) => l.ref === ref)?.desc || "",
+        propositions: props,
+      }));
+
     const rapport = {
       client: { id: societe.id, nom: societe.name, ville: societe.city || "" },
       articles: Object.entries(resolus).map(([ref, id]) => ({ ref, id, par: comment[ref] })),
       negoce: enNegoce,
       ...(negManquants.length ? { negoceIntrouvable: negManquants } : {}),
+      ...(aRattacher.length ? { aRattacher } : {}),
       lignes: payload.lines.length,
     };
 

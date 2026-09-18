@@ -209,6 +209,41 @@ code manque chez Odoo (`rapport.negoceIntrouvable`).
 ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis` — sans cela la
 fonction ignore `negoce` et tout part encore en NEG.ISO.
 
+## L'export Odoo et la référence manquante (18 sept.)
+
+Le devis partait avec la moitié de ses lignes en **GE NEGOCE SH ISO** alors
+qu'Odoo porte les articles. Cause : les articles du **catalogue métier
+ISOFLOOR** — `FLOWFAST319`, `QUARTZ0308`, `SNLFILLER`, `FLOWFAST107`,
+`PIGMENTKG` — n'ont **pas de `reference_odoo`** (142 articles sur 22 726 ;
+25 des 45 articles employés par les systèmes). L'export envoie alors la
+référence MonCRM, qu'Odoo ne connaît pas, et `resoudreArticles` doit deviner.
+
+⚠️ **ET IL DEVINAIT MAL.** `FLOWFAST107` — « FLOWFAST 107 Primer (20 kg) » —
+se rapprochait à 92 % de `FLOWFASTF107`, « FLOWFAST 107 CERAMIC PRIMER
+(**180KG**) » : treize unités commandées faisaient 2 340 kg au lieu de 260, et
+rien ne le disait. Odoo porte pourtant `FLOWFASTPRIMER107.20` en 20 kg.
+
+- **`conditionnementCompatible`** (`odoo-devis`) : quand les DEUX libellés
+  annoncent un conditionnement et qu'ils diffèrent, le candidat est écarté —
+  passes 3 et 4 seulement, un code exact fait toujours foi. Effet mesuré : le
+  fût de 180 kg est refusé, et `FLOWFAST319` **se résout enfin** en
+  `FLOWFAST31920` (100 %), le jumeau de 10 kg qui le bloquait à 97 % étant
+  maintenant hors course.
+- **`rapport.aRattacher`** : ce qui reste orphelin remonte avec les candidats
+  Odoo nommés, et l'écran du devis propose « Retenir FLOWFASTPRIMER107.20 ».
+  Le clic écrit `referenceOdoo` sur l'article : l'envoi suivant le trouve par
+  code exact. Un candidat écarté au conditionnement s'affiche barré, sans
+  bouton — on ne le retient pas d'un geste distrait.
+- ⚠️ **On ne devine toujours pas à la place de l'utilisateur.** Un candidat
+  sous le seuil est proposé, jamais retenu. C'est la règle de la maison : un
+  rail en trop se facture, un rail en moins manque au chantier.
+- ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis`. Sans cela le
+  rapport ne porte pas `aRattacher` et l'écran n'a rien à proposer (le front
+  le supporte : liste vide).
+- ⚠️ Les helpers `conditionnement` / `conditionnementCompatible` vivent dans
+  la fonction Edge : **vitest ne les couvre pas** (`include: src/**`). Ils ont
+  été vérifiés sur les vraies données du catalogue.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

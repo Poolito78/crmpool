@@ -390,6 +390,12 @@ export default function Devis() {
     lignes?: number;
     erreurs?: string[];
     negoce?: string[];
+    /* Les références qu'Odoo n'a pas su rattacher, avec ce qu'il propose. */
+    aRattacher?: {
+      ref: string;
+      desc: string;
+      propositions: { code: string; nom: string; note: number; ecart?: string }[];
+    }[];
     candidats?: { id: number; nom: string; ville: string; estSociete: boolean; societeMere: string }[];
     payload?: OdooPayload;
     /* Chemin de secours : dépôt pour le pont, et script console. */
@@ -397,6 +403,33 @@ export default function Devis() {
     script?: string;
   }
   const [odooInfo, setOdooInfo] = useState<EtatOdoo | null>(null);
+  /** Références déjà rattachées depuis cet écran : ref du CRM → code Odoo. */
+  const [odooRattache, setOdooRattache] = useState<Record<string, string>>({});
+
+  /**
+   * RETENIR UNE FOIS, ET NE PLUS JAMAIS PARTIR EN NÉGOCE.
+   *
+   * Les articles du catalogue métier ISOFLOOR — FLOWFAST319, QUARTZ0308,
+   * SNLFILLER — n'ont pas de `reference_odoo` : leurs lignes partaient en
+   * « GE NEGOCE SH ISO » devis après devis, alors qu'Odoo porte l'article. On
+   * n'a pas voulu le deviner à la place de l'utilisateur — un seau de 20 kg
+   * n'est pas un fût de 180 kg. Un clic écrit la correspondance sur l'article,
+   * et l'export suivant la trouve par code exact.
+   */
+  const rattacherOdoo = useCallback((ref: string, code: string) => {
+    const cible = produits.find(p =>
+      String(p.reference || '').toUpperCase() === ref.toUpperCase());
+    if (!cible) {
+      toast.error(`Article « ${ref} » introuvable dans le catalogue local.`);
+      return;
+    }
+    updateProduits(prev => prev.map(p =>
+      p.id === cible.id ? { ...p, referenceOdoo: code } : p));
+    setOdooRattache(prev => ({ ...prev, [ref]: code }));
+    toast.success(`${ref} → ${code}`, {
+      description: 'Enregistré sur l’article. Le prochain envoi partira sous cette référence.',
+    });
+  }, [produits, updateProduits]);
 
   /**
    * Crée le devis DANS Odoo, sans marque-page ni presse-papiers.
@@ -441,6 +474,7 @@ export default function Devis() {
         setOdooInfo({
           numero: payload.numero, etat: 'verifie', payload, script: scriptSecours,
           negoce: data.rapport?.negoce || [],
+          aRattacher: data.rapport?.aRattacher || [],
           message: `${data.rapport?.client?.nom} — `
             + `${(data.rapport?.articles || []).length} article(s) reconnu(s) `
             + `sur ${data.rapport?.lignes} ligne(s). Rien n'a été écrit.`,
@@ -453,6 +487,7 @@ export default function Devis() {
         url: data?.url, numeroOdoo: data?.numero, montantHT: data?.montantHT,
         lignes: data?.lignes, erreurs: data?.erreurs || [],
         negoce: data?.rapport?.negoce || [],
+        aRattacher: data?.rapport?.aRattacher || [],
       });
       if (data?.url) window.open(data.url, '_blank', 'noopener');
     } catch (e) {
@@ -4165,6 +4200,50 @@ export default function Devis() {
                   {odooInfo.negoce.slice(0, 8).map((n, i) => <li key={i}>· {n}</li>)}
                   {odooInfo.negoce.length > 8 && <li>· …</li>}
                 </ul>
+              </div>
+            )}
+
+            {/* CE QU'ODOO PORTE DÉJÀ, ET QUE NOUS N'AVONS PAS ENREGISTRÉ.
+                « Article non trouvé » ne donnait rien à faire : ici on nomme
+                les candidats, et un clic fige la correspondance pour de bon. */}
+            {!!odooInfo?.aRattacher?.length && (
+              <div className="rounded border border-primary/30 bg-primary/5 p-2 space-y-2">
+                <p className="text-xs font-medium">
+                  Odoo porte peut-être ces articles — retenez la correspondance une fois :
+                </p>
+                {odooInfo.aRattacher.slice(0, 6).map(a => (
+                  <div key={a.ref} className="text-xs space-y-1">
+                    <p className="font-medium">
+                      {a.ref} <span className="text-muted-foreground font-normal">· {a.desc}</span>
+                    </p>
+                    {odooRattache[a.ref] ? (
+                      <p className="text-success pl-3">✓ rattaché à {odooRattache[a.ref]}</p>
+                    ) : (
+                      <ul className="pl-3 space-y-1">
+                        {a.propositions.map(prop => (
+                          <li key={prop.code} className="flex items-center gap-2 flex-wrap">
+                            {prop.ecart ? (
+                              <span className="text-muted-foreground/70 line-through">
+                                {prop.code}
+                              </span>
+                            ) : (
+                              <Button size="sm" variant="outline" className="h-6 px-2 text-[11px]"
+                                      onClick={() => rattacherOdoo(a.ref, prop.code)}>
+                                Retenir {prop.code}
+                              </Button>
+                            )}
+                            <span className="text-muted-foreground">{prop.nom}</span>
+                            <span className="text-muted-foreground/60">
+                              {prop.ecart
+                                ? `conditionnement ${prop.ecart} — ce n'est pas le même produit`
+                                : `${prop.note} %`}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 
