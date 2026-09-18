@@ -15,12 +15,24 @@
  * À DESSEIN : une fonction Edge doit pouvoir répondre seule. Les deux listes se
  * corrigent ensemble.
  *
- * ⚠️ **UN ÉCHEC SE DIT.** La réponse d'erreur porte `essais` — modèle, statut
- * et message du fournisseur pour chaque tentative. C'est ce message qui nomme
- * un modèle retiré, une clé refusée ou un quota épuisé ; le front l'affiche.
+ * ⚠️ **UN ÉCHEC SE DIT.** La réponse d'erreur porte `essais` — modèle, statut,
+ * durée et message du fournisseur pour chaque tentative. C'est ce message qui
+ * nomme un modèle retiré, une clé refusée ou un quota épuisé ; le front
+ * l'affiche.
+ *
+ * ⚠️ **UNE RÉPONSE PEUT PRENDRE UNE MINUTE.** Le 18 septembre 2026,
+ * « l'assistant ne répond pas » : il répondait, en 62 s. `gemini-3.6-flash`
+ * était en 503 « high demand » (une demi-seconde perdue, sans gravité) et
+ * `gemini-3.5-flash-lite`, qui réfléchit avant de répondre, mettait une minute
+ * sur un devis de vingt lignes. Rien ne le disait à l'écran. D'où :
+ * - un CHRONO par tentative, dans les journaux comme dans `essais` ;
+ * - une ÉCHÉANCE : chaque appel est borné (`ATTENTE_MODELE_MS`) et la chaîne
+ *   entière tient dans `BUDGET_MS`, pour qu'un fournisseur muet ne retienne
+ *   pas la main jusqu'à ce que la plateforme coupe le travailleur.
+ * Le front, lui, affiche le temps écoulé — voir `DevisAssistantDialog`.
  *
  * Entrée : { message, history?, devisContext?, produitsCatalog? }
- * Sortie : { response, modele }  |  { error, essais }  (HTTP 502)
+ * Sortie : { response, modele, ms }  |  { error, essais }  (HTTP 502)
  */
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
@@ -34,6 +46,14 @@ const corsHeaders = {
 const MODELES_GEMINI = ["gemini-3.6-flash", "gemini-3.5-flash-lite"];
 /* Ceux qu'emploient `extract-client` et `analyze-email`. */
 const MODELES_GROQ = ["meta-llama/llama-4-scout-17b-16e-instruct", "llama-3.1-8b-instant"];
+
+/* Un modèle qui réfléchit met couramment une minute sur un gros devis : la
+   borne laisse largement le temps de répondre, elle n'est là que pour rendre
+   la main si le fournisseur se tait. Le budget total garde de quoi essayer le
+   modèle suivant et, surtout, de quoi RÉPONDRE avant que le navigateur
+   n'abandonne. */
+const ATTENTE_MODELE_MS = 90_000;
+const BUDGET_MS = 170_000;
 
 const SYSTEM_PROMPT = `Tu es un assistant expert pour un logiciel de CRM et devis dans le bâtiment (revêtements de sol, chapes, enduits, isolants, produits de construction type Flowfast, Flowcoat, etc.).
 
@@ -71,7 +91,7 @@ Le catalogue contient un champ "cat" qui est la catégorie exacte du produit (ex
 Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes).`;
 
 type Message = { role: string; content: string };
-type Essai = { modele: string; status: number; message: string };
+type Essai = { modele: string; status: number; message: string; ms: number };
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -99,31 +119,45 @@ serve(async (req) => {
 
     const trimmedHistory: Message[] = (history as Message[]).slice(-10);
     const essais: Essai[] = [];
+    const debut = Date.now();
+    const resteMs = () => BUDGET_MS - (Date.now() - debut);
 
-    /* Une tentative : le texte rendu, ou `null` après avoir noté la raison. */
+    /* Une tentative : le texte rendu, ou `null` après avoir noté la raison.
+       `signal` porte la borne d'attente — sans elle, un fournisseur qui ne
+       ferme pas la connexion garde la main jusqu'à la coupure du travailleur,
+       et l'écran ne voit qu'un rouet qui tourne. */
     async function essayer(
       modele: string,
-      appel: () => Promise<Response>,
+      appel: (signal: AbortSignal) => Promise<Response>,
       lire: (data: any) => string,
     ): Promise<string | null> {
+      const t0 = Date.now();
+      const note = (status: number, message: string) => {
+        const ms = Date.now() - t0;
+        console.warn(`[devis-assistant] ${modele} → ${status} (${ms} ms) ${message}`);
+        essais.push({ modele, status, message, ms });
+        return null;
+      };
+
+      const budget = Math.min(ATTENTE_MODELE_MS, resteMs());
+      if (budget < 5_000) return note(0, "budget de temps épuisé — modèle non essayé");
+
       let r: Response;
       try {
-        r = await appel();
+        r = await appel(AbortSignal.timeout(budget));
       } catch (e) {
-        essais.push({ modele, status: 0, message: (e as Error).message });
-        return null;
+        const err = e as Error;
+        return note(0, err.name === "TimeoutError"
+          ? `pas de réponse en ${Math.round(budget / 1000)} s`
+          : err.message);
       }
       if (!r.ok) {
-        const texte = (await r.text().catch(() => "")).slice(0, 400);
-        console.warn(`[devis-assistant] ${modele} → ${r.status} ${texte}`);
-        essais.push({ modele, status: r.status, message: texte });
-        return null;
+        return note(r.status, (await r.text().catch(() => "")).slice(0, 400));
       }
       const texte = lire(await r.json());
-      if (!texte) {
-        essais.push({ modele, status: r.status, message: "réponse vide" });
-        return null;
-      }
+      if (!texte) return note(r.status, "réponse vide");
+
+      console.log(`[devis-assistant] ${modele} a répondu en ${Date.now() - t0} ms`);
       return texte;
     }
 
@@ -138,7 +172,7 @@ serve(async (req) => {
       for (const modele of MODELES_GEMINI) {
         const texte = await essayer(
           modele,
-          () => fetch(
+          (signal) => fetch(
             `https://generativelanguage.googleapis.com/v1beta/models/${modele}:generateContent?key=${geminiKey}`,
             {
               method: "POST",
@@ -148,11 +182,12 @@ serve(async (req) => {
                 contents,
                 generationConfig: { temperature: 0.2, maxOutputTokens: 2000 },
               }),
+              signal,
             },
           ),
           (data) => data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "",
         );
-        if (texte) return repondre({ response: texte, modele });
+        if (texte) return repondre({ response: texte, modele, ms: Date.now() - debut });
       }
     }
 
@@ -165,14 +200,15 @@ serve(async (req) => {
       for (const modele of MODELES_GROQ) {
         const texte = await essayer(
           modele,
-          () => fetch("https://api.groq.com/openai/v1/chat/completions", {
+          (signal) => fetch("https://api.groq.com/openai/v1/chat/completions", {
             method: "POST",
             headers: { "Authorization": `Bearer ${groqKey}`, "Content-Type": "application/json" },
             body: JSON.stringify({ model: modele, max_tokens: 2000, temperature: 0.2, messages }),
+            signal,
           }),
           (data) => data?.choices?.[0]?.message?.content ?? "",
         );
-        if (texte) return repondre({ response: texte, modele });
+        if (texte) return repondre({ response: texte, modele, ms: Date.now() - debut });
       }
     }
 

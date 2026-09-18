@@ -1,3 +1,20 @@
+/**
+ * Assistant IA du devis.
+ *
+ * ⚠️ **UNE RÉPONSE PEUT PRENDRE UNE MINUTE, ET ÇA DOIT SE VOIR.** Le
+ * 18 septembre 2026, « l'assistant ne répond pas » : il répondait, en 62 s.
+ * Les modèles Gemini 3.x réfléchissent avant d'écrire, et un devis de vingt
+ * lignes leur donne de quoi faire — mais l'écran ne montrait qu'un rouet muet,
+ * impossible à distinguer d'une panne. D'où le chrono, le mot qui rassure
+ * passé quinze secondes, le bouton « Arrêter », et la provenance de la réponse
+ * (modèle et durée) sous le message.
+ *
+ * ⚠️ **ET UNE ATTENTE A UNE FIN.** `supabase.functions.invoke` n'a pas de
+ * délai propre : sans `DELAI_MAX_MS`, une requête perdue laissait le rouet
+ * tourner indéfiniment. La borne du front dépasse celle de la fonction
+ * (`BUDGET_MS`, 170 s) pour laisser celle-ci répondre d'abord — son message
+ * nomme le modèle fautif, le nôtre ne peut que constater le silence.
+ */
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,7 +48,13 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   suggestedLignes?: SuggestedLigne[];
+  /** Provenance de la réponse : « gemini-3.5-flash-lite · 62 s ». */
+  origine?: string;
 }
+
+/* Au-delà, on cesse d'attendre. La fonction s'arrête à 170 s : lui laisser dix
+   secondes d'avance, c'est recevoir SON message plutôt que le nôtre. */
+const DELAI_MAX_MS = 180_000;
 
 interface SuggestedLigne {
   produitId?: string;
@@ -115,6 +138,10 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
   const [loading, setLoading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [attachedFile, setAttachedFile] = useState<{ name: string; content: string } | null>(null);
+  /** Secondes écoulées depuis l'envoi : la seule preuve visible que ça travaille. */
+  const [attente, setAttente] = useState(0);
+  const abortRef = useRef<AbortController | null>(null);
+  const annuleRef = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -130,6 +157,27 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  /* Le chrono de l'attente. */
+  useEffect(() => {
+    if (!loading) { setAttente(0); return; }
+    const t0 = Date.now();
+    const id = window.setInterval(() => setAttente(Math.round((Date.now() - t0) / 1000)), 1000);
+    return () => window.clearInterval(id);
+  }, [loading]);
+
+  /* Fermer le dialogue pendant une attente coupe la requête. */
+  useEffect(() => {
+    if (!open && abortRef.current) {
+      annuleRef.current = true;
+      abortRef.current.abort();
+    }
+  }, [open]);
+
+  const annuler = useCallback(() => {
+    annuleRef.current = true;
+    abortRef.current?.abort();
+  }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -172,11 +220,17 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
     setMessages(prev => [...prev, { role: 'user', content: text || `📎 ${attachedFile?.name}` }]);
     setLoading(true);
 
+    const controller = new AbortController();
+    abortRef.current = controller;
+    annuleRef.current = false;
+    const minuteur = window.setTimeout(() => controller.abort(), DELAI_MAX_MS);
+
     try {
       // Garde les 10 derniers messages pour éviter les dépassements de tokens Groq
       const history = messages.slice(-10).map(m => ({ role: m.role, content: m.content }));
       const { data, error } = await supabase.functions.invoke('devis-assistant', {
         body: { message: userContent, history, devisContext: `${devisContext || ''}${CATALYST_TABLE}`, produitsCatalog },
+        signal: controller.signal,
       });
       if (error) {
         /* `error.message` ne vaut que « Edge Function returned a non-2xx
@@ -190,8 +244,8 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
             if (corps?.error) detail = String(corps.error);
             if (Array.isArray(corps?.essais) && corps.essais.length) {
               detail += ' — ' + corps.essais
-                .map((x: { modele: string; status: number; message: string }) =>
-                  `${x.modele}: ${x.status} ${String(x.message).slice(0, 120)}`)
+                .map((x: { modele: string; status: number; message: string; ms?: number }) =>
+                  `${x.modele}: ${x.status}${x.ms != null ? ` en ${Math.round(x.ms / 1000)} s` : ''} ${String(x.message).slice(0, 120)}`)
                 .join(' | ');
             }
           } catch { /* corps illisible : le message brut fera l'affaire */ }
@@ -200,10 +254,15 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
       }
       const raw: string = data.response || 'Erreur de réponse.';
       const { clean, lignes } = parseSuggestedLignes(raw);
+      /* D'où vient la réponse et en combien de temps : c'est ce qui manquait
+         pour distinguer « lent » de « en panne » sans ouvrir les journaux. */
+      const origine = [data.modele, data.ms != null ? `${Math.round(data.ms / 1000)} s` : null]
+        .filter(Boolean).join(' · ');
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: clean,
         suggestedLignes: lignes ?? undefined,
+        origine: origine || undefined,
       }]);
     } catch (e) {
       /* DIRE CE QUI A ÉCHOUÉ. « Erreur lors de la communication avec l'IA »
@@ -211,13 +270,17 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
          de quota ou d'une simple coupure réseau — et sans le message, il n'y
          a rien à chercher dans les journaux. */
       const detail = (e as Error)?.message?.trim();
-      setMessages(prev => [...prev, {
-        role: 'assistant',
-        content: detail
+      const contenu = controller.signal.aborted
+        ? (annuleRef.current
+          ? '⏹ Demande interrompue.'
+          : `⚠️ Aucune réponse au bout de ${Math.round(DELAI_MAX_MS / 60_000)} minutes — le modèle est probablement saturé. Réessayez, ou posez une question plus courte.`)
+        : (detail
           ? `⚠️ Erreur lors de la communication avec l'IA — ${detail}`
-          : "⚠️ Erreur lors de la communication avec l'IA.",
-      }]);
+          : "⚠️ Erreur lors de la communication avec l'IA.");
+      setMessages(prev => [...prev, { role: 'assistant', content: contenu }]);
     } finally {
+      window.clearTimeout(minuteur);
+      abortRef.current = null;
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 100);
     }
@@ -297,6 +360,9 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
                 }`}>
                   {m.content}
                 </div>
+                {m.origine && (
+                  <span className="text-[10px] text-muted-foreground/60 px-1">{m.origine}</span>
+                )}
                 {m.suggestedLignes && m.suggestedLignes.length > 0 && onInsertLignes && (
                   <Button size="sm" className="self-start h-7 text-xs" onClick={() => insertLignes(m.suggestedLignes!)}>
                     <Plus className="w-3 h-3 mr-1" />
@@ -311,8 +377,15 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
           {loading && (
             <div className="flex gap-2 justify-start">
               <Bot className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-              <div className="bg-muted rounded-lg px-3 py-2">
-                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              <div className="bg-muted rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground shrink-0" />
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  Réflexion… {attente} s
+                  {attente >= 15 && ' — un devis chargé demande souvent une minute'}
+                </span>
+                <button onClick={annuler} className="text-xs underline text-muted-foreground hover:text-foreground">
+                  Arrêter
+                </button>
               </div>
             </div>
           )}

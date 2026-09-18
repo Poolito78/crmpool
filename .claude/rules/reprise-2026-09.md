@@ -250,8 +250,15 @@ fonction ignore `negoce` et tout part encore en NEG.ISO.
    trancher sur le catalogue papier.
 3. **Familles de rails non saisies** : fluviaux, décors spécifiques, points de
    rassemblement, volets d'occultation, J10.
-4. **Assistant IA du devis** (14 sept.) : la requête atteignait bien la
-   fonction, qui rendait 500 — Groq a retiré `llama-3.3-70b-versatile` et le
-   repli visait `gemini-2.0-flash`, arrêté le 11. `devis-assistant` essaie
-   désormais les modèles Gemini 3.x puis Groq, et le dialogue affiche le détail
-   de chaque tentative. **À déployer** : `.\deploy-function.ps1 devis-assistant`.
+4. **Assistant IA du devis — LENT, PAS EN PANNE** (18 sept.). La chaîne de
+   repli du 14 sept. est **déployée** (version 7, vérifiée identique au dépôt) :
+   l'ancienne mention « à déployer » était périmée. Mesuré le 18 :
+   `gemini-3.6-flash` répond **503 « high demand »** en une demi-seconde (sans
+   gravité, c'est un incident Google du jour) et `gemini-3.5-flash-lite` prend
+   **62 s** sur un devis de vingt lignes — il réfléchit avant d'écrire. La
+   fonction rendait donc bien sa réponse ; l'écran ne montrait qu'un rouet.
+   Depuis : chrono à l'écran, mot qui rassure passé 15 s, bouton « Arrêter »,
+   modèle et durée sous la réponse ; côté fonction, une borne par appel
+   (`ATTENTE_MODELE_MS`, 90 s), un budget de chaîne (`BUDGET_MS`, 170 s) et la
+   durée de chaque tentative dans les journaux comme dans `essais`.
+   **À déployer** : `.\deploy-function.ps1 devis-assistant`.
