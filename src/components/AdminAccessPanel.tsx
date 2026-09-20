@@ -12,9 +12,10 @@ type Row = {
   crm_active?: boolean | null;
   crm_access: boolean | null;
   crm_achat_access?: boolean | null;
+  ca_access?: boolean | null;
 };
 
-type AccessField = 'crm_active' | 'crm_access' | 'crm_achat_access';
+type AccessField = 'crm_active' | 'crm_access' | 'crm_achat_access' | 'ca_access';
 
 // Panneau admin natif : gère les droits crmpool par utilisateur (table partagée
 // veille_roles). Réservé aux administrateurs (role = 'admin').
@@ -73,7 +74,8 @@ export default function AdminAccessPanel() {
           <p className="text-sm text-muted-foreground mt-0.5">
             Cochez les droits accordés à chaque utilisateur. « Compte actif » conditionne l'accès
           à l'application ; « Accès CRM » ouvre la page CRM ; « Accès Achat » le périmètre achats.
-          Les administrateurs ont tous les droits.
+          Les administrateurs ont tous les droits — sauf « Accès CA », qui se coche nommément
+          pour chacun, administrateurs compris.
           </p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
@@ -103,7 +105,8 @@ export default function AdminAccessPanel() {
                 <th className="py-2 px-3 font-medium">Rôle</th>
                 <th className="py-2 px-3 font-medium text-center">Compte actif</th>
                 <th className="py-2 px-3 font-medium text-center">Accès CRM</th>
-                <th className="py-2 pl-3 font-medium text-center">Accès Achat</th>
+                <th className="py-2 px-3 font-medium text-center">Accès Achat</th>
+                <th className="py-2 pl-3 font-medium text-center" title="Tableau de bord CA par client (poolito78.github.io/ca-mouhot)">Accès CA</th>
               </tr>
             </thead>
             <tbody>
@@ -157,7 +160,7 @@ export default function AdminAccessPanel() {
                         />
                       )}
                     </td>
-                    <td className="py-2.5 pl-3 text-center">
+                    <td className="py-2.5 px-3 text-center">
                       {isAdminRow ? (
                         <span className="text-xs text-muted-foreground">tous droits</span>
                       ) : (
@@ -170,6 +173,20 @@ export default function AdminAccessPanel() {
                           onChange={e => toggle(r, 'crm_achat_access', e.target.checked)}
                         />
                       )}
+                    </td>
+                    {/* Accès CA : case réelle pour TOUT LE MONDE, administrateurs compris.
+                        La policy RLS de ca_dashboard_data exige ca_access = true nommément :
+                        afficher « tous droits » pour un admin laisserait croire à un accès
+                        qu'il n'a pas, sans moyen de se le donner. */}
+                    <td className="py-2.5 pl-3 text-center">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-input accent-primary cursor-pointer disabled:opacity-50"
+                        checked={!!r.ca_access}
+                        disabled={saving || (!isAdminRow && !r.crm_active)}
+                        title={!isAdminRow && !r.crm_active ? 'Activez d\'abord le compte' : 'Tableau de bord CA par client'}
+                        onChange={e => toggle(r, 'ca_access', e.target.checked)}
+                      />
                     </td>
                   </tr>
                 );
