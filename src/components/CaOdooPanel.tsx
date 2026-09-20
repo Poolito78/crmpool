@@ -9,7 +9,7 @@ import { useCaOdoo, CA_ODOO_URL, type CaMarque } from '@/lib/caOdoo';
 // la projection fin d'année — au total puis par marque.
 //
 // ⚠️ Les sous-lignes « dont … » sont DÉJÀ COMPRISES dans le total de leur
-// marque (ISOFLOOR dans ISOMARK, STI dans ISOSIGN). Elles s'affichent en
+// marque (ISOFLOOR dans ISOMARK ; STI et RTE dans ISOSIGN). Elles s'affichent en
 // retrait, en italique : ne jamais les additionner au-dessus.
 //
 // ⚠️ La tuile ne s'affiche pas du tout sans le droit « Accès CA » — la requête
@@ -48,15 +48,17 @@ function LigneMarque({ m }: { m: CaMarque }) {
         <td className="py-2 px-3 text-right tabular-nums font-medium"><Evolution avant={m.ca25} apres={m.ca26} /></td>
         <td className="py-2 pl-3 text-right tabular-nums font-semibold">{formatMontant(m.projection)}</td>
       </tr>
-      {m.dont && (m.dont.ca26 !== 0 || m.dont.ca25 !== 0) && (
-        <tr className="border-b border-border/50 text-xs italic text-muted-foreground">
-          <td className="py-1.5 pr-3 pl-4">{m.dont.label}</td>
-          <td className="py-1.5 px-3 text-right tabular-nums">{formatMontant(m.dont.ca26)}</td>
-          <td className="py-1.5 px-3 text-right tabular-nums">{formatMontant(m.dont.ca25)}</td>
-          <td className="py-1.5 px-3 text-right tabular-nums"><Evolution avant={m.dont.ca25} apres={m.dont.ca26} /></td>
-          <td className="py-1.5 pl-3 text-right tabular-nums">{formatMontant(m.dont.projection)}</td>
-        </tr>
-      )}
+      {m.donts
+        .filter(d => d.ca26 !== 0 || d.ca25 !== 0 || d.projection !== 0)
+        .map(d => (
+          <tr key={d.key} className="border-b border-border/50 text-xs italic text-muted-foreground">
+            <td className="py-1.5 pr-3 pl-4">{d.label}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums">{formatMontant(d.ca26)}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums">{formatMontant(d.ca25)}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums"><Evolution avant={d.ca25} apres={d.ca26} /></td>
+            <td className="py-1.5 pl-3 text-right tabular-nums">{formatMontant(d.projection)}</td>
+          </tr>
+        ))}
     </>
   );
 }
@@ -159,7 +161,8 @@ export default function CaOdooPanel() {
               sous-catégorie « FLOORING » (résine ISOFLOOR). ISOSIGN regroupe la signalisation verticale,
               le transport et les lignes hors catégorie, la gamme plastique STI et le RTE. Les sous-lignes
               « dont … » sont <b className="text-foreground">déjà comprises</b> dans le total de leur
-              marque — ne pas les additionner.
+              marque — ne pas les additionner : ce qui reste d'ISOSIGN une fois STI et RTE retirés est la
+              signalisation verticale elle-même.
             </p>
             <p>
               <b className="text-foreground">Projection.</b> Calculée par client : CA 2026 à date + reste à

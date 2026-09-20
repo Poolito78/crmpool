@@ -47,15 +47,18 @@ type CaSummary = {
 
 type CaPayload = { summary: CaSummary; rows: CaRow[] };
 
-/** Une marque telle qu'elle s'affiche : un total, et le « dont » qu'il contient déjà. */
+/** Un sous-ensemble DÉJÀ COMPRIS dans sa marque — à afficher, jamais à additionner. */
+export type CaSousMarque = { key: string; label: string; ca26: number; ca25: number; projection: number };
+
+/** Une marque telle qu'elle s'affiche : un total, et les « dont » qu'il contient déjà. */
 export type CaMarque = {
   key: string;
   label: string;
   ca26: number;
   ca25: number;
   projection: number;
-  /** Sous-ensemble DÉJÀ COMPRIS dans les montants ci-dessus — ne jamais l'additionner. */
-  dont?: { label: string; ca26: number; ca25: number; projection: number };
+  /** Sous-ensembles DÉJÀ COMPRIS dans les montants ci-dessus — ne jamais les additionner. */
+  donts: CaSousMarque[];
 };
 
 export type CaOdooData = {
@@ -130,9 +133,9 @@ function construire(payload: CaPayload): CaOdooData {
   const { a26, a25, proj } = ventiler(rows);
 
   // ISOSIGN regroupe la signalisation verticale, le STI et le RTE : c'est le
-  // périmètre ISOSIGN au sens commercial. STI reste visible en sous-ligne, RTE
-  // (quelques milliers d'euros) y est fondu — sans quoi la somme des marques
-  // ne retomberait pas sur le total.
+  // périmètre ISOSIGN au sens commercial. STI et RTE s'affichent chacun en
+  // sous-ligne « dont », comme ISOFLOOR sous ISOMARK — ce qui reste après eux
+  // est la signalisation verticale elle-même.
   const marques: CaMarque[] = [
     {
       key: 'isomark',
@@ -140,7 +143,9 @@ function construire(payload: CaPayload): CaOdooData {
       ca26: a26.isomark,
       ca25: a25.isomark,
       projection: proj.isomark,
-      dont: { label: 'dont ISOFLOOR (résine)', ca26: a26.isofloor, ca25: a25.isofloor, projection: proj.isofloor },
+      donts: [
+        { key: 'isofloor', label: 'dont ISOFLOOR (résine)', ca26: a26.isofloor, ca25: a25.isofloor, projection: proj.isofloor },
+      ],
     },
     {
       key: 'isosign',
@@ -148,7 +153,10 @@ function construire(payload: CaPayload): CaOdooData {
       ca26: a26.isosign_sv + a26.sti + a26.rte,
       ca25: a25.isosign_sv + a25.sti + a25.rte,
       projection: proj.isosign_sv + proj.sti + proj.rte,
-      dont: { label: 'dont STI (gamme plastique)', ca26: a26.sti, ca25: a25.sti, projection: proj.sti },
+      donts: [
+        { key: 'sti', label: 'dont STI (gamme plastique)', ca26: a26.sti, ca25: a25.sti, projection: proj.sti },
+        { key: 'rte', label: 'dont RTE', ca26: a26.rte, ca25: a25.rte, projection: proj.rte },
+      ],
     },
   ];
 
