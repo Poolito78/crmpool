@@ -35,6 +35,29 @@ type CaRow = {
   rte26?: number; rte25?: number; rte25full?: number;
 };
 
+/**
+ * Réalisé mensuel, tel que la fonction `ca-refresh` le publie.
+ *
+ * ⚠️ 2026 SEULEMENT, et c'est délibéré. Le CA 2026 vient entièrement d'Odoo :
+ * son découpage par mois est exact. Le CA STI 2025 est en revanche FIGÉ au
+ * niveau de l'ANNÉE (fichier client + rapport commercial) et ne se décompose
+ * pas par mois — publier un mensuel 2025 reviendrait à afficher les chiffres
+ * d'Odoo sur le STI, ceux-là mêmes qu'on corrige parce qu'ils sont faux de
+ * près de 700 000 €.
+ *
+ * ⚠️ Absent des jeux publiés avant l'arrivée de l'actualisation à la demande :
+ * toujours prévoir le cas où il n'y a rien à montrer.
+ */
+export type CaMois = {
+  mois: number;
+  isomark: number;
+  isofloor: number;
+  isosign: number;
+  sti: number;
+  rte: number;
+  total: number;
+};
+
 type CaSummary = {
   cutoff_2026?: string;
   generated_at_odoo?: string;
@@ -43,6 +66,7 @@ type CaSummary = {
   overall_25full?: number;
   overall_projection?: number;
   overall_growth_rate?: number;
+  monthly?: CaMois[];
 };
 
 type CaPayload = { summary: CaSummary; rows: CaRow[] };
@@ -75,6 +99,8 @@ export type CaOdooData = {
   tauxCroissance: number;
   nbClients: number;
   marques: CaMarque[];
+  /** Réalisé mensuel 2026. Vide tant qu'aucune actualisation n'a eu lieu. */
+  mois: CaMois[];
 };
 
 const n = (v: number | undefined | null) => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -171,7 +197,40 @@ function construire(payload: CaPayload): CaOdooData {
     tauxCroissance: n(s.overall_growth_rate),
     nbClients: rows.length,
     marques,
+    mois: Array.isArray(s.monthly) ? s.monthly : [],
   };
+}
+
+/* Une seule lecture pour tous les consommateurs.
+ *
+ * Le tableau de bord appelle ce hook deux fois : une fois pour savoir s'il doit
+ * proposer l'onglet « CA Odoo », une fois dans le panneau lui-même. Sans cette
+ * mémo, la même ligne serait lue deux fois à chaque affichage. La promesse vit
+ * le temps de la page : les chiffres ne bougent qu'à une actualisation, qui
+ * recharge de toute façon. */
+let lecturePartagee: Promise<CaOdooData | null> | null = null;
+
+async function chargerJeu(): Promise<CaOdooData | null> {
+  // cast : ca_dashboard_data n'est pas dans les types générés tant que
+  // gen-types.ps1 n'a pas été relancé après la migration.
+  const { data: ligne, error } = await (supabase as never as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (k: string, v: string) => {
+          maybeSingle: () => Promise<{ data: { payload: CaPayload; updated_at: string } | null; error: unknown }>;
+        };
+      };
+    };
+  })
+    .from('ca_dashboard_data')
+    .select('payload, updated_at')
+    .eq('id', 'latest')
+    .maybeSingle();
+
+  if (error || !ligne || !ligne.payload) return null;
+  const construit = construire(ligne.payload);
+  construit.publieLe = ligne.updated_at ?? null;
+  return construit;
 }
 
 /**
@@ -184,36 +243,14 @@ export function useCaOdoo() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      // cast : ca_dashboard_data n'est pas dans les types générés tant que
-      // gen-types.ps1 n'a pas été relancé après la migration.
-      const { data: rows, error } = await (supabase as never as {
-        from: (t: string) => {
-          select: (c: string) => {
-            eq: (k: string, v: string) => {
-              maybeSingle: () => Promise<{ data: { payload: CaPayload; updated_at: string } | null; error: unknown }>;
-            };
-          };
-        };
-      })
-        .from('ca_dashboard_data')
-        .select('payload, updated_at')
-        .eq('id', 'latest')
-        .maybeSingle();
-
-      if (cancelled) return;
-      if (error || !rows || !rows.payload) {
-        setData(null);
-        setLoading(false);
-        return;
-      }
-      const built = construire(rows.payload);
-      built.publieLe = rows.updated_at ?? null;
-      setData(built);
+    let annule = false;
+    if (!lecturePartagee) lecturePartagee = chargerJeu();
+    lecturePartagee.then((jeu) => {
+      if (annule) return;
+      setData(jeu);
       setLoading(false);
-    })();
-    return () => { cancelled = true; };
+    });
+    return () => { annule = true; };
   }, []);
 
   return { data, loading, autorise: !!data };

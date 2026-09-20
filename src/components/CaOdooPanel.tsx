@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { TrendingUp, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, CalendarDays } from 'lucide-react';
 import { formatMontant } from '@/lib/store';
-import { useCaOdoo, CA_ODOO_URL, type CaMarque } from '@/lib/caOdoo';
+import { useCaOdoo, CA_ODOO_URL, type CaMarque, type CaMois } from '@/lib/caOdoo';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 // ─── Tuile « CA Odoo » du tableau de bord ────────────────────────────────────
 //
@@ -63,9 +64,99 @@ function LigneMarque({ m }: { m: CaMarque }) {
   );
 }
 
+const NOM_MOIS = [
+  'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
+  'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre',
+];
+
+/**
+ * Détail mensuel du réalisé 2026, ouvert au clic sur la carte « CA 2026 à date ».
+ *
+ * ⚠️ Les colonnes « dont » (ISOFLOOR sous ISOMARK, STI et RTE sous ISOSIGN)
+ * sont DÉJÀ COMPRISES dans leur marque : ISOMARK + ISOSIGN = Total, les
+ * sous-détails ne s'y ajoutent pas.
+ */
+function DetailMensuel({ mois, cutoff }: { mois: CaMois[]; cutoff: string | null }) {
+  if (!mois.length) {
+    return (
+      <p className="text-sm text-muted-foreground py-6 text-center">
+        Le détail mensuel n'est pas encore disponible : il apparaîtra après la prochaine
+        actualisation des données.
+      </p>
+    );
+  }
+
+  const cumul = mois.reduce(
+    (a, m) => ({
+      isomark: a.isomark + m.isomark, isofloor: a.isofloor + m.isofloor,
+      isosign: a.isosign + m.isosign, sti: a.sti + m.sti, rte: a.rte + m.rte,
+      total: a.total + m.total,
+    }),
+    { isomark: 0, isofloor: 0, isosign: 0, sti: 0, rte: 0, total: 0 },
+  );
+
+  const dernierMois = mois[mois.length - 1]?.mois;
+  const jour = cutoff ? Number(cutoff.slice(8, 10)) : null;
+
+  return (
+    <div className="space-y-3">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground text-left">
+              <th className="py-2 pr-3 font-medium">Mois</th>
+              <th className="py-2 px-3 font-medium text-right">ISOMARK</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont ISOFLOOR</th>
+              <th className="py-2 px-3 font-medium text-right">ISOSIGN</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont STI</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont RTE</th>
+              <th className="py-2 pl-3 font-medium text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {mois.map(m => (
+              <tr key={m.mois} className="border-b border-border/50">
+                <td className="py-2 pr-3 font-medium whitespace-nowrap">
+                  {NOM_MOIS[m.mois - 1] ?? m.mois}
+                  {m.mois === dernierMois && jour && (
+                    <span className="text-xs text-muted-foreground font-normal"> (au {jour})</span>
+                  )}
+                </td>
+                <td className="py-2 px-3 text-right tabular-nums">{formatMontant(m.isomark)}</td>
+                <td className="py-2 px-3 text-right tabular-nums text-xs italic text-muted-foreground">{formatMontant(m.isofloor)}</td>
+                <td className="py-2 px-3 text-right tabular-nums">{formatMontant(m.isosign)}</td>
+                <td className="py-2 px-3 text-right tabular-nums text-xs italic text-muted-foreground">{formatMontant(m.sti)}</td>
+                <td className="py-2 px-3 text-right tabular-nums text-xs italic text-muted-foreground">{formatMontant(m.rte)}</td>
+                <td className="py-2 pl-3 text-right tabular-nums font-medium">{formatMontant(m.total)}</td>
+              </tr>
+            ))}
+            <tr className="font-semibold">
+              <td className="py-2 pr-3">Cumul</td>
+              <td className="py-2 px-3 text-right tabular-nums">{formatMontant(cumul.isomark)}</td>
+              <td className="py-2 px-3 text-right tabular-nums text-xs italic">{formatMontant(cumul.isofloor)}</td>
+              <td className="py-2 px-3 text-right tabular-nums">{formatMontant(cumul.isosign)}</td>
+              <td className="py-2 px-3 text-right tabular-nums text-xs italic">{formatMontant(cumul.sti)}</td>
+              <td className="py-2 px-3 text-right tabular-nums text-xs italic">{formatMontant(cumul.rte)}</td>
+              <td className="py-2 pl-3 text-right tabular-nums">{formatMontant(cumul.total)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Les colonnes en italique sont <b className="text-foreground">déjà comprises</b> dans leur
+        marque : ISOMARK + ISOSIGN donne le total, les sous-détails ne s'y ajoutent pas.
+        Le mensuel ne couvre que <b className="text-foreground">2026</b> : le CA 2025 du STI est figé
+        au niveau de l'année sur le fichier client, il n'existe pas mois par mois — en afficher un
+        découpage reviendrait à publier les chiffres d'Odoo, ceux qu'on corrige justement.
+      </p>
+    </div>
+  );
+}
+
 export default function CaOdooPanel() {
   const { data, loading, autorise } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
+  const [mensuelOuvert, setMensuelOuvert] = useState(false);
 
   if (loading || !autorise || !data) return null;
 
@@ -93,11 +184,21 @@ export default function CaOdooPanel() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border p-3">
-          <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">CA 2026 à date</p>
+        {/* Cliquable : ouvre le détail mensuel. C'est un <button> et non une
+            <div> avec onClick, pour rester atteignable au clavier. */}
+        <button
+          type="button"
+          onClick={() => setMensuelOuvert(true)}
+          title="Voir le détail mois par mois"
+          className="rounded-lg border border-border p-3 text-left hover:border-primary/50 hover:bg-muted/40 transition-colors group"
+        >
+          <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1.5">
+            CA 2026 à date
+            <CalendarDays className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
+          </p>
           <p className="text-xl font-semibold tabular-nums mt-1">{formatMontant(data.ca26)}</p>
           <p className="text-xs mt-0.5"><Evolution avant={data.ca25ytd} apres={data.ca26} /> vs 2025</p>
-        </div>
+        </button>
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">CA 2025 à date</p>
           <p className="text-xl font-semibold tabular-nums mt-1 text-muted-foreground">{formatMontant(data.ca25ytd)}</p>
@@ -183,6 +284,19 @@ export default function CaOdooPanel() {
           </div>
         )}
       </div>
+
+      <Dialog open={mensuelOuvert} onOpenChange={setMensuelOuvert}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Réalisé mensuel 2026</DialogTitle>
+            <DialogDescription>
+              CA facturé mois par mois, du 01/01 au {formatJour(data.cutoff)} — source Odoo,
+              avoirs déduits.
+            </DialogDescription>
+          </DialogHeader>
+          <DetailMensuel mois={data.mois} cutoff={data.cutoff} />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

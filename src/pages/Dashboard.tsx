@@ -12,6 +12,10 @@ import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
 import { useCurrentUser } from '@/hooks/useAuth';
 import CaOdooPanel from '@/components/CaOdooPanel';
+import { useCaOdoo } from '@/lib/caOdoo';
+
+type DashTab = 'overview' | 'previsionnel' | 'caodoo';
+const DASH_TABS: DashTab[] = ['overview', 'previsionnel', 'caodoo'];
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -23,10 +27,20 @@ export default function Dashboard() {
   const { actions: crmActions } = useCrmActions();
   const { concurrents: concurrentsList, notes: concurrentNotes } = useConcurrents();
   const hidden = useHiddenTiles();
-  const [dashTab, setDashTab] = useState<'overview' | 'previsionnel'>(() => {
-    try { return (localStorage.getItem('dashboard_tab') as 'overview' | 'previsionnel') || 'overview'; } catch { return 'overview'; }
+  /* Onglet mémorisé. La valeur stockée est VALIDÉE : un onglet retiré depuis
+     (ou une clé écrite par une version précédente) laisserait sinon le tableau
+     de bord sur un onglet qui n'existe plus, donc sur un écran vide. */
+  const [dashTab, setDashTab] = useState<DashTab>(() => {
+    try {
+      const v = localStorage.getItem('dashboard_tab');
+      return DASH_TABS.includes(v as DashTab) ? (v as DashTab) : 'overview';
+    } catch { return 'overview'; }
   });
-  const setDashTabPersist = (t: 'overview' | 'previsionnel') => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
+  const setDashTabPersist = (t: DashTab) => { setDashTab(t); try { localStorage.setItem('dashboard_tab', t); } catch { /* ignore */ } };
+  // Onglet « CA Odoo » : seulement pour les comptes qui ont le droit « Accès CA »
+  // (la lecture ne renvoie alors aucune ligne) et si la tuile n'est pas masquée.
+  const { autorise: caOdooAutorise } = useCaOdoo();
+  const caOdooDispo = caOdooAutorise && !hidden.has('panel-ca-odoo');
   /* Le glisser-déposer d'un document vit desormais dans CRMLayout : il
      fonctionne sur TOUTES les pages, et la fenêtre d'analyse y est déjà
      montée. En garder une copie ici en ouvrirait deux. */
@@ -145,15 +159,15 @@ export default function Dashboard() {
       <div className="flex gap-1 border-b border-border">
         <button onClick={() => setDashTabPersist('overview')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'overview' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Vue d'ensemble</button>
         {canAchat && <button onClick={() => setDashTabPersist('previsionnel')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'previsionnel' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>Prévisionnel devis</button>}
+        {caOdooDispo && <button onClick={() => setDashTabPersist('caodoo')} className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${dashTab === 'caodoo' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>CA Odoo</button>}
       </div>
 
-      {dashTab === 'previsionnel' && canAchat ? (
+      {dashTab === 'caodoo' && caOdooDispo ? (
+        <CaOdooPanel />
+      ) : dashTab === 'previsionnel' && canAchat ? (
         <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
       ) : (
       <>
-      {/* ── CA Odoo par marque (masqué sans le droit « Accès CA ») ── */}
-      {!hidden.has('panel-ca-odoo') && <CaOdooPanel />}
-
       {/* ── Alertes prioritaires ── */}
       {(((isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes'))) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
