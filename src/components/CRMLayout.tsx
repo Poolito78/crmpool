@@ -14,10 +14,35 @@ import { useCommercials } from '@/hooks/useCommercials';
  * téléchargés par tout le monde à la première visite. */
 const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
+import { CA_ODOO_URL } from '@/lib/caOdoo';
 
-type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string };
+// `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
+// Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
+// vrai <a>, et l'entrée ne peut jamais être « active ».
+type NavLink = { type: 'link'; label: string; icon: any; path: string; shortLabel?: string; external?: boolean };
 type NavGroup = { type: 'group'; label: string; icon: any; items: NavLink[] };
 type NavEntry = NavLink | NavGroup;
+
+/* Un item de nav : <Link> interne, ou <a target="_blank"> pour un lien externe.
+   Passer par un seul composant évite d'oublier le cas externe dans l'un des
+   quatre endroits où la nav se rend (icônes repliées, lien racine, item de
+   groupe, barre mobile). */
+function NavItem({ item, className, onClick, title, children }: {
+  item: NavLink; className: string; onClick?: () => void; title?: string; children: React.ReactNode;
+}) {
+  if (item.external) {
+    return (
+      <a href={item.path} target="_blank" rel="noopener noreferrer" onClick={onClick} title={title} className={className}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link to={item.path} onClick={onClick} title={title} className={className}>
+      {children}
+    </Link>
+  );
+}
 
 const NAV: NavEntry[] = [
   { type: 'link',  label: 'Tableau de bord', icon: LayoutDashboard, path: '/' },
@@ -31,6 +56,7 @@ const NAV: NavEntry[] = [
       { type: 'link', label: 'Devis',              icon: FileText,    path: '/devis' },
       { type: 'link', label: 'Commandes Client',   icon: ClipboardList, path: '/commandes-client' },
       { type: 'link', label: 'Factures Client',    icon: Receipt,     path: '/factures-client' },
+      { type: 'link', label: 'CA ODOO',            icon: TrendingUp,  path: CA_ODOO_URL, external: true },
     ],
   },
   {
@@ -200,9 +226,9 @@ export default function CRMLayout() {
       return flat.map(item => {
         const active = isLinkActive(item.path);
         return (
-          <Link
+          <NavItem
             key={item.path}
-            to={item.path}
+            item={item}
             onClick={onLinkClick}
             title={item.label}
             className={cn(
@@ -213,7 +239,7 @@ export default function CRMLayout() {
             )}
           >
             <item.icon className="w-5 h-5 shrink-0" />
-          </Link>
+          </NavItem>
         );
       });
     }
@@ -221,9 +247,9 @@ export default function CRMLayout() {
       if (entry.type === 'link') {
         const active = isLinkActive(entry.path);
         return (
-          <Link
+          <NavItem
             key={entry.path}
-            to={entry.path}
+            item={entry}
             onClick={onLinkClick}
             className={cn(
               'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150',
@@ -234,7 +260,7 @@ export default function CRMLayout() {
           >
             <entry.icon className="w-5 h-5 shrink-0" />
             {entry.label}
-          </Link>
+          </NavItem>
         );
       }
 
@@ -263,9 +289,9 @@ export default function CRMLayout() {
               {entry.items.map(item => {
                 const active = isLinkActive(item.path);
                 return (
-                  <Link
+                  <NavItem
                     key={item.path}
-                    to={item.path}
+                    item={item}
                     onClick={onLinkClick}
                     className={cn(
                       'flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm font-medium transition-all duration-150',
@@ -276,7 +302,7 @@ export default function CRMLayout() {
                   >
                     <item.icon className="w-4 h-4 shrink-0" />
                     <span className={cn('min-w-0 truncate', item.label.length > 16 && 'text-[13px]')}>{item.label}</span>
-                  </Link>
+                  </NavItem>
                 );
               })}
             </div>
@@ -456,9 +482,9 @@ export default function CRMLayout() {
         {navFlat.slice(0, 5).map(item => {
           const active = location.pathname === item.path;
           return (
-            <Link
+            <NavItem
               key={item.path}
-              to={item.path}
+              item={item}
               className={cn(
                 'flex flex-col items-center gap-0.5 px-2 py-1 text-xs transition-colors',
                 active ? 'text-primary' : 'text-muted-foreground'
@@ -466,7 +492,7 @@ export default function CRMLayout() {
             >
               <item.icon className="w-5 h-5" />
               <span className="truncate max-w-[60px]">{item.label.split(' ').pop()}</span>
-            </Link>
+            </NavItem>
           );
         })}
       </nav>

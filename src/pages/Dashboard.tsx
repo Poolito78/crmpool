@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { useConcurrents, formatCreateur } from '@/lib/concurrents';
 import { useHiddenTiles } from '@/lib/dashboardSettings';
 import { useCurrentUser } from '@/hooks/useAuth';
+import CaOdooPanel from '@/components/CaOdooPanel';
 
 const TYPE_ICON: Record<string, any> = {
   visite: MapPin, appel: Phone, email: Mail, tache: CheckSquare, rdv: Calendar,
@@ -150,6 +151,9 @@ export default function Dashboard() {
         <PrevisionnelDevis devis={devis} clients={clients} produits={produits} />
       ) : (
       <>
+      {/* ── CA Odoo par marque (masqué sans le droit « Accès CA ») ── */}
+      {!hidden.has('panel-ca-odoo') && <CaOdooPanel />}
+
       {/* ── Alertes prioritaires ── */}
       {(((isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes'))) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

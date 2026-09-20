@@ -21,7 +21,8 @@ export type DashboardTileId =
   | 'panel-echeances-fourn'
   | 'panel-derniers-devis'
   | 'panel-alertes-stock'
-  | 'panel-veille';
+  | 'panel-veille'
+  | 'panel-ca-odoo';
 
 export interface DashboardTileDef {
   id: DashboardTileId;
@@ -47,6 +48,7 @@ export const DASHBOARD_TILES: DashboardTileDef[] = [
   { id: 'panel-derniers-devis',  label: 'Derniers devis',          group: 'Panneaux' },
   { id: 'panel-alertes-stock',   label: 'Alertes stock',           group: 'Panneaux' },
   { id: 'panel-veille',          label: 'Veille concurrence',      group: 'Panneaux' },
+  { id: 'panel-ca-odoo',         label: 'CA Odoo par marque',      group: 'Panneaux' },
 ];
 
 const STORAGE_KEY = 'crm_dashboard_tiles_hidden';
