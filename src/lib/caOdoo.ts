@@ -58,6 +58,47 @@ export type CaMois = {
   total: number;
 };
 
+/**
+ * Un mois 2025 vu pour la comparaison du mois en cours. ⚠️ HORS STI : le STI
+ * 2025 d'Odoo est faux, la fonction le retire d'ISOSIGN et du total et publie
+ * `sti: null`. On compare donc le 2026 hors STI lui aussi.
+ */
+export type CaMoisN1 = Omit<CaMois, 'sti'> & { sti: null; hors_sti: true };
+
+export type CaCommandeEnCours = {
+  commande: string;
+  client: string;
+  date: string | null;
+  pret: number;
+  a_livrer: number;
+  reste: number;
+  statut: 'dans_le_mois' | 'retard' | 'au_dela' | 'sans_date' | 'retard_ancien';
+};
+
+/** Estimation de fin de mois (voir `estimerFinDeMois`, fonction `ca-refresh`). */
+export type CaEstimationMois =
+  | { erreur: string }
+  | {
+      fin_mois: string;
+      pret_a_facturer: CaMois;
+      a_livrer_fin_mois: CaMois;
+      dont_retard: number;
+      estimation: CaMois;
+      hors_estimation: { sans_date: number; au_dela_du_mois: number; retard_ancien: number; retard_max_jours: number };
+      nb_commandes: number;
+      commandes: CaCommandeEnCours[];
+    };
+
+/** Mois en cours : réalisé 2026, N-1 à même date (hors STI), estimation de fin de mois. */
+export type CaMoisEnCours = {
+  mois: number;
+  jour: number;
+  mtd26: CaMois;
+  mtd25: CaMoisN1;
+  mois25_complet: CaMoisN1;
+  estimation: CaEstimationMois;
+};
+
 type CaSummary = {
   cutoff_2026?: string;
   generated_at_odoo?: string;
@@ -67,6 +108,7 @@ type CaSummary = {
   overall_projection?: number;
   overall_growth_rate?: number;
   monthly?: CaMois[];
+  mois_en_cours?: CaMoisEnCours;
 };
 
 type CaPayload = { summary: CaSummary; rows: CaRow[] };
@@ -101,6 +143,8 @@ export type CaOdooData = {
   marques: CaMarque[];
   /** Réalisé mensuel 2026. Vide tant qu'aucune actualisation n'a eu lieu. */
   mois: CaMois[];
+  /** Mois en cours (comparaison N-1 + estimation). Absent avant la première actualisation qui le produit. */
+  moisEnCours: CaMoisEnCours | null;
 };
 
 const n = (v: number | undefined | null) => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -198,6 +242,7 @@ function construire(payload: CaPayload): CaOdooData {
     nbClients: rows.length,
     marques,
     mois: Array.isArray(s.monthly) ? s.monthly : [],
+    moisEnCours: s.mois_en_cours && s.mois_en_cours.mtd26 ? s.mois_en_cours : null,
   };
 }
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, CalendarDays } from 'lucide-react';
 import { formatMontant } from '@/lib/store';
-import { useCaOdoo, CA_ODOO_URL, type CaMarque, type CaMois } from '@/lib/caOdoo';
+import { useCaOdoo, CA_ODOO_URL, type CaMarque, type CaMois, type CaMoisEnCours } from '@/lib/caOdoo';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 // ─── Tuile « CA Odoo » du tableau de bord ────────────────────────────────────
@@ -153,6 +153,170 @@ function DetailMensuel({ mois, cutoff }: { mois: CaMois[]; cutoff: string | null
   );
 }
 
+type Colonnes = { isomark: number; isofloor: number; isosign: number; sti: number | null; rte: number; total: number };
+const COLS = ['isomark', 'isofloor', 'isosign', 'sti', 'rte', 'total'] as const;
+const DONT = new Set(['isofloor', 'sti', 'rte']);
+
+const STATUT_CDE: Record<string, string> = {
+  dans_le_mois: 'prévue ce mois',
+  retard: 'en retard',
+  au_dela: 'prévue après le mois',
+  sans_date: 'sans date',
+  retard_ancien: 'retard ancien',
+};
+
+function celluleClasse(k: string, extra = '') {
+  return `py-1.5 px-3 text-right tabular-nums ${DONT.has(k) ? 'text-xs italic text-muted-foreground' : ''} ${extra}`;
+}
+
+function LigneMontants({ libelle, m, horsSti, className = '' }: {
+  libelle: React.ReactNode; m: Colonnes; horsSti?: boolean; className?: string;
+}) {
+  return (
+    <tr className={`border-b border-border/50 ${className}`}>
+      <td className="py-1.5 pr-3 whitespace-nowrap">{libelle}</td>
+      {COLS.map(k => (
+        <td key={k} className={celluleClasse(k)}>
+          {m[k] === null ? <span className="text-xs italic">n.c.</span> : formatMontant(m[k] as number)}
+          {horsSti && (k === 'isosign' || k === 'total') && <sup>*</sup>}
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+function LigneEcart({ libelle, a, b }: { libelle: React.ReactNode; a: Colonnes; b: Colonnes }) {
+  return (
+    <tr className="border-b border-border/50">
+      <td className="py-1.5 pr-3 whitespace-nowrap">{libelle}</td>
+      {COLS.map(k => {
+        const x = a[k], y = b[k];
+        if (x === null || y === null) {
+          return <td key={k} className={celluleClasse(k)}><span className="text-xs italic">n.c.</span></td>;
+        }
+        const d = x - y;
+        return (
+          <td key={k} className={celluleClasse(k, d >= 0 ? '!text-green-600' : '!text-destructive')}>
+            {d >= 0 ? '+' : ''}{formatMontant(d)}
+            {y !== 0 && <div className="text-[10.5px]">{formatPct(d / Math.abs(y))}</div>}
+          </td>
+        );
+      })}
+    </tr>
+  );
+}
+
+/**
+ * Mois en cours : facturé 2026 à date, face au même mois 2025 à la même date,
+ * puis estimation de fin de mois (prêt à facturer + commandes à livrer).
+ *
+ * ⚠️ Le STI 2025 d'Odoo est faux : la fonction ne le publie pas. ISOSIGN et le
+ * total 2025 arrivent HORS STI, et le 2026 est ramené hors STI pour les écarts —
+ * jamais un STI 2026 réel contre un STI 2025 faux.
+ */
+function MoisEnCours({ mec }: { mec: CaMoisEnCours }) {
+  const nom = NOM_MOIS[mec.mois - 1] ?? String(mec.mois);
+  const horsSti = (m: CaMois): Colonnes => ({ ...m, isosign: m.isosign - m.sti, total: m.total - m.sti, sti: null });
+  const e = mec.estimation;
+  const fin = 'fin_mois' in e ? Number(e.fin_mois.slice(8, 10)) : null;
+
+  return (
+    <div className="space-y-2 border-t border-border pt-4">
+      <h3 className="text-sm font-semibold">
+        {nom} 2026 en cours{' '}
+        <span className="font-normal text-muted-foreground text-xs">
+          — comparaison N-1 au {mec.jour} et estimation de fin de mois
+        </span>
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground text-left">
+              <th className="py-2 pr-3 font-medium" />
+              <th className="py-2 px-3 font-medium text-right">ISOMARK</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont ISOFLOOR</th>
+              <th className="py-2 px-3 font-medium text-right">ISOSIGN</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont STI</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont RTE</th>
+              <th className="py-2 px-3 font-medium text-right">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            <LigneMontants libelle={`Facturé ${nom} 2026 au ${mec.jour}`} m={mec.mtd26} className="font-medium" />
+            <LigneMontants libelle={`Facturé ${nom} 2025 au ${mec.jour}`} m={mec.mtd25} horsSti className="text-muted-foreground" />
+            <LigneEcart libelle="Écart vs N-1 à même date*" a={horsSti(mec.mtd26)} b={mec.mtd25} />
+            {'erreur' in e ? (
+              <tr>
+                <td colSpan={7} className="py-2 text-destructive text-xs">
+                  Estimation de fin de mois indisponible : {e.erreur}
+                </td>
+              </tr>
+            ) : (
+              <>
+                <LigneMontants libelle="+ Prêt à facturer (livré, non facturé)" m={e.pret_a_facturer} />
+                <LigneMontants libelle={`+ Commandes à livrer d'ici le ${fin}`} m={e.a_livrer_fin_mois} />
+                <LigneMontants libelle={`= Estimation fin ${nom.toLowerCase()}`} m={e.estimation} className="font-bold bg-muted/40" />
+                <LigneMontants libelle={`${nom} 2025 complet`} m={mec.mois25_complet} horsSti className="text-muted-foreground" />
+                <LigneEcart libelle={`Estimation vs ${nom.toLowerCase()} 2025*`} a={horsSti(e.estimation)} b={mec.mois25_complet} />
+              </>
+            )}
+          </tbody>
+        </table>
+      </div>
+      {!('erreur' in e) && (
+        <>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <b className="text-foreground">Estimation</b> = facturé à date + prêt à facturer (lignes de
+            commande livrées non facturées) + reste des commandes confirmées prévues au plus tard le {fin}
+            {e.dont_retard ? ` (dont ${formatMontant(e.dont_retard)} en retard)` : ''}.{' '}
+            <b className="text-foreground">Hors estimation</b> : {formatMontant(e.hors_estimation.au_dela_du_mois)} prévus
+            après le mois, {formatMontant(e.hors_estimation.sans_date)} sans date,{' '}
+            {formatMontant(e.hors_estimation.retard_ancien)} en retard de plus de {e.hors_estimation.retard_max_jours} jours
+            (à vérifier). {e.nb_commandes} commandes en cours, montants HT.
+            <br />* ISOSIGN et total 2025 sont <b className="text-foreground">hors STI</b> (le STI 2025 d'Odoo est faux, figé
+            à l'année) ; les écarts se calculent hors STI des deux côtés.
+          </p>
+          {e.commandes.length > 0 && (
+            <details className="text-xs">
+              <summary className="cursor-pointer font-medium py-1">
+                Commandes prises en compte ({e.commandes.length})
+              </summary>
+              <div className="overflow-x-auto mt-1">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-border text-muted-foreground text-left">
+                      <th className="py-1.5 pr-2 font-medium">Commande</th>
+                      <th className="py-1.5 px-2 font-medium">Client</th>
+                      <th className="py-1.5 px-2 font-medium text-right">Date prévue</th>
+                      <th className="py-1.5 px-2 font-medium text-right">Prêt à facturer</th>
+                      <th className="py-1.5 px-2 font-medium text-right">À livrer ce mois</th>
+                      <th className="py-1.5 px-2 font-medium text-right">Hors estimation</th>
+                      <th className="py-1.5 pl-2 font-medium">Statut</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {e.commandes.map(c => (
+                      <tr key={c.commande} className="border-b border-border/50">
+                        <td className="py-1 pr-2 whitespace-nowrap">{c.commande}</td>
+                        <td className="py-1 px-2">{c.client}</td>
+                        <td className="py-1 px-2 text-right tabular-nums">{c.date ? c.date.split('-').reverse().join('/') : '—'}</td>
+                        <td className="py-1 px-2 text-right tabular-nums">{formatMontant(c.pret)}</td>
+                        <td className="py-1 px-2 text-right tabular-nums">{formatMontant(c.a_livrer)}</td>
+                        <td className="py-1 px-2 text-right tabular-nums">{formatMontant(c.reste)}</td>
+                        <td className="py-1 pl-2 whitespace-nowrap text-muted-foreground">{STATUT_CDE[c.statut] ?? c.statut}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 export default function CaOdooPanel() {
   const { data, loading, autorise } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
@@ -286,7 +450,7 @@ export default function CaOdooPanel() {
       </div>
 
       <Dialog open={mensuelOuvert} onOpenChange={setMensuelOuvert}>
-        <DialogContent className="max-w-3xl">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Réalisé mensuel 2026</DialogTitle>
             <DialogDescription>
@@ -295,6 +459,7 @@ export default function CaOdooPanel() {
             </DialogDescription>
           </DialogHeader>
           <DetailMensuel mois={data.mois} cutoff={data.cutoff} />
+          {data.moisEnCours && <MoisEnCours mec={data.moisEnCours} />}
         </DialogContent>
       </Dialog>
     </div>
