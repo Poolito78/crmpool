@@ -157,6 +157,16 @@ interface Payload {
   numero: string;
   client: string;
   contact?: string;
+  /** Le contact de l'affaire tel que MonCRM le connaît : de quoi le
+      retrouver chez Odoo par son e-mail, ou l'y créer s'il n'existe pas. */
+  contactInfo?: {
+    nom: string;
+    prenom?: string;
+    email?: string;
+    telephone?: string;
+    mobile?: string;
+    fonction?: string;
+  };
   ref?: string;
   validity?: string;
   note?: string;
@@ -193,6 +203,41 @@ async function trouverClient(o: Odoo, nom: string, ctx: Record<string, unknown>)
   if (exactes.length === 1) return { choisi: exactes[0], candidats: parts };
   if (societes.length === 1) return { choisi: societes[0], candidats: parts };
   return { choisi: null, candidats: parts };
+}
+
+// ---------------------------------------------------------------- contact
+
+/**
+ * Le contact de l'affaire parmi les contacts de la société Odoo.
+ *
+ * On le cherchait par `name ilike "Prénom Nom"` : Odoo écrit souvent
+ * « NOM Prénom », la recherche ne rendait rien, et le devis partait sans
+ * contact sans que personne le sache. On compare donc les MOTS du nom, dans
+ * n'importe quel ordre, et l'e-mail d'abord quand on l'a — il ne ment pas.
+ */
+async function trouverContact(
+  o: Odoo,
+  societeId: number,
+  nomComplet: string,
+  email: string | undefined,
+  ctx: Record<string, unknown>,
+): Promise<{ id: number; name: string } | null> {
+  const enfants = await o.kw(
+    "res.partner",
+    "search_read",
+    [[["parent_id", "=", societeId]], ["id", "name", "email"]],
+    { limit: 300, context: ctx },
+  ) as any[];
+  const mail = String(email || "").trim().toLowerCase();
+  if (mail) {
+    const parMail = enfants.find((c) => String(c.email || "").trim().toLowerCase() === mail);
+    if (parMail) return parMail;
+  }
+  const mots = (s: string) =>
+    String(s || "").split(/[\s\-,.]+/).map(nu).filter(Boolean).sort().join(" ");
+  const cle = mots(nomComplet);
+  if (!cle) return null;
+  return enfants.find((c) => mots(c.name) === cle) || null;
 }
 
 // --------------------------------------------------------------- articles
@@ -498,8 +543,31 @@ serve(async (req) => {
         propositions: props,
       }));
 
+    // ---- 2 bis. le contact de l'affaire ----------------------------------
+    const info = payload.contactInfo;
+    const nomContact = info
+      ? [info.prenom, info.nom].filter(Boolean).join(" ").trim()
+      : String(payload.contact || "").trim();
+    let contactOdoo: { id: number; name: string } | null = null;
+    let contactEchec = "";
+    if (nomContact) {
+      try {
+        contactOdoo = await trouverContact(o, societe.id, nomContact, info?.email, ctx);
+      } catch (e) {
+        contactEchec = (e as Error).message;
+      }
+    }
+    const rapportContact = !nomContact
+      ? { etat: "aucun" }
+      : contactOdoo
+      ? { etat: "trouve", nom: contactOdoo.name, id: contactOdoo.id }
+      : contactEchec
+      ? { etat: "echec", nom: nomContact, message: contactEchec.slice(0, 160) }
+      : { etat: "a-creer", nom: nomContact };
+
     const rapport = {
       client: { id: societe.id, nom: societe.name, ville: societe.city || "" },
+      contact: rapportContact as Record<string, unknown>,
       articles: Object.entries(resolus).map(([ref, id]) => ({ ref, id, par: comment[ref] })),
       negoce: enNegoce,
       ...(negManquants.length ? { negoceIntrouvable: negManquants } : {}),
@@ -544,18 +612,30 @@ serve(async (req) => {
       /* champs optionnels */
     }
 
-    let contactId: number | null = null;
-    if (payload.contact && champContact) {
+    /* LE CONTACT SUIT L'AFFAIRE. Absent chez Odoo, il y est créé sous la
+       société, avec ce que MonCRM sait de lui : le devis part toujours avec
+       son interlocuteur, et le suivant le retrouvera. */
+    let contactId: number | null = contactOdoo?.id ?? null;
+    if (!champContact && nomContact) {
+      rapport.contact = { ...rapport.contact, etat: "champ-absent" };
+    } else if (!contactId && nomContact && !contactEchec) {
       try {
-        const c = await o.kw(
-          "res.partner",
-          "search_read",
-          [[["parent_id", "=", societe.id], ["name", "ilike", payload.contact]], ["id", "name"]],
-          { limit: 3, context: ctx },
-        ) as any[];
-        if (c.length) contactId = c[0].id;
-      } catch {
-        /* sans contact */
+        const vals: Record<string, unknown> = {
+          name: nomContact,
+          parent_id: societe.id,
+          type: "contact",
+        };
+        if (info?.email) vals.email = info.email;
+        if (info?.telephone) vals.phone = info.telephone;
+        if (info?.mobile) vals.mobile = info.mobile;
+        if (info?.fonction) vals.function = info.fonction;
+        contactId = await o.kw("res.partner", "create", [vals], { context: ctx }) as number;
+        rapport.contact = { etat: "cree", nom: nomContact, id: contactId };
+      } catch (e) {
+        rapport.contact = {
+          etat: "echec", nom: nomContact,
+          message: ("Création : " + (e as Error).message).slice(0, 160),
+        };
       }
     }
 

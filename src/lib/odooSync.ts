@@ -4,8 +4,7 @@
  * pour créer un devis CRMPool dans Odoo (sale.order + lignes).
  */
 
-import type { Devis, Client, Produit } from './store';
-import { calculerTotalDevis } from './store';
+import type { Devis, Client, Produit, Contact } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 
@@ -149,6 +148,16 @@ export interface OdooPayload {
   numero: string;
   client: string;
   contact?: string;
+  /** Le contact de l'affaire en entier : `odoo-devis` le retrouve par son
+      e-mail ou ses mots, et le crée sous la société s'il n'existe pas. */
+  contactInfo?: {
+    nom: string;
+    prenom?: string;
+    email?: string;
+    telephone?: string;
+    mobile?: string;
+    fonction?: string;
+  };
   ref?: string;
   validity?: string;
   note?: string;
@@ -159,17 +168,51 @@ export interface OdooPayload {
   lines: LigneScript[];
 }
 
+/**
+ * Le coût chantier : la matière CONSOMMÉE, HT, rapportée au m².
+ *
+ * La note Odoo divisait le total TTC du devis par la surface — TVA, port et
+ * conditionnements arrondis au seau compris : 48,32 €/m² là où l'écran du
+ * devis annonçait bien moins pour le même chantier. Un seul calcul désormais,
+ * celui de l'écran : surface × consommation × prix au kilo net pour un
+ * article qui porte une consommation, prix conditionné net pour les autres.
+ */
+export function coutChantier(
+  lignes: Devis['lignes'],
+  produits: Produit[],
+  surfaceGlobaleM2: number,
+): { total: number; parM2: number | null } {
+  let total = 0;
+  for (const l of lignes) {
+    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+    const conso = l.consommation || prod?.consommation || 0;
+    const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
+    const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+    if (conso > 0 && surfLigne > 0) {
+      const poids = prod?.poids || null;
+      if (poids && l.prixUnitaireHT) total += surfLigne * conso * (net / poids);
+    } else if (l.prixUnitaireHT > 0) {
+      total += (l.quantite || 0) * net;
+    }
+  }
+  const surfaceRef = surfaceGlobaleM2 > 0
+    ? surfaceGlobaleM2
+    : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
+  const parM2 = total > 0 && surfaceRef > 0 ? Math.round(total / surfaceRef * 100) / 100 : null;
+  return { total, parM2 };
+}
+
 /** Construit le devis à transmettre au pont (prix nets déjà calculés). */
 export function buildOdooPayload(
   devis: Devis,
   client: Client,
   produits: Produit[],
-  options?: { surface?: number; contactNom?: string; odooPartnerName?: string }
+  options?: { surface?: number; contactNom?: string; contact?: Contact; odooPartnerName?: string }
 ): OdooPayload {
   const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
-  const lignesProductOnly = devis.lignes.filter(l => !l.type || l.type === 'ligne');
-  const totals = calculerTotalDevis(lignesProductOnly, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
-  const coutM2 = surface > 0 ? Math.round((totals.totalTTC / surface) * 100) / 100 : 0;
+  const coutM2 = coutChantier(devis.lignes, produits, surface).parM2 ?? 0;
+  const ct = options?.contact;
 
   const noteLines: string[] = [];
   if (devis.systeme) noteLines.push(`Système : ${devis.systeme}`);
@@ -188,6 +231,16 @@ export function buildOdooPayload(
     numero: devis.numero,
     client: options?.odooPartnerName || client.societe || client.nom,
     contact: options?.contactNom || undefined,
+    ...(ct ? {
+      contactInfo: {
+        nom: ct.nom,
+        prenom: ct.prenom || undefined,
+        email: ct.email || undefined,
+        telephone: ct.telephone || undefined,
+        mobile: ct.telephoneMobile || undefined,
+        fonction: ct.fonction || undefined,
+      },
+    } : {}),
     ref: devis.referenceAffaire || undefined,
     validity: devis.dateValidite || undefined,
     note: noteLines.join('\n') || undefined,
@@ -234,15 +287,7 @@ export function genererScriptOdoo(
   }
 ): string {
   const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
-  const lignesProductOnly = devis.lignes.filter(
-    l => !l.type || l.type === 'ligne'
-  );
-  const totals = calculerTotalDevis(
-    lignesProductOnly,
-    devis.fraisPortHT || 0,
-    devis.fraisPortTVA ?? 20
-  );
-  const coutM2 = surface > 0 ? Math.round((totals.totalTTC / surface) * 100) / 100 : 0;
+  const coutM2 = coutChantier(devis.lignes, produits, surface).parM2 ?? 0;
 
   const lignes = buildLignes(devis, produits);
   const refs = [...new Set(lignes.filter(l => l.ref).map(l => l.ref as string))];

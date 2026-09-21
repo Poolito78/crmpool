@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
-import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, type OdooPayload } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -390,6 +390,8 @@ export default function Devis() {
     lignes?: number;
     erreurs?: string[];
     negoce?: string[];
+    /* Ce qu'est devenu le contact de l'affaire chez Odoo. */
+    contact?: { etat: 'aucun' | 'trouve' | 'a-creer' | 'cree' | 'champ-absent' | 'echec'; nom?: string; message?: string };
     /* Les références qu'Odoo n'a pas su rattacher, avec ce qu'il propose. */
     aRattacher?: {
       ref: string;
@@ -475,6 +477,7 @@ export default function Devis() {
           numero: payload.numero, etat: 'verifie', payload, script: scriptSecours,
           negoce: data.rapport?.negoce || [],
           aRattacher: data.rapport?.aRattacher || [],
+          contact: data.rapport?.contact,
           message: `${data.rapport?.client?.nom} — `
             + `${(data.rapport?.articles || []).length} article(s) reconnu(s) `
             + `sur ${data.rapport?.lignes} ligne(s). Rien n'a été écrit.`,
@@ -488,6 +491,7 @@ export default function Devis() {
         lignes: data?.lignes, erreurs: data?.erreurs || [],
         negoce: data?.rapport?.negoce || [],
         aRattacher: data?.rapport?.aRattacher || [],
+        contact: data?.rapport?.contact,
       });
       if (data?.url) window.open(data.url, '_blank', 'noopener');
     } catch (e) {
@@ -607,7 +611,7 @@ export default function Devis() {
         systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
         surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
       };
-      const opts = { surface: surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
+      const opts = { surface: surfaceGlobaleM2 || 0, contactNom, contact, odooPartnerName: odooNom };
       await lancerOdoo(
         buildOdooPayload(current, selectedClient, produits, opts),
         genererScriptOdoo(current, selectedClient, produits, opts),
@@ -638,7 +642,7 @@ export default function Devis() {
       if (odooNom === null) return;
       const contact = (client.contacts || []).find(ct => ct.id === d.contactId);
       const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
-      const opts = { surface: d.surfaceGlobaleM2 || 0, contactNom, odooPartnerName: odooNom };
+      const opts = { surface: d.surfaceGlobaleM2 || 0, contactNom, contact, odooPartnerName: odooNom };
       await lancerOdoo(
         buildOdooPayload(d, client, produits, opts),
         genererScriptOdoo(d, client, produits, opts),
@@ -3550,26 +3554,10 @@ export default function Devis() {
                   </div>
                   )}
                   {canAchat && (() => {
-                    // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg)
-                    let sumCoutConso = 0;
-                    for (const l of lignes) {
-                      if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
-                      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-                      const conso = l.consommation || prod?.consommation || 0;
-                      // surfaceM2 peut être 0 si saisie uniquement en global (preview stocke en local) → fallback sur surfaceGlobaleM2
-                      const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
-                      if (conso > 0 && surfLigne > 0) {
-                        const poids = prod?.poids || null;
-                        const prixKg = poids && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - (l.remise || 0) / 100) / poids : null;
-                        if (prixKg != null) sumCoutConso += surfLigne * conso * prixKg;
-                      } else if (l.prixUnitaireHT > 0) {
-                        // Produit sans taux de conso ou sans surface → coût conditionné
-                        sumCoutConso += l.quantite * l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
-                      }
-                    }
+                    // Coût chantier = produits consommés (surface × conso kg/m² × prix/kg).
+                    // Même calcul que la note envoyée à Odoo : `coutChantier`.
+                    const { total: sumCoutConso, parM2: coutM2 } = coutChantier(lignes, produits, surfaceGlobaleM2);
                     if (sumCoutConso <= 0) return null;
-                    const surfaceRef = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
-                    const coutM2 = surfaceRef > 0 ? Math.round(sumCoutConso / surfaceRef * 100) / 100 : null;
                     return (
                       <div className="flex justify-between border-t border-[#CC0000]/20 pt-2 mt-1">
                         <span className="text-xs font-semibold text-[#CC0000] uppercase tracking-wide">Coût chantier</span>
@@ -4187,6 +4175,22 @@ export default function Devis() {
                 )}
               </>
             )}
+
+            {/* Le contact de l'affaire : il part avec le devis, et s'il manque
+                chez Odoo il y est créé. On dit lequel des deux. */}
+            {odooInfo?.contact && (odooInfo.etat === 'verifie' || odooInfo.etat === 'cree') && (() => {
+              const c = odooInfo.contact;
+              const texte = {
+                aucun: 'Aucun contact de l’affaire sur ce devis.',
+                trouve: `Contact de l’affaire : ${c.nom} (trouvé dans Odoo).`,
+                'a-creer': `Contact de l’affaire : ${c.nom} — absent d’Odoo, il sera créé sous la société.`,
+                cree: `Contact de l’affaire : ${c.nom} — créé dans Odoo.`,
+                'champ-absent': `Contact de l’affaire : ${c.nom} — le champ « Contact de l’affaire » manque sur le devis Odoo.`,
+                echec: `Contact de l’affaire : ${c.nom} — non rattaché (${c.message || 'erreur Odoo'}).`,
+              }[c.etat];
+              const alerte = c.etat === 'aucun' || c.etat === 'champ-absent' || c.etat === 'echec';
+              return <p className={`text-xs ${alerte ? 'text-warning' : 'text-muted-foreground'}`}>{texte}</p>;
+            })()}
 
             {/* Les lignes qu'Odoo n'a pas su rattacher à un article : elles
                 existent, sous l'article négoce, avec leur désignation dans le
