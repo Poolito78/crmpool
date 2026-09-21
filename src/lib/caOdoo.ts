@@ -54,11 +54,11 @@ export type CaMois = {
 };
 
 /**
- * Un mois 2025 complet. Le STI d'Odoo (faux de près de 700 000 € sur l'année)
- * y est REMPLACÉ par le réel mensuel du rapport commercial, dans ISOSIGN comme
- * dans le total ; `sti_odoo` garde ce qu'Odoo annonçait.
+ * Un mois 2025 complet, lu dans le fichier du rapport commercial (« CA ISOSIGN
+ * 2025 y compris STI ») et non dans Odoo, dont le STI 2025 est faux. Le fichier
+ * ne détaille ni ISOFLOOR ni RTE : `null`, affiché « n.c. ».
  */
-export type CaMois2025 = CaMois & { sti_odoo: number; sti_reel: true };
+export type CaMois2025 = Omit<CaMois, 'isofloor' | 'rte'> & { isofloor: number | null; rte: number | null };
 
 /**
  * Un mois 2025 vu à même date pour la comparaison du mois en cours. ⚠️ HORS STI : le STI

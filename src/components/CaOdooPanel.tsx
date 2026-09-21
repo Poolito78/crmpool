@@ -85,8 +85,8 @@ const NOM_MOIS = [
  * sont DÉJÀ COMPRISES dans leur marque : ISOMARK + ISOSIGN = Total, les
  * sous-détails ne s'y ajoutent pas.
  *
- * Le total 2025 de chaque mois porte le STI RÉEL du rapport commercial, pas
- * celui d'Odoo (voir `CaMois2025`). Le mois en cours n'a pas d'écart : face au
+ * Le total 2025 de chaque mois vient du fichier du rapport commercial, STI
+ * compris, pas d'Odoo (voir `CaMois2025`). Le mois en cours n'a pas d'écart : face au
  * mois 2025 complet il serait faux, le N-1 à même date est dans le bloc suivant.
  */
 function DetailMensuel({ mois, mois2025, cutoff }: { mois: CaMois[]; mois2025: CaMois2025[]; cutoff: string | null }) {
@@ -197,9 +197,9 @@ function DetailMensuel({ mois, mois2025, cutoff }: { mois: CaMois[]; mois2025: C
         marque : ISOMARK + ISOSIGN donne le total, les sous-détails ne s'y ajoutent pas.{' '}
         {avecN1 ? (
           <>
-            Le <b className="text-foreground">total 2025</b> porte le STI réel du rapport commercial
-            (fichier « CA ISOSIGN 2025 y compris STI »), pas celui d'Odoo, faux sur 2025. Le mois en
-            cours se compare à même date dans le bloc ci-dessous.
+            Le <b className="text-foreground">total 2025</b> est celui du rapport commercial (fichier
+            « CA ISOSIGN 2025 y compris STI »), STI compris — pas celui d'Odoo, faux sur le STI 2025.
+            Le mois en cours se compare à même date dans le bloc ci-dessous.
           </>
         ) : (
           <>Le comparatif 2025 apparaîtra à la prochaine actualisation.</>
@@ -209,7 +209,7 @@ function DetailMensuel({ mois, mois2025, cutoff }: { mois: CaMois[]; mois2025: C
   );
 }
 
-type Colonnes = { isomark: number; isofloor: number; isosign: number; sti: number | null; rte: number; total: number };
+type Colonnes = { isomark: number; isofloor: number | null; isosign: number; sti: number | null; rte: number | null; total: number };
 const COLS = ['isomark', 'isofloor', 'isosign', 'sti', 'rte', 'total'] as const;
 const DONT = new Set(['isofloor', 'sti', 'rte']);
 
@@ -316,7 +316,7 @@ function MoisEnCours({ mec }: { mec: CaMoisEnCours }) {
                 <LigneMontants libelle={`+ Commandes à livrer d'ici le ${fin}`} m={e.a_livrer_fin_mois} />
                 <LigneMontants libelle={`= Estimation fin ${nom.toLowerCase()}`} m={e.estimation} className="font-bold bg-muted/40" />
                 <LigneMontants
-                  libelle={completHorsSti ? `${nom} 2025 complet` : `${nom} 2025 complet (STI réel)`}
+                  libelle={completHorsSti ? `${nom} 2025 complet` : `${nom} 2025 complet (rapport commercial)`}
                   m={mec.mois25_complet} horsSti={completHorsSti} className="text-muted-foreground"
                 />
                 <LigneEcart

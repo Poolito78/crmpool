@@ -29,18 +29,36 @@ const SALESPERSON_ID = 642; // François MOUHOT côté Odoo
 const STI_YTD_2025_REEL = 749776.0;
 
 /**
- * STI 2025 RÉEL, mois par mois (janvier → décembre), portefeuille François
+ * CA 2025 RÉEL, mois par mois (janvier → décembre), portefeuille François
  * MOUHOT. Source : « 12 CA ISOSIGN 2025 y compris STI.xlsx », onglet
- * « CA 2025 - N-1 », ligne « François Mouhot » de chaque mois, colonne STI du
- * bloc « Réel CA 2025 ». Janvier → septembre retombe exactement sur
+ * « CA 2025 - N-1 », ligne « François Mouhot » de chaque mois, bloc « Réel CA
+ * 2025 » : SV+Service+Divers, SH, STI. Le total du fichier (ISO + STI) est
+ * leur somme. Le STI de janvier → septembre retombe exactement sur
  * STI_YTD_2025_REEL (749 776 €) : c'est la même source.
  *
+ * ⚠️ C'EST LE FICHIER QUI FAIT FOI pour chaque mois 2025 complet, pas Odoo
+ * (dont le STI 2025 est faux). SH = ISOMARK ; ISOSIGN = SV + STI. Le fichier
+ * ne détaille ni ISOFLOOR ni RTE : ils sont publiés à `null` (« n.c. »), jamais
+ * repris d'Odoo — un « dont » d'une autre source que sa marque ne tomberait pas
+ * juste.
+ *
  * ⚠️ Montants MENSUELS, sans découpage au jour : le N-1 « à même date » du mois
- * en cours reste donc hors STI — on ne répartit pas un mois sur ses jours.
+ * en cours reste donc lu dans Odoo, hors STI — on ne répartit pas un mois sur
+ * ses jours.
  */
-const STI_2025_MENSUEL_REEL = [
-  47425, 85260, 74497, 70528, 95280, 141620,
-  117306, 43453, 74407, 126720, 59960, 10192,
+const CA_2025_MENSUEL_REEL: { sv: number; sh: number; sti: number }[] = [
+  { sv: 64032, sh: 23502, sti: 47425 },    // janvier
+  { sv: 135878, sh: 31336, sti: 85260 },   // février
+  { sv: 174681, sh: 62458, sti: 74497 },   // mars
+  { sv: 155740, sh: 79133, sti: 70528 },   // avril
+  { sv: 101113, sh: 62736, sti: 95280 },   // mai
+  { sv: 118285, sh: 60328, sti: 141620 },  // juin
+  { sv: 219757, sh: 162918, sti: 117306 }, // juillet
+  { sv: 93968, sh: 24612, sti: 43453 },    // août
+  { sv: 172841, sh: 93251, sti: 74407 },   // septembre
+  { sv: 150182, sh: 50848, sti: 126720 },  // octobre
+  { sv: 89349, sh: 36859, sti: 59960 },    // novembre
+  { sv: 139898, sh: 28096, sti: 10192 },   // décembre
 ];
 
 /**
@@ -184,10 +202,9 @@ const add = (r: Row, k: string, v: number) => { r[k] = num(r, k) + v; };
 /**
  * Réalisé mensuel, par marque d'affichage.
  *
- * Le CA 2026 vient intégralement d'Odoo : son découpage mensuel est exact. Le
- * 2025 aussi, SAUF le STI, faux chez Odoo : chaque mois 2025 publié remplace
- * le STI d'Odoo par le réel du rapport commercial (`STI_2025_MENSUEL_REEL`),
- * dans ISOSIGN comme dans le total (`avecStiReel`).
+ * Le CA 2026 vient intégralement d'Odoo : son découpage mensuel est exact.
+ * Chaque mois 2025 complet vient, lui, du fichier du rapport commercial
+ * (`CA_2025_MENSUEL_REEL`, `mois2025Reel`).
  */
 type Mois = {
   mois: number;
@@ -235,19 +252,20 @@ const horsSti = (m: Mois) => ({
 });
 
 /**
- * Un mois 2025 complet, STI d'Odoo remplacé par le réel mensuel du rapport
- * commercial — dans ISOSIGN et dans le total. `sti_odoo` garde la trace de ce
- * qui a été retiré.
+ * Un mois 2025 complet, tel que le fichier du rapport commercial le donne
+ * (voir `CA_2025_MENSUEL_REEL`). ISOFLOOR et RTE n'y sont pas : `null`.
  */
-const avecStiReel = (m: Mois) => {
-  const reel = STI_2025_MENSUEL_REEL[m.mois - 1] ?? 0;
+const mois2025Reel = (mois: number) => {
+  const r = CA_2025_MENSUEL_REEL[mois - 1] ?? { sv: 0, sh: 0, sti: 0 };
   return {
-    ...m,
-    isosign: r2(m.isosign - m.sti + reel),
-    total: r2(m.total - m.sti + reel),
-    sti: reel,
-    sti_odoo: m.sti,
-    sti_reel: true,
+    mois,
+    isomark: r.sh,
+    isofloor: null,
+    isosign: r.sv + r.sti,
+    sti: r.sti,
+    rte: null,
+    total: r.sv + r.sh + r.sti,
+    source: "rapport_commercial",
   };
 };
 
@@ -314,19 +332,13 @@ async function extraireOdoo(journal: string[]) {
     if (!parMois.has(m)) parMois.set(m, moisVide(m));
     return parMois.get(m)!;
   };
-  // Réalisé mensuel 2025, les douze mois — son STI est remplacé par le réel
-  // du rapport commercial à la publication (`avecStiReel`).
-  const parMois25 = new Map<number, Mois>();
-  for (let m = 1; m <= 12; m++) parMois25.set(m, moisVide(m));
-  // Mois en cours, vu en 2025 : du 1er au même jour (mtd25) et mois complet
-  // (plein25). ⚠️ Le STI 2025 d'Odoo est FAUX (voir en-tête) : ces seaux le
-  // portent, mais l'écran ne le publie jamais comme un réel — ISOSIGN et le
-  // total s'y comparent HORS STI.
+  // Mois en cours, vu en 2025 : du 1er au même jour (mtd25) ; le mois complet
+  // vient du rapport commercial (`mois2025Reel`). ⚠️ Le STI 2025 d'Odoo est
+  // FAUX (voir en-tête) : ce seau le porte, mais l'écran ne le publie jamais
+  // comme un réel — ISOSIGN et le total s'y comparent HORS STI.
   const moisCourant = Number(today.slice(5, 7));
   const debutMois25 = "2025-" + today.slice(5, 7) + "-01";
-  const finMois25 = "2025-" + today.slice(5, 7) + "-31";
   const mtd25 = moisVide(moisCourant);
-  const plein25 = moisVide(moisCourant);
 
   for (const l of lignes) {
     if (!l.partner_id) continue;
@@ -359,11 +371,7 @@ async function extraireOdoo(journal: string[]) {
       add(row, `${brand}25full`, montant);
       if (precision === "isofloor") add(row, "isofloor25full", montant);
       else if (precision === "transport") add(row, "exclu25full", montant);
-      ventilerMois(parMois25.get(Number(d.slice(5, 7)))!, brand, precision, montant);
-      if (d >= debutMois25 && d <= finMois25) {
-        ventilerMois(plein25, brand, precision, montant);
-        if (d <= cutoff2025) ventilerMois(mtd25, brand, precision, montant);
-      }
+      if (d >= debutMois25 && d <= cutoff2025) ventilerMois(mtd25, brand, precision, montant);
       if (d <= cutoff2025) {
         add(row, "t25ytd", montant);
         add(row, `${brand}25`, montant);
@@ -379,11 +387,10 @@ async function extraireOdoo(journal: string[]) {
   }
 
   const monthly = [...parMois.values()].sort((a, b) => a.mois - b.mois).map(arrondirMois);
-  const monthly25 = [...parMois25.values()].map((m) => avecStiReel(arrondirMois(m)));
 
   return {
-    rows, monthly, monthly25, cutoff2026, cutoff2025, nbLignes: lignes.length,
-    mtd25: arrondirMois(mtd25), plein25: arrondirMois(plein25),
+    rows, monthly, cutoff2026, cutoff2025, nbLignes: lignes.length,
+    mtd25: arrondirMois(mtd25),
     odoo, categName, prodCateg,
   };
 }
@@ -770,7 +777,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { rows, monthly, monthly25, cutoff2026, cutoff2025, nbLignes, mtd25, plein25, odoo, categName, prodCateg } =
+    const { rows, monthly, cutoff2026, cutoff2025, nbLignes, mtd25, odoo, categName, prodCateg } =
       await extraireOdoo(journal);
 
     // Mois en cours : comparaison N-1 à même date + estimation de fin de mois.
@@ -792,9 +799,9 @@ Deno.serve(async (req: Request) => {
       // ⚠️ STI 2025 d'Odoo : faux (voir en-tête), donc JAMAIS publié. À même
       // date, le N-1 part HORS STI (le réel n'existe qu'au mois) : ISOSIGN et
       // total en sont retirés, `sti` vaut null, et l'écran compare le 2026
-      // hors STI lui aussi. Le mois complet, lui, porte le STI réel mensuel.
+      // hors STI lui aussi. Le mois complet, lui, vient du rapport commercial.
       mtd25: horsSti(mtd25),
-      mois25_complet: avecStiReel(plein25),
+      mois25_complet: mois2025Reel(moisCourant),
       estimation,
     };
     const sti = await appliquerCorrectionSti(rows, journal);
@@ -843,7 +850,7 @@ Deno.serve(async (req: Request) => {
       cutoff_2025: cutoff2025,
       // Réalisé mensuel 2026, et 2025 avec le STI réel (voir le type Mois).
       monthly,
-      monthly_2025: monthly25,
+      monthly_2025: Array.from({ length: 12 }, (_, i) => mois2025Reel(i + 1)),
       mois_en_cours: moisEnCours,
       projection_method:
         "Par client : CA 2026 à date + MAX(CA 2025 année pleine − CA 2025 à date, 0) × (1 + taux de " +
