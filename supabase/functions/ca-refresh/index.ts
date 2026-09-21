@@ -29,6 +29,21 @@ const SALESPERSON_ID = 642; // François MOUHOT côté Odoo
 const STI_YTD_2025_REEL = 749776.0;
 
 /**
+ * STI 2025 RÉEL, mois par mois (janvier → décembre), portefeuille François
+ * MOUHOT. Source : « 12 CA ISOSIGN 2025 y compris STI.xlsx », onglet
+ * « CA 2025 - N-1 », ligne « François Mouhot » de chaque mois, colonne STI du
+ * bloc « Réel CA 2025 ». Janvier → septembre retombe exactement sur
+ * STI_YTD_2025_REEL (749 776 €) : c'est la même source.
+ *
+ * ⚠️ Montants MENSUELS, sans découpage au jour : le N-1 « à même date » du mois
+ * en cours reste donc hors STI — on ne répartit pas un mois sur ses jours.
+ */
+const STI_2025_MENSUEL_REEL = [
+  47425, 85260, 74497, 70528, 95280, 141620,
+  117306, 43453, 74407, 126720, 59960, 10192,
+];
+
+/**
  * Seuil de crédibilité (€ de CA 2025 à date) au-delà duquel on fait
  * entièrement confiance à l'évolution propre du client plutôt qu'au taux
  * global. En dessous, lissage progressif vers le taux global : un client avec
@@ -167,14 +182,12 @@ const num = (r: Row, k: string) => (typeof r[k] === "number" ? (r[k] as number) 
 const add = (r: Row, k: string, v: number) => { r[k] = num(r, k) + v; };
 
 /**
- * Réalisé mensuel 2026, par marque d'affichage.
+ * Réalisé mensuel, par marque d'affichage.
  *
- * ⚠️ 2026 SEULEMENT, et c'est volontaire. Le CA 2026 vient intégralement
- * d'Odoo : son découpage mensuel est donc exact. Le CA STI 2025 est en
- * revanche FIGÉ au niveau de l'année (fichier client + rapport commercial) et
- * ne se décompose pas par mois — en afficher un découpage mensuel reviendrait
- * à publier les chiffres d'Odoo, ceux-là mêmes qu'on corrige parce qu'ils sont
- * faux. On préfère ne rien montrer que montrer un mois inventé.
+ * Le CA 2026 vient intégralement d'Odoo : son découpage mensuel est exact. Le
+ * 2025 aussi, SAUF le STI, faux chez Odoo : chaque mois 2025 publié remplace
+ * le STI d'Odoo par le réel du rapport commercial (`STI_2025_MENSUEL_REEL`),
+ * dans ISOSIGN comme dans le total (`avecStiReel`).
  */
 type Mois = {
   mois: number;
@@ -220,6 +233,23 @@ const horsSti = (m: Mois) => ({
   sti: null,
   hors_sti: true,
 });
+
+/**
+ * Un mois 2025 complet, STI d'Odoo remplacé par le réel mensuel du rapport
+ * commercial — dans ISOSIGN et dans le total. `sti_odoo` garde la trace de ce
+ * qui a été retiré.
+ */
+const avecStiReel = (m: Mois) => {
+  const reel = STI_2025_MENSUEL_REEL[m.mois - 1] ?? 0;
+  return {
+    ...m,
+    isosign: r2(m.isosign - m.sti + reel),
+    total: r2(m.total - m.sti + reel),
+    sti: reel,
+    sti_odoo: m.sti,
+    sti_reel: true,
+  };
+};
 
 // ─────────────────────────────────────────────────────── 1. extraction Odoo
 
@@ -284,6 +314,10 @@ async function extraireOdoo(journal: string[]) {
     if (!parMois.has(m)) parMois.set(m, moisVide(m));
     return parMois.get(m)!;
   };
+  // Réalisé mensuel 2025, les douze mois — son STI est remplacé par le réel
+  // du rapport commercial à la publication (`avecStiReel`).
+  const parMois25 = new Map<number, Mois>();
+  for (let m = 1; m <= 12; m++) parMois25.set(m, moisVide(m));
   // Mois en cours, vu en 2025 : du 1er au même jour (mtd25) et mois complet
   // (plein25). ⚠️ Le STI 2025 d'Odoo est FAUX (voir en-tête) : ces seaux le
   // portent, mais l'écran ne le publie jamais comme un réel — ISOSIGN et le
@@ -325,6 +359,7 @@ async function extraireOdoo(journal: string[]) {
       add(row, `${brand}25full`, montant);
       if (precision === "isofloor") add(row, "isofloor25full", montant);
       else if (precision === "transport") add(row, "exclu25full", montant);
+      ventilerMois(parMois25.get(Number(d.slice(5, 7)))!, brand, precision, montant);
       if (d >= debutMois25 && d <= finMois25) {
         ventilerMois(plein25, brand, precision, montant);
         if (d <= cutoff2025) ventilerMois(mtd25, brand, precision, montant);
@@ -344,9 +379,10 @@ async function extraireOdoo(journal: string[]) {
   }
 
   const monthly = [...parMois.values()].sort((a, b) => a.mois - b.mois).map(arrondirMois);
+  const monthly25 = [...parMois25.values()].map((m) => avecStiReel(arrondirMois(m)));
 
   return {
-    rows, monthly, cutoff2026, cutoff2025, nbLignes: lignes.length,
+    rows, monthly, monthly25, cutoff2026, cutoff2025, nbLignes: lignes.length,
     mtd25: arrondirMois(mtd25), plein25: arrondirMois(plein25),
     odoo, categName, prodCateg,
   };
@@ -734,7 +770,7 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { rows, monthly, cutoff2026, cutoff2025, nbLignes, mtd25, plein25, odoo, categName, prodCateg } =
+    const { rows, monthly, monthly25, cutoff2026, cutoff2025, nbLignes, mtd25, plein25, odoo, categName, prodCateg } =
       await extraireOdoo(journal);
 
     // Mois en cours : comparaison N-1 à même date + estimation de fin de mois.
@@ -753,11 +789,12 @@ Deno.serve(async (req: Request) => {
       mois: moisCourant,
       jour: Number(cutoff2026.slice(8, 10)),
       mtd26,
-      // ⚠️ STI 2025 d'Odoo : faux (voir en-tête), donc JAMAIS publié. Le N-1
-      // part HORS STI : ISOSIGN et total en sont retirés, `sti` vaut null, et
-      // l'écran compare le 2026 hors STI lui aussi.
+      // ⚠️ STI 2025 d'Odoo : faux (voir en-tête), donc JAMAIS publié. À même
+      // date, le N-1 part HORS STI (le réel n'existe qu'au mois) : ISOSIGN et
+      // total en sont retirés, `sti` vaut null, et l'écran compare le 2026
+      // hors STI lui aussi. Le mois complet, lui, porte le STI réel mensuel.
       mtd25: horsSti(mtd25),
-      mois25_complet: horsSti(plein25),
+      mois25_complet: avecStiReel(plein25),
       estimation,
     };
     const sti = await appliquerCorrectionSti(rows, journal);
@@ -804,8 +841,9 @@ Deno.serve(async (req: Request) => {
       generated_at_odoo: maintenant,
       cutoff_2026: cutoff2026,
       cutoff_2025: cutoff2025,
-      // Réalisé mensuel 2026 (voir le commentaire du type Mois : 2026 seulement).
+      // Réalisé mensuel 2026, et 2025 avec le STI réel (voir le type Mois).
       monthly,
+      monthly_2025: monthly25,
       mois_en_cours: moisEnCours,
       projection_method:
         "Par client : CA 2026 à date + MAX(CA 2025 année pleine − CA 2025 à date, 0) × (1 + taux de " +

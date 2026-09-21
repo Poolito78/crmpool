@@ -38,12 +38,7 @@ type CaRow = {
 /**
  * Réalisé mensuel, tel que la fonction `ca-refresh` le publie.
  *
- * ⚠️ 2026 SEULEMENT, et c'est délibéré. Le CA 2026 vient entièrement d'Odoo :
- * son découpage par mois est exact. Le CA STI 2025 est en revanche FIGÉ au
- * niveau de l'ANNÉE (fichier client + rapport commercial) et ne se décompose
- * pas par mois — publier un mensuel 2025 reviendrait à afficher les chiffres
- * d'Odoo sur le STI, ceux-là mêmes qu'on corrige parce qu'ils sont faux de
- * près de 700 000 €.
+ * Le CA 2026 vient entièrement d'Odoo : son découpage par mois est exact.
  *
  * ⚠️ Absent des jeux publiés avant l'arrivée de l'actualisation à la demande :
  * toujours prévoir le cas où il n'y a rien à montrer.
@@ -59,7 +54,14 @@ export type CaMois = {
 };
 
 /**
- * Un mois 2025 vu pour la comparaison du mois en cours. ⚠️ HORS STI : le STI
+ * Un mois 2025 complet. Le STI d'Odoo (faux de près de 700 000 € sur l'année)
+ * y est REMPLACÉ par le réel mensuel du rapport commercial, dans ISOSIGN comme
+ * dans le total ; `sti_odoo` garde ce qu'Odoo annonçait.
+ */
+export type CaMois2025 = CaMois & { sti_odoo: number; sti_reel: true };
+
+/**
+ * Un mois 2025 vu à même date pour la comparaison du mois en cours. ⚠️ HORS STI : le STI
  * 2025 d'Odoo est faux, la fonction le retire d'ISOSIGN et du total et publie
  * `sti: null`. On compare donc le 2026 hors STI lui aussi.
  */
@@ -95,7 +97,8 @@ export type CaMoisEnCours = {
   jour: number;
   mtd26: CaMois;
   mtd25: CaMoisN1;
-  mois25_complet: CaMoisN1;
+  /** STI réel mensuel depuis l'actualisation qui le publie ; hors STI avant. */
+  mois25_complet: CaMoisN1 | CaMois2025;
   estimation: CaEstimationMois;
 };
 
@@ -108,6 +111,7 @@ type CaSummary = {
   overall_projection?: number;
   overall_growth_rate?: number;
   monthly?: CaMois[];
+  monthly_2025?: CaMois2025[];
   mois_en_cours?: CaMoisEnCours;
 };
 
@@ -143,6 +147,8 @@ export type CaOdooData = {
   marques: CaMarque[];
   /** Réalisé mensuel 2026. Vide tant qu'aucune actualisation n'a eu lieu. */
   mois: CaMois[];
+  /** Réalisé mensuel 2025, STI réel. Vide avant l'actualisation qui le publie. */
+  mois2025: CaMois2025[];
   /** Mois en cours (comparaison N-1 + estimation). Absent avant la première actualisation qui le produit. */
   moisEnCours: CaMoisEnCours | null;
 };
@@ -242,6 +248,7 @@ function construire(payload: CaPayload): CaOdooData {
     nbClients: rows.length,
     marques,
     mois: Array.isArray(s.monthly) ? s.monthly : [],
+    mois2025: Array.isArray(s.monthly_2025) ? s.monthly_2025 : [],
     moisEnCours: s.mois_en_cours && s.mois_en_cours.mtd26 ? s.mois_en_cours : null,
   };
 }
