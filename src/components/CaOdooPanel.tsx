@@ -1,8 +1,7 @@
 import { useState } from 'react';
-import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, CalendarDays } from 'lucide-react';
+import { TrendingUp, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatMontant } from '@/lib/store';
 import { useCaOdoo, CA_ODOO_URL, type CaMarque, type CaMois, type CaMoisEnCours } from '@/lib/caOdoo';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 
 // ─── Tuile « CA Odoo » du tableau de bord ────────────────────────────────────
 //
@@ -70,7 +69,7 @@ const NOM_MOIS = [
 ];
 
 /**
- * Détail mensuel du réalisé 2026, ouvert au clic sur la carte « CA 2026 à date ».
+ * Détail mensuel du réalisé 2026, affiché d'office sous le tableau des marques.
  *
  * ⚠️ Les colonnes « dont » (ISOFLOOR sous ISOMARK, STI et RTE sous ISOSIGN)
  * sont DÉJÀ COMPRISES dans leur marque : ISOMARK + ISOSIGN = Total, les
@@ -320,7 +319,6 @@ function MoisEnCours({ mec }: { mec: CaMoisEnCours }) {
 export default function CaOdooPanel() {
   const { data, loading, autorise } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
-  const [mensuelOuvert, setMensuelOuvert] = useState(false);
 
   if (loading || !autorise || !data) return null;
 
@@ -348,21 +346,11 @@ export default function CaOdooPanel() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Cliquable : ouvre le détail mensuel. C'est un <button> et non une
-            <div> avec onClick, pour rester atteignable au clavier. */}
-        <button
-          type="button"
-          onClick={() => setMensuelOuvert(true)}
-          title="Voir le détail mois par mois"
-          className="rounded-lg border border-border p-3 text-left hover:border-primary/50 hover:bg-muted/40 transition-colors group"
-        >
-          <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold flex items-center gap-1.5">
-            CA 2026 à date
-            <CalendarDays className="w-3 h-3 opacity-0 group-hover:opacity-60 transition-opacity" />
-          </p>
+        <div className="rounded-lg border border-border p-3">
+          <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">CA 2026 à date</p>
           <p className="text-xl font-semibold tabular-nums mt-1">{formatMontant(data.ca26)}</p>
           <p className="text-xs mt-0.5"><Evolution avant={data.ca25ytd} apres={data.ca26} /> vs 2025</p>
-        </button>
+        </div>
         <div className="rounded-lg border border-border p-3">
           <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">CA 2025 à date</p>
           <p className="text-xl font-semibold tabular-nums mt-1 text-muted-foreground">{formatMontant(data.ca25ytd)}</p>
@@ -398,6 +386,20 @@ export default function CaOdooPanel() {
           </tbody>
         </table>
       </div>
+
+      {/* Réalisé mensuel affiché d'office sous le tableau des marques (plus de
+          fenêtre à ouvrir) : c'est ce qu'on vient consulter, il doit se lire
+          sans clic. Le mois en cours suit, avec son N-1 et son estimation. */}
+      <section className="space-y-3 border-t border-border pt-4">
+        <h3 className="text-sm font-semibold">
+          Réalisé mensuel 2026{' '}
+          <span className="font-normal text-muted-foreground text-xs">
+            — du 01/01 au {formatJour(data.cutoff)}, source Odoo, avoirs déduits
+          </span>
+        </h3>
+        <DetailMensuel mois={data.mois} cutoff={data.cutoff} />
+        {data.moisEnCours && <MoisEnCours mec={data.moisEnCours} />}
+      </section>
 
       {/* Méthode repliée par défaut : elle est longue, et on ne la relit pas
           tous les jours — mais elle doit rester à un clic, sans quoi les
@@ -440,28 +442,15 @@ export default function CaOdooPanel() {
               sur la projection globale.
             </p>
             <p>
-              <b className="text-foreground">Actualisation.</b> Les chiffres proviennent du dernier
-              ACTUALISER.bat lancé sur le poste du bureau
-              {data.publieLe ? ` (publié le ${new Date(data.publieLe).toLocaleString('fr-FR')})` : ''}.
+              <b className="text-foreground">Actualisation.</b> Les chiffres proviennent de la dernière
+              actualisation (bouton « Actualiser » du tableau de bord « Détail par client »)
+              {data.publieLe ? ` — publiée le ${new Date(data.publieLe).toLocaleString('fr-FR')}` : ''}.
               Ils ne se rafraîchissent pas tout seuls.
             </p>
           </div>
         )}
       </div>
 
-      <Dialog open={mensuelOuvert} onOpenChange={setMensuelOuvert}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Réalisé mensuel 2026</DialogTitle>
-            <DialogDescription>
-              CA facturé mois par mois, du 01/01 au {formatJour(data.cutoff)} — source Odoo,
-              avoirs déduits.
-            </DialogDescription>
-          </DialogHeader>
-          <DetailMensuel mois={data.mois} cutoff={data.cutoff} />
-          {data.moisEnCours && <MoisEnCours mec={data.moisEnCours} />}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
