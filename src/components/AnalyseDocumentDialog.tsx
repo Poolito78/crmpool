@@ -3166,6 +3166,8 @@ const [contratOdoo, setContratOdoo] = useState<
         prixAchat: 0, coefficient: 1, prixHT: 0,
         coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
         tva: 20, unite: 'u', stock: 0, stockMin: 0,
+        /* Né d'une fiche Odoo : sans cela la base le poserait en « crm ». */
+        origine: 'odoo',
         dateCreation: today(),
       };
 

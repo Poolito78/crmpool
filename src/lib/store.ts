@@ -219,6 +219,9 @@ export interface Produit {
   catalogue?: string;
   /** Référence du même article dans Odoo, quand elle diffère. */
   referenceOdoo?: string;
+  /** D'où vient la fiche : importée d'Odoo ou créée dans MonCRM. Stockée, et
+      non déduite de `referenceOdoo` : une copie de fiche Odoo est du CRM. */
+  origine?: 'odoo' | 'crm';
   dateCreation: string;
   paliersPrix?: PrixPalier[];       // prix évolutifs par palier de quantité/poids
   variantes?: VarianteDimension[];  // dimensions de variantes (ex: RAL, granulométrie)
@@ -774,6 +777,7 @@ function dbToProduit(r: any): Produit {
     fichesSupplementaires: r.fiches_supplementaires ? (Array.isArray(r.fiches_supplementaires) ? r.fiches_supplementaires : JSON.parse(r.fiches_supplementaires)) : undefined,
     catalogue: r.catalogue || undefined,
     referenceOdoo: r.reference_odoo || undefined,
+    origine: r.origine === 'odoo' || r.origine === 'crm' ? r.origine : undefined,
     dateCreation: r.date_creation?.split('T')[0] || '',
     paliersPrix: r.paliers_prix ? (Array.isArray(r.paliers_prix) ? r.paliers_prix : JSON.parse(r.paliers_prix)) : undefined,
     variantes: r.variantes ? (Array.isArray(r.variantes) ? r.variantes : JSON.parse(r.variantes)) : undefined,
@@ -835,6 +839,7 @@ function produitToDb(p: Produit, userId: string) {
     } : {}),
     catalogue: p.catalogue || null,
     reference_odoo: p.referenceOdoo || null,
+    ...(p.origine !== undefined ? { origine: p.origine } : {}),
     date_creation: p.dateCreation,
     paliers_prix: p.paliersPrix && p.paliersPrix.length > 0 ? p.paliersPrix : null,
     variantes: p.variantes && p.variantes.length > 0 ? p.variantes : null,

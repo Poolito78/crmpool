@@ -30,6 +30,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from 'sonner';
 import TagsArticle from '@/components/TagsArticle';
 import * as XLSX from 'xlsx';
@@ -93,10 +94,15 @@ function dateHeure(iso?: string): string {
  * (22 585 articles) ; un article saisi ici n'en a pas (139). Deux fiches
  * peuvent ainsi porter le même produit — FLOWFAST208, créé dans le CRM, et
  * FLOWFAST208COVEMIX, venu d'Odoo — et la colonne dit laquelle est laquelle.
+ *
+ * L'origine est STOCKÉE (`produits.origine`) et se modifie dans l'onglet
+ * Infos : une fiche Odoo dupliquée devient du CRM, et un article du CRM
+ * rattaché ensuite à Odoo le reste. La référence Odoo ne sert plus que de
+ * repli pour une fiche lue sans la colonne.
  */
 type Origine = 'odoo' | 'crm';
-const origineProduit = (p: { referenceOdoo?: string }): Origine =>
-  p.referenceOdoo?.trim() ? 'odoo' : 'crm';
+const origineProduit = (p: { origine?: Origine; referenceOdoo?: string }): Origine =>
+  p.origine ?? (p.referenceOdoo?.trim() ? 'odoo' : 'crm');
 const LIBELLE_ORIGINE: Record<Origine, string> = { odoo: 'Odoo', crm: 'CRM' };
 
 const COLUMNS = [
@@ -126,7 +132,7 @@ type ColKey = typeof COLUMNS[number]['key'];
 const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
 
 const emptyProduit = {
-  reference: '', referenceOdoo: '', description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
+  reference: '', referenceOdoo: '', origine: 'crm' as Origine, description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
@@ -916,7 +922,10 @@ export default function Produits() {
   function duplicate(p: Produit) {
     const newId = generateId();
     const newRef = `${p.reference}-COPIE`;
-    const newProd = { ...p, id: newId, reference: newRef, dateCreation: new Date().toISOString().split('T')[0] };
+    /* La copie est une fiche du CRM, même tirée d'un article Odoo : Odoo ne
+       la connaît pas. Elle perd donc aussi la référence Odoo de l'original,
+       sans quoi stock et envoi vers Odoo viseraient l'article copié. */
+    const newProd: Produit = { ...p, id: newId, reference: newRef, referenceOdoo: undefined, origine: 'crm', dateCreation: new Date().toISOString().split('T')[0] };
     updateProduits(prev => [...prev, newProd]);
     if (newProd.composants && newProd.composants.length > 0) {
       supabase.from('produits').update({ composants: newProd.composants as any }).eq('id', newId).then(({ error }) => {
@@ -949,7 +958,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -1586,8 +1595,8 @@ export default function Produits() {
                               ? 'bg-purple-500/15 text-purple-700 dark:text-purple-300'
                               : 'bg-primary/15 text-primary'}`}
                             title={o === 'odoo'
-                              ? `Importé d'Odoo — référence Odoo ${p.referenceOdoo}`
-                              : 'Créé dans MonCRM — aucune référence Odoo'}
+                              ? `Importé d'Odoo${p.referenceOdoo ? ` — référence Odoo ${p.referenceOdoo}` : ''}`
+                              : `Créé dans MonCRM${p.referenceOdoo ? ` — rattaché à Odoo sous ${p.referenceOdoo}` : ''}`}
                           >{LIBELLE_ORIGINE[o]}</span>
                         </td>
                       );
@@ -1914,6 +1923,17 @@ export default function Produits() {
                 <Label>Référence Odoo</Label>
                 <Input value={form.referenceOdoo} onChange={e => setForm(p => ({ ...p, referenceOdoo: e.target.value.trim() }))} placeholder={form.reference || 'Identique à la référence'} />
                 <p className="text-[10px] text-muted-foreground mt-0.5">À remplir seulement si Odoo nomme l'article autrement.</p>
+              </div>
+              <div>
+                <Label>Origine</Label>
+                <Select value={form.origine} onValueChange={v => setForm(p => ({ ...p, origine: v as Origine }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="odoo">{LIBELLE_ORIGINE.odoo}</SelectItem>
+                    <SelectItem value="crm">{LIBELLE_ORIGINE.crm}</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Une fiche dupliquée devient CRM.</p>
               </div>
             </div>
             <div><Label>Description *</Label><Input value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} /></div>
