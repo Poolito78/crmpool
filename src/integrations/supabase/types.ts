@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      ca_dashboard_data: {
+        Row: {
+          id: string
+          payload: Json
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          id?: string
+          payload: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          id?: string
+          payload?: Json
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      ca_dashboard_page: {
+        Row: {
+          html: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          html: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          html?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      ca_sti_2025_fige: {
+        Row: {
+          client: string
+          montant: number
+        }
+        Insert: {
+          client: string
+          montant: number
+        }
+        Update: {
+          client?: string
+          montant?: number
+        }
+        Relationships: []
+      }
       categorie_documents: {
         Row: {
           categorie: string
@@ -121,6 +175,7 @@ export type Database = {
           code_ape: string | null
           code_postal: string
           contacts: Json | null
+          contrat_cadre_odoo: string | null
           created_at: string
           date_creation: string
           date_creation_entreprise: string | null
@@ -130,12 +185,15 @@ export type Database = {
           forme_juridique: string | null
           id: string
           libelle_ape: string | null
+          liste_prix_odoo: string | null
+          niveau_tarif: string | null
           nom: string
           notes: string | null
           rcs: string | null
           remises_par_categorie: Json | null
           siret: string | null
           societe: string | null
+          tarifs_odoo_maj: string | null
           telephone: string
           telephone_mobile: string | null
           tranche_effectif: string | null
@@ -150,6 +208,7 @@ export type Database = {
           code_ape?: string | null
           code_postal?: string
           contacts?: Json | null
+          contrat_cadre_odoo?: string | null
           created_at?: string
           date_creation?: string
           date_creation_entreprise?: string | null
@@ -159,12 +218,15 @@ export type Database = {
           forme_juridique?: string | null
           id?: string
           libelle_ape?: string | null
+          liste_prix_odoo?: string | null
+          niveau_tarif?: string | null
           nom: string
           notes?: string | null
           rcs?: string | null
           remises_par_categorie?: Json | null
           siret?: string | null
           societe?: string | null
+          tarifs_odoo_maj?: string | null
           telephone?: string
           telephone_mobile?: string | null
           tranche_effectif?: string | null
@@ -179,6 +241,7 @@ export type Database = {
           code_ape?: string | null
           code_postal?: string
           contacts?: Json | null
+          contrat_cadre_odoo?: string | null
           created_at?: string
           date_creation?: string
           date_creation_entreprise?: string | null
@@ -188,12 +251,15 @@ export type Database = {
           forme_juridique?: string | null
           id?: string
           libelle_ape?: string | null
+          liste_prix_odoo?: string | null
+          niveau_tarif?: string | null
           nom?: string
           notes?: string | null
           rcs?: string | null
           remises_par_categorie?: Json | null
           siret?: string | null
           societe?: string | null
+          tarifs_odoo_maj?: string | null
           telephone?: string
           telephone_mobile?: string | null
           tranche_effectif?: string | null
@@ -642,6 +708,7 @@ export type Database = {
           archive_concurrents: Json | null
           archive_date: string | null
           archive_raison: string | null
+          chantier: string | null
           client_id: string | null
           conditions: string | null
           contact_id: string | null
@@ -658,6 +725,7 @@ export type Database = {
           lignes: Json
           mo_content: string | null
           mode_calcul: string | null
+          niveau_tarif: string | null
           notes: string | null
           numero: string
           probabilite_reussite: number | null
@@ -674,6 +742,7 @@ export type Database = {
           archive_concurrents?: Json | null
           archive_date?: string | null
           archive_raison?: string | null
+          chantier?: string | null
           client_id?: string | null
           conditions?: string | null
           contact_id?: string | null
@@ -690,6 +759,7 @@ export type Database = {
           lignes?: Json
           mo_content?: string | null
           mode_calcul?: string | null
+          niveau_tarif?: string | null
           notes?: string | null
           numero?: string
           probabilite_reussite?: number | null
@@ -706,6 +776,7 @@ export type Database = {
           archive_concurrents?: Json | null
           archive_date?: string | null
           archive_raison?: string | null
+          chantier?: string | null
           client_id?: string | null
           conditions?: string | null
           contact_id?: string | null
@@ -722,6 +793,7 @@ export type Database = {
           lignes?: Json
           mo_content?: string | null
           mode_calcul?: string | null
+          niveau_tarif?: string | null
           notes?: string | null
           numero?: string
           probabilite_reussite?: number | null
@@ -1536,6 +1608,41 @@ export type Database = {
           },
         ]
       }
+      produit_tags: {
+        Row: {
+          created_at: string
+          cree_par: string | null
+          id: string
+          origine: string
+          produit_id: string
+          tag: string
+        }
+        Insert: {
+          created_at?: string
+          cree_par?: string | null
+          id?: string
+          origine?: string
+          produit_id: string
+          tag: string
+        }
+        Update: {
+          created_at?: string
+          cree_par?: string | null
+          id?: string
+          origine?: string
+          produit_id?: string
+          tag?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produit_tags_produit_id_fkey"
+            columns: ["produit_id"]
+            isOneToOne: false
+            referencedRelation: "produits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produits: {
         Row: {
           achats_historique: Json | null
@@ -1550,15 +1657,18 @@ export type Database = {
           date_creation: string
           description: string
           description_detaillee: string | null
+          description_variante: string | null
           disponible_vente: boolean
           est_modele: boolean
           fiche_link_label: string | null
           fiche_url: string | null
+          fiches_supplementaires: Json | null
           fournisseur_id: string | null
           id: string
           lignes_kit: Json | null
           modele_cle: string | null
           nb_variantes: number
+          origine: string | null
           paliers_prix: Json | null
           poids: number | null
           prix_achat: number
@@ -1597,15 +1707,18 @@ export type Database = {
           date_creation?: string
           description?: string
           description_detaillee?: string | null
+          description_variante?: string | null
           disponible_vente?: boolean
           est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
+          fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
           modele_cle?: string | null
           nb_variantes?: number
+          origine?: string | null
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
@@ -1644,15 +1757,18 @@ export type Database = {
           date_creation?: string
           description?: string
           description_detaillee?: string | null
+          description_variante?: string | null
           disponible_vente?: boolean
           est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
+          fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
           modele_cle?: string | null
           nb_variantes?: number
+          origine?: string | null
           paliers_prix?: Json | null
           poids?: number | null
           prix_achat?: number
@@ -1987,8 +2103,8 @@ export type Database = {
       systeme_composants: {
         Row: {
           au_kit: boolean
-          conditionnement_kg: number | null
           condition: string | null
+          conditionnement_kg: number | null
           consommation: number | null
           created_at: string
           dosage_temperature: Json | null
@@ -2005,8 +2121,8 @@ export type Database = {
         }
         Insert: {
           au_kit?: boolean
-          conditionnement_kg?: number | null
           condition?: string | null
+          conditionnement_kg?: number | null
           consommation?: number | null
           created_at?: string
           dosage_temperature?: Json | null
@@ -2023,8 +2139,8 @@ export type Database = {
         }
         Update: {
           au_kit?: boolean
-          conditionnement_kg?: number | null
           condition?: string | null
+          conditionnement_kg?: number | null
           consommation?: number | null
           created_at?: string
           dosage_temperature?: Json | null
@@ -2139,6 +2255,7 @@ export type Database = {
       }
       veille_roles: {
         Row: {
+          ca_access: boolean
           crm_access: boolean | null
           crm_achat_access: boolean | null
           crm_active: boolean | null
@@ -2149,6 +2266,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ca_access?: boolean
           crm_access?: boolean | null
           crm_achat_access?: boolean | null
           crm_active?: boolean | null
@@ -2159,6 +2277,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ca_access?: boolean
           crm_access?: boolean | null
           crm_achat_access?: boolean | null
           crm_active?: boolean | null
@@ -2179,7 +2298,9 @@ export type Database = {
       get_my_veille_role: { Args: never; Returns: string }
       lancer_stock_odoo: { Args: never; Returns: undefined }
       lancer_synchro_grilles: { Args: never; Returns: undefined }
+      maj_description_variante: { Args: { lignes: Json }; Returns: number }
       next_devis_numero: { Args: never; Returns: string }
+      recalculer_modeles: { Args: { cles: string[] }; Returns: number }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
     }
