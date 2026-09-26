@@ -244,6 +244,15 @@ rien ne le disait. Odoo porte pourtant `FLOWFASTPRIMER107.20` en 20 kg.
   la fonction Edge : **vitest ne les couvre pas** (`include: src/**`). Ils ont
   été vérifiés sur les vraies données du catalogue.
 
+## EB10 / EB20 : des panneaux directionnels P50 (26 sept.)
+
+Un panneau d'agglomération part en DR50 et se fixe comme un Lapérouse P50 :
+`colliersAgglo` (`AnalyseDocumentDialog`) ajoute, case cochée par défaut, les
+fixations `fixationsP50` (`bridesDevis.ts`) — 1 par rail et par support, rails
+de `railsLaperouse`, référence d'après la section de l'affaire (Ø76 alu →
+CO76SFP50, 80×80 → BR8080SFP50…), prix de la grille du niveau. Nombre de
+supports saisissable (1 par défaut).
+
 ## odoo-prix : la Variant Sale Description (26 sept.)
 
 La désignation renvoyée par `odoo-prix` est la **Variant Sale Description**

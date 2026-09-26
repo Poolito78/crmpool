@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  compterBrides, familleRails, railsDuPanneau, fixationDeSection, fixationsPour,
+  compterBrides, familleRails, railsDuPanneau, fixationDeSection, fixationsPour, fixationsP50,
 } from '@/lib/bridesDevis';
 
 describe('familleRails', () => {
@@ -233,5 +233,18 @@ describe('fixations d’un ensemble', () => {
     expect(f.nombre).toBeNull();
     expect(f.prix).toBeNull();
     expect(f.aVerifier).toHaveLength(1);
+  });
+});
+
+describe('fixations P50 (EB10 / EB20, directionnels)', () => {
+  it('une par rail et par support, rails de la table Lapérouse', () => {
+    /* EB10 1000×400 sur un Ø76 alu : 2 rails → 2 colliers CO76SFP50. */
+    expect(fixationsP50(400, 1, 'Ø76alu')).toEqual({ reference: 'CO76SFP50.BRUT', rails: 2, nombre: 2 });
+    expect(fixationsP50(300, 2, '80x80x2')).toEqual({ reference: 'BR8080SFP50.BRUT', rails: 2, nombre: 4 });
+    expect(fixationsP50(750, 1, 'Ø90alu')).toMatchObject({ reference: 'CO89SFP50.BRUT', nombre: 3 });
+  });
+
+  it('une hauteur hors table ne se devine pas', () => {
+    expect(fixationsP50(175, 1, 'Ø60')).toEqual({ reference: 'CO60SFP50.BRUT', rails: null, nombre: null });
   });
 });

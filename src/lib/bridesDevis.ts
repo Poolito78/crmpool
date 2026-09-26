@@ -6,6 +6,7 @@ import {
   SUP_PRIX, BRIDE_ACIER, COLLIER_ALU,
   type NiveauTarif, type SectionSupport,
 } from '@/lib/tarifPanneaux.donnees';
+import { railsLaperouse } from '@/lib/planDirectionnel';
 
 /**
  * Combien de brides un devis demande-t-il ?
@@ -342,5 +343,41 @@ export function fixationsPour(
     explication: comptage.lignes
       .map(b => `${b.famille}${b.cote !== '—' ? ` ${b.cote}` : ''} : ${b.railsUnitaires} rail(s)`)
       .join(' · ') || 'aucun élément dont la table donne les rails',
+  };
+}
+
+/**
+ * La fixation SIMPLE FACE P50 qu'appelle une section de support, par sa
+ * référence de grille : collier sur un rond, bride sur un profil carré.
+ *
+ * C'est celle des panneaux directionnels Lapérouse P50 — et des panneaux
+ * d'agglomération EB10 / EB20, qui en sont (ils partent en DR50). Même
+ * règle que `fixationsEnsemble` du plan Kadri. Toutes ces références sont à
+ * la grille R1-R4 (relevé du 26/09/2026).
+ */
+export const FIXATION_P50: Record<SectionSupport, string> = {
+  'Ø60': 'CO60SFP50.BRUT',
+  '80x40': 'BR8040SFP50.BRUT',
+  '80x80x2': 'BR8080SFP50.BRUT',
+  '80x80x3': 'BR8080SFP50.BRUT',
+  'Ø76alu': 'CO76SFP50.BRUT',
+  'Ø90alu': 'CO89SFP50.BRUT',
+};
+
+/**
+ * Les fixations P50 d'un panneau : UNE PAR RAIL ET PAR SUPPORT, les rails
+ * lus dans la table Lapérouse (`railsLaperouse`). Une hauteur absente de la
+ * table rend `nombre: null` : on ne devine pas un nombre de rails.
+ */
+export function fixationsP50(
+  hauteur: number,
+  supports: number,
+  section: SectionSupport,
+): { reference: string; rails: number | null; nombre: number | null } {
+  const rails = railsLaperouse(hauteur);
+  return {
+    reference: FIXATION_P50[section],
+    rails,
+    nombre: rails === null ? null : rails * Math.max(1, Math.round(supports)),
   };
 }

@@ -39,7 +39,7 @@ import {
 import { rapprocherArticle, memeFamille } from '@/lib/rapprochementArticle';
 import { variantesParDefaut, varianteSelonDemande } from '@/lib/variantFunnel';
 import { chantierDansTexte } from '@/lib/chantierDemande';
-import { compterBrides, fixationsPour, fixationDeSection, type Fixations } from '@/lib/bridesDevis';
+import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import {
@@ -692,6 +692,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Mention de commune portée sous le nom, quand la commune diffère de
      l'agglomération : « MOULIGNON » puis « c°ne de QUINCY-VOISINS ». */
   const [mentionAgglo, setMentionAgglo] = useState<Record<string, string>>({});
+  /* Nombre de supports d'un panneau d'agglomération : ses colliers P50 se
+     comptent par rail ET par support. 1 tant qu'on ne dit rien. */
+  const [supportsAgglo, setSupportsAgglo] = useState<Record<string, number>>({});
   /* ── état des lignes reconnues comme SYSTÈME ──────────────────────────────
      Une demande de résine nomme une mise en œuvre, pas un article : « SYSTEME
      FLOWSHIELD COMFORT 3MM · 30 ». Aucun article ne porte ce nom, et le
@@ -1235,7 +1238,7 @@ const [contratOdoo, setContratOdoo] = useState<
        d'une analyse à l'autre, elles cocheraient le support d'un panneau qui
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
-    setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
+    setNomAgglo({}); setSupportsAgglo({}); setDptLivraison(''); setNiveauForce('');
     setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
@@ -2167,6 +2170,49 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [result, texteDemande, gammePanneau, classePanneau, niveauRemise,
     sectionSupport, hauteurSousPanneau, optionsEnsemble, planKadri]);
 
+  /**
+   * LES COLLIERS P50 D'UN PANNEAU D'AGGLOMÉRATION.
+   *
+   * Un EB10 / EB20 est un panneau DIRECTIONNEL Lapérouse P50 : il part en
+   * DR50 et se fixe comme lui — un collier (ou une bride) simple face P50 par
+   * rail et par support, les rails lus dans la table Lapérouse
+   * (`fixationsP50`), la référence d'après la section du support choisie pour
+   * l'affaire. Il n'est pas un ensemble de police (`ensembleDeLigne` l'écarte) :
+   * il partait donc sans rien pour le fixer.
+   *
+   * `null` sans format — le nom n'est pas saisi. Coché par défaut (clé
+   * « d<i>:colliers » absente) : un panneau se livre avec ses fixations.
+   * Prix de la grille du niveau affiché ; R0 n'en a pas, la ligne part alors
+   * sans prix plutôt qu'à un prix déduit.
+   */
+  const colliersAgglo = useCallback((i: number) => {
+    if (planKadri) return null;
+    const l = (result?.lignes ?? [])[i];
+    if (!l) return null;
+    const texte = texteDemande(l, i);
+    const trouve = codeDansTexte(texte);
+    const type = trouve ? typeAgglomeration(trouve.code) : null;
+    if (!trouve || !type) return null;
+    const cle = `d${i}`;
+    const nom = nomAgglo[cle] ?? nomAgglomerationDansTexte(texte, trouve.code) ?? '';
+    const p = nom.trim() ? dimensionnerAgglomerationAuto(nom, {
+      type, hc: hcAgglo[cle] ?? HC_AGGLO_DEFAUT, mention: mentionAgglo[cle],
+    }) : null;
+    if (!p) return null;
+    const supports = supportsAgglo[cle] ?? 1;
+    const f = fixationsP50(p.hauteur, supports, sectionSupport);
+    const prix = niveauRemise === 'R0' ? null
+      : grillesNiveau[niveauRemise]?.get(f.reference)?.prix ?? null;
+    return { ...f, supports, hauteur: p.hauteur, prix, coche: optionsEnsemble[`${cle}:colliers`] ?? true };
+  }, [planKadri, result, texteDemande, nomAgglo, hcAgglo, mentionAgglo, supportsAgglo,
+    sectionSupport, niveauRemise, grillesNiveau, optionsEnsemble]);
+
+  /** Les lignes d'agglomération dont le format est connu. */
+  const lignesAgglo = useMemo(
+    () => (result?.lignes ?? []).map((_, i) => i).filter(i => !!colliersAgglo(i)),
+    [result, colliersAgglo],
+  );
+
   /** Les lignes de demande qui forment un ensemble de police. */
   const lignesEnsemble = useMemo(
     () => (result?.lignes ?? []).map((_, i) => i).filter(i => !!ensembleDeLigne(i)),
@@ -2199,6 +2245,10 @@ const [contratOdoo, setContratOdoo] = useState<
 
   /** Ce que pèsent les accessoires cochés d'une ligne — le total les compte. */
   const totalOptionsDe = useCallback((i: number, quantite: number) => {
+    const eb = colliersAgglo(i);
+    if (eb) {
+      return eb.coche && eb.nombre != null && eb.prix != null ? eb.nombre * eb.prix * quantite : 0;
+    }
     const ens = ensembleDeLigne(i);
     if (!ens) return 0;
     let t = 0;
@@ -2211,7 +2261,7 @@ const [contratOdoo, setContratOdoo] = useState<
       t += ens.fixations.prix;
     }
     return t * quantite;
-  }, [ensembleDeLigne, optionsEnsemble]);
+  }, [ensembleDeLigne, optionsEnsemble, colliersAgglo]);
 
   const texteRechercheOdoo = useCallback((
     l: { reference?: string; description?: string },
@@ -3241,11 +3291,11 @@ const [contratOdoo, setContratOdoo] = useState<
      pas chez Odoo, et la règle « R4 ÷ 0,65 » ne vaut que pour la police :
      en R0, un directionnel reste sans prix plutôt qu'à un prix déduit. */
   useEffect(() => {
-    if (!open || !planKadri || niveauRemise === 'R0' || grillesNiveau[niveauRemise]) return;
+    if (!open || !(planKadri || lignesAgglo.length) || niveauRemise === 'R0' || grillesNiveau[niveauRemise]) return;
     chargerGrille(niveauRemise)
       .then(g => setGrillesNiveau(prev => (prev[niveauRemise] ? prev : { ...prev, [niveauRemise]: g })))
       .catch(e => toast.error(`Grille ${niveauRemise} illisible : ${(e as Error).message}`));
-  }, [open, planKadri, niveauRemise, grillesNiveau]);
+  }, [open, planKadri, lignesAgglo.length, niveauRemise, grillesNiveau]);
 
   /** Prix de grille d'une ligne de plan, au niveau affiché. */
   const prixGrillePlan = useCallback((i: number) => {
@@ -3494,6 +3544,22 @@ const [contratOdoo, setContratOdoo] = useState<
     const lignesOptionsEnsemble = (
       i: number, l: { quantite: number; tva?: number },
     ): LigneDevis[] => {
+      /* Panneau d'agglomération : ses colliers P50, sous leur référence. */
+      const eb = colliersAgglo(i);
+      if (eb) {
+        if (!eb.coche || eb.nombre == null) return [];
+        const article = produits.find(p => (p.referenceOdoo || p.reference || '').toUpperCase() === eb.reference);
+        return [{
+          id: generateId(),
+          produitId: article?.id,
+          referenceOdoo: eb.reference,
+          description: article ? designationProduit(article) : `Fixation simple face P50 ${eb.reference}`,
+          quantite: quantiteDe(`d${i}`, l.quantite || 1) * eb.nombre, unite: article?.unite || 'u',
+          prixUnitaireHT: eb.prix ?? 0,
+          tva: l.tva ?? 20, remise: 0,
+          note: `1 par rail et par support : ${eb.rails} rail(s) × ${eb.supports} support(s)`,
+        }];
+      }
       const ens = ensembleDeLigne(i);
       if (!ens) return [];
       const qte = quantiteDe(`d${i}`, l.quantite || 1);
@@ -4721,7 +4787,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                 d'un collier, un profil carré se boulonne par
                                 une bride acier. Choisir l'une sans l'autre
                                 ferait facturer des colliers Ø60 sur du 80×80. */}
-                            {lignesEnsemble.length > 0 && (() => {
+                            {(lignesEnsemble.length > 0 || lignesAgglo.length > 0) && (() => {
                               const fixation = fixationDeSection(sectionSupport, niveauRemise);
                               return (
                                 <div className="rounded border border-border bg-muted/30 p-1.5 space-y-1 text-[11px]">
@@ -5492,6 +5558,50 @@ const [contratOdoo, setContratOdoo] = useState<
                                                   réf. à retenir ci-dessus
                                                 </span>
                                               </div>
+                                              {(() => {
+                                                /* Panneau P50 : ses colliers, une par rail et par support. */
+                                                const f = colliersAgglo(i);
+                                                if (!f) return null;
+                                                return (
+                                                  <div className="flex flex-wrap items-center gap-2 border-t border-primary/20 pt-0.5">
+                                                    <label className="flex items-center gap-1.5 cursor-pointer">
+                                                      <Checkbox
+                                                        className="h-3.5 w-3.5"
+                                                        checked={f.coche}
+                                                        disabled={f.nombre == null}
+                                                        onCheckedChange={v => setOptionsEnsemble(pr => ({
+                                                          ...pr, [`${cle}:colliers`]: v === true,
+                                                        }))}
+                                                      />
+                                                      Fixations P50 {f.reference}
+                                                    </label>
+                                                    <span className="flex items-center gap-1">
+                                                      sur
+                                                      <input
+                                                        type="number" min={1} step={1}
+                                                        className="w-10 rounded border px-1 py-0.5 text-[11px]"
+                                                        value={f.supports}
+                                                        onChange={e => setSupportsAgglo(pr => ({
+                                                          ...pr, [cle]: Math.max(1, Math.round(Number(e.target.value) || 1)),
+                                                        }))}
+                                                      />
+                                                      support(s)
+                                                    </span>
+                                                    {f.nombre == null ? (
+                                                      <span className="text-warning">
+                                                        rails inconnus pour {f.hauteur} de haut — hauteur absente de la table Lapérouse
+                                                      </span>
+                                                    ) : (
+                                                      <span className="ml-auto text-muted-foreground">
+                                                        {f.rails} rail(s) × {f.supports} = {f.nombre} × {qte}
+                                                        {' · '}{f.prix != null
+                                                          ? `${formatMontant(f.prix)} l’unité`
+                                                          : <span className="text-warning">prix de grille absent</span>}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
                                             </>
                                           )}
                                         </div>
