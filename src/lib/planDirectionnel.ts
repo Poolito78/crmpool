@@ -75,6 +75,8 @@ export interface EnsemblePlan {
   support: string;
   panneaux: PanneauPlan[];
   supports: SupportPlan[];
+  /** « Socle d'ancrage avec embase » : les mâts de l'ensemble sont sur embase. */
+  embase: boolean;
 }
 
 /** Un panneau que le chantier demande de fabriquer. */
@@ -231,6 +233,8 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
     support: c.support,
     panneaux,
     supports,
+    /* « Socle d'ancrage avec em base » : pdf.js coupe aussi ce mot-là. */
+    embase: /avecembase/i.test(sansEspaces(texte)),
   };
 }
 
@@ -820,6 +824,50 @@ export function bridesPal(
     description: `Bride PAL H10x60 — ${detail}` };
 }
 
+/**
+ * L'ancrage d'un mât sur embase, par diamètre — les articles Odoo, relevés
+ * le 26/09/2026 : embase, jeu de 4 tiges (« IS TIGES ANCRAGE X4 »), gabarit
+ * de pose. Un jeu de chaque par mât, comme dans les devis (AF035742 :
+ * MC.89 + EMBASE.89 + TIGE.89.M22.500 + SFGAB60.140).
+ */
+export const ANCRAGE_MAT: Record<number, { embase: string; tiges: string; gabarit: string }> = {
+  60: { embase: 'EMBASE.60', tiges: 'TIGE.60.M14.400', gabarit: 'SFGAB60.140' },
+  76: { embase: 'EMBASE.76', tiges: 'TIGE.76.M14.400', gabarit: 'SFGAB60.140' },
+  89: { embase: 'EMBASE.89', tiges: 'TIGE.89.M22.500', gabarit: 'SFGAB60.140' },
+  114: { embase: 'EMBASE.114', tiges: 'TIGE.114.M22', gabarit: 'SFGAB60.140' },
+  140: { embase: 'EMBASE.140', tiges: 'TIGE.140.M22', gabarit: 'SFGAB60.140' },
+  168: { embase: 'EMBASE.168', tiges: 'TIGE.168.M27.750', gabarit: 'SFGAB168' },
+};
+
+/**
+ * Embase, tiges et gabarit des mâts NEUFS d'un ensemble posé « avec
+ * embase ». Le diamètre est celui du MÂT — sa section basse, celle qui se
+ * pose sur l'embase —, jamais celui du coulisseau. Un mât carré ou de
+ * diamètre inconnu : l'ancrage reste à vérifier.
+ */
+export function ancragesEnsemble(e: EnsemblePlan): Omit<LigneDemandePlan, 'unite' | 'ensembles' | 'recherche'>[] {
+  if (!e.embase) return [];
+  const out: Omit<LigneDemandePlan, 'unite' | 'ensembles' | 'recherche'>[] = [];
+  for (const s of e.supports) {
+    if (s.existant || /^coulisseau/i.test(s.designation)) continue;
+    const section = sectionSupport(s.designation);
+    const a = section && 'rond' in section ? ANCRAGE_MAT[section.rond] : undefined;
+    if (!a) {
+      out.push({ reference: '', quantite: 1,
+        description: `Embase, tiges et gabarit — ${s.designation}`,
+        aVerifier: 'ancrage à choisir : diamètre du mât non lu ou sans embase au catalogue' });
+      continue;
+    }
+    const d = (section as { rond: number }).rond;
+    out.push(
+      { reference: a.embase, quantite: 1, description: `Embase Ø${d}`, aVerifier: null },
+      { reference: a.tiges, quantite: 1, description: `4 tiges d'ancrage Ø${d}`, aVerifier: null },
+      { reference: a.gabarit, quantite: 1, description: `Gabarit de pose Ø${d}`, aVerifier: null },
+    );
+  }
+  return out;
+}
+
 function lignesDe(
   ensembles: EnsemblePlan[],
   gammes: Record<string, GammeDirectionnelle>,
@@ -894,6 +942,22 @@ function lignesDe(
       recherche: '',
     });
   }
+  /* Embase, tiges et gabarit des mâts neufs sur embase — une même référence
+     s'additionne d'un ensemble à l'autre. */
+  const ancrages = new Map<string, LigneDemandePlan>();
+  for (const e of ensembles) {
+    for (const a of ancragesEnsemble(e)) {
+      const cle = a.reference || `${e.ensemble}|${a.description}`;
+      const deja = ancrages.get(cle);
+      if (deja && a.reference) {
+        deja.quantite += a.quantite;
+        if (!deja.ensembles.includes(e.ensemble)) deja.ensembles.push(e.ensemble);
+      } else {
+        ancrages.set(cle, { ...a, unite: 'u', ensembles: [e.ensemble], recherche: '' });
+      }
+    }
+  }
+  out.push(...ancrages.values());
   return out;
 }
 

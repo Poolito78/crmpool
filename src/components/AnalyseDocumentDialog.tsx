@@ -3236,7 +3236,10 @@ const [contratOdoo, setContratOdoo] = useState<
   const prixGrillePlan = useCallback((i: number) => {
     const ref = String(result?.lignes?.[i]?.reference || '').trim();
     if (!planKadri || !ref) return null;
-    const g = prixDansGrille(grillesNiveau[niveauRemise], ref);
+    /* L'article Odoo peut porter un segment que la grille n'écrit pas :
+       TIGE.89.M22.500 y est coté « TIGE.89.M22 ». */
+    const g = prixDansGrille(grillesNiveau[niveauRemise], ref)
+      ?? (ref.includes('.') ? prixDansGrille(grillesNiveau[niveauRemise], ref.replace(/\.[^.]+$/, '')) : null);
     return g ? { prix: Math.round(g.prix * 100) / 100, gabarit: g.gabarit } : null;
   }, [planKadri, result, grillesNiveau, niveauRemise]);
 

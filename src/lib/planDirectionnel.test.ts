@@ -4,6 +4,7 @@ import {
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
   railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
+  ancragesEnsemble,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -446,5 +447,25 @@ describe('supports neufs', () => {
     const e = lireEnsemble(PAGE_CAISSON.replace('CAISSON CL1\nMAT TRAV REHAUSSE', 'CAISSON CL1\nTUBE GALV')
       .replace('MAT TRAV MC', 'TUBE GALV MC 80').replace(/Existant\nCoulisseau MB\nMt : 10 m\.daN\nLg : 0\.85 m\n/, ''), 3)!;
     expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'BR8080SFP50.BRUT', quantite: 2 });
+  });
+});
+
+describe('ancrage des mâts neufs sur embase', () => {
+  it('embase, tiges et gabarit au diamètre du mât, pas du coulisseau', () => {
+    const e = lireEnsemble(PAGE_CAISSON.replace(PIED, `Socle d'ancrage avec embase\n${PIED}`), 3)!;
+    expect(e.embase).toBe(true);
+    /* MAT TRAV MC neuf (Ø89) ; le coulisseau MB (Ø76) est existant. */
+    expect(ancragesEnsemble(e).map(a => a.reference)).toEqual(['EMBASE.89', 'TIGE.89.M22.500', 'SFGAB60.140']);
+  });
+
+  it('rien sans « avec embase », ni pour un mât existant', () => {
+    expect(ancragesEnsemble(lireEnsemble(PAGE_CAISSON, 3)!)).toEqual([]);
+    expect(ancragesEnsemble(lireEnsemble(PAGE_NEUF, 1)!)).toEqual([]);
+    expect(ancragesEnsemble(lireEnsemble(PAGE_ALU, 43)!)).toEqual([]);
+  });
+
+  it('lit « avec em base » coupé par pdf.js', () => {
+    const e = lireEnsemble(PAGE_CAISSON.replace(PIED, `Socle d'ancrage avec em base\n${PIED}`), 3)!;
+    expect(e.embase).toBe(true);
   });
 });
