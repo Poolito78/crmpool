@@ -273,7 +273,8 @@ describe('chiffrage par ensemble', () => {
       'HARF-06 D3.4151.2550.C1.ST.IS.BRUT',
       'HARF-06 TUBE GALV MC 80 — long',
     ]);
-    expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble DEM1-47 — Demidoff - Portion 1 (plan p. 1)');
+    expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
+    expect(titreEnsemble(lignes[5].ensemble!)).toBe('Ensemble 0003/HARF-06');
   });
 
   it('par référence, les quantités se cumulent et il n\'y a plus d\'ensemble', () => {

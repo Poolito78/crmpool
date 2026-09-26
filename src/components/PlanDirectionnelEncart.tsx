@@ -132,7 +132,12 @@ export default function PlanDirectionnelEncart({
                 <Fragment key={i}>
                 {ouvre && (
                   <tr className="border-t border-border bg-muted/50">
-                    <td colSpan={4} className="px-1.5 py-1 font-medium">{titreEnsemble(e)}</td>
+                    <td colSpan={4} className="px-1.5 py-1 font-medium">
+                      {titreEnsemble(e)}
+                      <span className="ml-2 font-normal text-muted-foreground">
+                        {e.section ? `${e.section} · ` : ''}plan p. {e.page}
+                      </span>
+                    </td>
                     <td className="px-1.5 py-1 text-right font-medium whitespace-nowrap">
                       {formatMontant(totalEnsemble(e.nom))}
                     </td>

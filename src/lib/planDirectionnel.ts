@@ -522,7 +522,7 @@ export interface LigneDemandePlan {
   unite: 'u';
   ensembles: string[];
   /** L'ensemble du plan, quand les lignes sont données ensemble par ensemble. */
-  ensemble?: { nom: string; section: string; page: number };
+  ensemble?: { numero: number; nom: string; section: string; page: number };
   /** Pourquoi la ligne n'a pas de référence ; `null` quand elle en a une. */
   aVerifier: string | null;
   /**
@@ -587,13 +587,24 @@ export function lignesDuPlan(
   regroupement: RegroupementPlan = 'ensemble',
 ): LigneDemandePlan[] {
   if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe);
-  return ensembles.flatMap(e => lignesDe([e], gammes, existe).map(l => ({
-    ...l,
-    ensemble: { nom: e.ensemble, section: e.section, page: e.page },
-  })));
+  /* Le numéro compte les ensembles QUI ONT QUELQUE CHOSE À CHIFFRER, dans
+     l'ordre du plan : le devis n'a pas de trou dans sa numérotation. */
+  let numero = 0;
+  return ensembles.flatMap(e => {
+    const lignes = lignesDe([e], gammes, existe);
+    if (!lignes.length) return [];
+    numero += 1;
+    const ensemble = { numero, nom: e.ensemble, section: e.section, page: e.page };
+    return lignes.map(l => ({ ...l, ensemble }));
+  });
 }
 
-/** Titre d'un ensemble au devis : son nom Kadri, sa section, sa page. */
-export function titreEnsemble(e: { nom: string; section: string; page: number }): string {
-  return `Ensemble ${e.nom}${e.section ? ` — ${e.section}` : ''} (plan p. ${e.page})`;
+/**
+ * Titre d'un ensemble au devis, écrit comme les sections des devis Odoo :
+ * « Ensemble 0001/HARF-06 » — numéro d'ordre sur quatre chiffres, puis le
+ * nom que porte le plan Kadri. C'est ce titre qui part chez Odoo comme
+ * section (`line_section`) à l'export.
+ */
+export function titreEnsemble(e: { numero: number; nom: string }): string {
+  return `Ensemble ${String(e.numero).padStart(4, '0')}/${e.nom}`;
 }
