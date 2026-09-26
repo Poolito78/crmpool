@@ -244,6 +244,16 @@ rien ne le disait. Odoo porte pourtant `FLOWFASTPRIMER107.20` en 20 kg.
   la fonction Edge : **vitest ne les couvre pas** (`include: src/**`). Ils ont
   été vérifiés sur les vraies données du catalogue.
 
+## odoo-prix : la Variant Sale Description (26 sept.)
+
+La désignation renvoyée par `odoo-prix` est la **Variant Sale Description**
+(« DF50 1000 250 C1 50 O BRUT FLECHE LAPEROUSE P50 »), champ retrouvé par son
+libellé (`champDescriptionVariante`, un `fields_get` par instance, `null` en
+cas d'échec → repli sur `display_name`). Avant, l'`Article` construit depuis
+la lecture Odoo perdait `display_name` et la réponse de prix rendait le nom du
+modèle (« IS DF [P50] »).
+⚠️ **À déployer** : `.\deploy-function.ps1 odoo-prix`.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

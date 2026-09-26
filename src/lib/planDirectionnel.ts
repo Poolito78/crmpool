@@ -37,7 +37,9 @@
  * tient sous l'admissible. Sinon, à vérifier — jamais au prix d'une longueur
  * devinée. Un mât rehaussé EXISTANT (mât + coulisseau, « Existant » écrit une
  * fois pour la paire) n'est pas commandé : ses colliers vont sur le
- * coulisseau, et un mât neuf s'ajoute à la demande (`avecMatNeuf`).
+ * coulisseau, et un mât neuf s'ajoute à la demande (`avecMatNeuf`). Sous un
+ * panneau PAL, les supports sont des IPN (`SUPPORTS_IPN`, IPN1 = IA … IPN5 =
+ * IE) : le plus petit dont le moment admissible couvre le moment Kadri.
  */
 
 export type SortPanneau = 'neuf' | 'remplace' | 'depose' | 'existant' | 'supprime';
@@ -518,6 +520,8 @@ export interface LigneSupportPlan {
   rehausse: boolean;
   /** Le plus fort moment Kadri des supports regroupés, en daN.m. */
   moment?: number;
+  /** L'ensemble porte un panneau PAL (Tasman) : ses supports sont des IPN. */
+  pal?: boolean;
   quantite: number;
   ensembles: string[];
 }
@@ -557,10 +561,20 @@ export function avecMatNeuf(e: EnsemblePlan): EnsemblePlan {
   };
 }
 
+/** L'ensemble porte-t-il un panneau PAL à fabriquer (grand format ou gamme Tasman) ? */
+export function portePal(e: EnsemblePlan, gammes: Record<string, GammeDirectionnelle> = {}): boolean {
+  const gamme = gammes[e.produit] ?? gammeParDefaut(e.produit);
+  return e.panneaux.some(p => aFabriquer(p) && (estGrandFormat(p) || gamme === 'tasman'));
+}
+
 /** Les supports NEUFS, regroupés par désignation et longueur. */
-export function supportsNeufs(ensembles: EnsemblePlan[]): LigneSupportPlan[] {
+export function supportsNeufs(
+  ensembles: EnsemblePlan[],
+  gammes: Record<string, GammeDirectionnelle> = {},
+): LigneSupportPlan[] {
   const m = new Map<string, LigneSupportPlan>();
   for (const e of ensembles) {
+    const pal = portePal(e, gammes);
     const rehausse = /REHAUSS/i.test(e.support)
       || e.supports.some(x => /^coulisseau/i.test(x.designation));
     const mono = matMonoNeuf(e);
@@ -568,10 +582,11 @@ export function supportsNeufs(ensembles: EnsemblePlan[]): LigneSupportPlan[] {
       if (s.existant) continue;
       /* Le mât mono en tient lieu : pas de coulisseau à commander. */
       if (mono && estCoulisseau(s)) continue;
-      const cle = `${s.designation}|${s.longueur ?? ''}|${s.longueurTotale ?? ''}|${rehausse}`;
+      const cle = `${s.designation}|${s.longueur ?? ''}|${s.longueurTotale ?? ''}|${rehausse}|${pal}`;
       const l: LigneSupportPlan = m.get(cle) ?? {
         designation: s.designation, longueur: s.longueur,
         longueurTotale: s.longueurTotale, rehausse, quantite: 0, ensembles: [],
+        ...(pal ? { pal } : {}),
       };
       if (s.moment !== undefined) l.moment = Math.max(l.moment ?? 0, s.moment);
       l.quantite += 1;
@@ -637,6 +652,24 @@ export const MOMENT_ADMISSIBLE: Record<string, number> = {
 };
 
 /**
+ * Les supports I du même tableau, tels qu'Odoo les vend : IPN1 = IA … IPN5 =
+ * IE (`IPN3.5000.BRUT`), de 700 à 11 000 mm. Correspondance confirmée par le
+ * chargé d'affaires le 26/09/2026 ; moments admissibles en daN.m.
+ */
+export const SUPPORTS_IPN: { article: string; section: string; moment: number }[] = [
+  { article: 'IPN1', section: 'IA', moment: 576 },
+  { article: 'IPN2', section: 'IB', moment: 1175 },
+  { article: 'IPN3', section: 'IC', moment: 2021 },
+  { article: 'IPN4', section: 'ID', moment: 3795 },
+  { article: 'IPN5', section: 'IE', moment: 7118 },
+];
+
+/** Le plus petit IPN dont le moment admissible couvre `moment`, `null` au-delà d'IE. */
+export function ipnPourMoment(moment: number) {
+  return SUPPORTS_IPN.find(x => x.moment >= moment) ?? null;
+}
+
+/**
  * L'article Odoo d'un support NEUF du plan, quand la correspondance est
  * établie :
  *   « TUBE GALV MC 80 »          → SG80802.<L>.IS.BRUT, support acier galva
@@ -656,9 +689,21 @@ export const MOMENT_ADMISSIBLE: Record<string, number> = {
  * reste à choisir.
  */
 export function referenceSupport(
-  s: Pick<LigneSupportPlan, 'designation' | 'longueur' | 'longueurTotale' | 'rehausse' | 'moment'>,
+  s: Pick<LigneSupportPlan, 'designation' | 'longueur' | 'longueurTotale' | 'rehausse' | 'moment' | 'pal'>,
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: string } {
+  /* PANNEAU PAL : des IPN, quel que soit le support que Kadri dessine —
+     le plus petit dont le moment admissible couvre le moment Kadri. */
+  if (s.pal) {
+    if (s.moment === undefined) return { raison: 'moment Kadri non lu : IPN à choisir' };
+    const ipn = ipnPourMoment(s.moment);
+    if (!ipn) return { raison: `moment ${s.moment} daN.m au-delà d'un IE : support à étudier` };
+    const lg = s.longueurTotale ?? s.longueur;
+    if (!lg) return { raison: 'longueur du support non lue sur le plan' };
+    const reference = `${ipn.article}.${Math.ceil(Math.round(lg * 1000) / 100) * 100}.BRUT`;
+    if (existe && !existe(reference)) return { raison: `${reference} absent de la grille` };
+    return { reference };
+  }
   const t = sansEspaces(s.designation).toUpperCase();
   let famille: string | null = null;
   if (t === 'TUBEGALVMC80') famille = 'SG80802';
@@ -682,6 +727,12 @@ export function referenceSupport(
 export function designationSupport(s: LigneSupportPlan): string {
   const lg = s.longueurTotale ?? s.longueur;
   const cote = lg ? ` — longueur ${lg.toLocaleString('fr-FR')} m (plan Kadri)` : '';
+  if (s.pal) {
+    const ipn = s.moment !== undefined ? ipnPourMoment(s.moment) : null;
+    return ipn
+      ? `Support IPN ${ipn.section}${cote} — moment ${s.moment} ≤ ${ipn.moment} daN.m (au lieu de ${s.designation})`
+      : `Support IPN${cote} (au lieu de ${s.designation})`;
+  }
   const mat = sansEspaces(s.designation).toUpperCase().match(TYPE_MAT);
   const mono = mat && s.rehausse ? ' — mono, sans coulisseau' : '';
   const moment = mat && s.moment !== undefined && s.moment <= MOMENT_ADMISSIBLE[mat[2]]
@@ -1009,7 +1060,7 @@ function lignesDe(
     }
   }
   out.push(...fixations.values());
-  for (const s of supportsNeufs(ensembles)) {
+  for (const s of supportsNeufs(ensembles, gammes)) {
     const r = referenceSupport(s, existe);
     out.push({
       reference: 'reference' in r ? r.reference : '',

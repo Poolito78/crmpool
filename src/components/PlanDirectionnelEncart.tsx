@@ -1,6 +1,6 @@
-import { Fragment, useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Maximize2, Minimize2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
@@ -24,7 +24,7 @@ import {
  */
 export default function PlanDirectionnelEncart({
   ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
-  tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne,
+  tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne, designationLigne,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
@@ -46,8 +46,13 @@ export default function PlanDirectionnelEncart({
   onMatsNeufs: (ensembles: string[]) => void;
   /** Descend à la ligne i de la demande, là où elle se corrige. */
   onVoirLigne: (i: number) => void;
+  /** Désignation de l'article retenu pour la ligne i (Variant Sale Description
+      d'Odoo, libellé corrigé à la main), `null` tant qu'aucun n'est retenu. */
+  designationLigne: (i: number) => string | null;
 }) {
   const bilan = useMemo(() => bilanPlan(ensembles), [ensembles]);
+  /* Le tableau s'agrandit d'un clic ; agrandi, il se tire encore par son coin bas-droit. */
+  const [grand, setGrand] = useState(false);
   /* Seules les gammes Kadri qui portent un panneau à fabriquer méritent un
      choix ; chacune prend Lapérouse P50 tant qu'on ne dit rien. */
   const gammesAChoisir = useMemo(() => bilan.produits.filter(p =>
@@ -203,7 +208,20 @@ export default function PlanDirectionnelEncart({
         </div>
       )}
 
-      <div className="max-h-72 overflow-auto rounded border border-border bg-background">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={() => setGrand(g => !g)}
+          className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+        >
+          {grand ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+          {grand ? 'Réduire le tableau' : 'Agrandir le tableau'}
+        </button>
+      </div>
+      <div
+        key={grand ? 'grand' : 'petit'}
+        className={`${grand ? 'h-[75vh] min-h-40 resize-y' : 'max-h-72'} overflow-auto rounded border border-border bg-background`}
+      >
         <table className="w-full table-fixed text-[11px]">
           <thead className="sticky top-0 bg-muted text-muted-foreground">
             <tr>
@@ -260,7 +278,17 @@ export default function PlanDirectionnelEncart({
                     )}
                   </td>
                   <td className="px-1.5 py-1 break-words">
-                    <div>{l.description}</div>
+                    {(() => {
+                      /* L'ARTICLE NOMME LA LIGNE, comme au devis ; le détail
+                         lu sur le plan reste dessous, en gris. */
+                      const d = designationLigne(i);
+                      return d && d !== l.description ? (
+                        <>
+                          <div>{d}</div>
+                          <div className="text-muted-foreground">{l.description}</div>
+                        </>
+                      ) : <div>{l.description}</div>;
+                    })()}
                     {l.aVerifier && <div className="text-warning">{l.aVerifier}</div>}
                     {!e && (
                       <div className="text-muted-foreground truncate" title={l.ensembles.join(', ')}>

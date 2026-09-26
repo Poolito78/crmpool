@@ -4,7 +4,7 @@ import {
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
   railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
-  ancragesEnsemble, avecMatNeuf, matRemplacable,
+  ancragesEnsemble, avecMatNeuf, matRemplacable, designationSupport,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -299,7 +299,8 @@ describe('chiffrage par ensemble', () => {
       'HARF-07 CO114SFP50.BRUT',
       'HARF-06 D3.4200.2550.C1.ST.IS.BRUT',
       'HARF-06 BR.PAL.H10X60.BRUT',
-      'HARF-06 SG80802.5000.IS.BRUT',
+      /* Sous un PAL : IPN, Mt 1341 > 1175 (IB) → IC = IPN3. */
+      'HARF-06 IPN3.5000.BRUT',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
     expect(titreEnsemble(lignes[7].ensemble!)).toBe('Ensemble 0003/HARF-06');
@@ -461,6 +462,17 @@ describe('supports neufs', () => {
       .toMatchObject({ raison: expect.any(String) });
     expect(referenceSupport({ designation: 'TUBE GALV MC 80', longueur: 6, rehausse: false }, () => false))
       .toEqual({ raison: 'SG80802.6000.IS.BRUT absent de la grille' });
+  });
+
+  it('sous un panneau PAL : le plus petit IPN qui couvre le moment Kadri', () => {
+    const [s] = supportsNeufs(lirePlanDirectionnel([PAGE_NEUF]));
+    expect(s).toMatchObject({ designation: 'TUBE GALV MC 80', pal: true, moment: 1341 });
+    expect(referenceSupport(s)).toEqual({ reference: 'IPN3.5000.BRUT' });
+    expect(designationSupport(s))
+      .toBe('Support IPN IC — longueur 5 m (plan Kadri) — moment 1341 ≤ 2021 daN.m (au lieu de TUBE GALV MC 80)');
+    expect(referenceSupport({ ...s, moment: 500 })).toEqual({ reference: 'IPN1.5000.BRUT' });
+    expect(referenceSupport({ ...s, moment: 9000 })).toMatchObject({ raison: expect.stringContaining('IE') });
+    expect(referenceSupport({ ...s, moment: undefined })).toEqual({ raison: 'moment Kadri non lu : IPN à choisir' });
   });
 
   it('le tube 80×80 reçoit des brides 80×80', () => {

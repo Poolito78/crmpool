@@ -131,6 +131,8 @@ interface Article {
   qty_available?: number;
   /** Stock prévisionnel : constaté + attendu - réservé. */
   virtual_available?: number;
+  /** Désignation de la VARIANTE (`designationVariante`), lue avec l'article. */
+  designation?: string;
 }
 
 interface Regle {
@@ -1039,17 +1041,51 @@ class ContratCadre {
  *  rien à voir avec la société attendue) sans être trop strict sur la forme
  *  exacte (« REFLEX SIGNALISATION » doit matcher « Reflex Signalisation »). */
 /**
- * La désignation d'une VARIANTE, telle qu'Odoo l'écrit sur une ligne de
- * devis : « IS D3 (4200, 2550, C2, BRUT) », pas « IS D3 ».
+ * La désignation d'une VARIANTE : sa « Variant Sale Description » —
+ * « DF50 1000 250 C1 50 O BRUT FLECHE LAPEROUSE P50 » —, celle que MonCRM
+ * range dans `description_variante` (voir `claude/designations-odoo.md`).
  *
- * `name` est celui du MODÈLE, commun aux 460 variantes IS D3 : le reprendre
- * mettait « IS D3 » au devis, sans cote ni classe. `display_name` porte les
- * valeurs d'attributs, précédées de « [référence] » qu'on retire — la
- * référence a déjà sa colonne. Sans variante, les deux coïncident.
+ * `name` est celui du MODÈLE, commun aux variantes (« IS DF [P50] », « IS
+ * D3 ») : le reprendre mettait au devis un nom sans cote ni classe. Faute de
+ * Variant Sale Description, `display_name` porte au moins les valeurs
+ * d'attributs, précédées de « [référence] » qu'on retire — la référence a
+ * déjà sa colonne. Sans variante, tout coïncide.
  */
-function designationVariante(p: { name?: unknown; display_name?: unknown }): string {
+// deno-lint-ignore no-explicit-any
+function designationVariante(p: any, champVente?: string | null): string {
+  const vente = champVente ? p[champVente] : "";
+  if (typeof vente === "string" && vente.trim()) return vente.trim();
   const affiche = String(p.display_name || "").replace(/^\[[^\]]*\]\s*/, "").trim();
   return affiche || String(p.name || "");
+}
+
+/**
+ * Le nom technique du champ « Variant Sale Description », retrouvé PAR SON
+ * LIBELLÉ — il varie d'une base Odoo à l'autre, on ne l'écrit pas en dur
+ * (même règle que `odoo-designations`). Un seul `fields_get` par instance ;
+ * introuvable ou en erreur, `null` : on lit alors sans lui, jamais un champ
+ * deviné qui ferait échouer toute la lecture des articles.
+ */
+let champVenteVariante: Promise<string | null> | null = null;
+function champDescriptionVariante(od: Odoo): Promise<string | null> {
+  champVenteVariante ??= (async () => {
+    try {
+      const champs = await od.kw("product.product", "fields_get", [[], ["string", "type"]], {}) as
+        Record<string, { string?: string; type?: string }>;
+      const entrees = Object.entries(champs);
+      const libelle = (m: { string?: string }) => (m.string || "").trim().toLowerCase();
+      return entrees.find(([, m]) => libelle(m) === "variant sale description")?.[0]
+        ?? entrees.find(([n]) => n === "variant_description_sale" || n === "variant_sale_description"
+          || n === "description_sale_variant")?.[0]
+        ?? entrees.find(([, m]) => (m.type === "char" || m.type === "text")
+          && libelle(m).includes("sale description") && libelle(m).includes("variant"))?.[0]
+        ?? null;
+    } catch (e) {
+      console.warn("[variant sale description]", (e as Error).message);
+      return null;
+    }
+  })();
+  return champVenteVariante;
 }
 
 function nomsProches(a: string, b: string): boolean {
@@ -2074,6 +2110,7 @@ serve(async (req) => {
     }
     const references = [...quantites.keys()];
 
+    const champVente = await champDescriptionVariante(od);
     const bruts = (await od.kw(
       "product.product",
       "search_read",
@@ -2081,7 +2118,7 @@ serve(async (req) => {
         [["default_code", "in", references]],
         ["id", "default_code", "name", "display_name", "lst_price", "standard_price",
           "categ_id", "product_tmpl_id", "write_date", "create_date",
-          "qty_available", "virtual_available"],
+          "qty_available", "virtual_available", ...(champVente ? [champVente] : [])],
       ],
       { limit: references.length + 50 },
     )) as any[];
@@ -2095,6 +2132,7 @@ serve(async (req) => {
         tmpl_id: r.product_tmpl_id ? r.product_tmpl_id[0] : null,
         categ_id: r.categ_id ? r.categ_id[0] : null,
         name: r.name,
+        designation: designationVariante(r, champVente),
         lst_price: r.lst_price || 0,
         standard_price: r.standard_price || 0,
       });
@@ -2193,7 +2231,7 @@ serve(async (req) => {
         + ` | contrat=${auCadre ?? "-"} grille=${auRepli ?? "-"}`
         + ` liste=${pListe ?? "-"} coût=${cout || "-"}`);
       prix[ref] = {
-        designation: designationVariante(a),
+        designation: a.designation || designationVariante(a),
         source,
         niveauGrille: auRepli !== null ? niveauRepli : "",
         gabarit: cadre.gabarit(ref) ?? cadreRepli?.gabarit(ref) ?? null,
@@ -2273,8 +2311,10 @@ serve(async (req) => {
     const preparerLigne = async (r: any): Promise<LignePreparee> => {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
+      const champVente = await champDescriptionVariante(od);
       const CHAMPS_ART = ["id", "default_code", "name", "display_name", "lst_price", "standard_price",
-                          "categ_id", "product_tmpl_id", "uom_id", "write_date", "create_date"];
+                          "categ_id", "product_tmpl_id", "uom_id", "write_date", "create_date",
+                          ...(champVente ? [champVente] : [])];
       const chercher = (domaine: unknown[], plafond = 40) => od.kw(
         "product.product", "search_read", [domaine, CHAMPS_ART],
         { limit: plafond, order: "default_code, name" },
@@ -2868,6 +2908,7 @@ serve(async (req) => {
     // deno-lint-ignore no-explicit-any
     const tousRetenus: any[] = preparees.flatMap((l) => l.retenus);
     const toutesRefs = tousRetenus.map((x) => x.default_code || "");
+    const champVenteRetenus = await champDescriptionVariante(od);
     if (tousRetenus.length) {
       await tarif.preparer(tousRetenus.map((x) => ({
         id: x.id,
@@ -3006,7 +3047,7 @@ serve(async (req) => {
         }
         return {
           reference: x.default_code || "",
-          designation: designationVariante(x),
+          designation: designationVariante(x, champVenteRetenus),
           categorie: x.categ_id ? x.categ_id[1] : "",
           unite: x.uom_id ? x.uom_id[1] : "",
           /* Quand la fiche Odoo a bougé pour la dernière fois. MonCRM s'en

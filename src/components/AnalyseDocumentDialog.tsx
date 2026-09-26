@@ -4877,6 +4877,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                 classe={classePlan}
                                 onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
                                 matsNeufs={matsNeufsPlan}
+                                designationLigne={i => libelleManuel[i] || choixOdoo[i]?.designation || null}
                                 onMatsNeufs={m => reconstruirePlan(gammesKadri, regroupementPlan, classePlan, m)}
                                 onVoirLigne={i => {
                                   document.getElementById(`ligne-demande-${i}`)
