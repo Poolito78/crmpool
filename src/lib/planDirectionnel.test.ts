@@ -139,23 +139,31 @@ describe('lecture d\'un ensemble', () => {
 });
 
 describe('références', () => {
-  it('flèche en DF, rectangle en DR, classe du plan', () => {
-    expect(referencePanneau({ code: 'D21', largeur: 1900, hauteur: 250 }, '50', 1))
+  it('Lapérouse P50 : flèche en DF50, rectangle en DR50, classe du plan', () => {
+    expect(referencePanneau({ code: 'D21', largeur: 1900, hauteur: 250 }, 'laperouse', 1))
       .toEqual({ reference: 'DF50.1900.250.C1.50.IS.BRUT' });
-    expect(referencePanneau({ code: 'D43', largeur: 2500, hauteur: 400 }, '50F', 2))
-      .toEqual({ reference: 'DR50.2500.400.C2.F.50.IS.BRUT' });
-    expect(referencePanneau({ code: 'E43', largeur: 500, hauteur: 150 }, '25', 1))
-      .toEqual({ reference: 'DR25.500.150.C1.25.IS.BRUT' });
+    expect(referencePanneau({ code: 'E43', largeur: 500, hauteur: 150 }, 'laperouse', 1))
+      .toEqual({ reference: 'DR50.500.150.C1.50.IS.BRUT' });
   });
 
-  it("n'invente ni la gamme, ni la classe, ni un format", () => {
-    expect(gammeParDefaut('CAISSON (NC) CL1')).toBe('50');
-    expect(gammeParDefaut('ALU BT/M CL1')).toBe('aucune');
+  it('Vasco de Gama : la même en dos fermé, option F', () => {
+    expect(referencePanneau({ code: 'D43', largeur: 2500, hauteur: 400 }, 'vasco', 2))
+      .toEqual({ reference: 'DR50.2500.400.C2.F.50.IS.BRUT' });
+  });
+
+  it('Lapérouse par défaut ; Vasco et Urville seulement quand ils sont dits', () => {
+    expect(gammeParDefaut('CAISSON (NC) CL1')).toBe('laperouse');
+    expect(gammeParDefaut('ALU BT/M CL1')).toBe('laperouse');
+    expect(gammeParDefaut('ALU DOS FERMÉ CL1')).toBe('vasco');
+    expect(gammeParDefaut('VASCO DE GAMA CL2')).toBe('vasco');
+    expect(gammeParDefaut('CAISSON TRAVERSANT CL1')).toBe('urville');
+  });
+
+  it("n'invente ni la classe, ni un format, ni une référence Urville", () => {
     const d21 = { code: 'D21', largeur: 1900, hauteur: 250 };
-    expect(referencePanneau(d21, 'aucune', 1)).toEqual({ raison: 'gamme' });
-    expect(referencePanneau(d21, '50', null)).toEqual({ raison: 'classe' });
-    expect(referencePanneau(d21, '25', 1)).toEqual({ raison: 'fleche25' });
-    expect(referencePanneau({ code: 'D42b', largeur: 3000, hauteur: 2100 }, '50', 1, () => false))
+    expect(referencePanneau(d21, 'laperouse', null)).toEqual({ raison: 'classe' });
+    expect(referencePanneau(d21, 'urville', 1)).toEqual({ raison: 'urville' });
+    expect(referencePanneau({ code: 'D42b', largeur: 3000, hauteur: 2100 }, 'laperouse', 1, () => false))
       .toEqual({ raison: 'hors-grille' });
   });
 });
@@ -167,23 +175,24 @@ describe('carnet', () => {
     expect(ensembles.map(e => e.page)).toEqual([2, 3, 4]);
   });
 
-  it('ne chiffre que ce qui se fabrique', () => {
+  it('ne chiffre que ce qui se fabrique, en Lapérouse P50 par défaut', () => {
     const lignes = panneauxAFabriquer(ensembles, {});
     expect(lignes.map(l => `${l.quantite} ${l.code} ${l.largeur}x${l.hauteur} ${l.reference ?? l.raison}`))
       .toEqual([
         '1 D21 2200x250 DF50.2200.250.C1.50.IS.BRUT',
-        '1 D21 2200x400 gamme',
-        '1 D42b1 4151x2474 gamme',
-        '1 E43 500x150 gamme',
+        '1 D21 2200x400 DF50.2200.400.C1.50.IS.BRUT',
+        '1 D42b1 4151x2474 DR50.4151.2474.C1.50.IS.BRUT',
+        '1 E43 500x150 DR50.500.150.C1.50.IS.BRUT',
       ]);
-    expect(designationPanneau(lignes[0])).toBe('Panneau directionnel D21 2200x250 classe 1 — fond blanc');
+    expect(designationPanneau(lignes[0]))
+      .toBe('Panneau directionnel Lapérouse P50 D21 2200x250 classe 1 — fond blanc');
   });
 
   it('une gamme choisie à l\'écran donne sa référence', () => {
-    const lignes = panneauxAFabriquer(ensembles, { 'ALU BT/M (NC) CL1': '25' });
-    expect(lignes.find(l => l.code === 'E43')!.reference).toBe('DR25.500.150.C1.25.IS.BRUT');
-    /* Pas de flèche en profil 25 : la ligne reste à vérifier. */
-    expect(lignes.find(l => l.largeur === 2200 && l.hauteur === 400)!.raison).toBe('fleche25');
+    const vasco = panneauxAFabriquer(ensembles, { 'ALU BT/M (NC) CL1': 'vasco' });
+    expect(vasco.find(l => l.code === 'E43')!.reference).toBe('DR50.500.150.C1.F.50.IS.BRUT');
+    const urville = panneauxAFabriquer(ensembles, { 'ALU BT/M (NC) CL1': 'urville' });
+    expect(urville.find(l => l.code === 'E43')).toMatchObject({ reference: null, raison: 'urville' });
   });
 
   it('regroupe deux gammes Kadri qui donnent la même référence', () => {
@@ -207,14 +216,15 @@ describe('carnet', () => {
 describe('lignes de la demande', () => {
   it('panneaux puis supports neufs, chacun avec ce qui reste à vérifier', () => {
     const e = lirePlanDirectionnel([PAGE_CAISSON, PAGE_ALU]);
-    const lignes = lignesDuPlan(e, {});
-    expect(lignes.map(l => [l.reference, l.quantite, l.aVerifier])).toEqual([
-      ['DF50.2200.250.C1.50.IS.BRUT', 1, null],
-      ['', 1, 'gamme Kadri sans correspondance — à choisir'],
-      ['', 1, 'gamme Kadri sans correspondance — à choisir'],
-      ['', 1, 'support neuf : article de mât à choisir'],
+    const lignes = lignesDuPlan(e, { 'ALU BT/M (NC) CL1': 'urville' });
+    expect(lignes.map(l => [l.reference, l.quantite, l.aVerifier, l.recherche])).toEqual([
+      ['DF50.2200.250.C1.50.IS.BRUT', 1, null, ''],
+      ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 2200 400 C1'],
+      ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 500 150 C1'],
+      ['', 1, 'support neuf : article de mât à choisir', ''],
     ]);
-    expect(lignes[1].description).toBe('Panneau directionnel D21 2200x400 classe 1 ALU BT/M (NC) CL1 — fond blanc');
+    expect(lignes[1].description)
+      .toBe('Panneau directionnel Urville caisson traversant D21 2200x400 classe 1 — fond blanc');
     expect(lignes[3].description).toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri)');
   });
 });

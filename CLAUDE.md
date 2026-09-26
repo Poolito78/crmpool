@@ -151,7 +151,7 @@ explication.
 `bridesDevis` + `railsPanneaux.donnees` (une bride par rail, jamais devinée) ·
 `grilleTarif` (niveau R0-R4 : grille Odoo pour ISOSIGN, barème STI pour le plastique) ·
 `fichesSysteme` (système absent de la base → dossier des fiches, lu puis relu avant import) ·
-`planDirectionnel` (carnet de plans Kadri lu sans IA → lignes DF50/DR50 de la grille, gamme jamais devinée) ·
+`planDirectionnel` (carnet de plans Kadri lu sans IA → DF50/DR50 Lapérouse P50 par défaut, Vasco = option F, Urville hors grille ; ni pose ni dépose) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

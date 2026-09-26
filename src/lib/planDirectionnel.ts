@@ -23,10 +23,13 @@
  * l'écriture de la grille contractuelle Odoo (`grille_contrat`) :
  *   D21 (flèche)                     → DF50.1900.250.C1.50.IS.BRUT
  *   D42, D43, E43… (rectangles)      → DR50.2500.400.C1.50.IS.BRUT
- * ⚠️ On n'invente pas la gamme. Seul « CAISSON » a une correspondance posée
- * d'office (profil 50) ; toute autre gamme Kadri (« ALU BT/M ») attend un
- * choix à l'écran, et une cote absente de la grille reste « à vérifier » —
- * une référence fabriquée serait rapprochée d'une voisine chez Odoo.
+ * La GAMME est Lapérouse P50 (dos ouvert) par défaut ; Vasco de Gama (dos
+ * fermé, option F) et Urville (caisson traversant) seulement si c'est dit
+ * ou choisi à l'écran — voir `GammeDirectionnelle`. Une cote absente de la
+ * grille reste « à vérifier » : une référence fabriquée serait rapprochée
+ * d'une voisine chez Odoo.
+ *
+ * On ne chiffre QUE la fabrication : ni pose, ni dépose.
  *
  * Les SUPPORTS neufs sont relevés tels que Kadri les nomme (« MAT TRAV MC,
  * Lg 2,42 m (2,77) ») : le passage à une référence de mât n'est pas établi,
@@ -244,28 +247,36 @@ export function lirePlanDirectionnel(pages: string[]): EnsemblePlan[] {
 /* ── Références ─────────────────────────────────────────────────────────── */
 
 /**
- * Gamme de fabrication retenue pour une gamme Kadri.
- *   '50'      caisson, profil 50           DF50 / DR50
- *   '50F'     la même, option F             DF50…F / DR50…F
- *   '25'      profil 25 (rectangles seuls)  DR25
- *   'aucune'  pas de correspondance : la ligne reste à vérifier
+ * Gamme de fabrication ISOSIGN retenue pour une gamme Kadri.
+ *
+ *   'laperouse'  LAPÉROUSE P50, dos ouvert — LA GAMME PAR DÉFAUT     DF50 / DR50
+ *   'vasco'      VASCO DE GAMA : la même en dos FERMÉ (même
+ *                certificat CE « Lapérouse dos ouvert et Vasco de
+ *                Gama dos fermé »), option F de la grille          DF50…F / DR50…F
+ *   'urville'    URVILLE : caisson TRAVERSANT, plus épais, traversé
+ *                par le support — il n'a pas de fixation. Absent de
+ *                la grille contractuelle : cherché chez Odoo et
+ *                proposé, jamais retenu d'office.
  */
-export type GammeDirectionnelle = '50' | '50F' | '25' | 'aucune';
+export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville';
 
 export const LIBELLE_GAMME: Record<GammeDirectionnelle, string> = {
-  '50': 'Profil 50 (DF50 / DR50)',
-  '50F': 'Profil 50 option F',
-  '25': 'Profil 25 (DR25, rectangles)',
-  aucune: 'À vérifier — pas de référence',
+  laperouse: 'Lapérouse P50 (dos ouvert)',
+  vasco: 'Vasco de Gama (dos fermé)',
+  urville: 'Urville (caisson traversant)',
 };
 
 /**
- * Seul le CAISSON a une correspondance établie. Le reste attend un choix :
- * « ALU BT » peut désigner plusieurs fabrications, et une gamme devinée
- * change le prix de chaque panneau du carnet.
+ * Lapérouse P50 par défaut, quoi que Kadri écrive (« CAISSON », « ALU BT/M »…) :
+ * c'est la gamme courante d'ISOSIGN. Les deux autres ne se prennent que si
+ * elles sont DITES — le nom de la gamme, « dos fermé », « traversant ». Un
+ * simple « CAISSON » ne dit pas « traversant ».
  */
 export function gammeParDefaut(produitKadri: string): GammeDirectionnelle {
-  return /\bCAISSON\b/i.test(produitKadri) ? '50' : 'aucune';
+  const t = produitKadri.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase();
+  if (/URVILLE|TRAVERSANT/.test(t)) return 'urville';
+  if (/VASCO|DOS\s*FERME/.test(t)) return 'vasco';
+  return 'laperouse';
 }
 
 /** Le panneau a-t-il une pointe ? D21 (et ses variantes) seulement. */
@@ -274,7 +285,7 @@ export function estFleche(code: string): boolean {
 }
 
 /** Pourquoi une ligne n'a pas de référence, quand c'est le cas. */
-export type RaisonSansReference = 'gamme' | 'classe' | 'fleche25' | 'hors-grille';
+export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille';
 
 /**
  * Référence de grille d'un panneau, ou la raison de son absence.
@@ -288,24 +299,26 @@ export function referencePanneau(
   classe: number | null,
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: RaisonSansReference } {
-  if (gamme === 'aucune') return { raison: 'gamme' };
+  if (gamme === 'urville') return { raison: 'urville' };
   if (!classe) return { raison: 'classe' };
-  const fleche = estFleche(p.code);
-  if (fleche && gamme === '25') return { raison: 'fleche25' };
-  const profil = gamme === '25' ? '25' : '50';
-  const famille = `${fleche ? 'DF' : 'DR'}${profil}`;
-  const option = gamme === '50F' ? '.F' : '';
-  const reference =
-    `${famille}.${p.largeur}.${p.hauteur}.C${classe}${option}.${profil}.IS.BRUT`;
+  const famille = estFleche(p.code) ? 'DF50' : 'DR50';
+  const dos = gamme === 'vasco' ? '.F' : '';
+  const reference = `${famille}.${p.largeur}.${p.hauteur}.C${classe}${dos}.50.IS.BRUT`;
   if (existe && !existe(reference)) return { raison: 'hors-grille' };
   return { reference };
 }
 
 export const LIBELLE_RAISON: Record<RaisonSansReference, string> = {
-  gamme: 'gamme Kadri sans correspondance — à choisir',
   classe: 'classe de rétroréflexion absente du plan',
-  fleche25: 'pas de flèche en profil 25 à la grille',
+  urville: 'Urville absent de la grille — article Odoo à choisir',
   'hors-grille': 'format absent de la grille',
+};
+
+/** Nom court de la gamme, tel qu'il part dans la désignation. */
+const NOM_GAMME: Record<GammeDirectionnelle, string> = {
+  laperouse: 'Lapérouse P50',
+  vasco: 'Vasco de Gama dos fermé',
+  urville: 'Urville caisson traversant',
 };
 
 /* ── Regroupement en lignes de devis ────────────────────────────────────── */
@@ -316,6 +329,8 @@ export interface LignePanneauPlan {
   hauteur: number;
   /** Gammes Kadri regroupées sur la ligne. */
   produits: string[];
+  /** Gamme de fabrication retenue. */
+  gamme: GammeDirectionnelle;
   classe: number | null;
   quantite: number;
   /** Ensembles où il figure, dans l'ordre du carnet. */
@@ -345,12 +360,12 @@ export function panneauxAFabriquer(
       if (!aFabriquer(p)) continue;
       const r = referencePanneau(p, gamme, e.classe, existe);
       const reference = 'reference' in r ? r.reference : null;
-      const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${e.produit}`;
+      const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${e.classe}`;
       let l = m.get(cle);
       if (!l) {
         l = {
           code: p.code, largeur: p.largeur, hauteur: p.hauteur,
-          produits: [], classe: e.classe, quantite: 0,
+          produits: [], gamme, classe: e.classe, quantite: 0,
           ensembles: [], fonds: [],
           reference,
           raison: 'raison' in r ? r.raison : null,
@@ -435,12 +450,9 @@ export function bilanPlan(ensembles: EnsemblePlan[]) {
 /** Désignation d'une ligne de panneau, telle qu'elle part au devis. */
 export function designationPanneau(l: LignePanneauPlan): string {
   const forme = estFleche(l.code) ? 'Panneau directionnel' : 'Panneau';
-  /* La gamme Kadri n'est répétée que sur une ligne SANS référence : c'est
-     alors la seule chose qui dise ce qu'il faut fabriquer. */
   const fonds = l.fonds.length ? ` — fond ${l.fonds.join('/').toLowerCase()}` : '';
-  const gamme = l.reference ? '' : ` ${l.produits.join(' / ')}`;
   const classe = l.classe ? ` classe ${l.classe}` : '';
-  return `${forme} ${l.code} ${l.largeur}x${l.hauteur}${classe}${gamme}${fonds}`;
+  return `${forme} ${NOM_GAMME[l.gamme]} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`;
 }
 
 /** Désignation d'un support neuf, longueur lue sur le plan. */
@@ -460,6 +472,12 @@ export interface LigneDemandePlan {
   ensembles: string[];
   /** Pourquoi la ligne n'a pas de référence ; `null` quand elle en a une. */
   aVerifier: string | null;
+  /**
+   * Texte à chercher chez Odoo pour une ligne SANS référence qu'on sait
+   * nommer (Urville). Vide sinon : une désignation cherchée par mots
+   * ramènerait un voisin.
+   */
+  recherche: string;
 }
 
 /**
@@ -477,6 +495,8 @@ export function lignesDuPlan(
     quantite: l.quantite,
     ensembles: l.ensembles,
     aVerifier: l.raison ? LIBELLE_RAISON[l.raison] : null,
+    recherche: l.raison === 'urville'
+      ? `URVILLE ${l.largeur} ${l.hauteur}${l.classe ? ` C${l.classe}` : ''}` : '',
   }));
   for (const s of supportsNeufs(ensembles)) {
     out.push({
@@ -485,6 +505,7 @@ export function lignesDuPlan(
       quantite: s.quantite,
       ensembles: s.ensembles,
       aVerifier: 'support neuf : article de mât à choisir',
+      recherche: '',
     });
   }
   return out;

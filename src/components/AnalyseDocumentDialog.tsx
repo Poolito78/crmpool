@@ -2184,10 +2184,10 @@ const [contratOdoo, setContratOdoo] = useState<
     l: { reference?: string; description?: string },
     i: number,
   ) => {
-    /* Ligne de plan : sa référence, ou rien. Une ligne sans référence n'est
-       pas cherchée par mots — sa désignation ramènerait un article voisin,
-       retenu d'office. Elle attend un choix. */
-    if (planKadri) return String(l.reference || '').trim();
+    /* Ligne de plan : sa référence ; à défaut, ce qu'on sait nommer
+       (« URVILLE 1900 250 C1 »), sinon rien — une désignation cherchée par
+       mots ramènerait un article voisin. */
+    if (planKadri) return String(l.reference || '').trim() || lignesPlan[i]?.recherche || '';
     const brut = texteDemande(l, i);
     const trouve = codeDansTexte(brut);
     /* La CLASSE part avec la demande même quand la ligne ne porte aucun code
@@ -2279,7 +2279,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const panneauSeul = coupe > 0 ? brut.slice(0, coupe).replace(/[\s+&,/-]+$/, '') : brut;
     return `${panneauSeul}${mm ? ` ${mm}` : ''} C${classePanneau}`;
   }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo,
-      texteDemande, planKadri]);
+      texteDemande, planKadri, lignesPlan]);
 
   /** Articles par code de référence (AB3A → AB3A.*), IS et SO confondus. */
   const produitsParCode = useMemo(() => {
@@ -2956,6 +2956,10 @@ const [contratOdoo, setContratOdoo] = useState<
            Seul un clic la fige. */
         if ((n[i] && !odooDOfficeRef.current.has(i)) || refusOdoo.has(i)
             || produitDeLigne(i) || estLigneSysteme(i)) return;
+        /* Ligne de plan SANS référence (Urville) : Odoo propose, on ne
+           retient pas d'office — la gamme n'est pas à la grille, rien ne
+           garantit que le premier article venu soit le bon. */
+        if (planKadri && !String(l.reference || '').trim()) return;
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -2995,7 +2999,7 @@ const [contratOdoo, setContratOdoo] = useState<
       return change ? n : prev;
     });
   }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo,
-      estLigneSysteme, texteDemande]);
+      estLigneSysteme, texteDemande, planKadri]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.

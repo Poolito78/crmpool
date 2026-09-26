@@ -30,7 +30,8 @@ export default function PlanDirectionnelEncart({
   niveau: string;
 }) {
   const bilan = useMemo(() => bilanPlan(ensembles), [ensembles]);
-  /* Seules les gammes qui portent un panneau à fabriquer méritent un choix. */
+  /* Seules les gammes Kadri qui portent un panneau à fabriquer méritent un
+     choix ; chacune prend Lapérouse P50 tant qu'on ne dit rien. */
   const gammesAChoisir = useMemo(() => bilan.produits.filter(p =>
     ensembles.some(e => e.produit === p && e.panneaux.some(aFabriquer))), [bilan, ensembles]);
 
@@ -86,8 +87,9 @@ export default function PlanDirectionnelEncart({
             </div>
           ))}
           <p className="text-muted-foreground">
-            Seul le caisson a une correspondance d'office (profil 50). Les autres gammes Kadri
-            restent sans référence tant qu'on n'en a pas choisi une : on ne la devine pas.
+            Lapérouse P50 (dos ouvert) par défaut. Vasco de Gama pour un dos fermé ; Urville pour
+            un caisson traversant — absent de la grille, il se choisit parmi les articles Odoo
+            proposés. Ni pose ni dépose ne sont chiffrées.
           </p>
         </div>
       )}
