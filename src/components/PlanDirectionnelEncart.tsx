@@ -1,6 +1,6 @@
 import { Fragment, useMemo, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, Maximize2, Minimize2 } from 'lucide-react';
+import { AlertTriangle, ExternalLink, Maximize2, Minimize2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
@@ -24,7 +24,7 @@ import {
  */
 export default function PlanDirectionnelEncart({
   ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
-  tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne, designationLigne,
+  tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne, designationLigne, onVoirPage,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
@@ -49,6 +49,8 @@ export default function PlanDirectionnelEncart({
   /** Désignation de l'article retenu pour la ligne i (Variant Sale Description
       d'Odoo, libellé corrigé à la main), `null` tant qu'aucun n'est retenu. */
   designationLigne: (i: number) => string | null;
+  /** Ouvre le carnet PDF à une page ; absent quand le fichier n'est plus là. */
+  onVoirPage?: (page: number) => void;
 }) {
   const bilan = useMemo(() => bilanPlan(ensembles), [ensembles]);
   /* Le tableau s'agrandit d'un clic ; agrandi, il se tire encore par son coin bas-droit. */
@@ -242,10 +244,27 @@ export default function PlanDirectionnelEncart({
                 {ouvre && (
                   <tr className="border-t border-border bg-muted/50">
                     <td colSpan={4} className="px-1.5 py-1 font-medium">
-                      {titreEnsemble(e)}
-                      <span className="ml-2 font-normal text-muted-foreground">
-                        {e.section ? `${e.section} · ` : ''}plan p. {e.page}
-                      </span>
+                      {onVoirPage ? (
+                        <button
+                          type="button"
+                          onClick={() => onVoirPage(e.page)}
+                          className="inline-flex items-baseline gap-2 text-left hover:text-primary hover:underline"
+                          title={`Ouvrir le plan à la page ${e.page}`}
+                        >
+                          {titreEnsemble(e)}
+                          <span className="font-normal text-muted-foreground">
+                            {e.section ? `${e.section} · ` : ''}plan p. {e.page}
+                          </span>
+                          <ExternalLink className="w-3 h-3 self-center text-muted-foreground" />
+                        </button>
+                      ) : (
+                        <>
+                          {titreEnsemble(e)}
+                          <span className="ml-2 font-normal text-muted-foreground">
+                            {e.section ? `${e.section} · ` : ''}plan p. {e.page}
+                          </span>
+                        </>
+                      )}
                     </td>
                     <td className="px-1.5 py-1 text-right font-medium whitespace-nowrap">
                       {formatMontant(totalEnsemble(e.nom))}

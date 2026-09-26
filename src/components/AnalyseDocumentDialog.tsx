@@ -241,7 +241,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      grille, et le reste suit le chemin commun — article Odoo par code
      exact, prix du contrat. `grille` (R4) ne sert qu'à dire si une
      référence existe : une cote absente reste « à vérifier ». */
-  const [planKadri, setPlanKadri] = useState<{ ensembles: EnsemblePlan[]; grille?: GrilleTarif } | null>(null);
+  /* `fichier` : le PDF du carnet, pour l'ouvrir à la page d'un ensemble. */
+  const [planKadri, setPlanKadri] = useState<{ ensembles: EnsemblePlan[]; grille?: GrilleTarif; fichier?: File } | null>(null);
   const [gammesKadri, setGammesKadri] = useState<Record<string, GammeDirectionnelle>>({});
   /* Ensemble par ensemble par défaut : le devis se relit sous les noms du
      plan (« HARF-06 »). */
@@ -1155,6 +1156,13 @@ const [contratOdoo, setContratOdoo] = useState<
     // rapprochement devient alors plus sûr.
   }, [result, signature, clients, motsMetier]);
 
+  /* L'URL du carnet PDF, créée une fois par plan et libérée quand il change :
+     un clic sur un ensemble l'ouvre à sa page (« #page=26 »). */
+  const urlPlan = useMemo(
+    () => (planKadri?.fichier ? URL.createObjectURL(planKadri.fichier) : null),
+    [planKadri?.fichier]);
+  useEffect(() => () => { if (urlPlan) URL.revokeObjectURL(urlPlan); }, [urlPlan]);
+
   /** Les lignes du carnet, pour un choix de gammes donné. */
   const lignesPlan = useMemo(() => {
     if (!planKadri) return [];
@@ -1252,7 +1260,7 @@ const [contratOdoo, setContratOdoo] = useState<
              s'en passe : les références partent telles quelles, et Odoo
              dira lui-même s'il les connaît. */
           const grille = await chargerGrille('R4').catch(() => undefined);
-          setPlanKadri({ ensembles, grille });
+          setPlanKadri({ ensembles, grille, fichier: pdfFile });
           analysis = documentDuPlan(ensembles, lignesDuPlan(ensembles, {},
             grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {
@@ -4877,6 +4885,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                 classe={classePlan}
                                 onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
                                 matsNeufs={matsNeufsPlan}
+                                onVoirPage={urlPlan
+                                  ? page => window.open(`${urlPlan}#page=${page}`, '_blank', 'noopener')
+                                  : undefined}
                                 designationLigne={i => libelleManuel[i] || choixOdoo[i]?.designation || null}
                                 onMatsNeufs={m => reconstruirePlan(gammesKadri, regroupementPlan, classePlan, m)}
                                 onVoirLigne={i => {
