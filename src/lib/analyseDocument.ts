@@ -196,6 +196,28 @@ async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
   return pages.join('\n');
 }
 
+/**
+ * Texte d'un PDF page par page, UN ÉLÉMENT PAR LIGNE.
+ *
+ * `extraireTextePDF` aplatit chaque page en une seule ligne : c'est ce qu'il
+ * faut à l'IA, et c'est ce qui rend illisible un plan, où chaque cote, chaque
+ * mention tient sur sa propre ligne. Ici les fins de ligne de pdf.js sont
+ * gardées. Sert à reconnaître et lire les plans Kadri (`planDirectionnel`).
+ */
+export async function extrairePagesPDF(buffer: ArrayBuffer): Promise<string[]> {
+  /* pdf.js détache le tampon qu'on lui passe : on travaille sur une copie,
+     l'appelant s'en sert encore pour l'analyse ou l'aperçu. */
+  const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer.slice(0)) }).promise;
+  const pages: string[] = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const content = await (await pdf.getPage(i)).getTextContent();
+    pages.push(content.items
+      .map(item => ('str' in item ? `${item.str}${item.hasEOL ? '\n' : ' '}` : ''))
+      .join(''));
+  }
+  return pages;
+}
+
 /** Tronque le texte à ~6000 caractères pour rester sous la limite TPM de Groq (free tier) */
 function tronquer(texte: string, maxChars = 6000): string {
   if (texte.length <= maxChars) return texte;

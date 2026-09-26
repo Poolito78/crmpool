@@ -8,7 +8,12 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
-import { analyserDocument, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import {
+  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan,
+  type EnsemblePlan, type GammeDirectionnelle,
+} from '@/lib/planDirectionnel';
+import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignature, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
@@ -52,7 +57,7 @@ import {
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
 import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
-import { prixAuNiveau, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
+import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat,
@@ -229,6 +234,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      la réponse d'Odoo. Deux calculs différents pour un même « R2 »
      finiraient par annoncer deux prix. */
   const [grillesNiveau, setGrillesNiveau] = useState<Partial<Record<NiveauTarif, GrilleTarif>>>({});
+  /* ── PLAN DE SIGNALISATION DIRECTIONNELLE (Kadri) ─────────────────────
+     Un carnet de plans se lit sans IA (`planDirectionnel.ts`) : chaque
+     panneau à fabriquer devient une ligne de demande sous sa référence de
+     grille, et le reste suit le chemin commun — article Odoo par code
+     exact, prix du contrat. `grille` (R4) ne sert qu'à dire si une
+     référence existe : une cote absente reste « à vérifier ». */
+  const [planKadri, setPlanKadri] = useState<{ ensembles: EnsemblePlan[]; grille?: GrilleTarif } | null>(null);
+  const [gammesKadri, setGammesKadri] = useState<Record<string, GammeDirectionnelle>>({});
   useEffect(() => {
     if (!open || !niveauForce) return;
     const aCharger: NiveauTarif[] = niveauForce === 'R0' ? ['R0', 'R4'] : [niveauForce];
@@ -1127,6 +1140,46 @@ const [contratOdoo, setContratOdoo] = useState<
     // rapprochement devient alors plus sûr.
   }, [result, signature, clients, motsMetier]);
 
+  /** Les lignes du carnet, pour un choix de gammes donné. */
+  const lignesPlan = useMemo(() => {
+    if (!planKadri) return [];
+    const g = planKadri.grille;
+    return lignesDuPlan(planKadri.ensembles, gammesKadri,
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined);
+  }, [planKadri, gammesKadri]);
+
+  /** Le carnet en demande de devis : un document que l'IA n'a pas touché. */
+  const documentDuPlan = useCallback((
+    ensembles: EnsemblePlan[],
+    lignes: ReturnType<typeof lignesDuPlan>,
+  ): DocumentAnalysis => {
+    const b = bilanPlan(ensembles);
+    const sections = [...new Set(ensembles.map(e => e.section).filter(Boolean))];
+    return {
+      typeDocument: 'demande_devis',
+      lignes: lignes.map(l => ({ reference: l.reference, description: l.description, quantite: l.quantite })),
+      notes: `Plan de signalisation directionnelle (Kadri) — ${b.ensembles} ensembles, `
+        + `${b.panneaux.neuf + b.panneaux.remplace} panneaux à fabriquer`
+        + (sections.length ? ` · ${sections.join(', ')}` : ''),
+    };
+  }, []);
+
+  /* Une autre gamme choisie : les références changent, donc les lignes.
+     Tout ce qui s'attachait au RANG d'une ligne est oublié — un choix fait
+     sur la ligne 3 désignerait sinon un autre panneau. */
+  const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) => {
+    if (!planKadri) return;
+    const gammes = { ...gammesKadri, [produit]: gamme };
+    const g = planKadri.grille;
+    const lignes = lignesDuPlan(planKadri.ensembles, gammes,
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined);
+    setGammesKadri(gammes);
+    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
+    odooDOfficeRef.current = new Set();
+    setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
+    setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
+  }, [planKadri, gammesKadri, documentDuPlan]);
+
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
     pdfFile: File | null,
@@ -1150,6 +1203,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
+    setPlanKadri(null); setGammesKadri({});
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1163,7 +1217,22 @@ const [contratOdoo, setContratOdoo] = useState<
       if (pdfFile) {
         const texteSuppl = pdfsCtx.length > 0 && texteCtx.trim() ? texteCtx : undefined;
         if (texteCtx.trim()) analyseTexteRef.current = texteCtx;
-        analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey);
+        /* UN PLAN KADRI NE PASSE PAS PAR L'IA. Cent pages de cotes résumées
+           par un modèle, ce sont des quantités inventées ; lues une à une,
+           ce sont celles du bureau d'études. */
+        const pages = await extrairePagesPDF(await pdfFile.arrayBuffer()).catch(() => [] as string[]);
+        if (estPlanKadri(pages)) {
+          const ensembles = lirePlanDirectionnel(pages);
+          /* La grille R4 dit quelles références existent. Illisible, on
+             s'en passe : les références partent telles quelles, et Odoo
+             dira lui-même s'il les connaît. */
+          const grille = await chargerGrille('R4').catch(() => undefined);
+          setPlanKadri({ ensembles, grille });
+          analysis = documentDuPlan(ensembles, lignesDuPlan(ensembles, {},
+            grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined));
+        } else {
+          analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey);
+        }
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
         let texteAnalyse = texteCtx;
@@ -1202,7 +1271,7 @@ const [contratOdoo, setContratOdoo] = useState<
     } finally {
       setLoading(false);
     }
-  }, [apiKey, commandesFournisseur]);
+  }, [apiKey, commandesFournisseur, documentDuPlan]);
 
   /* ── traitement des fichiers pré-chargés depuis le dashboard ── */
   useEffect(() => {
@@ -1365,6 +1434,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
+    setPlanKadri(null); setGammesKadri({});
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -1801,6 +1871,10 @@ const [contratOdoo, setContratOdoo] = useState<
       /* Une ligne système ne cherche pas d'article : la balayer contre les
          22 634 références ne produirait qu'un faux candidat à écarter. */
       if (estLigneSysteme(i)) return;
+      /* Une ligne de plan Kadri porte une référence de grille, calculée :
+         la rapprocher par ressemblance du catalogue local ne ramènerait
+         qu'un voisin. Elle se résout chez Odoo, par code exact. */
+      if (planKadri) return;
       /* Les mots du client comptent ici aussi : « plot PVC » doit retrouver
          le PLASTOBLOC dès qu'on le lui a appris une fois, sans quoi le tag ne
          servirait qu'à la recherche à la main — c'est-à-dire jamais quand
@@ -1808,7 +1882,7 @@ const [contratOdoo, setContratOdoo] = useState<
       m.set(i, rapprocherArticle(texteDemande(l, i), produits, 20, tagsParProduit));
     });
     return m;
-  }, [result, produits, estLigneSysteme, texteDemande, tagsParProduit]);
+  }, [result, produits, estLigneSysteme, texteDemande, tagsParProduit, planKadri]);
 
   /** Variante retenue pour une ligne : le choix de l'utilisateur, sinon celle
       que l'épaisseur désigne. Rien tant que la variante reste à trancher. */
@@ -1979,6 +2053,10 @@ const [contratOdoo, setContratOdoo] = useState<
   } | null => {
     const l = (result?.lignes ?? [])[i];
     if (!l) return null;
+    /* « DF50.1900.250.C1… » porte un « C1 » que `codeDansTexte` prendrait
+       pour un panneau carré : un directionnel n'est pas un ensemble de
+       police, son mât et ses fixations sont ceux du plan. */
+    if (planKadri) return null;
     const trouve = codeDansTexte(texteDemande(l, i));
     if (!trouve) return null;
     /* Les panneaux d'agglomération et les panonceaux ont leur propre encart :
@@ -2054,7 +2132,7 @@ const [contratOdoo, setContratOdoo] = useState<
       hauteurPanneau, hauteurLibre, poseBasse, support, fixations,
     };
   }, [result, texteDemande, gammePanneau, classePanneau, niveauRemise,
-    sectionSupport, hauteurSousPanneau, optionsEnsemble]);
+    sectionSupport, hauteurSousPanneau, optionsEnsemble, planKadri]);
 
   /** Les lignes de demande qui forment un ensemble de police. */
   const lignesEnsemble = useMemo(
@@ -2106,6 +2184,10 @@ const [contratOdoo, setContratOdoo] = useState<
     l: { reference?: string; description?: string },
     i: number,
   ) => {
+    /* Ligne de plan : sa référence, ou rien. Une ligne sans référence n'est
+       pas cherchée par mots — sa désignation ramènerait un article voisin,
+       retenu d'office. Elle attend un choix. */
+    if (planKadri) return String(l.reference || '').trim();
     const brut = texteDemande(l, i);
     const trouve = codeDansTexte(brut);
     /* La CLASSE part avec la demande même quand la ligne ne porte aucun code
@@ -2197,7 +2279,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const panneauSeul = coupe > 0 ? brut.slice(0, coupe).replace(/[\s+&,/-]+$/, '') : brut;
     return `${panneauSeul}${mm ? ` ${mm}` : ''} C${classePanneau}`;
   }, [gammePanneau, classePanneau, contratOdoo, niveauRemise, porteurDeLigne, nomAgglo, hcAgglo, mentionAgglo,
-      texteDemande]);
+      texteDemande, planKadri]);
 
   /** Articles par code de référence (AB3A → AB3A.*), IS et SO confondus. */
   const produitsParCode = useMemo(() => {
@@ -3117,12 +3199,34 @@ const [contratOdoo, setContratOdoo] = useState<
    * L'article Odoo l'emporte quand il est retenu : c'est un choix explicite,
    * et c'est déjà ce que fait la création du devis.
    */
+  /* La grille du niveau affiché, pour tarifer les lignes du plan. R0 n'en a
+     pas chez Odoo, et la règle « R4 ÷ 0,65 » ne vaut que pour la police :
+     en R0, un directionnel reste sans prix plutôt qu'à un prix déduit. */
+  useEffect(() => {
+    if (!open || !planKadri || niveauRemise === 'R0' || grillesNiveau[niveauRemise]) return;
+    chargerGrille(niveauRemise)
+      .then(g => setGrillesNiveau(prev => (prev[niveauRemise] ? prev : { ...prev, [niveauRemise]: g })))
+      .catch(e => toast.error(`Grille ${niveauRemise} illisible : ${(e as Error).message}`));
+  }, [open, planKadri, niveauRemise, grillesNiveau]);
+
+  /** Prix de grille d'une ligne de plan, au niveau affiché. */
+  const prixGrillePlan = useCallback((i: number) => {
+    const ref = String(result?.lignes?.[i]?.reference || '').trim();
+    if (!planKadri || !ref) return null;
+    const g = prixDansGrille(grillesNiveau[niveauRemise], ref);
+    return g ? { prix: Math.round(g.prix * 100) / 100, gabarit: g.gabarit } : null;
+  }, [planKadri, result, grillesNiveau, niveauRemise]);
+
   const puDeLigne = useCallback((i: number) => {
     const cle = `d${i}`;
     const odoo = choixOdoo[i];
     if (odoo) return prixManuel[cle] ?? prixOdoo(odoo).retenu;
-    return prixDe(produitDeLigne(i), undefined, cle);
-  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne]);
+    const p = produitDeLigne(i);
+    /* Ligne de plan qu'Odoo ne connaît pas (encore) : la grille du niveau
+       la tarife sous sa référence. Ni référence ni grille → 0, à vérifier. */
+    if (planKadri && !p) return prixManuel[cle] ?? prixGrillePlan(i)?.prix ?? 0;
+    return prixDe(p, undefined, cle);
+  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan]);
 
   /** Ce que pèse une ligne système : la somme de ses composants. */
   const totalSystemeDe = useCallback((i: number, quantite?: number | null) =>
@@ -3132,6 +3236,12 @@ const [contratOdoo, setContratOdoo] = useState<
       return t + quantiteComposant(i, ls) * prixDe(p, undefined, `d${i}:${ls.composant.id}`);
     }, 0),
   [lignesSystemeDe, produits, quantiteComposant, prixDe]);
+
+  /** Les ensembles du plan où va la ligne : le poseur s'en sert. */
+  const noteDuPlan = (i: number) => {
+    const ens = planKadri ? lignesPlan[i]?.ensembles : undefined;
+    return ens?.length ? `Ensembles : ${ens.join(', ')}` : undefined;
+  };
 
   function handleCreerDevis() {
     if (!creerDevisClientId) { toast.error('Veuillez sélectionner un client'); return; }
@@ -3449,6 +3559,7 @@ const [contratOdoo, setContratOdoo] = useState<
           prixUnitaireHT: puDeLigne(i),
           tva: l.tva ?? 20,
           remise: 0,
+          note: noteDuPlan(i),
         }, ...lignesOptionsEnsemble(i, l)];
       }
       const p = produitDeLigne(i);
@@ -3489,11 +3600,16 @@ const [contratOdoo, setContratOdoo] = useState<
            Le libellé corrigé à la main garde la priorité : le rectifier à
            l'écran n'aurait aucun sens s'il ne partait pas au devis. */
         description: libelleManuel[i] || (p ? designationProduit(p) : '') || l.description || '',
+        /* Ligne de plan sans article : sa référence de grille part quand
+           même vers Odoo, qui la résout par code exact — sans elle, la ligne
+           y serait créée en négoce. */
+        referenceOdoo: planKadri && !p ? (String(l.reference || '').trim() || undefined) : undefined,
         quantite: quantiteDe(cle, l.quantite),
         unite: p?.unite || 'u',
         prixUnitaireHT: puDeLigne(i),
         tva: l.tva ?? 20,
         remise: 0,
+        note: noteDuPlan(i),
       }, ...lignesOptionsEnsemble(i, l)];
     });
     // Les articles ajoutés par les règles suivent les articles demandés.
@@ -4682,6 +4798,24 @@ const [contratOdoo, setContratOdoo] = useState<
                                 chiffrage, comme le devis Odoo : primaire,
                                 quartz, résine, charge et finition pour tout
                                 le chantier, un pigment par teinte. */}
+                            {planKadri && (
+                              <PlanDirectionnelEncart
+                                ensembles={planKadri.ensembles}
+                                gammes={gammesKadri}
+                                onGamme={choisirGammeKadri}
+                                lignes={lignesPlan}
+                                niveau={niveauRemise}
+                                prixLigne={i => {
+                                  const odoo = choixOdoo[i];
+                                  const pu = puDeLigne(i);
+                                  if (!(pu > 0)) return null;
+                                  if (prixManuel[`d${i}`] !== undefined) return { prix: pu, source: 'saisi' };
+                                  if (odoo) return { prix: pu, source: `Odoo ${odoo.reference}` };
+                                  const g = prixGrillePlan(i);
+                                  return { prix: pu, source: g ? `grille ${niveauRemise}` : 'catalogue' };
+                                }}
+                              />
+                            )}
                             {systemeDocument && (() => {
                               const { rap } = systemeDocument;
                               const sys = systemeDuDocument;
@@ -5673,6 +5807,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                 une ligne hors table est signalée et n'entre pas
                                 dans le total. */}
                             {(() => {
+                              /* Le plan directionnel porte ses propres
+                                 fixations : la table des rails est celle de
+                                 la police, elle signalerait chaque
+                                 directionnel « à vérifier ». */
+                              if (planKadri) return null;
                               const comptage = compterBrides(
                                 (result?.lignes || []).map((l, i) => {
                                   /* Une ligne système est chiffrée par ses
