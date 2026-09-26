@@ -262,8 +262,10 @@ export function lirePlanDirectionnel(pages: string[]): EnsemblePlan[] {
  *                lames de 150 mm, longueur libre. C'est la gamme des
  *                GRANDS FORMATS, que Lapérouse ne fabrique pas
  *                (`estGrandFormat`). Une variante Odoo par format :
- *                D3.1900.1500.C1.IS.BRUT. Absent de la grille : c'est
- *                Odoo qui la tarife, par sa référence exacte.
+ *                D3.1900.1500.C1.ST.IS.BRUT — ST = face STANDARD, la
+ *                face par défaut (l'autre est occultable). Absent de la
+ *                grille : c'est Odoo qui la tarife, par sa référence
+ *                exacte.
  */
 export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville' | 'tasman';
 
@@ -339,7 +341,7 @@ export function referencePanneau(
      entières. Pas à la grille — `existe` ne la juge donc pas : Odoo dira
      s'il la connaît. */
   if (gamme === 'tasman') {
-    return { reference: `D3.${p.largeur}.${surfaceTasman(p).hauteur}.C${classe}.IS.BRUT` };
+    return { reference: `D3.${p.largeur}.${surfaceTasman(p).hauteur}.C${classe}.ST.IS.BRUT` };
   }
   const famille = estFleche(p.code) ? 'DF50' : 'DR50';
   const dos = gamme === 'vasco' ? '.F' : '';
