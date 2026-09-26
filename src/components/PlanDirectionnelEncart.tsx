@@ -4,7 +4,7 @@ import { AlertTriangle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
-  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
+  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, matRemplacable, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
   type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 
@@ -17,11 +17,14 @@ import {
  * tranche la gamme de fabrication des gammes Kadri qui n'ont pas de
  * correspondance d'office. Les lignes elles-mêmes restent celles de la
  * demande, plus bas : article Odoo, prix du contrat et devis suivent le
- * chemin commun.
+ * chemin commun — un clic sur « à vérifier » y descend.
+ *
+ * Un mât EXISTANT n'est pas commandé ; un mât neuf s'y ajoute à la demande,
+ * ensemble par ensemble (`avecMatNeuf`).
  */
 export default function PlanDirectionnelEncart({
   ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
-  tauxPal, onTauxPal, lignes, prixLigne, niveau,
+  tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
@@ -38,6 +41,11 @@ export default function PlanDirectionnelEncart({
   /** Prix unitaire retenu pour la ligne i et d'où il vient, `null` sans prix. */
   prixLigne: (i: number) => { prix: number; source: string } | null;
   niveau: string;
+  /** Ensembles dont le mât existant est remplacé par un mât neuf. */
+  matsNeufs: string[];
+  onMatsNeufs: (ensembles: string[]) => void;
+  /** Descend à la ligne i de la demande, là où elle se corrige. */
+  onVoirLigne: (i: number) => void;
 }) {
   const bilan = useMemo(() => bilanPlan(ensembles), [ensembles]);
   /* Seules les gammes Kadri qui portent un panneau à fabriquer méritent un
@@ -51,6 +59,10 @@ export default function PlanDirectionnelEncart({
   const total = lignes.reduce((t, l, i) => t + (prixLigne(i)?.prix ?? 0) * l.quantite, 0);
   const aVerifier = lignes.filter((l, i) => l.aVerifier || !prixLigne(i)).length;
   const fabriques = bilan.panneaux.neuf + bilan.panneaux.remplace;
+  /* Ensembles à mât existant qu'un mât neuf de la grille pourrait remplacer. */
+  const matsExistants = useMemo(() => ensembles.filter(matRemplacable), [ensembles]);
+  const basculerMat = (nom: string) => onMatsNeufs(matsNeufs.includes(nom)
+    ? matsNeufs.filter(n => n !== nom) : [...matsNeufs, nom]);
 
   return (
     <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 space-y-2 text-[11px]">
@@ -124,6 +136,34 @@ export default function PlanDirectionnelEncart({
         </div>
       )}
 
+      {matsExistants.length > 0 && (
+        <div className="space-y-1">
+          <p className="font-medium">
+            Mât existant conservé
+            <span className="ml-2 font-normal text-muted-foreground">
+              pas de mât au devis, colliers sur le support en place — cocher pour ajouter un mât neuf
+              (mono de son type, moment Kadri vérifié)
+            </span>
+          </p>
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
+            {matsExistants.map(e => (
+              <label key={`${e.page}-${e.ensemble}`} className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={matsNeufs.includes(e.ensemble)}
+                  onChange={() => basculerMat(e.ensemble)}
+                  className="h-3 w-3"
+                />
+                <span>{e.ensemble}</span>
+                <span className="text-muted-foreground">
+                  ({e.supports.map(s => s.designation).join(' + ')})
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
       {gammesAChoisir.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium">Gamme de fabrication</p>
@@ -189,7 +229,16 @@ export default function PlanDirectionnelEncart({
                     {l.quantite}
                   </td>
                   <td className="px-1.5 py-1 font-mono break-all">
-                    {l.reference || <span className="text-warning">à vérifier</span>}
+                    {l.reference || (
+                      <button
+                        type="button"
+                        onClick={() => onVoirLigne(i)}
+                        className="text-warning underline decoration-dotted hover:decoration-solid"
+                        title="Descendre à la ligne de la demande pour la corriger"
+                      >
+                        à vérifier
+                      </button>
+                    )}
                   </td>
                   <td className="px-1.5 py-1 break-words">
                     <div>{l.description}</div>

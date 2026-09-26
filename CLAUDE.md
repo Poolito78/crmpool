@@ -151,7 +151,7 @@ explication.
 `bridesDevis` + `railsPanneaux.donnees` (une bride par rail, jamais devinée) ·
 `grilleTarif` (niveau R0-R4 : grille Odoo pour ISOSIGN, barème STI pour le plastique) ·
 `fichesSysteme` (système absent de la base → dossier des fiches, lu puis relu avant import) ·
-`planDirectionnel` (carnet de plans Kadri lu sans IA, chiffré par ensemble → DF50/DR50 Lapérouse P50 par défaut, Vasco = option F, Urville hors grille, grands formats en Tasman PAL = variante Odoo D3.l.h.Cx.ST.IS.BRUT (face standard), 1 collier CO{Ø}SFP50 par rail et par support sur la plus petite section, lattes Tasman de 300 complétées de 150, brides PAL = lattes×supports + 2 + 4/ml ; ni pose ni dépose) ·
+`planDirectionnel` (carnet de plans Kadri lu sans IA, chiffré par ensemble → DF50/DR50 Lapérouse P50 par défaut, Vasco = option F, Urville hors grille, grands formats en Tasman PAL = variante Odoo D3.l.h.Cx.ST.IS.BRUT (face standard), 1 collier CO{Ø}SFP50 par rail et par support sur la plus petite section, lattes Tasman de 300 complétées de 150, brides PAL = lattes×supports + 2 + 4/ml ; mât rehaussé existant jamais commandé, mât neuf en option = mono de son type à la longueur hors tout, moment Kadri ≤ admissible ; ni pose ni dépose) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

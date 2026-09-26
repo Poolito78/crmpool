@@ -32,8 +32,12 @@
  * On ne chiffre QUE la fabrication : ni pose, ni dépose.
  *
  * Les SUPPORTS neufs sont relevés tels que Kadri les nomme (« MAT TRAV MC,
- * Lg 2,42 m (2,77) ») : le passage à une référence de mât n'est pas établi,
- * ils partent en lignes à vérifier, jamais au prix d'une longueur devinée.
+ * Lg 2,42 m (2,77) ») et prennent leur article par `referenceSupport` : un
+ * mât part en MONO de son type à la longueur hors tout, si le moment Kadri
+ * tient sous l'admissible. Sinon, à vérifier — jamais au prix d'une longueur
+ * devinée. Un mât rehaussé EXISTANT (mât + coulisseau, « Existant » écrit une
+ * fois pour la paire) n'est pas commandé : ses colliers vont sur le
+ * coulisseau, et un mât neuf s'ajoute à la demande (`avecMatNeuf`).
  */
 
 export type SortPanneau = 'neuf' | 'remplace' | 'depose' | 'existant' | 'supprime';
@@ -57,6 +61,8 @@ export interface SupportPlan {
   longueur?: number;
   /** Longueur hors tout, entre parenthèses chez Kadri. */
   longueurTotale?: number;
+  /** Moment que Kadri calcule pour ce support (« Mt : 151 m.daN »), en daN.m. */
+  moment?: number;
   existant: boolean;
 }
 
@@ -214,13 +220,24 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
     if (!/^Mt:/i.test(plates[j + 1] || '')) return;
     const lg = plates.slice(j + 1, j + 4).join(' ')
       .match(/Lg:([\d.,]+)m(?:\(([\d.,]+)\))?/i);
+    const mt = (plates[j + 1] || '').match(/^Mt:([\d.,]+)/i);
     supports.push({
       designation: lignes[j].replace(/\s+/g, ' '),
       longueur: nombre(lg?.[1]),
       longueurTotale: nombre(lg?.[2]),
+      moment: nombre(mt?.[1]),
       existant: /^Existant$/i.test(plates[j - 1] || ''),
     });
   });
+
+  /* MÂT REHAUSSÉ : Kadri n'écrit « Existant » qu'une fois pour le mât et
+     son coulisseau (DEM1-47 : au-dessus du coulisseau seul). La paire est
+     un même support : l'un existant, tout l'ensemble l'est — on ne commande
+     pas de mât, les colliers vont sur le coulisseau. Un mât neuf reste une
+     option (`avecMatNeuf`). */
+  if (supports.some(estCoulisseau) && supports.some(s => s.existant)) {
+    supports.forEach(s => { s.existant = true; });
+  }
 
   const cl = c.produit.match(/\bCL\s*([123])\b/i);
   return {
@@ -499,8 +516,45 @@ export interface LigneSupportPlan {
   longueurTotale?: number;
   /** Mât rehaussé : l'ensemble est « REHAUSSE » ou le mât porte un coulisseau. */
   rehausse: boolean;
+  /** Le plus fort moment Kadri des supports regroupés, en daN.m. */
+  moment?: number;
   quantite: number;
   ensembles: string[];
+}
+
+/** « MAT TRAV MC », « MAT ANCRE MD » : un mât alu d'un type de la grille. */
+const TYPE_MAT = /^MAT(TRAV|ANCRE)M([B-F])$/;
+const estMatType = (s: SupportPlan) => TYPE_MAT.test(sansEspaces(s.designation).toUpperCase());
+
+/**
+ * L'ensemble reçoit-il un mât MONO neuf ? Un mât d'un type de la grille,
+ * même rehaussé d'un coulisseau chez Kadri, se commande en mât monosection
+ * à la longueur hors tout (MC.89.2800 pour « MAT TRAV MC + Coulisseau MB,
+ * 2,77 m », option `avecMatNeuf`) : le coulisseau n'est ni commandé ni
+ * porteur des fixations.
+ */
+export function matMonoNeuf(e: EnsemblePlan): boolean {
+  return e.supports.some(s => !s.existant && estMatType(s));
+}
+
+/** Le mât existant de l'ensemble pourrait-il être remplacé par un mât neuf de la grille ? */
+export function matRemplacable(e: EnsemblePlan): boolean {
+  return e.supports.some(s => s.existant && estMatType(s));
+}
+
+/**
+ * L'ensemble avec un MÂT NEUF à la place de l'existant — l'option que le
+ * chargé d'affaires coche à la demande. Le mât passe neuf (il part en mono de
+ * son type, moment vérifié : `referenceSupport`), le coulisseau disparaît et
+ * les colliers vont sur la section du mât.
+ */
+export function avecMatNeuf(e: EnsemblePlan): EnsemblePlan {
+  if (!matRemplacable(e)) return e;
+  return {
+    ...e,
+    supports: e.supports.filter(s => !estCoulisseau(s))
+      .map(s => (estMatType(s) ? { ...s, existant: false } : s)),
+  };
 }
 
 /** Les supports NEUFS, regroupés par désignation et longueur. */
@@ -509,13 +563,17 @@ export function supportsNeufs(ensembles: EnsemblePlan[]): LigneSupportPlan[] {
   for (const e of ensembles) {
     const rehausse = /REHAUSS/i.test(e.support)
       || e.supports.some(x => /^coulisseau/i.test(x.designation));
+    const mono = matMonoNeuf(e);
     for (const s of e.supports) {
       if (s.existant) continue;
+      /* Le mât mono en tient lieu : pas de coulisseau à commander. */
+      if (mono && estCoulisseau(s)) continue;
       const cle = `${s.designation}|${s.longueur ?? ''}|${s.longueurTotale ?? ''}|${rehausse}`;
-      const l = m.get(cle) ?? {
+      const l: LigneSupportPlan = m.get(cle) ?? {
         designation: s.designation, longueur: s.longueur,
         longueurTotale: s.longueurTotale, rehausse, quantite: 0, ensembles: [],
       };
+      if (s.moment !== undefined) l.moment = Math.max(l.moment ?? 0, s.moment);
       l.quantite += 1;
       if (!l.ensembles.includes(e.ensemble)) l.ensembles.push(e.ensemble);
       m.set(cle, l);
@@ -570,7 +628,14 @@ export function designationPanneau(l: LignePanneauPlan): string {
   return `${forme} ${NOM_GAMME[l.gamme]} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`;
 }
 
-/** Désignation d'un support neuf, longueur lue sur le plan. */
+/**
+ * Moment admissible des mâts aluminium par type, en daN.m (tableau « Choix du
+ * support » du catalogue) : MA 150, MB 250, MC 500 (Ø89), MD 1 000…
+ */
+export const MOMENT_ADMISSIBLE: Record<string, number> = {
+  A: 150, B: 250, C: 500, D: 1000, E: 1500, F: 2500, G: 3500, H: 5000,
+};
+
 /**
  * L'article Odoo d'un support NEUF du plan, quand la correspondance est
  * établie :
@@ -580,20 +645,29 @@ export function designationPanneau(l: LignePanneauPlan): string {
  *   « MAT TRAV MC », « MAT ANCRE MD »… → M<x>.<Ø>.<L>.IS.BRUT (MC.89.3100…)
  * La longueur est celle, hors tout, que Kadri écrit entre parenthèses —
  * sinon la longueur calculée —, montée aux 100 mm supérieurs : les articles
- * vont de 100 en 100. Un mât REHAUSSÉ n'a pas d'équivalent sûr (pas de
- * MCREH chez Odoo) : il reste à choisir, comme tout support sans
- * correspondance ou toute longueur absente de la grille.
+ * vont de 100 en 100. Un mât REHAUSSÉ d'un coulisseau se commande en MONO
+ * de son type, à cette longueur hors tout (« MAT TRAV MC + Coulisseau MB,
+ * (2,77) » → MC.89.2800) — pas de MCREH chez Odoo.
+ *
+ * LE MOMENT SE VÉRIFIE : celui que Kadri calcule (« Mt : 151 m.daN ») doit
+ * tenir sous le moment admissible du type (`MOMENT_ADMISSIBLE`, MC 500).
+ * Au-delà, la ligne reste à vérifier : on ne pose pas un mât trop faible.
+ * Tout support sans correspondance ou toute longueur absente de la grille
+ * reste à choisir.
  */
 export function referenceSupport(
-  s: Pick<LigneSupportPlan, 'designation' | 'longueur' | 'longueurTotale' | 'rehausse'>,
+  s: Pick<LigneSupportPlan, 'designation' | 'longueur' | 'longueurTotale' | 'rehausse' | 'moment'>,
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: string } {
   const t = sansEspaces(s.designation).toUpperCase();
   let famille: string | null = null;
   if (t === 'TUBEGALVMC80') famille = 'SG80802';
-  const mat = t.match(/^MAT(TRAV|ANCRE)M([B-F])$/);
+  const mat = t.match(TYPE_MAT);
   if (mat) {
-    if (s.rehausse) return { raison: 'mât rehaussé : article REH à choisir' };
+    const admissible = MOMENT_ADMISSIBLE[mat[2]];
+    if (s.moment !== undefined && s.moment > admissible) {
+      return { raison: `moment ${s.moment} daN.m au-delà des ${admissible} admissibles d'un M${mat[2]} : mât plus fort à choisir` };
+    }
     famille = `M${mat[2]}.${DIAMETRE_TYPE[mat[2]]}`;
   }
   if (!famille) return { raison: 'support neuf : article de mât à choisir' };
@@ -608,7 +682,11 @@ export function referenceSupport(
 export function designationSupport(s: LigneSupportPlan): string {
   const lg = s.longueurTotale ?? s.longueur;
   const cote = lg ? ` — longueur ${lg.toLocaleString('fr-FR')} m (plan Kadri)` : '';
-  return `${s.designation}${cote}`;
+  const mat = sansEspaces(s.designation).toUpperCase().match(TYPE_MAT);
+  const mono = mat && s.rehausse ? ' — mono, sans coulisseau' : '';
+  const moment = mat && s.moment !== undefined && s.moment <= MOMENT_ADMISSIBLE[mat[2]]
+    ? ` — moment ${s.moment} ≤ ${MOMENT_ADMISSIBLE[mat[2]]} daN.m` : '';
+  return `${s.designation}${cote}${mono}${moment}`;
 }
 
 /* ── Lignes de la demande ───────────────────────────────────────────────── */
@@ -735,7 +813,8 @@ export function fixationsEnsemble(
   const coulisseaux = e.supports.filter(estCoulisseau);
   const mats = e.supports.filter(s => !estCoulisseau(s));
   const nbSupports = mats.length || coulisseaux.length;
-  const porteurs = e.supports;
+  /* Mât mono neuf : il porte seul les panneaux, sur sa propre section. */
+  const porteurs = matMonoNeuf(e) ? mats : e.supports;
   const sections = porteurs.map(s => sectionSupport(s.designation));
   /* Tous ronds : la plus petite section. Tous du même carré : ce carré.
      Mélange ou section illisible : on ne tranche pas. */
@@ -973,7 +1052,10 @@ export function lignesDuPlan(
   regroupement: RegroupementPlan = 'ensemble',
   /** Classe imposée à tout le carnet ; `null` = celle du plan. */
   classeForcee: number | null = null,
+  /** Ensembles dont le mât existant est remplacé par un mât neuf (option). */
+  matsNeufs: readonly string[] = [],
 ): LigneDemandePlan[] {
+  ensembles = ensembles.map(e => (matsNeufs.includes(e.ensemble) ? avecMatNeuf(e) : e));
   if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee);
   /* Le numéro compte les ensembles QUI ONT QUELQUE CHOSE À CHIFFRER, dans
      l'ordre du plan : le devis n'a pas de trou dans sa numérotation. */

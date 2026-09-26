@@ -4,7 +4,7 @@ import {
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
   railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
-  ancragesEnsemble,
+  ancragesEnsemble, avecMatNeuf, matRemplacable,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -129,8 +129,8 @@ describe('lecture d\'un ensemble', () => {
 
   it('distingue le support neuf de l\'existant', () => {
     expect(lireEnsemble(PAGE_CAISSON, 3)!.supports).toEqual([
-      { designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, existant: false },
-      { designation: 'Coulisseau MB', longueur: 0.85, longueurTotale: undefined, existant: true },
+      { designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, moment: 151, existant: true },
+      { designation: 'Coulisseau MB', longueur: 0.85, longueurTotale: undefined, moment: 10, existant: true },
     ]);
     expect(lireEnsemble(PAGE_ALU, 43)!.supports[0])
       .toMatchObject({ longueur: 2.4, longueurTotale: 3.6, existant: true });
@@ -206,11 +206,12 @@ describe('carnet', () => {
   });
 
   it('relève les supports neufs et fait le bilan', () => {
-    expect(supportsNeufs(ensembles).map(s => s.designation)).toEqual(['MAT TRAV MC', 'TUBE GALV MC 80']);
+    /* DEM1-47 : mât rehaussé existant, rien à commander. */
+    expect(supportsNeufs(ensembles).map(s => s.designation)).toEqual(['TUBE GALV MC 80']);
     expect(bilanPlan(ensembles)).toMatchObject({
       ensembles: 3,
       panneaux: { neuf: 1, remplace: 3, depose: 1, existant: 0, supprime: 1 },
-      supportsNeufs: 2, supportsExistants: 2, sansPanneau: [],
+      supportsNeufs: 1, supportsExistants: 3, sansPanneau: [],
     });
   });
 });
@@ -223,14 +224,27 @@ describe('lignes de la demande', () => {
       ['DF50.2200.250.C1.50.IS.BRUT', 1, null, ''],
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 2200 400 C1'],
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 500 150 C1'],
-      /* Urville est traversant : pas de collier pour HARF-07. */
+      /* Urville est traversant : pas de collier pour HARF-07. DEM1-47 garde
+         son mât rehaussé existant : colliers sur le coulisseau MB, pas de mât. */
       ['CO76SFP50.BRUT', 2, null, ''],
-      /* MAT TRAV MC d'un ensemble REHAUSSE : pas d'article sûr. */
-      ['', 1, 'mât rehaussé : article REH à choisir', ''],
     ]);
     expect(lignes[1].description)
       .toBe('Panneau directionnel Urville caisson traversant D21 2200x400 classe 1 — fond blanc');
-    expect(lignes[4].description).toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri)');
+  });
+
+  it('un mât neuf à la demande : MC.89 mono à la longueur hors tout, moment vérifié', () => {
+    const e = lirePlanDirectionnel([PAGE_CAISSON]);
+    expect(matRemplacable(e[0])).toBe(true);
+    const lignes = lignesDuPlan(e, {}, undefined, 'reference', null, ['DEM1-47']);
+    expect(lignes.map(l => [l.reference, l.quantite, l.aVerifier])).toEqual([
+      ['DF50.2200.250.C1.50.IS.BRUT', 1, null],
+      /* Le mono porte seul le panneau : colliers Ø89. */
+      ['CO89SFP50.BRUT', 2, null],
+      /* MAT TRAV MC + coulisseau MB, 2,77 m hors tout : moment 151 ≤ 500. */
+      ['MC.89.2800.IS.BRUT', 1, null],
+    ]);
+    expect(lignes[2].description)
+      .toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri) — mono, sans coulisseau — moment 151 ≤ 500 daN.m');
   });
 });
 
@@ -280,7 +294,6 @@ describe('chiffrage par ensemble', () => {
     expect(lignes.map(l => `${l.ensemble?.nom} ${l.reference || l.description.slice(0, 22)}`)).toEqual([
       'DEM1-47 DF50.2200.250.C1.50.IS.BRUT',
       'DEM1-47 CO76SFP50.BRUT',
-      'DEM1-47 MAT TRAV MC — longueur',
       'HARF-07 DF50.2200.400.C1.50.IS.BRUT',
       'HARF-07 DR50.500.150.C1.50.IS.BRUT',
       'HARF-07 CO114SFP50.BRUT',
@@ -289,13 +302,13 @@ describe('chiffrage par ensemble', () => {
       'HARF-06 SG80802.5000.IS.BRUT',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
-    expect(titreEnsemble(lignes[8].ensemble!)).toBe('Ensemble 0003/HARF-06');
+    expect(titreEnsemble(lignes[7].ensemble!)).toBe('Ensemble 0003/HARF-06');
   });
 
   it('par référence, les quantités se cumulent et il n\'y a plus d\'ensemble', () => {
     const lignes = lignesDuPlan(e, {}, undefined, 'reference');
     expect(lignes.every(l => !l.ensemble)).toBe(true);
-    expect(lignes.length).toBe(9);
+    expect(lignes.length).toBe(8);
   });
 });
 
@@ -346,9 +359,11 @@ ${PIED}`, 1)!;
     });
   });
 
-  it("sur un coulisseau, c'est sa section qui compte", () => {
+  it("sur un coulisseau, c'est sa section qui compte — sauf sous un mât neuf", () => {
     const e = lireEnsemble(PAGE_CAISSON, 3)!;
     expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'CO76SFP50.BRUT', quantite: 2 });
+    /* Mât neuf à la demande : MC.89 mono, colliers en Ø89. */
+    expect(fixationsEnsemble(avecMatNeuf(e), {})).toMatchObject({ reference: 'CO89SFP50.BRUT', quantite: 2 });
   });
 
   it('une section illisible ou une hauteur hors table reste à vérifier', () => {
@@ -434,9 +449,14 @@ describe('supports neufs', () => {
       .toEqual({ reference: 'MF.140.4200.IS.BRUT' });
   });
 
-  it('rehaussé, sans correspondance ou hors grille : à choisir', () => {
-    expect(referenceSupport({ designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, rehausse: true }))
-      .toEqual({ raison: 'mât rehaussé : article REH à choisir' });
+  it('rehaussé : le mono de son type à la longueur hors tout, si le moment tient', () => {
+    expect(referenceSupport({ designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, rehausse: true, moment: 151 }))
+      .toEqual({ reference: 'MC.89.2800.IS.BRUT' });
+    expect(referenceSupport({ designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, rehausse: true, moment: 620 }))
+      .toEqual({ raison: "moment 620 daN.m au-delà des 500 admissibles d'un MC : mât plus fort à choisir" });
+  });
+
+  it('sans correspondance ou hors grille : à choisir', () => {
     expect(referenceSupport({ designation: 'CANDELABRE', longueur: 4, rehausse: false }))
       .toMatchObject({ raison: expect.any(String) });
     expect(referenceSupport({ designation: 'TUBE GALV MC 80', longueur: 6, rehausse: false }, () => false))
@@ -454,8 +474,9 @@ describe('ancrage des mâts neufs sur embase', () => {
   it('embase, tiges et gabarit au diamètre du mât, pas du coulisseau', () => {
     const e = lireEnsemble(PAGE_CAISSON.replace(PIED, `Socle d'ancrage avec embase\n${PIED}`), 3)!;
     expect(e.embase).toBe(true);
-    /* MAT TRAV MC neuf (Ø89) ; le coulisseau MB (Ø76) est existant. */
-    expect(ancragesEnsemble(e).map(a => a.reference)).toEqual(['EMBASE.89', 'TIGE.89.M22.500', 'SFGAB60.140']);
+    /* Mât rehaussé existant : rien. Mât neuf à la demande : Ø89, pas Ø76. */
+    expect(ancragesEnsemble(e)).toEqual([]);
+    expect(ancragesEnsemble(avecMatNeuf(e)).map(a => a.reference)).toEqual(['EMBASE.89', 'TIGE.89.M22.500', 'SFGAB60.140']);
   });
 
   it('rien sans « avec embase », ni pour un mât existant', () => {

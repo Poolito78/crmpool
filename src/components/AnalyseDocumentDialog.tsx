@@ -249,6 +249,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Classe imposée à tout le carnet quand le plan Kadri se trompe ; `null`
      = celle du plan. */
   const [classePlan, setClassePlan] = useState<number | null>(null);
+  /* Ensembles dont le mât existant est remplacé par un mât neuf, à la
+     demande du chargé d'affaires (`avecMatNeuf`). */
+  const [matsNeufsPlan, setMatsNeufsPlan] = useState<string[]>([]);
+  /* La ligne de la demande vers laquelle un clic « à vérifier » a mené. */
+  const [ligneEnVue, setLigneEnVue] = useState<number | null>(null);
   /* Taux PAL au m² saisi à l'écran ; `null` = référence (140 € en C2), puis
      contrat cadre. Le prix Odoo du modèle IS D3 n'est pas le bon. */
   const [tauxPal, setTauxPal] = useState<number | null>(null);
@@ -1155,8 +1160,8 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!planKadri) return [];
     const g = planKadri.grille;
     return lignesDuPlan(planKadri.ensembles, gammesKadri,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan);
-  }, [planKadri, gammesKadri, regroupementPlan, classePlan]);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan, matsNeufsPlan);
+  }, [planKadri, gammesKadri, regroupementPlan, classePlan, matsNeufsPlan]);
 
   /** Le carnet en demande de devis : un document que l'IA n'a pas touché. */
   const documentDuPlan = useCallback((
@@ -1181,19 +1186,21 @@ const [contratOdoo, setContratOdoo] = useState<
     gammes: Record<string, GammeDirectionnelle>,
     regroupement: RegroupementPlan,
     classe: number | null,
+    matsNeufs: string[] = matsNeufsPlan,
   ) => {
     if (!planKadri) return;
     const g = planKadri.grille;
     const lignes = lignesDuPlan(planKadri.ensembles, gammes,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement, classe);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement, classe, matsNeufs);
     setGammesKadri(gammes);
     setRegroupementPlan(regroupement);
     setClassePlan(classe);
+    setMatsNeufsPlan(matsNeufs);
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
-  }, [planKadri, documentDuPlan]);
+  }, [planKadri, documentDuPlan, matsNeufsPlan]);
   const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) =>
     reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan, classePlan),
   [reconstruirePlan, gammesKadri, regroupementPlan, classePlan]);
@@ -1221,7 +1228,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setTauxPal(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1452,7 +1459,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setTauxPal(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -4869,6 +4876,14 @@ const [contratOdoo, setContratOdoo] = useState<
                                 onRegroupement={r => reconstruirePlan(gammesKadri, r, classePlan)}
                                 classe={classePlan}
                                 onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
+                                matsNeufs={matsNeufsPlan}
+                                onMatsNeufs={m => reconstruirePlan(gammesKadri, regroupementPlan, classePlan, m)}
+                                onVoirLigne={i => {
+                                  document.getElementById(`ligne-demande-${i}`)
+                                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                  setLigneEnVue(i);
+                                  window.setTimeout(() => setLigneEnVue(v => (v === i ? null : v)), 2500);
+                                }}
                                 tauxPal={tauxPal}
                                 onTauxPal={setTauxPal}
                                 lignes={lignesPlan}
@@ -5038,7 +5053,9 @@ const [contratOdoo, setContratOdoo] = useState<
                               const rap = rapprochements.get(i);
                               const sysRap = systemesDetectes.get(i);
                               return (
-                                <div key={i} className="rounded-lg border border-border p-2 space-y-1.5">
+                                <div key={i} id={`ligne-demande-${i}`}
+                                  className={`rounded-lg border p-2 space-y-1.5 scroll-mt-4 transition-shadow ${
+                                    ligneEnVue === i ? 'border-warning ring-2 ring-warning' : 'border-border'}`}>
                                   <div className="flex items-center gap-2 text-xs">
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${sysRap
                                       ? 'bg-primary/15 text-primary'
