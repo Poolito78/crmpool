@@ -303,22 +303,61 @@ export function estGrandFormat(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): boo
 export const LAME_TASMAN = 150;
 
 /**
- * Le panneau Tasman FABRIQUÉ : la hauteur monte au multiple de 150
- * supérieur (2474 → 2550), la longueur est libre. Les lattes sont d'abord
- * des planches de 300 — le plus possible —, complétées d'une de 150 si la
- * hauteur l'exige : 2100 = 7 × 300 ; 2550 = 8 × 300 + 1 × 150.
+ * Les dimensions du modèle Odoo « IS D3 » (Tasman), relevées sur ses
+ * attributs le 26/09/2026 — 460 variantes. Dimension 1 = largeur,
+ * Dimension 2 = hauteur. Un panneau du plan se fabrique à la dimension
+ * SUPÉRIEURE la plus proche de chacune : 4151 × 2474 → 4200 × 2550, comme
+ * dans les devis Odoo. Si Odoo en ajoute, les recopier ici.
+ */
+export const DIMENSIONS_D3 = {
+  largeurs: [
+    300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200, 1300, 1345, 1400, 1500, 1600,
+    1700, 1800, 1900, 1950, 2000, 2100, 2150, 2200, 2250, 2300, 2400, 2450, 2500, 2600,
+    2700, 2800, 2900, 3000, 3100, 3200, 3300, 3400, 3500, 3600, 3700, 3750, 3800, 3900,
+    4000, 4100, 4200, 4300, 4400, 4500, 4600, 4700, 4800, 4900, 5000, 5100, 5200, 5300,
+    5400, 5500, 5600, 5700, 5800, 5900, 6000, 6100, 6200, 6300, 6400, 6500, 6600, 6700,
+    6800, 6900, 7000, 7700, 7800, 7900, 8000,
+  ],
+  hauteurs: [
+    150, 300, 450, 600, 750, 900, 1050, 1200, 1350, 1500, 1650, 1800, 1950, 2100, 2250,
+    2400, 2550, 2700, 2850, 3000, 3150, 3300, 3450, 3600, 3750, 3900, 4050, 4200, 4350,
+    4500, 4650, 4800, 4950, 5100,
+  ],
+} as const;
+
+const auDessus = (liste: readonly number[], v: number) => liste.find(x => x >= v) ?? null;
+
+/**
+ * Le panneau Tasman FABRIQUÉ : chaque cote monte à la dimension IS D3
+ * supérieure (`DIMENSIONS_D3`) — 4151 × 2474 → 4200 × 2550. Les lattes sont
+ * d'abord des planches de 300 — le plus possible —, complétées d'une de 150
+ * si la hauteur l'exige : 2100 = 7 × 300 ; 2550 = 8 × 300 + 1 × 150.
+ * `horsGamme` : une cote dépasse les dimensions d'Odoo — on garde la cote
+ * du plan (hauteur au multiple de 150) et la ligne reste à vérifier.
  */
 export function surfaceTasman(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): {
-  lames: number; lames300: number; lames150: number; hauteur: number; surface: number;
+  largeur: number; hauteur: number; lames: number; lames300: number; lames150: number;
+  surface: number; horsGamme: boolean;
 } {
-  const hauteur = Math.ceil(p.hauteur / LAME_TASMAN) * LAME_TASMAN;
+  const l = auDessus(DIMENSIONS_D3.largeurs, p.largeur);
+  const h = auDessus(DIMENSIONS_D3.hauteurs, p.hauteur);
+  const largeur = l ?? p.largeur;
+  const hauteur = h ?? Math.ceil(p.hauteur / LAME_TASMAN) * LAME_TASMAN;
   const lames300 = Math.floor(hauteur / 300);
   const lames150 = (hauteur - lames300 * 300) / LAME_TASMAN;
   return {
-    lames: lames300 + lames150, lames300, lames150, hauteur,
-    surface: Math.round((p.largeur * hauteur) / 1000) / 1000,
+    largeur, hauteur, lames: lames300 + lames150, lames300, lames150,
+    surface: Math.round((largeur * hauteur) / 1000) / 1000,
+    horsGamme: l === null || h === null,
   };
 }
+
+/**
+ * Taux PAL de référence au m², par classe — celui que le chargé d'affaires
+ * retient : 140 €/m² en classe 2. Il prime sur le contrat cadre ; une classe
+ * absente d'ici prend le taux du contrat, sinon il se saisit à l'écran.
+ */
+export const TAUX_PAL_REFERENCE: Record<number, number> = { 2: 140 };
 
 /** « 8 lattes de 300 + 1 de 150 », « 7 lattes de 300 ». */
 export function composition(t: { lames300: number; lames150: number }): string {
@@ -354,7 +393,9 @@ export function referencePanneau(
      entières. Pas à la grille — `existe` ne la juge donc pas : Odoo dira
      s'il la connaît. */
   if (gamme === 'tasman') {
-    return { reference: `D3.${p.largeur}.${surfaceTasman(p).hauteur}.C${classe}.ST.IS.BRUT` };
+    const t = surfaceTasman(p);
+    if (t.horsGamme) return { raison: 'hors-grille' };
+    return { reference: `D3.${t.largeur}.${t.hauteur}.C${classe}.ST.IS.BRUT` };
   }
   const famille = estFleche(p.code) ? 'DF50' : 'DR50';
   const dos = gamme === 'vasco' ? '.F' : '';
@@ -515,7 +556,7 @@ export function designationPanneau(l: LignePanneauPlan): string {
   if (l.gamme === 'tasman') {
     const t = surfaceTasman(l);
     return `${forme} ${NOM_GAMME.tasman} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`
-      + ` — fabriqué ${l.largeur}x${t.hauteur} (${composition(t)}), `
+      + ` — fabriqué ${t.largeur}x${t.hauteur} (${composition(t)}), `
       + `${t.surface.toLocaleString('fr-FR')} m²`;
   }
   return `${forme} ${NOM_GAMME[l.gamme]} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`;
@@ -759,7 +800,8 @@ function lignesDe(
       ensembles: l.ensembles,
       aVerifier: l.raison ? LIBELLE_RAISON[l.raison] : null,
       recherche: l.raison === 'urville' ? `URVILLE ${l.largeur} ${l.hauteur}${classe}`
-        : l.gamme === 'tasman' ? `D3 ${l.largeur} ${surfaceTasman(l).hauteur}${classe}` : '',
+        : l.gamme === 'tasman'
+          ? `D3 ${surfaceTasman(l).largeur} ${surfaceTasman(l).hauteur}${classe}` : '',
     };
   });
   /* Les fixations des panneaux P50, ensemble par ensemble — une

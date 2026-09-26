@@ -182,7 +182,7 @@ describe('carnet', () => {
       .toEqual([
         '1 D21 2200x250 DF50.2200.250.C1.50.IS.BRUT',
         '1 D21 2200x400 DF50.2200.400.C1.50.IS.BRUT',
-        '1 D42b1 4151x2474 D3.4151.2550.C1.ST.IS.BRUT',
+        '1 D42b1 4151x2474 D3.4200.2550.C1.ST.IS.BRUT',
         '1 E43 500x150 DR50.500.150.C1.50.IS.BRUT',
       ]);
     expect(designationPanneau(lignes[0]))
@@ -242,24 +242,31 @@ describe('Tasman PAL : les grands formats', () => {
 
   it('se chiffre au m² fabriqué, lames de 150 entières', () => {
     expect(surfaceTasman({ largeur: 4151, hauteur: 2474 }))
-      .toEqual({ lames: 9, lames300: 8, lames150: 1, hauteur: 2550, surface: 10.585 });
+      .toEqual({ largeur: 4200, hauteur: 2550, lames: 9, lames300: 8, lames150: 1, surface: 10.71, horsGamme: false });
     expect(surfaceTasman({ largeur: 3000, hauteur: 2100 }))
-      .toEqual({ lames: 7, lames300: 7, lames150: 0, hauteur: 2100, surface: 6.3 });
+      .toEqual({ largeur: 3000, hauteur: 2100, lames: 7, lames300: 7, lames150: 0, surface: 6.3, horsGamme: false });
+    /* Au-delà des dimensions d'Odoo : cote du plan, à vérifier. */
+    expect(surfaceTasman({ largeur: 9000, hauteur: 2100 }).horsGamme).toBe(true);
   });
 
   it('part sous la variante Odoo IS D3 du format fabriqué', () => {
     const [l] = lignesDuPlan(lirePlanDirectionnel([PAGE_NEUF]), {});
     expect(l).toMatchObject({
-      reference: 'D3.4151.2550.C1.ST.IS.BRUT', quantite: 1, unite: 'u',
-      aVerifier: null, recherche: 'D3 4151 2550 C1',
+      reference: 'D3.4200.2550.C1.ST.IS.BRUT', quantite: 1, unite: 'u',
+      aVerifier: null, recherche: 'D3 4200 2550 C1',
     });
     expect(l.description).toBe('Panneau Tasman PAL D42b1 4151x2474 classe 1 — fond blanc'
-      + ' — fabriqué 4151x2550 (8 latte(s) de 300 + 1 de 150), 10,585 m²');
+      + ' — fabriqué 4200x2550 (8 latte(s) de 300 + 1 de 150), 10,71 m²');
   });
 
   it('même hors grille, la variante D3 reste : Odoo seul dit si elle existe', () => {
     expect(referencePanneau({ code: 'D42b', largeur: 3000, hauteur: 2100 }, 'tasman', 2, () => false))
       .toEqual({ reference: 'D3.3000.2100.C2.ST.IS.BRUT' });
+    /* 2940 → 3000 : la dimension IS D3 supérieure. */
+    expect(referencePanneau({ code: 'D42b', largeur: 2940, hauteur: 2000 }, 'tasman', 2))
+      .toEqual({ reference: 'D3.3000.2100.C2.ST.IS.BRUT' });
+    expect(referencePanneau({ code: 'D42b', largeur: 9000, hauteur: 2000 }, 'tasman', 2))
+      .toEqual({ raison: 'hors-grille' });
   });
 });
 
@@ -275,7 +282,7 @@ describe('chiffrage par ensemble', () => {
       'HARF-07 DF50.2200.400.C1.50.IS.BRUT',
       'HARF-07 DR50.500.150.C1.50.IS.BRUT',
       'HARF-07 CO114SFP50.BRUT',
-      'HARF-06 D3.4151.2550.C1.ST.IS.BRUT',
+      'HARF-06 D3.4200.2550.C1.ST.IS.BRUT',
       'HARF-06 BR.PAL.H10X60.BRUT',
       'HARF-06 TUBE GALV MC 80 — long',
     ]);
@@ -399,14 +406,14 @@ describe('classe imposée et prix PAL', () => {
   it('une classe imposée remplace celle du plan, références comprises', () => {
     const lignes = lignesDuPlan(e, {}, undefined, 'reference', 2);
     expect(lignes.map(l => l.reference).filter(r => /^(DF|DR|D3)/.test(r))).toEqual([
-      'DF50.2200.250.C2.50.IS.BRUT', 'D3.4151.2550.C2.ST.IS.BRUT',
+      'DF50.2200.250.C2.50.IS.BRUT', 'D3.4200.2550.C2.ST.IS.BRUT',
     ]);
     expect(lignesDuPlan(e, {}, undefined, 'reference')[0].reference).toBe('DF50.2200.250.C1.50.IS.BRUT');
   });
 
   it('un Tasman porte sa surface et sa classe, pour le taux PAL au m² du contrat', () => {
     const t = lignesDuPlan(e, {}, undefined, 'reference', 2).find(l => l.tasman);
-    expect(t?.tasman).toEqual({ surface: 10.585, classe: 2 });
+    expect(t?.tasman).toEqual({ surface: 10.71, classe: 2 });
     expect(codificationPal(2)).toBe('PMSD.C2');
     expect(codificationPal(null)).toBeNull();
   });

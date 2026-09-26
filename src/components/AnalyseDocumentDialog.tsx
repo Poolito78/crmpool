@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
   estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
+  TAUX_PAL_REFERENCE,
   type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
@@ -248,6 +249,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Classe imposée à tout le carnet quand le plan Kadri se trompe ; `null`
      = celle du plan. */
   const [classePlan, setClassePlan] = useState<number | null>(null);
+  /* Taux PAL au m² saisi à l'écran ; `null` = référence (140 € en C2), puis
+     contrat cadre. Le prix Odoo du modèle IS D3 n'est pas le bon. */
+  const [tauxPal, setTauxPal] = useState<number | null>(null);
   useEffect(() => {
     if (!open || !niveauForce) return;
     const aCharger: NiveauTarif[] = niveauForce === 'R0' ? ['R0', 'R4'] : [niveauForce];
@@ -1217,7 +1221,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setTauxPal(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1448,7 +1452,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setTauxPal(null);
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -3244,10 +3248,16 @@ const [contratOdoo, setContratOdoo] = useState<
    */
   const prixPal = useCallback((i: number) => {
     const t = planKadri ? lignesPlan[i]?.tasman : undefined;
-    const code = t ? codificationPal(t.classe) : null;
-    const taux = code ? grillesNiveau[niveauRemise]?.get(code)?.prix : undefined;
-    return t && taux ? { prix: Math.round(taux * t.surface * 100) / 100, taux, surface: t.surface } : null;
-  }, [planKadri, lignesPlan, grillesNiveau, niveauRemise]);
+    if (!t) return null;
+    const code = codificationPal(t.classe);
+    const contrat = code ? grillesNiveau[niveauRemise]?.get(code)?.prix : undefined;
+    const reference = t.classe ? TAUX_PAL_REFERENCE[t.classe] : undefined;
+    /* Saisi > référence du chargé d'affaires > contrat cadre. */
+    const [taux, origine] = tauxPal ? [tauxPal, 'saisi']
+      : reference ? [reference, 'référence']
+        : contrat ? [contrat, `contrat ${niveauRemise}`] : [undefined, ''];
+    return taux ? { prix: Math.round(taux * t.surface * 100) / 100, taux, surface: t.surface, origine } : null;
+  }, [planKadri, lignesPlan, grillesNiveau, niveauRemise, tauxPal]);
 
   const puDeLigne = useCallback((i: number) => {
     const cle = `d${i}`;
@@ -4856,6 +4866,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                 onRegroupement={r => reconstruirePlan(gammesKadri, r, classePlan)}
                                 classe={classePlan}
                                 onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
+                                tauxPal={tauxPal}
+                                onTauxPal={setTauxPal}
                                 lignes={lignesPlan}
                                 niveau={niveauRemise}
                                 prixLigne={i => {
@@ -4866,7 +4878,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                   const pal = prixPal(i);
                                   if (pal) {
                                     return { prix: pu, source: `PAL ${pal.taux.toLocaleString('fr-FR')} €/m² × ${
-                                      pal.surface.toLocaleString('fr-FR')} m² (${niveauRemise})` };
+                                      pal.surface.toLocaleString('fr-FR')} m² (${pal.origine})` };
                                   }
                                   if (odoo) return { prix: pu, source: `Odoo ${odoo.reference}` };
                                   const g = prixGrillePlan(i);

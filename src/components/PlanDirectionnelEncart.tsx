@@ -1,9 +1,10 @@
 import { Fragment, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
-  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, LIBELLE_GAMME,
+  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
   type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 
@@ -20,7 +21,7 @@ import {
  */
 export default function PlanDirectionnelEncart({
   ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
-  lignes, prixLigne, niveau,
+  tauxPal, onTauxPal, lignes, prixLigne, niveau,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
@@ -30,6 +31,9 @@ export default function PlanDirectionnelEncart({
   /** Classe imposée au carnet ; `null` = celle du plan Kadri. */
   classe: number | null;
   onClasse: (c: number | null) => void;
+  /** Taux PAL au m² saisi ; `null` = référence (140 € en C2) puis contrat. */
+  tauxPal: number | null;
+  onTauxPal: (t: number | null) => void;
   lignes: LigneDemandePlan[];
   /** Prix unitaire retenu pour la ligne i et d'où il vient, `null` sans prix. */
   prixLigne: (i: number) => { prix: number; source: string } | null;
@@ -103,6 +107,23 @@ export default function PlanDirectionnelEncart({
         )}
       </div>
 
+      {lignes.some(l => l.tasman) && (
+        <div className="flex items-center gap-2">
+          <span className="font-medium">Taux PAL Tasman</span>
+          <Input
+            type="number" min={0} step="0.01"
+            value={tauxPal ?? ''}
+            placeholder={`référence ${TAUX_PAL_REFERENCE[2]} € en C2, sinon contrat`}
+            onChange={e => {
+              const v = Number(e.target.value.replace(',', '.'));
+              onTauxPal(e.target.value.trim() && v > 0 ? v : null);
+            }}
+            className="h-7 w-60 text-[11px]"
+          />
+          <span className="text-muted-foreground">€/m² fabriqué — le prix Odoo du modèle IS D3 n'est pas le bon</span>
+        </div>
+      )}
+
       {gammesAChoisir.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium">Gamme de fabrication</p>
@@ -126,7 +147,7 @@ export default function PlanDirectionnelEncart({
             Lapérouse P50 (dos ouvert) par défaut. Vasco de Gama pour un dos fermé ; Urville pour
             un caisson traversant — absent de la grille, il se choisit parmi les articles Odoo
             proposés. Au-delà de 2500 × 1200, le panneau passe en Tasman PAL : variante Odoo
-            IS D3 du format fabriqué (hauteur en lames de 150), tarifée par Odoo. Ni pose ni
+            IS D3 aux dimensions supérieures du modèle, chiffrée au m² fabriqué. Ni pose ni
             dépose ne sont chiffrées.
           </p>
         </div>
