@@ -3,7 +3,7 @@ import {
   estPlanKadri, lireEnsemble, lirePlanDirectionnel, lireCotePanneau,
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
-  railsLaperouse, sectionSupport, fixationsEnsemble,
+  railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -276,7 +276,7 @@ describe('chiffrage par ensemble', () => {
       'HARF-07 DR50.500.150.C1.50.IS.BRUT',
       'HARF-07 CO114SFP50.BRUT',
       'HARF-06 D3.4151.2550.C1.ST.IS.BRUT',
-      'HARF-06 Fixations Tasman (brid',
+      'HARF-06 BR.PAL.H10X60.BRUT',
       'HARF-06 TUBE GALV MC 80 — long',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
@@ -357,5 +357,28 @@ describe('section malgré les espaces de pdf.js', () => {
     expect(sectionSupport('Coulisseau M Crenf')).toEqual({ rond: 89 });
     expect(sectionSupport('M AT ANCRE M C')).toEqual({ rond: 89 });
     expect(sectionSupport('M AT TRAV 160G')).toEqual({ rond: 160 });
+  });
+});
+
+describe('brides PAL des panneaux Tasman', () => {
+  it('(lattes + 2) × supports + 4 par ml de hauteur', () => {
+    /* D42b1 4151x2474 → 17 lattes (2550), sur l'unique TUBE GALV de
+       l'extrait : (17 + 2) × 1 + 4 × 2,55 = 19 + 11 = 30. */
+    expect(bridesPal(lireEnsemble(PAGE_NEUF, 1)!, {})).toEqual({
+      reference: 'BR.PAL.H10X60.BRUT', quantite: 30, aVerifier: null,
+      description: 'Bride PAL H10x60 — (17 lattes + 2) × 1 + 11',
+    });
+  });
+
+  it('sans support lu, le compte reste à vérifier', () => {
+    const e = lireEnsemble(PAGE_NEUF.replace(/Déblai[\s\S]*Lg : 5\.00 {3}m\n/, ''), 1)!;
+    expect(e.supports).toEqual([]);
+    expect(bridesPal(e, {})).toMatchObject({ reference: null });
+  });
+
+  it('bi-section : la plus petite section porte les panneaux', () => {
+    const e = lireEnsemble(PAGE_CAISSON, 3)!;
+    /* MAT TRAV MC (Ø89) + Coulisseau MB (Ø76) → Ø76, un seul support. */
+    expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'CO76SFP50.BRUT', quantite: 2 });
   });
 });

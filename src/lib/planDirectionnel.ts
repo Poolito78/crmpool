@@ -596,10 +596,10 @@ const estCoulisseau = (s: SupportPlan) => /^coulisseau/i.test(s.designation);
  * devis Odoo, soixante ensembles sur soixante : 2 panneaux de 250 et 300
  * sur un MC.89 → 4 CO89SFP50.
  *
- * Quand le mât porte un COULISSEAU, les panneaux sont sur lui : c'est sa
- * section qui compte, et il ne compte pas comme un support de plus. Tasman
- * (brides PAL, colliers renforcés) et Urville (traversant, sans fixation)
- * n'entrent pas ici.
+ * UN MÂT BI-SECTION SE FIXE SUR SA PLUS PETITE SECTION : c'est la section
+ * haute qui porte les panneaux. Le coulisseau qui la forme ne compte pas
+ * comme un support de plus. Tasman (`bridesPal`) et Urville (traversant,
+ * sans fixation) n'entrent pas ici.
  *
  * `null` si l'ensemble n'a aucun panneau P50 à fixer ; sinon la référence,
  * ou la raison pour laquelle elle manque.
@@ -620,16 +620,25 @@ export function fixationsEnsemble(
 
   const coulisseaux = e.supports.filter(estCoulisseau);
   const mats = e.supports.filter(s => !estCoulisseau(s));
-  const porteurs = coulisseaux.length ? coulisseaux : mats;
   const nbSupports = mats.length || coulisseaux.length;
+  const porteurs = e.supports;
   const sections = porteurs.map(s => sectionSupport(s.designation));
-  const cle = (s: SectionSupport | null) => (s ? JSON.stringify(s) : '?');
-  const section = sections.length && sections.every(s => s && cle(s) === cle(sections[0]))
-    ? sections[0] : null;
+  /* Tous ronds : la plus petite section. Tous du même carré : ce carré.
+     Mélange ou section illisible : on ne tranche pas. */
+  const ronds = sections.filter((x): x is { rond: number } => !!x && 'rond' in x);
+  const carres = sections.filter((x): x is { carre: [number, number] } => !!x && 'carre' in x);
+  const section: SectionSupport | null = !sections.length || sections.some(x => !x) ? null
+    : ronds.length === sections.length ? { rond: Math.min(...ronds.map(r => r.rond)) }
+      : carres.length === sections.length
+        && carres.every(c => c.carre.join('x') === carres[0].carre.join('x')) ? carres[0]
+        : null;
+  const porteurSection = section && 'rond' in section
+    ? porteurs.find((_, i) => { const x = sections[i]; return !!x && 'rond' in x && x.rond === section.rond; })
+    : porteurs[0];
 
   const quantite = rails * nbSupports;
   const detail = `1 par rail : ${rails} rail(s) × ${nbSupports} support(s)`;
-  const porteur = porteurs[0]?.designation ?? '';
+  const porteur = porteurSection?.designation ?? '';
 
   let aVerifier: string | null = null;
   if (horsTable.length) {
@@ -654,6 +663,43 @@ export function fixationsEnsemble(
       aVerifier: `${reference} absent de la grille` };
   }
   return { reference, quantite, description: `${nom} — ${detail} (${porteur})`, aVerifier: null };
+}
+
+/** La bride des panneaux à lames, telle qu'Odoo la vend. */
+export const BRIDE_PAL = 'BR.PAL.H10X60.BRUT';
+
+/**
+ * Les brides des panneaux Tasman (PAL) d'un ensemble — règle du fabricant :
+ *
+ *   (nombre de lattes + 2) × nombre de supports
+ *   + 4 brides par mètre linéaire de hauteur, pour le profil d'entourage.
+ *
+ * Les lattes sont celles du panneau FABRIQUÉ (`surfaceTasman`, lames de
+ * 150) ; les 4 brides par mètre s'arrondissent à la bride entière. Sans
+ * support lu sur le plan, le compte reste à vérifier.
+ */
+export function bridesPal(
+  e: EnsemblePlan,
+  gammes: Record<string, GammeDirectionnelle>,
+): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
+  const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
+  const panneaux = e.panneaux.filter(p => aFabriquer(p)
+    && (estGrandFormat(p) || gammeProduit === 'tasman'));
+  if (!panneaux.length) return null;
+  const supports = e.supports.filter(s => !estCoulisseau(s)).length;
+  const parPanneau = panneaux.map(p => {
+    const t = surfaceTasman(p);
+    return { lattes: t.lames, entourage: Math.ceil((4 * t.hauteur) / 1000) };
+  });
+  const detail = parPanneau.map(x => `(${x.lattes} lattes + 2) × ${supports || '?'} + ${x.entourage}`)
+    .join(' ; ');
+  if (!supports) {
+    return { reference: null, quantite: 1, description: `Brides PAL — ${detail}`,
+      aVerifier: 'aucun support lu sur le plan : nombre de brides PAL à établir' };
+  }
+  const quantite = parPanneau.reduce((n, x) => n + (x.lattes + 2) * supports + x.entourage, 0);
+  return { reference: BRIDE_PAL, quantite, aVerifier: null,
+    description: `Bride PAL H10x60 — ${detail}` };
 }
 
 function lignesDe(
@@ -695,16 +741,21 @@ function lignesDe(
         });
       }
     }
-    /* Tasman : brides PAL sur IPN ou colliers renforcés, selon le support —
-       aucune règle unique dans les devis. On le dit plutôt que de deviner. */
-    const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
-    if (e.panneaux.some(p => aFabriquer(p) && (estGrandFormat(p) || gammeProduit === 'tasman'))) {
-      const cle = `${e.ensemble}|tasman`;
-      fixations.set(cle, {
-        reference: '', description: 'Fixations Tasman (brides PAL ou colliers renforcés)',
-        quantite: 1, unite: 'u', ensembles: [e.ensemble],
-        aVerifier: 'fixations Tasman à établir selon le support', recherche: '',
-      });
+    const pal = bridesPal(e, gammes);
+    if (pal) {
+      const cle = pal.reference ? `${pal.reference}` : `${e.ensemble}|tasman`;
+      const deja = fixations.get(cle);
+      if (deja && pal.reference) {
+        deja.quantite += pal.quantite;
+        if (!deja.ensembles.includes(e.ensemble)) deja.ensembles.push(e.ensemble);
+        deja.description = deja.description.split(' — ')[0]
+          + ' — (lattes + 2) × supports + 4 par ml de hauteur';
+      } else {
+        fixations.set(cle, {
+          reference: pal.reference ?? '', description: pal.description, quantite: pal.quantite,
+          unite: 'u', ensembles: [e.ensemble], aVerifier: pal.aVerifier, recherche: '',
+        });
+      }
     }
   }
   out.push(...fixations.values());
