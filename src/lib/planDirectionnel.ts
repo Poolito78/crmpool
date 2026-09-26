@@ -493,6 +493,8 @@ export interface LigneSupportPlan {
   designation: string;
   longueur?: number;
   longueurTotale?: number;
+  /** Mât rehaussé : l'ensemble est « REHAUSSE » ou le mât porte un coulisseau. */
+  rehausse: boolean;
   quantite: number;
   ensembles: string[];
 }
@@ -501,12 +503,14 @@ export interface LigneSupportPlan {
 export function supportsNeufs(ensembles: EnsemblePlan[]): LigneSupportPlan[] {
   const m = new Map<string, LigneSupportPlan>();
   for (const e of ensembles) {
+    const rehausse = /REHAUSS/i.test(e.support)
+      || e.supports.some(x => /^coulisseau/i.test(x.designation));
     for (const s of e.supports) {
       if (s.existant) continue;
-      const cle = `${s.designation}|${s.longueur ?? ''}|${s.longueurTotale ?? ''}`;
+      const cle = `${s.designation}|${s.longueur ?? ''}|${s.longueurTotale ?? ''}|${rehausse}`;
       const l = m.get(cle) ?? {
         designation: s.designation, longueur: s.longueur,
-        longueurTotale: s.longueurTotale, quantite: 0, ensembles: [],
+        longueurTotale: s.longueurTotale, rehausse, quantite: 0, ensembles: [],
       };
       l.quantite += 1;
       if (!l.ensembles.includes(e.ensemble)) l.ensembles.push(e.ensemble);
@@ -563,6 +567,40 @@ export function designationPanneau(l: LignePanneauPlan): string {
 }
 
 /** Désignation d'un support neuf, longueur lue sur le plan. */
+/**
+ * L'article Odoo d'un support NEUF du plan, quand la correspondance est
+ * établie :
+ *   « TUBE GALV MC 80 »          → SG80802.<L>.IS.BRUT, support acier galva
+ *                                  80×80 ép. 2 (ligne 5651 des contrats
+ *                                  cadres pour 5 m : SG80802.5000.IS.BRUT)
+ *   « MAT TRAV MC », « MAT ANCRE MD »… → M<x>.<Ø>.<L>.IS.BRUT (MC.89.3100…)
+ * La longueur est celle, hors tout, que Kadri écrit entre parenthèses —
+ * sinon la longueur calculée —, montée aux 100 mm supérieurs : les articles
+ * vont de 100 en 100. Un mât REHAUSSÉ n'a pas d'équivalent sûr (pas de
+ * MCREH chez Odoo) : il reste à choisir, comme tout support sans
+ * correspondance ou toute longueur absente de la grille.
+ */
+export function referenceSupport(
+  s: Pick<LigneSupportPlan, 'designation' | 'longueur' | 'longueurTotale' | 'rehausse'>,
+  existe?: (codification: string) => boolean,
+): { reference: string } | { raison: string } {
+  const t = sansEspaces(s.designation).toUpperCase();
+  let famille: string | null = null;
+  if (t === 'TUBEGALVMC80') famille = 'SG80802';
+  const mat = t.match(/^MAT(TRAV|ANCRE)M([B-F])$/);
+  if (mat) {
+    if (s.rehausse) return { raison: 'mât rehaussé : article REH à choisir' };
+    famille = `M${mat[2]}.${DIAMETRE_TYPE[mat[2]]}`;
+  }
+  if (!famille) return { raison: 'support neuf : article de mât à choisir' };
+  const lg = s.longueurTotale ?? s.longueur;
+  if (!lg) return { raison: 'longueur du support non lue sur le plan' };
+  const mm = Math.ceil(Math.round(lg * 1000) / 100) * 100;
+  const reference = `${famille}.${mm}.IS.BRUT`;
+  if (existe && !existe(reference)) return { raison: `${reference} absent de la grille` };
+  return { reference };
+}
+
 export function designationSupport(s: LigneSupportPlan): string {
   const lg = s.longueurTotale ?? s.longueur;
   const cote = lg ? ` — longueur ${lg.toLocaleString('fr-FR')} m (plan Kadri)` : '';
@@ -642,10 +680,11 @@ export type SectionSupport = { rond: number } | { carre: [number, number] };
  */
 export function sectionSupport(designation: string): SectionSupport | null {
   /* Sans ses espaces, comme les cotes : pdf.js rend « Coulisseau M Crenf »
-     et « M AT ANCRE M C ». « TUBE GALV MC 80 » devient « MC80 », qui ne se
-     lit ni en type ni en diamètre — il reste illisible, et c'est voulu. */
+     et « M AT ANCRE M C ». « TUBE GALV MC 80 » est le 80×80 acier galva. */
   const type = sansEspaces(designation).toUpperCase()
     .replace(/^(MAT(TRAV|ANCRE)|COULISSEAU|TUBE(GALV|ROND)|CANDELABRE)/, '');
+  /* « TUBE GALV MC 80 » : le support acier galva 80×80 (SG80802). */
+  if (/^MC80$/.test(type) && /^TUBEGALV/i.test(sansEspaces(designation))) return { carre: [80, 80] };
   const carre = type.match(/^(\d{2,3})X(\d{2,3})$/);
   if (carre) return { carre: [Number(carre[1]), Number(carre[2])] };
   const lettre = type.match(/^M([A-F])(RENF|_G)?$/);
@@ -844,13 +883,14 @@ function lignesDe(
   }
   out.push(...fixations.values());
   for (const s of supportsNeufs(ensembles)) {
+    const r = referenceSupport(s, existe);
     out.push({
-      reference: '',
+      reference: 'reference' in r ? r.reference : '',
       description: designationSupport(s),
       quantite: s.quantite,
       unite: 'u',
       ensembles: s.ensembles,
-      aVerifier: 'support neuf : article de mât à choisir',
+      aVerifier: 'raison' in r ? r.raison : null,
       recherche: '',
     });
   }

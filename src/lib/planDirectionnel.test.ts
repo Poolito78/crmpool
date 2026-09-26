@@ -3,7 +3,7 @@ import {
   estPlanKadri, lireEnsemble, lirePlanDirectionnel, lireCotePanneau,
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
-  railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal,
+  railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -224,7 +224,8 @@ describe('lignes de la demande', () => {
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 500 150 C1'],
       /* Urville est traversant : pas de collier pour HARF-07. */
       ['CO76SFP50.BRUT', 2, null, ''],
-      ['', 1, 'support neuf : article de mât à choisir', ''],
+      /* MAT TRAV MC d'un ensemble REHAUSSE : pas d'article sûr. */
+      ['', 1, 'mât rehaussé : article REH à choisir', ''],
     ]);
     expect(lignes[1].description)
       .toBe('Panneau directionnel Urville caisson traversant D21 2200x400 classe 1 — fond blanc');
@@ -284,7 +285,7 @@ describe('chiffrage par ensemble', () => {
       'HARF-07 CO114SFP50.BRUT',
       'HARF-06 D3.4200.2550.C1.ST.IS.BRUT',
       'HARF-06 BR.PAL.H10X60.BRUT',
-      'HARF-06 TUBE GALV MC 80 — long',
+      'HARF-06 SG80802.5000.IS.BRUT',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
     expect(titreEnsemble(lignes[8].ensemble!)).toBe('Ensemble 0003/HARF-06');
@@ -313,7 +314,7 @@ describe('fixations des panneaux P50', () => {
     expect(sectionSupport('MAT TRAV 114E')).toEqual({ rond: 114 });
     expect(sectionSupport('MAT TRAV 76Alu')).toEqual({ rond: 76 });
     expect(sectionSupport('TUBE GALV 40x27')).toEqual({ carre: [40, 27] });
-    expect(sectionSupport('TUBE GALV MC 80')).toBeNull();
+    expect(sectionSupport('TUBE GALV MC 80')).toEqual({ carre: [80, 80] });
     expect(sectionSupport('CANDELABRE')).toBeNull();
   });
 
@@ -416,5 +417,34 @@ describe('classe imposée et prix PAL', () => {
     expect(t?.tasman).toEqual({ surface: 10.71, classe: 2 });
     expect(codificationPal(2)).toBe('PMSD.C2');
     expect(codificationPal(null)).toBeNull();
+  });
+});
+
+describe('supports neufs', () => {
+  it('TUBE GALV MC 80 de 5 m : SG80802.5000, la ligne 5651 des contrats cadres', () => {
+    expect(referenceSupport({ designation: 'TUBE   GALV   MC 80', longueur: 5, rehausse: false }))
+      .toEqual({ reference: 'SG80802.5000.IS.BRUT' });
+  });
+
+  it('un mât droit prend sa famille, longueur hors tout aux 100 mm supérieurs', () => {
+    expect(referenceSupport({ designation: 'MAT ANCRE MC', longueur: 2.4, longueurTotale: 3.06, rehausse: false }))
+      .toEqual({ reference: 'MC.89.3100.IS.BRUT' });
+    expect(referenceSupport({ designation: 'MAT TRAV MF', longueur: 4.2, rehausse: false }))
+      .toEqual({ reference: 'MF.140.4200.IS.BRUT' });
+  });
+
+  it('rehaussé, sans correspondance ou hors grille : à choisir', () => {
+    expect(referenceSupport({ designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, rehausse: true }))
+      .toEqual({ raison: 'mât rehaussé : article REH à choisir' });
+    expect(referenceSupport({ designation: 'CANDELABRE', longueur: 4, rehausse: false }))
+      .toMatchObject({ raison: expect.any(String) });
+    expect(referenceSupport({ designation: 'TUBE GALV MC 80', longueur: 6, rehausse: false }, () => false))
+      .toEqual({ raison: 'SG80802.6000.IS.BRUT absent de la grille' });
+  });
+
+  it('le tube 80×80 reçoit des brides 80×80', () => {
+    const e = lireEnsemble(PAGE_CAISSON.replace('CAISSON CL1\nMAT TRAV REHAUSSE', 'CAISSON CL1\nTUBE GALV')
+      .replace('MAT TRAV MC', 'TUBE GALV MC 80').replace(/Existant\nCoulisseau MB\nMt : 10 m\.daN\nLg : 0\.85 m\n/, ''), 3)!;
+    expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'BR8080SFP50.BRUT', quantite: 2 });
   });
 });
