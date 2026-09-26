@@ -10,8 +10,8 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
-  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan,
-  type EnsemblePlan, type GammeDirectionnelle,
+  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble,
+  type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
@@ -242,6 +242,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      référence existe : une cote absente reste « à vérifier ». */
   const [planKadri, setPlanKadri] = useState<{ ensembles: EnsemblePlan[]; grille?: GrilleTarif } | null>(null);
   const [gammesKadri, setGammesKadri] = useState<Record<string, GammeDirectionnelle>>({});
+  /* Ensemble par ensemble par défaut : le devis se relit sous les noms du
+     plan (« HARF-06 »). */
+  const [regroupementPlan, setRegroupementPlan] = useState<RegroupementPlan>('ensemble');
   useEffect(() => {
     if (!open || !niveauForce) return;
     const aCharger: NiveauTarif[] = niveauForce === 'R0' ? ['R0', 'R4'] : [niveauForce];
@@ -1145,8 +1148,8 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!planKadri) return [];
     const g = planKadri.grille;
     return lignesDuPlan(planKadri.ensembles, gammesKadri,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined);
-  }, [planKadri, gammesKadri]);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan);
+  }, [planKadri, gammesKadri, regroupementPlan]);
 
   /** Le carnet en demande de devis : un document que l'IA n'a pas touché. */
   const documentDuPlan = useCallback((
@@ -1164,21 +1167,27 @@ const [contratOdoo, setContratOdoo] = useState<
     };
   }, []);
 
-  /* Une autre gamme choisie : les références changent, donc les lignes.
+  /* Une autre gamme, ou un autre regroupement : les lignes changent.
      Tout ce qui s'attachait au RANG d'une ligne est oublié — un choix fait
      sur la ligne 3 désignerait sinon un autre panneau. */
-  const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) => {
+  const reconstruirePlan = useCallback((
+    gammes: Record<string, GammeDirectionnelle>,
+    regroupement: RegroupementPlan,
+  ) => {
     if (!planKadri) return;
-    const gammes = { ...gammesKadri, [produit]: gamme };
     const g = planKadri.grille;
     const lignes = lignesDuPlan(planKadri.ensembles, gammes,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement);
     setGammesKadri(gammes);
+    setRegroupementPlan(regroupement);
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
-  }, [planKadri, gammesKadri, documentDuPlan]);
+  }, [planKadri, documentDuPlan]);
+  const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) =>
+    reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan),
+  [reconstruirePlan, gammesKadri, regroupementPlan]);
 
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
@@ -1203,7 +1212,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({});
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble');
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1229,7 +1238,7 @@ const [contratOdoo, setContratOdoo] = useState<
           const grille = await chargerGrille('R4').catch(() => undefined);
           setPlanKadri({ ensembles, grille });
           analysis = documentDuPlan(ensembles, lignesDuPlan(ensembles, {},
-            grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined));
+            grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {
           analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey);
         }
@@ -1434,7 +1443,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({});
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble');
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -3243,6 +3252,8 @@ const [contratOdoo, setContratOdoo] = useState<
 
   /** Les ensembles du plan où va la ligne : le poseur s'en sert. */
   const noteDuPlan = (i: number) => {
+    /* Par ensemble, le titre du groupe le dit déjà. */
+    if (regroupementPlan === 'ensemble') return undefined;
     const ens = planKadri ? lignesPlan[i]?.ensembles : undefined;
     return ens?.length ? `Ensembles : ${ens.join(', ')}` : undefined;
   };
@@ -3521,7 +3532,18 @@ const [contratOdoo, setContratOdoo] = useState<
       return [entete, zones, ...composants];
     };
 
-    const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => {
+    /* PAR ENSEMBLE, CHAQUE ENSEMBLE DU PLAN OUVRE SON GROUPE, sous le nom et
+       le numéro que porte le plan Kadri. Le groupe ne compte pas dans les
+       totaux. */
+    const enteteDuPlan = (i: number): LigneDevis[] => {
+      const e = planKadri && regroupementPlan === 'ensemble' ? lignesPlan[i]?.ensemble : undefined;
+      if (!e || lignesPlan[i - 1]?.ensemble?.nom === e.nom) return [];
+      return [{
+        id: generateId(), type: 'groupe', description: titreEnsemble(e),
+        quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+      }];
+    };
+    const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => [...enteteDuPlan(i), ...((): LigneDevis[] => {
       const cle = `d${i}`;
       if (systemeDocument?.zones.has(i)) {
         /* Une zone ne part pas seule : la première porte le bloc entier. Sans
@@ -3609,13 +3631,14 @@ const [contratOdoo, setContratOdoo] = useState<
            y serait créée en négoce. */
         referenceOdoo: planKadri && !p ? (String(l.reference || '').trim() || undefined) : undefined,
         quantite: quantiteDe(cle, l.quantite),
-        unite: p?.unite || 'u',
+        /* Un Tasman part au m² fabriqué. */
+        unite: p?.unite || (planKadri ? lignesPlan[i]?.unite : undefined) || 'u',
         prixUnitaireHT: puDeLigne(i),
         tva: l.tva ?? 20,
         remise: 0,
         note: noteDuPlan(i),
       }, ...lignesOptionsEnsemble(i, l)];
-    });
+    })()]);
     // Les articles ajoutés par les règles suivent les articles demandés.
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
@@ -4807,6 +4830,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                 ensembles={planKadri.ensembles}
                                 gammes={gammesKadri}
                                 onGamme={choisirGammeKadri}
+                                regroupement={regroupementPlan}
+                                onRegroupement={r => reconstruirePlan(gammesKadri, r)}
                                 lignes={lignesPlan}
                                 niveau={niveauRemise}
                                 prixLigne={i => {

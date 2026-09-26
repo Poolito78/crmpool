@@ -1,10 +1,10 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertTriangle } from 'lucide-react';
 import { formatMontant } from '@/lib/store';
 import {
-  bilanPlan, gammeParDefaut, aFabriquer, LIBELLE_GAMME,
-  type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan,
+  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, LIBELLE_GAMME,
+  type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 
 /**
@@ -19,11 +19,13 @@ import {
  * chemin commun.
  */
 export default function PlanDirectionnelEncart({
-  ensembles, gammes, onGamme, lignes, prixLigne, niveau,
+  ensembles, gammes, onGamme, regroupement, onRegroupement, lignes, prixLigne, niveau,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
   onGamme: (produitKadri: string, gamme: GammeDirectionnelle) => void;
+  regroupement: RegroupementPlan;
+  onRegroupement: (r: RegroupementPlan) => void;
   lignes: LigneDemandePlan[];
   /** Prix unitaire retenu pour la ligne i et d'où il vient, `null` sans prix. */
   prixLigne: (i: number) => { prix: number; source: string } | null;
@@ -34,6 +36,9 @@ export default function PlanDirectionnelEncart({
      choix ; chacune prend Lapérouse P50 tant qu'on ne dit rien. */
   const gammesAChoisir = useMemo(() => bilan.produits.filter(p =>
     ensembles.some(e => e.produit === p && e.panneaux.some(aFabriquer))), [bilan, ensembles]);
+  /* Sous-total de chaque ensemble, affiché sur sa ligne de titre. */
+  const totalEnsemble = (nom: string) => lignes.reduce((t, l, i) =>
+    t + (l.ensemble?.nom === nom ? (prixLigne(i)?.prix ?? 0) * l.quantite : 0), 0);
 
   const total = lignes.reduce((t, l, i) => t + (prixLigne(i)?.prix ?? 0) * l.quantite, 0);
   const aVerifier = lignes.filter((l, i) => l.aVerifier || !prixLigne(i)).length;
@@ -67,6 +72,17 @@ export default function PlanDirectionnelEncart({
         </p>
       )}
 
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Présentation du devis</span>
+        <Select value={regroupement} onValueChange={v => onRegroupement(v as RegroupementPlan)}>
+          <SelectTrigger className="h-7 w-60 text-[11px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ensemble" className="text-[11px]">Par ensemble (noms du plan Kadri)</SelectItem>
+            <SelectItem value="reference" className="text-[11px]">Par référence (quantités cumulées)</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {gammesAChoisir.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium">Gamme de fabrication</p>
@@ -89,7 +105,8 @@ export default function PlanDirectionnelEncart({
           <p className="text-muted-foreground">
             Lapérouse P50 (dos ouvert) par défaut. Vasco de Gama pour un dos fermé ; Urville pour
             un caisson traversant — absent de la grille, il se choisit parmi les articles Odoo
-            proposés. Ni pose ni dépose ne sont chiffrées.
+            proposés. Au-delà de 2500 × 1200, le panneau passe en Tasman PAL (IS D3), au m²
+            fabriqué. Ni pose ni dépose ne sont chiffrées.
           </p>
         </div>
       )}
@@ -98,7 +115,7 @@ export default function PlanDirectionnelEncart({
         <table className="w-full table-fixed text-[11px]">
           <thead className="sticky top-0 bg-muted text-muted-foreground">
             <tr>
-              <th className="w-9 px-1.5 py-1 text-right font-medium">Qté</th>
+              <th className="w-16 px-1.5 py-1 text-right font-medium">Qté</th>
               <th className="w-48 px-1.5 py-1 text-left font-medium">Référence</th>
               <th className="px-1.5 py-1 text-left font-medium">Désignation</th>
               <th className="w-20 px-1.5 py-1 text-right font-medium">PU HT</th>
@@ -108,18 +125,33 @@ export default function PlanDirectionnelEncart({
           <tbody>
             {lignes.map((l, i) => {
               const p = prixLigne(i);
+              const e = l.ensemble;
+              const ouvre = e && lignes[i - 1]?.ensemble?.nom !== e.nom;
               return (
-                <tr key={i} className="border-t border-border align-top">
-                  <td className="px-1.5 py-1 text-right">{l.quantite}</td>
+                <Fragment key={i}>
+                {ouvre && (
+                  <tr className="border-t border-border bg-muted/50">
+                    <td colSpan={4} className="px-1.5 py-1 font-medium">{titreEnsemble(e)}</td>
+                    <td className="px-1.5 py-1 text-right font-medium whitespace-nowrap">
+                      {formatMontant(totalEnsemble(e.nom))}
+                    </td>
+                  </tr>
+                )}
+                <tr className="border-t border-border align-top">
+                  <td className="px-1.5 py-1 text-right whitespace-nowrap">
+                    {l.quantite.toLocaleString('fr-FR')}{l.unite === 'm²' ? ' m²' : ''}
+                  </td>
                   <td className="px-1.5 py-1 font-mono break-all">
                     {l.reference || <span className="text-warning">à vérifier</span>}
                   </td>
                   <td className="px-1.5 py-1 break-words">
                     <div>{l.description}</div>
                     {l.aVerifier && <div className="text-warning">{l.aVerifier}</div>}
-                    <div className="text-muted-foreground truncate" title={l.ensembles.join(', ')}>
-                      {l.ensembles.length} ensemble(s) : {l.ensembles.join(', ')}
-                    </div>
+                    {!e && (
+                      <div className="text-muted-foreground truncate" title={l.ensembles.join(', ')}>
+                        {l.ensembles.length} ensemble(s) : {l.ensembles.join(', ')}
+                      </div>
+                    )}
                   </td>
                   <td className="px-1.5 py-1 text-right whitespace-nowrap">
                     {p ? formatMontant(p.prix) : '—'}
@@ -129,6 +161,7 @@ export default function PlanDirectionnelEncart({
                     {p ? formatMontant(p.prix * l.quantite) : '—'}
                   </td>
                 </tr>
+                </Fragment>
               );
             })}
           </tbody>

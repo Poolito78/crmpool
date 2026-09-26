@@ -257,13 +257,20 @@ export function lirePlanDirectionnel(pages: string[]): EnsemblePlan[] {
  *                par le support — il n'a pas de fixation. Absent de
  *                la grille contractuelle : cherché chez Odoo et
  *                proposé, jamais retenu d'office.
+ *   'tasman'     TASMAN : panneau à lames emboîtées (PAL, article Odoo
+ *                « IS D3 »), sans limite de dimensions — hauteur en
+ *                lames de 150 mm, longueur libre. C'est la gamme des
+ *                GRANDS FORMATS, que Lapérouse ne fabrique pas
+ *                (`estGrandFormat`). Chiffré AU M² FABRIQUÉ ; absent de
+ *                la grille, son prix se saisit ou se prend chez Odoo.
  */
-export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville';
+export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville' | 'tasman';
 
 export const LIBELLE_GAMME: Record<GammeDirectionnelle, string> = {
   laperouse: 'Lapérouse P50 (dos ouvert)',
   vasco: 'Vasco de Gama (dos fermé)',
   urville: 'Urville (caisson traversant)',
+  tasman: 'Tasman PAL (grand format, au m²)',
 };
 
 /**
@@ -274,9 +281,35 @@ export const LIBELLE_GAMME: Record<GammeDirectionnelle, string> = {
  */
 export function gammeParDefaut(produitKadri: string): GammeDirectionnelle {
   const t = produitKadri.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase();
+  if (/TASMAN|\bPAL\b/.test(t)) return 'tasman';
   if (/URVILLE|TRAVERSANT/.test(t)) return 'urville';
   if (/VASCO|DOS\s*FERME/.test(t)) return 'vasco';
   return 'laperouse';
+}
+
+/**
+ * Trop grand pour Lapérouse P50 : la grille s'arrête à 2500 de large et
+ * 1200 de haut. Au-delà, c'est un panneau à lames — Tasman —, quelle que
+ * soit la gamme Kadri : aucune autre gamme ne le fabrique.
+ */
+export function estGrandFormat(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): boolean {
+  return p.largeur > 2500 || p.hauteur > 1200;
+}
+
+/** Hauteur d'une lame Tasman, en mm : la hauteur fabriquée en est un multiple. */
+export const LAME_TASMAN = 150;
+
+/**
+ * Surface FABRIQUÉE d'un panneau Tasman, en m² : la hauteur monte au
+ * multiple de lame supérieur (2474 → 17 lames, 2550 mm), la longueur est
+ * libre. C'est ce qui sort de l'atelier, donc ce qui se facture.
+ */
+export function surfaceTasman(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): {
+  lames: number; hauteur: number; surface: number;
+} {
+  const lames = Math.ceil(p.hauteur / LAME_TASMAN);
+  const hauteur = lames * LAME_TASMAN;
+  return { lames, hauteur, surface: Math.round((p.largeur * hauteur) / 1000) / 1000 };
 }
 
 /** Le panneau a-t-il une pointe ? D21 (et ses variantes) seulement. */
@@ -285,7 +318,7 @@ export function estFleche(code: string): boolean {
 }
 
 /** Pourquoi une ligne n'a pas de référence, quand c'est le cas. */
-export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille';
+export type RaisonSansReference = 'classe' | 'urville' | 'tasman' | 'hors-grille';
 
 /**
  * Référence de grille d'un panneau, ou la raison de son absence.
@@ -300,6 +333,7 @@ export function referencePanneau(
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: RaisonSansReference } {
   if (gamme === 'urville') return { raison: 'urville' };
+  if (gamme === 'tasman') return { raison: 'tasman' };
   if (!classe) return { raison: 'classe' };
   const famille = estFleche(p.code) ? 'DF50' : 'DR50';
   const dos = gamme === 'vasco' ? '.F' : '';
@@ -311,6 +345,7 @@ export function referencePanneau(
 export const LIBELLE_RAISON: Record<RaisonSansReference, string> = {
   classe: 'classe de rétroréflexion absente du plan',
   urville: 'Urville absent de la grille — article Odoo à choisir',
+  tasman: 'Tasman PAL (IS D3) : prix au m² à saisir ou article Odoo à choisir',
   'hors-grille': 'format absent de la grille',
 };
 
@@ -319,6 +354,7 @@ const NOM_GAMME: Record<GammeDirectionnelle, string> = {
   laperouse: 'Lapérouse P50',
   vasco: 'Vasco de Gama dos fermé',
   urville: 'Urville caisson traversant',
+  tasman: 'Tasman PAL',
 };
 
 /* ── Regroupement en lignes de devis ────────────────────────────────────── */
@@ -355,9 +391,10 @@ export function panneauxAFabriquer(
 ): LignePanneauPlan[] {
   const m = new Map<string, LignePanneauPlan>();
   for (const e of ensembles) {
-    const gamme = gammes[e.produit] ?? gammeParDefaut(e.produit);
+    const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
     for (const p of e.panneaux) {
       if (!aFabriquer(p)) continue;
+      const gamme: GammeDirectionnelle = estGrandFormat(p) ? 'tasman' : gammeProduit;
       const r = referencePanneau(p, gamme, e.classe, existe);
       const reference = 'reference' in r ? r.reference : null;
       const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${e.classe}`;
@@ -452,6 +489,14 @@ export function designationPanneau(l: LignePanneauPlan): string {
   const forme = estFleche(l.code) ? 'Panneau directionnel' : 'Panneau';
   const fonds = l.fonds.length ? ` — fond ${l.fonds.join('/').toLowerCase()}` : '';
   const classe = l.classe ? ` classe ${l.classe}` : '';
+  if (l.gamme === 'tasman') {
+    const t = surfaceTasman(l);
+    const n = l.quantite > 1 ? `${l.quantite} × ` : '';
+    const unite = l.quantite > 1 ? " l'unité" : '';
+    return `${forme} ${NOM_GAMME.tasman} ${l.code} ${n}${l.largeur}x${l.hauteur}${classe}${fonds}`
+      + ` — fabriqué ${l.largeur}x${t.hauteur} (${t.lames} lames de ${LAME_TASMAN}) = `
+      + `${t.surface.toLocaleString('fr-FR')} m²${unite}`;
+  }
   return `${forme} ${NOM_GAMME[l.gamme]} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`;
 }
 
@@ -469,44 +514,84 @@ export interface LigneDemandePlan {
   reference: string;
   description: string;
   quantite: number;
+  /** « u », ou « m² » pour un Tasman chiffré au m² fabriqué. */
+  unite: 'u' | 'm²';
   ensembles: string[];
+  /** L'ensemble du plan, quand les lignes sont données ensemble par ensemble. */
+  ensemble?: { nom: string; section: string; page: number };
   /** Pourquoi la ligne n'a pas de référence ; `null` quand elle en a une. */
   aVerifier: string | null;
   /**
    * Texte à chercher chez Odoo pour une ligne SANS référence qu'on sait
-   * nommer (Urville). Vide sinon : une désignation cherchée par mots
-   * ramènerait un voisin.
+   * nommer (Urville, Tasman). Vide sinon : une désignation cherchée par
+   * mots ramènerait un voisin.
    */
   recherche: string;
 }
 
 /**
- * Le carnet en lignes de demande de devis : les panneaux à fabriquer, puis
- * les supports neufs. L'ordre est stable pour un même choix de gammes.
+ * Comment présenter le carnet au devis :
+ *   'ensemble'   ENSEMBLE PAR ENSEMBLE, sous le nom et le numéro que porte
+ *                le plan Kadri (« HARF-06 ») — c'est ainsi que le client
+ *                relit le chiffrage et que le poseur prépare le chantier ;
+ *   'reference'  une ligne par référence, quantités additionnées.
  */
-export function lignesDuPlan(
+export type RegroupementPlan = 'ensemble' | 'reference';
+
+function lignesDe(
   ensembles: EnsemblePlan[],
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
 ): LigneDemandePlan[] {
-  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe).map(l => ({
-    reference: l.reference ?? '',
-    description: designationPanneau(l),
-    quantite: l.quantite,
-    ensembles: l.ensembles,
-    aVerifier: l.raison ? LIBELLE_RAISON[l.raison] : null,
-    recherche: l.raison === 'urville'
-      ? `URVILLE ${l.largeur} ${l.hauteur}${l.classe ? ` C${l.classe}` : ''}` : '',
-  }));
+  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe).map(l => {
+    const tasman = l.gamme === 'tasman';
+    const classe = l.classe ? ` C${l.classe}` : '';
+    return {
+      reference: l.reference ?? '',
+      description: designationPanneau(l),
+      /* Un Tasman se vend au m² FABRIQUÉ, lames entières. */
+      quantite: tasman
+        ? Math.round(l.quantite * surfaceTasman(l).surface * 1000) / 1000 : l.quantite,
+      unite: tasman ? 'm²' : 'u',
+      ensembles: l.ensembles,
+      aVerifier: l.raison ? LIBELLE_RAISON[l.raison] : null,
+      recherche: l.raison === 'urville' ? `URVILLE ${l.largeur} ${l.hauteur}${classe}`
+        : tasman ? `IS D3${classe}` : '',
+    };
+  });
   for (const s of supportsNeufs(ensembles)) {
     out.push({
       reference: '',
       description: designationSupport(s),
       quantite: s.quantite,
+      unite: 'u',
       ensembles: s.ensembles,
       aVerifier: 'support neuf : article de mât à choisir',
       recherche: '',
     });
   }
   return out;
+}
+
+/**
+ * Le carnet en lignes de demande de devis : les panneaux à fabriquer, puis
+ * les supports neufs — pour tout le carnet, ou ensemble par ensemble dans
+ * l'ordre du plan. L'ordre est stable pour un même choix de gammes.
+ */
+export function lignesDuPlan(
+  ensembles: EnsemblePlan[],
+  gammes: Record<string, GammeDirectionnelle>,
+  existe?: (codification: string) => boolean,
+  regroupement: RegroupementPlan = 'ensemble',
+): LigneDemandePlan[] {
+  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe);
+  return ensembles.flatMap(e => lignesDe([e], gammes, existe).map(l => ({
+    ...l,
+    ensemble: { nom: e.ensemble, section: e.section, page: e.page },
+  })));
+}
+
+/** Titre d'un ensemble au devis : son nom Kadri, sa section, sa page. */
+export function titreEnsemble(e: { nom: string; section: string; page: number }): string {
+  return `Ensemble ${e.nom}${e.section ? ` — ${e.section}` : ''} (plan p. ${e.page})`;
 }

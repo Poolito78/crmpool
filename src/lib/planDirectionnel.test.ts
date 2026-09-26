@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   estPlanKadri, lireEnsemble, lirePlanDirectionnel, lireCotePanneau,
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
-  gammeParDefaut, designationPanneau, lignesDuPlan,
+  gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -181,7 +181,7 @@ describe('carnet', () => {
       .toEqual([
         '1 D21 2200x250 DF50.2200.250.C1.50.IS.BRUT',
         '1 D21 2200x400 DF50.2200.400.C1.50.IS.BRUT',
-        '1 D42b1 4151x2474 DR50.4151.2474.C1.50.IS.BRUT',
+        '1 D42b1 4151x2474 tasman',
         '1 E43 500x150 DR50.500.150.C1.50.IS.BRUT',
       ]);
     expect(designationPanneau(lignes[0]))
@@ -216,7 +216,7 @@ describe('carnet', () => {
 describe('lignes de la demande', () => {
   it('panneaux puis supports neufs, chacun avec ce qui reste à vérifier', () => {
     const e = lirePlanDirectionnel([PAGE_CAISSON, PAGE_ALU]);
-    const lignes = lignesDuPlan(e, { 'ALU BT/M (NC) CL1': 'urville' });
+    const lignes = lignesDuPlan(e, { 'ALU BT/M (NC) CL1': 'urville' }, undefined, 'reference');
     expect(lignes.map(l => [l.reference, l.quantite, l.aVerifier, l.recherche])).toEqual([
       ['DF50.2200.250.C1.50.IS.BRUT', 1, null, ''],
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 2200 400 C1'],
@@ -226,5 +226,54 @@ describe('lignes de la demande', () => {
     expect(lignes[1].description)
       .toBe('Panneau directionnel Urville caisson traversant D21 2200x400 classe 1 — fond blanc');
     expect(lignes[3].description).toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri)');
+  });
+});
+
+describe('Tasman PAL : les grands formats', () => {
+  it('au-delà de 2500 × 1200, Lapérouse ne fabrique plus', () => {
+    expect(estGrandFormat({ largeur: 2500, hauteur: 1200 })).toBe(false);
+    expect(estGrandFormat({ largeur: 3000, hauteur: 2100 })).toBe(true);
+    expect(estGrandFormat({ largeur: 4151, hauteur: 2474 })).toBe(true);
+    expect(gammeParDefaut('PAL CL2')).toBe('tasman');
+  });
+
+  it('se chiffre au m² fabriqué, lames de 150 entières', () => {
+    expect(surfaceTasman({ largeur: 4151, hauteur: 2474 }))
+      .toEqual({ lames: 17, hauteur: 2550, surface: 10.585 });
+    expect(surfaceTasman({ largeur: 3000, hauteur: 2100 }))
+      .toEqual({ lames: 14, hauteur: 2100, surface: 6.3 });
+  });
+
+  it("part en m², cherché chez Odoo sous « IS D3 », jamais sous une référence inventée", () => {
+    const [l] = lignesDuPlan(lirePlanDirectionnel([PAGE_NEUF]), {});
+    expect(l).toMatchObject({
+      reference: '', quantite: 10.585, unite: 'm²', recherche: 'IS D3 C1',
+      aVerifier: 'Tasman PAL (IS D3) : prix au m² à saisir ou article Odoo à choisir',
+    });
+    expect(l.description).toBe('Panneau Tasman PAL D42b1 4151x2474 classe 1 — fond blanc'
+      + ' — fabriqué 4151x2550 (17 lames de 150) = 10,585 m²');
+  });
+});
+
+describe('chiffrage par ensemble', () => {
+  const e = lirePlanDirectionnel([PAGE_CAISSON, PAGE_ALU, PAGE_NEUF]);
+
+  it("suit l'ordre du plan, chaque ligne sous son ensemble", () => {
+    const lignes = lignesDuPlan(e, {});
+    expect(lignes.map(l => `${l.ensemble?.nom} ${l.reference || l.description.slice(0, 22)}`)).toEqual([
+      'DEM1-47 DF50.2200.250.C1.50.IS.BRUT',
+      'DEM1-47 MAT TRAV MC — longueur',
+      'HARF-07 DF50.2200.400.C1.50.IS.BRUT',
+      'HARF-07 DR50.500.150.C1.50.IS.BRUT',
+      'HARF-06 Panneau Tasman PAL D42',
+      'HARF-06 TUBE GALV MC 80 — long',
+    ]);
+    expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble DEM1-47 — Demidoff - Portion 1 (plan p. 1)');
+  });
+
+  it('par référence, les quantités se cumulent et il n\'y a plus d\'ensemble', () => {
+    const lignes = lignesDuPlan(e, {}, undefined, 'reference');
+    expect(lignes.every(l => !l.ensemble)).toBe(true);
+    expect(lignes.length).toBe(6);
   });
 });
