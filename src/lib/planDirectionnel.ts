@@ -408,21 +408,24 @@ export function panneauxAFabriquer(
   ensembles: EnsemblePlan[],
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
+  /** Classe imposée à l'écran, à la place de celle du plan (erreur Kadri). */
+  classeForcee?: number | null,
 ): LignePanneauPlan[] {
   const m = new Map<string, LignePanneauPlan>();
   for (const e of ensembles) {
     const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
+    const classeE = classeForcee || e.classe;
     for (const p of e.panneaux) {
       if (!aFabriquer(p)) continue;
       const gamme: GammeDirectionnelle = estGrandFormat(p) ? 'tasman' : gammeProduit;
-      const r = referencePanneau(p, gamme, e.classe, existe);
+      const r = referencePanneau(p, gamme, classeE, existe);
       const reference = 'reference' in r ? r.reference : null;
-      const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${e.classe}`;
+      const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${classeE}`;
       let l = m.get(cle);
       if (!l) {
         l = {
           code: p.code, largeur: p.largeur, hauteur: p.hauteur,
-          produits: [], gamme, classe: e.classe, quantite: 0,
+          produits: [], gamme, classe: classeE, quantite: 0,
           ensembles: [], fonds: [],
           reference,
           raison: 'raison' in r ? r.raison : null,
@@ -545,6 +548,21 @@ export interface LigneDemandePlan {
    * jamais retenu d'office.
    */
   recherche: string;
+  /**
+   * Panneau Tasman : il se tarife AU M² FABRIQUÉ, au taux PAL de sa classe
+   * dans le contrat cadre (`codificationPal`) — la variante D3 y vaut 0 €.
+   * `surface` est celle d'UN panneau.
+   */
+  tasman?: { surface: number; classe: number | null };
+}
+
+/**
+ * Codification du prix PAL au m² d'une classe, telle que la synchro de la
+ * grille la range (`odoo-grille-sync`) : « PMSD.C2 ». Le contrat cadre porte
+ * quatre lignes « PMSD », distinguées par leur libellé « PAL m2 - C2 ».
+ */
+export function codificationPal(classe: number | null): string | null {
+  return classe ? `PMSD.C${classe}` : null;
 }
 
 /**
@@ -727,10 +745,13 @@ function lignesDe(
   ensembles: EnsemblePlan[],
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
+  classeForcee?: number | null,
 ): LigneDemandePlan[] {
-  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe).map(l => {
+  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe, classeForcee).map(l => {
     const classe = l.classe ? ` C${l.classe}` : '';
     return {
+      ...(l.gamme === 'tasman'
+        ? { tasman: { surface: surfaceTasman(l).surface, classe: l.classe } } : {}),
       reference: l.reference ?? '',
       description: designationPanneau(l),
       quantite: l.quantite,
@@ -804,13 +825,15 @@ export function lignesDuPlan(
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
   regroupement: RegroupementPlan = 'ensemble',
+  /** Classe imposée à tout le carnet ; `null` = celle du plan. */
+  classeForcee: number | null = null,
 ): LigneDemandePlan[] {
-  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe);
+  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee);
   /* Le numéro compte les ensembles QUI ONT QUELQUE CHOSE À CHIFFRER, dans
      l'ordre du plan : le devis n'a pas de trou dans sa numérotation. */
   let numero = 0;
   return ensembles.flatMap(e => {
-    const lignes = lignesDe([e], gammes, existe);
+    const lignes = lignesDe([e], gammes, existe, classeForcee);
     if (!lignes.length) return [];
     numero += 1;
     const ensemble = { numero, nom: e.ensemble, section: e.section, page: e.page };

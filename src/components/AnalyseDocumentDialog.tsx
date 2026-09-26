@@ -10,7 +10,7 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
-  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble,
+  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
@@ -245,6 +245,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Ensemble par ensemble par défaut : le devis se relit sous les noms du
      plan (« HARF-06 »). */
   const [regroupementPlan, setRegroupementPlan] = useState<RegroupementPlan>('ensemble');
+  /* Classe imposée à tout le carnet quand le plan Kadri se trompe ; `null`
+     = celle du plan. */
+  const [classePlan, setClassePlan] = useState<number | null>(null);
   useEffect(() => {
     if (!open || !niveauForce) return;
     const aCharger: NiveauTarif[] = niveauForce === 'R0' ? ['R0', 'R4'] : [niveauForce];
@@ -1148,8 +1151,8 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!planKadri) return [];
     const g = planKadri.grille;
     return lignesDuPlan(planKadri.ensembles, gammesKadri,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan);
-  }, [planKadri, gammesKadri, regroupementPlan]);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan);
+  }, [planKadri, gammesKadri, regroupementPlan, classePlan]);
 
   /** Le carnet en demande de devis : un document que l'IA n'a pas touché. */
   const documentDuPlan = useCallback((
@@ -1173,21 +1176,23 @@ const [contratOdoo, setContratOdoo] = useState<
   const reconstruirePlan = useCallback((
     gammes: Record<string, GammeDirectionnelle>,
     regroupement: RegroupementPlan,
+    classe: number | null,
   ) => {
     if (!planKadri) return;
     const g = planKadri.grille;
     const lignes = lignesDuPlan(planKadri.ensembles, gammes,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement, classe);
     setGammesKadri(gammes);
     setRegroupementPlan(regroupement);
+    setClassePlan(classe);
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
   }, [planKadri, documentDuPlan]);
   const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) =>
-    reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan),
-  [reconstruirePlan, gammesKadri, regroupementPlan]);
+    reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan, classePlan),
+  [reconstruirePlan, gammesKadri, regroupementPlan, classePlan]);
 
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
@@ -1212,7 +1217,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble');
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1443,7 +1448,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble');
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null);
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -3231,16 +3236,33 @@ const [contratOdoo, setContratOdoo] = useState<
     return g ? { prix: Math.round(g.prix * 100) / 100, gabarit: g.gabarit } : null;
   }, [planKadri, result, grillesNiveau, niveauRemise]);
 
+  /**
+   * Prix d'un panneau Tasman : surface fabriquée × taux PAL au m² de sa
+   * classe, lu dans le contrat cadre (grille du niveau affiché). La variante
+   * D3 y vaut 0 € : c'est ce taux qui fait le prix, comme dans les devis
+   * Odoo (174,42 €/m² en C2 au niveau R4).
+   */
+  const prixPal = useCallback((i: number) => {
+    const t = planKadri ? lignesPlan[i]?.tasman : undefined;
+    const code = t ? codificationPal(t.classe) : null;
+    const taux = code ? grillesNiveau[niveauRemise]?.get(code)?.prix : undefined;
+    return t && taux ? { prix: Math.round(taux * t.surface * 100) / 100, taux, surface: t.surface } : null;
+  }, [planKadri, lignesPlan, grillesNiveau, niveauRemise]);
+
   const puDeLigne = useCallback((i: number) => {
     const cle = `d${i}`;
     const odoo = choixOdoo[i];
+    /* Tasman : le taux PAL du contrat fait le prix, même quand la variante
+       D3 est trouvée chez Odoo — elle y est cotée 0 €. */
+    const pal = prixPal(i);
+    if (pal) return prixManuel[cle] ?? pal.prix;
     if (odoo) return prixManuel[cle] ?? prixOdoo(odoo).retenu;
     const p = produitDeLigne(i);
     /* Ligne de plan qu'Odoo ne connaît pas (encore) : la grille du niveau
        la tarife sous sa référence. Ni référence ni grille → 0, à vérifier. */
     if (planKadri && !p) return prixManuel[cle] ?? prixGrillePlan(i)?.prix ?? 0;
     return prixDe(p, undefined, cle);
-  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan]);
+  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan, prixPal]);
 
   /** Ce que pèse une ligne système : la somme de ses composants. */
   const totalSystemeDe = useCallback((i: number, quantite?: number | null) =>
@@ -4831,7 +4853,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                 gammes={gammesKadri}
                                 onGamme={choisirGammeKadri}
                                 regroupement={regroupementPlan}
-                                onRegroupement={r => reconstruirePlan(gammesKadri, r)}
+                                onRegroupement={r => reconstruirePlan(gammesKadri, r, classePlan)}
+                                classe={classePlan}
+                                onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
                                 lignes={lignesPlan}
                                 niveau={niveauRemise}
                                 prixLigne={i => {
@@ -4839,6 +4863,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                   const pu = puDeLigne(i);
                                   if (!(pu > 0)) return null;
                                   if (prixManuel[`d${i}`] !== undefined) return { prix: pu, source: 'saisi' };
+                                  const pal = prixPal(i);
+                                  if (pal) {
+                                    return { prix: pu, source: `PAL ${pal.taux.toLocaleString('fr-FR')} €/m² × ${
+                                      pal.surface.toLocaleString('fr-FR')} m² (${niveauRemise})` };
+                                  }
                                   if (odoo) return { prix: pu, source: `Odoo ${odoo.reference}` };
                                   const g = prixGrillePlan(i);
                                   return { prix: pu, source: g ? `grille ${niveauRemise}` : 'catalogue' };

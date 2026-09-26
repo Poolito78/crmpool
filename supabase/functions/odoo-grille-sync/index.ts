@@ -110,6 +110,23 @@ function niveauDeLIntitule(nom: string): string | null {
   return m ? m[1] : null;
 }
 
+/**
+ * La codification, rendue DISTINCTE quand Odoo en répète une.
+ *
+ * ⚠️ Le prix du PAL au m² tient sur quatre lignes de même codification
+ * « PMSD » ; seul leur libellé client dit la classe : « PAL m2 - C1 »,
+ * « PAL m2 - C2 », « PAL m2 - C3 », « PAL m2 - NR ». Recopiées telles
+ * quelles, elles devenaient quatre prix indiscernables. On les range sous
+ * « PMSD.C1 »… « PMSD.NR » — c'est là que le chiffrage des panneaux Tasman
+ * (`planDirectionnel.ts`) va lire son prix au m².
+ */
+function codificationDistincte(l: { x_studio_codification?: unknown; x_name?: unknown }): string {
+  const code = String(l.x_studio_codification || "").trim();
+  if (code.toUpperCase() !== "PMSD") return code;
+  const classe = String(l.x_name || "").toUpperCase().match(/\bPAL\s*M2\s*-\s*(C[123]|NR)\b/);
+  return classe ? `PMSD.${classe[1]}` : code;
+}
+
 /** Modèle des lignes de grille, retrouvé par sa relation one2many. */
 async function modeleDesLignes(od: Odoo): Promise<string> {
   const defs = (await od.kw(
@@ -146,7 +163,7 @@ async function synchroniserContrat(
       const lot = (await od.kw(
         modele, "search_read",
         [[["x_contrat_cadre_id", "=", contrat.id]],
-         ["x_studio_codification", "x_studio_prix_unit", "x_studio_priorite"]],
+         ["x_studio_codification", "x_studio_prix_unit", "x_studio_priorite", "x_name"]],
         { limit: PAS, offset: debut, order: "id" },
       )) as any[];
       if (!lot.length) break;
@@ -159,7 +176,7 @@ async function synchroniserContrat(
         contrat_id: contrat.id,
         contrat_nom: contrat.nom,
         niveau,
-        codification: String(l.x_studio_codification || "").trim(),
+        codification: codificationDistincte(l),
         prix: Number(l.x_studio_prix_unit) || 0,
         priorite: Number(l.x_studio_priorite) || 0,
       }))

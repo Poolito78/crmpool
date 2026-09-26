@@ -3,7 +3,7 @@ import {
   estPlanKadri, lireEnsemble, lirePlanDirectionnel, lireCotePanneau,
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
-  railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal,
+  railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -390,5 +390,24 @@ describe('brides PAL des panneaux Tasman', () => {
     const e = lireEnsemble(PAGE_CAISSON, 3)!;
     /* MAT TRAV MC (Ø89) + Coulisseau MB (Ø76) → Ø76, un seul support. */
     expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'CO76SFP50.BRUT', quantite: 2 });
+  });
+});
+
+describe('classe imposée et prix PAL', () => {
+  const e = lirePlanDirectionnel([PAGE_CAISSON, PAGE_NEUF]);
+
+  it('une classe imposée remplace celle du plan, références comprises', () => {
+    const lignes = lignesDuPlan(e, {}, undefined, 'reference', 2);
+    expect(lignes.map(l => l.reference).filter(r => /^(DF|DR|D3)/.test(r))).toEqual([
+      'DF50.2200.250.C2.50.IS.BRUT', 'D3.4151.2550.C2.ST.IS.BRUT',
+    ]);
+    expect(lignesDuPlan(e, {}, undefined, 'reference')[0].reference).toBe('DF50.2200.250.C1.50.IS.BRUT');
+  });
+
+  it('un Tasman porte sa surface et sa classe, pour le taux PAL au m² du contrat', () => {
+    const t = lignesDuPlan(e, {}, undefined, 'reference', 2).find(l => l.tasman);
+    expect(t?.tasman).toEqual({ surface: 10.585, classe: 2 });
+    expect(codificationPal(2)).toBe('PMSD.C2');
+    expect(codificationPal(null)).toBeNull();
   });
 });

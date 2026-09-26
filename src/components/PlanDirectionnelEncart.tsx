@@ -19,13 +19,17 @@ import {
  * chemin commun.
  */
 export default function PlanDirectionnelEncart({
-  ensembles, gammes, onGamme, regroupement, onRegroupement, lignes, prixLigne, niveau,
+  ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
+  lignes, prixLigne, niveau,
 }: {
   ensembles: EnsemblePlan[];
   gammes: Record<string, GammeDirectionnelle>;
   onGamme: (produitKadri: string, gamme: GammeDirectionnelle) => void;
   regroupement: RegroupementPlan;
   onRegroupement: (r: RegroupementPlan) => void;
+  /** Classe imposée au carnet ; `null` = celle du plan Kadri. */
+  classe: number | null;
+  onClasse: (c: number | null) => void;
   lignes: LigneDemandePlan[];
   /** Prix unitaire retenu pour la ligne i et d'où il vient, `null` sans prix. */
   prixLigne: (i: number) => { prix: number; source: string } | null;
@@ -81,6 +85,22 @@ export default function PlanDirectionnelEncart({
             <SelectItem value="reference" className="text-[11px]">Par référence (quantités cumulées)</SelectItem>
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="font-medium">Classe</span>
+        <Select value={classe ? String(classe) : 'plan'} onValueChange={v => onClasse(v === 'plan' ? null : Number(v))}>
+          <SelectTrigger className="h-7 w-60 text-[11px]"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="plan" className="text-[11px]">Celle du plan Kadri</SelectItem>
+            <SelectItem value="1" className="text-[11px]">Classe 1 imposée</SelectItem>
+            <SelectItem value="2" className="text-[11px]">Classe 2 imposée</SelectItem>
+            <SelectItem value="3" className="text-[11px]">Classe 3 imposée</SelectItem>
+          </SelectContent>
+        </Select>
+        {classe && (
+          <span className="text-warning">remplace la classe écrite sur le plan, pour tout le carnet</span>
+        )}
       </div>
 
       {gammesAChoisir.length > 0 && (
