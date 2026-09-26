@@ -1038,6 +1038,20 @@ class ContratCadre {
  *  effacés ? Sert à repérer une fiche Odoo mal rattachée (parent qui n'a
  *  rien à voir avec la société attendue) sans être trop strict sur la forme
  *  exacte (« REFLEX SIGNALISATION » doit matcher « Reflex Signalisation »). */
+/**
+ * La désignation d'une VARIANTE, telle qu'Odoo l'écrit sur une ligne de
+ * devis : « IS D3 (4200, 2550, C2, BRUT) », pas « IS D3 ».
+ *
+ * `name` est celui du MODÈLE, commun aux 460 variantes IS D3 : le reprendre
+ * mettait « IS D3 » au devis, sans cote ni classe. `display_name` porte les
+ * valeurs d'attributs, précédées de « [référence] » qu'on retire — la
+ * référence a déjà sa colonne. Sans variante, les deux coïncident.
+ */
+function designationVariante(p: { name?: unknown; display_name?: unknown }): string {
+  const affiche = String(p.display_name || "").replace(/^\[[^\]]*\]\s*/, "").trim();
+  return affiche || String(p.name || "");
+}
+
 function nomsProches(a: string, b: string): boolean {
   /* ⚠️ **LA PONCTUATION N'EST PAS UNE DIFFÉRENCE DE RAISON SOCIALE.**
      Mesuré le 10/09/2026 : « AGILIS (27) », tel que le document l'écrit, ne
@@ -2065,7 +2079,7 @@ serve(async (req) => {
       "search_read",
       [
         [["default_code", "in", references]],
-        ["id", "default_code", "name", "lst_price", "standard_price",
+        ["id", "default_code", "name", "display_name", "lst_price", "standard_price",
           "categ_id", "product_tmpl_id", "write_date", "create_date",
           "qty_available", "virtual_available"],
       ],
@@ -2179,7 +2193,7 @@ serve(async (req) => {
         + ` | contrat=${auCadre ?? "-"} grille=${auRepli ?? "-"}`
         + ` liste=${pListe ?? "-"} coût=${cout || "-"}`);
       prix[ref] = {
-        designation: a.name,
+        designation: designationVariante(a),
         source,
         niveauGrille: auRepli !== null ? niveauRepli : "",
         gabarit: cadre.gabarit(ref) ?? cadreRepli?.gabarit(ref) ?? null,
@@ -2259,7 +2273,7 @@ serve(async (req) => {
     const preparerLigne = async (r: any): Promise<LignePreparee> => {
       const q = String(r.texte).trim();
       const qte = Number(r.quantite) || 1;
-      const CHAMPS_ART = ["id", "default_code", "name", "lst_price", "standard_price",
+      const CHAMPS_ART = ["id", "default_code", "name", "display_name", "lst_price", "standard_price",
                           "categ_id", "product_tmpl_id", "uom_id", "write_date", "create_date"];
       const chercher = (domaine: unknown[], plafond = 40) => od.kw(
         "product.product", "search_read", [domaine, CHAMPS_ART],
@@ -2992,7 +3006,7 @@ serve(async (req) => {
         }
         return {
           reference: x.default_code || "",
-          designation: x.name,
+          designation: designationVariante(x),
           categorie: x.categ_id ? x.categ_id[1] : "",
           unite: x.uom_id ? x.uom_id[1] : "",
           /* Quand la fiche Odoo a bougé pour la dernière fois. MonCRM s'en
