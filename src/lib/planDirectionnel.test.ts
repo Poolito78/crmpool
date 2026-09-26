@@ -181,7 +181,7 @@ describe('carnet', () => {
       .toEqual([
         '1 D21 2200x250 DF50.2200.250.C1.50.IS.BRUT',
         '1 D21 2200x400 DF50.2200.400.C1.50.IS.BRUT',
-        '1 D42b1 4151x2474 tasman',
+        '1 D42b1 4151x2474 D3.4151.2550.C1.IS.BRUT',
         '1 E43 500x150 DR50.500.150.C1.50.IS.BRUT',
       ]);
     expect(designationPanneau(lignes[0]))
@@ -244,14 +244,19 @@ describe('Tasman PAL : les grands formats', () => {
       .toEqual({ lames: 14, hauteur: 2100, surface: 6.3 });
   });
 
-  it("part en m², cherché chez Odoo sous « IS D3 », jamais sous une référence inventée", () => {
+  it('part sous la variante Odoo IS D3 du format fabriqué', () => {
     const [l] = lignesDuPlan(lirePlanDirectionnel([PAGE_NEUF]), {});
     expect(l).toMatchObject({
-      reference: '', quantite: 10.585, unite: 'm²', recherche: 'IS D3 C1',
-      aVerifier: 'Tasman PAL (IS D3) : prix au m² à saisir ou article Odoo à choisir',
+      reference: 'D3.4151.2550.C1.IS.BRUT', quantite: 1, unite: 'u',
+      aVerifier: null, recherche: 'D3 4151 2550 C1',
     });
     expect(l.description).toBe('Panneau Tasman PAL D42b1 4151x2474 classe 1 — fond blanc'
-      + ' — fabriqué 4151x2550 (17 lames de 150) = 10,585 m²');
+      + ' — fabriqué 4151x2550 (17 lames de 150), 10,585 m²');
+  });
+
+  it('même hors grille, la variante D3 reste : Odoo seul dit si elle existe', () => {
+    expect(referencePanneau({ code: 'D42b', largeur: 3000, hauteur: 2100 }, 'tasman', 2, () => false))
+      .toEqual({ reference: 'D3.3000.2100.C2.IS.BRUT' });
   });
 });
 
@@ -265,7 +270,7 @@ describe('chiffrage par ensemble', () => {
       'DEM1-47 MAT TRAV MC — longueur',
       'HARF-07 DF50.2200.400.C1.50.IS.BRUT',
       'HARF-07 DR50.500.150.C1.50.IS.BRUT',
-      'HARF-06 Panneau Tasman PAL D42',
+      'HARF-06 D3.4151.2550.C1.IS.BRUT',
       'HARF-06 TUBE GALV MC 80 — long',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble DEM1-47 — Demidoff - Portion 1 (plan p. 1)');

@@ -105,8 +105,9 @@ export default function PlanDirectionnelEncart({
           <p className="text-muted-foreground">
             Lapérouse P50 (dos ouvert) par défaut. Vasco de Gama pour un dos fermé ; Urville pour
             un caisson traversant — absent de la grille, il se choisit parmi les articles Odoo
-            proposés. Au-delà de 2500 × 1200, le panneau passe en Tasman PAL (IS D3), au m²
-            fabriqué. Ni pose ni dépose ne sont chiffrées.
+            proposés. Au-delà de 2500 × 1200, le panneau passe en Tasman PAL : variante Odoo
+            IS D3 du format fabriqué (hauteur en lames de 150), tarifée par Odoo. Ni pose ni
+            dépose ne sont chiffrées.
           </p>
         </div>
       )}
@@ -139,7 +140,7 @@ export default function PlanDirectionnelEncart({
                 )}
                 <tr className="border-t border-border align-top">
                   <td className="px-1.5 py-1 text-right whitespace-nowrap">
-                    {l.quantite.toLocaleString('fr-FR')}{l.unite === 'm²' ? ' m²' : ''}
+                    {l.quantite}
                   </td>
                   <td className="px-1.5 py-1 font-mono break-all">
                     {l.reference || <span className="text-warning">à vérifier</span>}

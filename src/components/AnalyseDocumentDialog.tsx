@@ -2196,7 +2196,7 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Ligne de plan : sa référence ; à défaut, ce qu'on sait nommer
        (« URVILLE 1900 250 C1 »), sinon rien — une désignation cherchée par
        mots ramènerait un article voisin. */
-    if (planKadri) return String(l.reference || '').trim() || lignesPlan[i]?.recherche || '';
+    if (planKadri) return lignesPlan[i]?.recherche || String(l.reference || '').trim();
     const brut = texteDemande(l, i);
     const trouve = codeDansTexte(brut);
     /* La CLASSE part avec la demande même quand la ligne ne porte aucun code
@@ -2965,10 +2965,11 @@ const [contratOdoo, setContratOdoo] = useState<
            Seul un clic la fige. */
         if ((n[i] && !odooDOfficeRef.current.has(i)) || refusOdoo.has(i)
             || produitDeLigne(i) || estLigneSysteme(i)) return;
-        /* Ligne de plan SANS référence (Urville) : Odoo propose, on ne
-           retient pas d'office — la gamme n'est pas à la grille, rien ne
-           garantit que le premier article venu soit le bon. */
-        if (planKadri && !String(l.reference || '').trim()) return;
+        /* Ligne de plan : seule la fiche lue par RÉFÉRENCE EXACTE se retient
+           d'office. Ce que la recherche par mots ramène — Urville, une
+           variante D3 voisine d'un Tasman qu'Odoo n'a pas créé — se propose,
+           sans plus : un D3.1900.1500 ne vaut pas un 4151 × 2550. */
+        if (planKadri && !fichesOdoo[String(l.reference || '').trim().toUpperCase()]) return;
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -3631,8 +3632,7 @@ const [contratOdoo, setContratOdoo] = useState<
            y serait créée en négoce. */
         referenceOdoo: planKadri && !p ? (String(l.reference || '').trim() || undefined) : undefined,
         quantite: quantiteDe(cle, l.quantite),
-        /* Un Tasman part au m² fabriqué. */
-        unite: p?.unite || (planKadri ? lignesPlan[i]?.unite : undefined) || 'u',
+        unite: p?.unite || 'u',
         prixUnitaireHT: puDeLigne(i),
         tva: l.tva ?? 20,
         remise: 0,
