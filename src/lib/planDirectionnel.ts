@@ -543,6 +543,119 @@ export interface LigneDemandePlan {
  */
 export type RegroupementPlan = 'ensemble' | 'reference';
 
+/* ── Fixations ─────────────────────────────────────────────────────────── */
+
+/**
+ * Rails d'un panneau Lapérouse P50, lus dans la table du catalogue (« Nombre
+ * de rails ») : 2 jusqu'à 600 de haut — cartouches compris —, 3 pour 750 et
+ * 900, 4 pour 1200. Une hauteur absente de la table rend `null` : on ne
+ * devine pas un nombre de rails.
+ */
+export function railsLaperouse(hauteur: number): number | null {
+  if ([150, 200, 250, 300, 400, 500, 600].includes(hauteur)) return 2;
+  if (hauteur === 750 || hauteur === 900) return 3;
+  if (hauteur === 1200) return 4;
+  return null;
+}
+
+/** Diamètre des mâts selon leur type : MB.76, MC.89, MD.114, ME.114, MF.140. */
+const DIAMETRE_TYPE: Record<string, number> = { A: 60, B: 76, C: 89, D: 114, E: 114, F: 140 };
+
+export type SectionSupport = { rond: number } | { carre: [number, number] };
+
+/**
+ * Section d'un support Kadri, lue dans sa désignation : « MAT TRAV MC » →
+ * Ø89, « MAT TRAV 114E » → Ø114, « Coulisseau MCrenf » → Ø89, « TUBE GALV
+ * 40x27 » → 40×27. `null` quand la désignation ne dit pas la section
+ * (« TUBE GALV MC 80 », « CANDELABRE »).
+ */
+export function sectionSupport(designation: string): SectionSupport | null {
+  /* Sans ses espaces, comme les cotes : pdf.js rend « Coulisseau M Crenf »
+     et « M AT ANCRE M C ». « TUBE GALV MC 80 » devient « MC80 », qui ne se
+     lit ni en type ni en diamètre — il reste illisible, et c'est voulu. */
+  const type = sansEspaces(designation).toUpperCase()
+    .replace(/^(MAT(TRAV|ANCRE)|COULISSEAU|TUBE(GALV|ROND)|CANDELABRE)/, '');
+  const carre = type.match(/^(\d{2,3})X(\d{2,3})$/);
+  if (carre) return { carre: [Number(carre[1]), Number(carre[2])] };
+  const lettre = type.match(/^M([A-F])(RENF|_G)?$/);
+  if (lettre) return { rond: DIAMETRE_TYPE[lettre[1]] };
+  const nombre = type.match(/^(\d{2,3})(E|D|G|ALU)?$/);
+  if (nombre) return { rond: Number(nombre[1]) };
+  return null;
+}
+
+/** Un coulisseau prolonge le mât : ce n'est pas un support de plus. */
+const estCoulisseau = (s: SupportPlan) => /^coulisseau/i.test(s.designation);
+
+/**
+ * Les fixations des panneaux Lapérouse / Vasco de Gama d'un ensemble.
+ *
+ * **UNE FIXATION PAR RAIL ET PAR SUPPORT**, du type que commande la SECTION
+ * du support : collier simple face P50 sur un mât rond (CO89SFP50.BRUT),
+ * bride sur un profil carré (BR8080SFP50.BRUT). Règle vérifiée sur vingt
+ * devis Odoo, soixante ensembles sur soixante : 2 panneaux de 250 et 300
+ * sur un MC.89 → 4 CO89SFP50.
+ *
+ * Quand le mât porte un COULISSEAU, les panneaux sont sur lui : c'est sa
+ * section qui compte, et il ne compte pas comme un support de plus. Tasman
+ * (brides PAL, colliers renforcés) et Urville (traversant, sans fixation)
+ * n'entrent pas ici.
+ *
+ * `null` si l'ensemble n'a aucun panneau P50 à fixer ; sinon la référence,
+ * ou la raison pour laquelle elle manque.
+ */
+export function fixationsEnsemble(
+  e: EnsemblePlan,
+  gammes: Record<string, GammeDirectionnelle>,
+  existe?: (codification: string) => boolean,
+): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
+  const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
+  const panneaux = e.panneaux.filter(p => aFabriquer(p)
+    && !estGrandFormat(p) && (gammeProduit === 'laperouse' || gammeProduit === 'vasco'));
+  if (!panneaux.length) return null;
+
+  const railsParPanneau = panneaux.map(p => railsLaperouse(p.hauteur));
+  const rails = railsParPanneau.reduce<number>((t, r) => t + (r ?? 0), 0);
+  const horsTable = panneaux.filter((_, i) => railsParPanneau[i] === null);
+
+  const coulisseaux = e.supports.filter(estCoulisseau);
+  const mats = e.supports.filter(s => !estCoulisseau(s));
+  const porteurs = coulisseaux.length ? coulisseaux : mats;
+  const nbSupports = mats.length || coulisseaux.length;
+  const sections = porteurs.map(s => sectionSupport(s.designation));
+  const cle = (s: SectionSupport | null) => (s ? JSON.stringify(s) : '?');
+  const section = sections.length && sections.every(s => s && cle(s) === cle(sections[0]))
+    ? sections[0] : null;
+
+  const quantite = rails * nbSupports;
+  const detail = `1 par rail : ${rails} rail(s) × ${nbSupports} support(s)`;
+  const porteur = porteurs[0]?.designation ?? '';
+
+  let aVerifier: string | null = null;
+  if (horsTable.length) {
+    aVerifier = `rails inconnus pour ${horsTable.map(p => `${p.code} ${p.largeur}x${p.hauteur}`).join(', ')}`
+      + ' — hauteur absente de la table';
+  } else if (!nbSupports) {
+    aVerifier = 'aucun support lu sur le plan : nombre de fixations à établir';
+  } else if (!section) {
+    aVerifier = `section du support non lue (${porteurs.map(s => s.designation).join(', ')})`;
+  }
+  if (aVerifier || !section) {
+    return { reference: null, quantite: quantite || 1, aVerifier,
+      description: `Fixations P50 — ${detail}` };
+  }
+
+  const reference = 'rond' in section
+    ? `CO${section.rond}SFP50.BRUT` : `BR${section.carre[0]}${section.carre[1]}SFP50.BRUT`;
+  const nom = 'rond' in section
+    ? `Collier Ø${section.rond} simple face P50` : `Bride ${section.carre[0]}x${section.carre[1]} simple face P50`;
+  if (existe && !existe(reference)) {
+    return { reference: null, quantite, description: `${nom} — ${detail} (${porteur})`,
+      aVerifier: `${reference} absent de la grille` };
+  }
+  return { reference, quantite, description: `${nom} — ${detail} (${porteur})`, aVerifier: null };
+}
+
 function lignesDe(
   ensembles: EnsemblePlan[],
   gammes: Record<string, GammeDirectionnelle>,
@@ -561,6 +674,40 @@ function lignesDe(
         : l.gamme === 'tasman' ? `D3 ${l.largeur} ${surfaceTasman(l).hauteur}${classe}` : '',
     };
   });
+  /* Les fixations des panneaux P50, ensemble par ensemble — une
+     référence commune s'additionne d'un ensemble à l'autre. */
+  const fixations = new Map<string, LigneDemandePlan>();
+  for (const e of ensembles) {
+    const f = fixationsEnsemble(e, gammes, existe);
+    if (f) {
+      const cle = f.reference ?? `${e.ensemble}|${f.description}`;
+      const deja = fixations.get(cle);
+      if (deja && f.reference) {
+        deja.quantite += f.quantite;
+        if (!deja.ensembles.includes(e.ensemble)) deja.ensembles.push(e.ensemble);
+        /* Cumulées, le détail « N rails × M supports » d'un seul ensemble
+           ne vaudrait plus : on ne garde que l'article. */
+        deja.description = deja.description.split(' — ')[0] + ' — 1 par rail et par support';
+      } else {
+        fixations.set(cle, {
+          reference: f.reference ?? '', description: f.description, quantite: f.quantite,
+          unite: 'u', ensembles: [e.ensemble], aVerifier: f.aVerifier, recherche: '',
+        });
+      }
+    }
+    /* Tasman : brides PAL sur IPN ou colliers renforcés, selon le support —
+       aucune règle unique dans les devis. On le dit plutôt que de deviner. */
+    const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
+    if (e.panneaux.some(p => aFabriquer(p) && (estGrandFormat(p) || gammeProduit === 'tasman'))) {
+      const cle = `${e.ensemble}|tasman`;
+      fixations.set(cle, {
+        reference: '', description: 'Fixations Tasman (brides PAL ou colliers renforcés)',
+        quantite: 1, unite: 'u', ensembles: [e.ensemble],
+        aVerifier: 'fixations Tasman à établir selon le support', recherche: '',
+      });
+    }
+  }
+  out.push(...fixations.values());
   for (const s of supportsNeufs(ensembles)) {
     out.push({
       reference: '',

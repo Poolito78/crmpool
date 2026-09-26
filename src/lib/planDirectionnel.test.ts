@@ -3,6 +3,7 @@ import {
   estPlanKadri, lireEnsemble, lirePlanDirectionnel, lireCotePanneau,
   panneauxAFabriquer, supportsNeufs, bilanPlan, referencePanneau,
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
+  railsLaperouse, sectionSupport, fixationsEnsemble,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -214,18 +215,20 @@ describe('carnet', () => {
 });
 
 describe('lignes de la demande', () => {
-  it('panneaux puis supports neufs, chacun avec ce qui reste à vérifier', () => {
+  it('panneaux, fixations puis supports neufs, chacun avec ce qui reste à vérifier', () => {
     const e = lirePlanDirectionnel([PAGE_CAISSON, PAGE_ALU]);
     const lignes = lignesDuPlan(e, { 'ALU BT/M (NC) CL1': 'urville' }, undefined, 'reference');
     expect(lignes.map(l => [l.reference, l.quantite, l.aVerifier, l.recherche])).toEqual([
       ['DF50.2200.250.C1.50.IS.BRUT', 1, null, ''],
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 2200 400 C1'],
       ['', 1, 'Urville absent de la grille — article Odoo à choisir', 'URVILLE 500 150 C1'],
+      /* Urville est traversant : pas de collier pour HARF-07. */
+      ['CO76SFP50.BRUT', 2, null, ''],
       ['', 1, 'support neuf : article de mât à choisir', ''],
     ]);
     expect(lignes[1].description)
       .toBe('Panneau directionnel Urville caisson traversant D21 2200x400 classe 1 — fond blanc');
-    expect(lignes[3].description).toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri)');
+    expect(lignes[4].description).toBe('MAT TRAV MC — longueur 2,77 m (plan Kadri)');
   });
 });
 
@@ -267,19 +270,92 @@ describe('chiffrage par ensemble', () => {
     const lignes = lignesDuPlan(e, {});
     expect(lignes.map(l => `${l.ensemble?.nom} ${l.reference || l.description.slice(0, 22)}`)).toEqual([
       'DEM1-47 DF50.2200.250.C1.50.IS.BRUT',
+      'DEM1-47 CO76SFP50.BRUT',
       'DEM1-47 MAT TRAV MC — longueur',
       'HARF-07 DF50.2200.400.C1.50.IS.BRUT',
       'HARF-07 DR50.500.150.C1.50.IS.BRUT',
+      'HARF-07 CO114SFP50.BRUT',
       'HARF-06 D3.4151.2550.C1.ST.IS.BRUT',
+      'HARF-06 Fixations Tasman (brid',
       'HARF-06 TUBE GALV MC 80 — long',
     ]);
     expect(titreEnsemble(lignes[0].ensemble!)).toBe('Ensemble 0001/DEM1-47');
-    expect(titreEnsemble(lignes[5].ensemble!)).toBe('Ensemble 0003/HARF-06');
+    expect(titreEnsemble(lignes[8].ensemble!)).toBe('Ensemble 0003/HARF-06');
   });
 
   it('par référence, les quantités se cumulent et il n\'y a plus d\'ensemble', () => {
     const lignes = lignesDuPlan(e, {}, undefined, 'reference');
     expect(lignes.every(l => !l.ensemble)).toBe(true);
-    expect(lignes.length).toBe(6);
+    expect(lignes.length).toBe(9);
+  });
+});
+
+describe('fixations des panneaux P50', () => {
+  it('les rails se lisent dans la table Lapérouse, jamais devinés', () => {
+    expect([150, 250, 600, 750, 900, 1200].map(railsLaperouse)).toEqual([2, 2, 2, 3, 3, 4]);
+    expect(railsLaperouse(175)).toBeNull();
+    expect(railsLaperouse(1000)).toBeNull();
+  });
+
+  it('la section du support se lit dans sa désignation Kadri', () => {
+    expect(sectionSupport('MAT TRAV MC')).toEqual({ rond: 89 });
+    expect(sectionSupport('MAT ANCRE MD')).toEqual({ rond: 114 });
+    expect(sectionSupport('MAT TRAV MF')).toEqual({ rond: 140 });
+    expect(sectionSupport('Coulisseau MCrenf')).toEqual({ rond: 89 });
+    expect(sectionSupport('MAT ANCRE MC_g')).toEqual({ rond: 89 });
+    expect(sectionSupport('MAT TRAV 114E')).toEqual({ rond: 114 });
+    expect(sectionSupport('MAT TRAV 76Alu')).toEqual({ rond: 76 });
+    expect(sectionSupport('TUBE GALV 40x27')).toEqual({ carre: [40, 27] });
+    expect(sectionSupport('TUBE GALV MC 80')).toBeNull();
+    expect(sectionSupport('CANDELABRE')).toBeNull();
+  });
+
+  it('une fixation par rail et par support, du diamètre de la section', () => {
+    /* Le cas du devis Odoo AF035742 : 2 panneaux de 250 et 300 sur un
+       MC.89 → 4 CO89SFP50. */
+    const e = lireEnsemble(`Plan avec détails
+Hauteur de base 100 mm
+D
+D
+S
+TZ_001
+CAISSON CL2
+MAT ANCRE
+Pose
+D43 1300x250=0.325m²
+Blanc 3290
+Pose
+D43 1300x300=0.390m²
+Blanc 3290
+MAT ANCRE MC
+Mt : 200 m.daN
+Lg : 3.10 m
+${PIED}`, 1)!;
+    expect(fixationsEnsemble(e, {})).toEqual({
+      reference: 'CO89SFP50.BRUT', quantite: 4, aVerifier: null,
+      description: 'Collier Ø89 simple face P50 — 1 par rail : 4 rail(s) × 1 support(s) (MAT ANCRE MC)',
+    });
+  });
+
+  it("sur un coulisseau, c'est sa section qui compte", () => {
+    const e = lireEnsemble(PAGE_CAISSON, 3)!;
+    expect(fixationsEnsemble(e, {})).toMatchObject({ reference: 'CO76SFP50.BRUT', quantite: 2 });
+  });
+
+  it('une section illisible ou une hauteur hors table reste à vérifier', () => {
+    const tube = lireEnsemble(PAGE_CAISSON.replace('MAT TRAV MC', 'CANDELABRE')
+      .replace('Existant\nCoulisseau MB\nMt : 10 m.daN\nLg : 0.85 m\n', ''), 3)!;
+    expect(fixationsEnsemble(tube, {})).toMatchObject({ reference: null });
+    const vasco = fixationsEnsemble(lireEnsemble(PAGE_CAISSON, 3)!, { 'CAISSON CL1': 'vasco' });
+    expect(vasco).toMatchObject({ reference: 'CO76SFP50.BRUT' });
+    expect(fixationsEnsemble(lireEnsemble(PAGE_CAISSON, 3)!, { 'CAISSON CL1': 'urville' })).toBeNull();
+  });
+});
+
+describe('section malgré les espaces de pdf.js', () => {
+  it('lit « Coulisseau M Crenf » et « M AT ANCRE M C »', () => {
+    expect(sectionSupport('Coulisseau M Crenf')).toEqual({ rond: 89 });
+    expect(sectionSupport('M AT ANCRE M C')).toEqual({ rond: 89 });
+    expect(sectionSupport('M AT TRAV 160G')).toEqual({ rond: 160 });
   });
 });
