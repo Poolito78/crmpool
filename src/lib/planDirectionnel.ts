@@ -584,9 +584,8 @@ export interface LigneDemandePlan {
   aVerifier: string | null;
   /**
    * Texte à chercher chez Odoo par mots, pour PROPOSER quand la référence
-   * manque (Urville) ou peut manquer chez Odoo (Tasman : toutes les
-   * variantes D3 ne sont pas créées). Vide sinon. Ce qui en sort n'est
-   * jamais retenu d'office.
+   * manque (Urville). Vide sinon. Ce qui en sort n'est jamais retenu
+   * d'office.
    */
   recherche: string;
   /**
@@ -799,9 +798,10 @@ function lignesDe(
       unite: 'u',
       ensembles: l.ensembles,
       aVerifier: l.raison ? LIBELLE_RAISON[l.raison] : null,
-      recherche: l.raison === 'urville' ? `URVILLE ${l.largeur} ${l.hauteur}${classe}`
-        : l.gamme === 'tasman'
-          ? `D3 ${surfaceTasman(l).largeur} ${surfaceTasman(l).hauteur}${classe}` : '',
+      /* Tasman : sa variante D3 et son prix au m² sont établis — on ne
+         cherche plus de voisines par mots, elles ne faisaient qu'induire en
+         erreur. */
+      recherche: l.raison === 'urville' ? `URVILLE ${l.largeur} ${l.hauteur}${classe}` : '',
     };
   });
   /* Les fixations des panneaux P50, ensemble par ensemble — une

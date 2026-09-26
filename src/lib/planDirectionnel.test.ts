@@ -253,7 +253,7 @@ describe('Tasman PAL : les grands formats', () => {
     const [l] = lignesDuPlan(lirePlanDirectionnel([PAGE_NEUF]), {});
     expect(l).toMatchObject({
       reference: 'D3.4200.2550.C1.ST.IS.BRUT', quantite: 1, unite: 'u',
-      aVerifier: null, recherche: 'D3 4200 2550 C1',
+      aVerifier: null, recherche: '',
     });
     expect(l.description).toBe('Panneau Tasman PAL D42b1 4151x2474 classe 1 — fond blanc'
       + ' — fabriqué 4200x2550 (8 latte(s) de 300 + 1 de 150), 10,71 m²');

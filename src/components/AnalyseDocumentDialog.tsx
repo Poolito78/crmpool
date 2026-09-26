@@ -5266,9 +5266,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                       même quand l'article vient d'Odoo et non du
                                       catalogue local : ce sont justement ces
                                       lignes-là qu'on veut pouvoir ajuster. */}
-                                  {(retenu || choixOdoo[i]) && (() => {
+                                  {(retenu || choixOdoo[i] || (planKadri && String(l.reference || '').trim())) && (() => {
                                     const cle = `d${i}`;
                                     const odoo = choixOdoo[i];
+                                    const pal = prixPal(i);
+                                    const grillePlan = planKadri && !odoo && !retenu ? prixGrillePlan(i) : null;
                                     const d = odoo
                                       ? prixOdoo(odoo)
                                       : prixDetail(retenu);
@@ -5302,6 +5304,12 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <div className="text-[11px] text-muted-foreground">
                                           {prixManuel[cle] !== undefined
                                             ? 'prix saisi à la main'
+                                            : pal
+                                              ? `PAL ${pal.taux.toLocaleString('fr-FR')} €/m² × ${pal.surface.toLocaleString('fr-FR')} m² (${pal.origine})`
+                                            : grillePlan
+                                              ? `grille ${niveauRemise} — ${grillePlan.gabarit}`
+                                            : planKadri && !odoo && !retenu
+                                              ? <span className="text-destructive">prix à saisir — absent de la grille et d’Odoo</span>
                                             : d.remise
                                               ? <>{d.remise.libelle} — <strong className="text-foreground">{(d.remise.remise * 100).toFixed(0)} %</strong> sur {formatMontant(d.remise.public)} public → <strong className="text-foreground">{formatMontant(d.remise.prix)}</strong>{d.contrat != null && Math.abs(d.contrat - d.remise.prix) >= 0.01 ? <> — contrat Odoo {formatMontant(d.contrat)}</> : null}</>
                                               : d.source === 'absent'
@@ -5328,7 +5336,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                       « Retenu d'office : PLASTOBLOC24GM » se
                                       contredisait : la ligne a bien un article
                                       et un prix, ils viennent d'ailleurs. */}
-                                  {!sysRap && !retenu && !choixOdoo[i] && (
+                                  {/* LIGNE DE PLAN AVEC SA RÉFÉRENCE : l'article
+                                      est établi par le plan — code, cotes,
+                                      gamme, classe — et chiffré. On ne le
+                                      redemande pas. */}
+                                  {!sysRap && !retenu && !choixOdoo[i] && planKadri && String(l.reference || '').trim() ? (
+                                    <p className="text-[11px] text-success">
+                                      Article du plan : <span className="font-mono">{l.reference}</span>
+                                    </p>
+                                  ) : !sysRap && !retenu && !choixOdoo[i] && (
                                     <p className={`text-[11px] ${tarificationEnCours ? 'text-muted-foreground' : 'text-warning'}`}>
                                       {tarificationEnCours
                                         ? <><Loader2 className="inline w-3 h-3 mr-1 animate-spin" />Recherche en cours chez Odoo…</>
@@ -5345,6 +5361,10 @@ const [contratOdoo, setContratOdoo] = useState<
                                       à donner le prix — et à savoir ce qui
                                       l'accompagne. */}
                                   {(() => {
+                                    /* Une ligne de plan Kadri n'est pas un
+                                       panneau de police : « …C2.ST… » y
+                                       ferait lire un carré C2. */
+                                    if (planKadri) return null;
                                     const texte = texteDemande(l, i);
                                     const trouve = codeDansTexte(texte);
                                     if (!trouve) return null;
@@ -5701,6 +5721,11 @@ const [contratOdoo, setContratOdoo] = useState<
                                        pas un mot en commun, pas le même
                                        produit. La fiche lue par référence
                                        EXACTE, elle, n'a rien à prouver. */
+                                    /* Ligne de plan avec sa référence : rien à
+                                       choisir. Les voisines qu'Odoo ramène (un
+                                       D3.4200.2250 pour un 4200 × 2550) ne
+                                       feraient qu'induire en erreur. */
+                                    if (planKadri && String(l.reference || '').trim()) return null;
                                     const demandeTexte = texteDemande(l, i);
                                     const cherchees = (trouvaillesOdoo[texteRechercheOdoo(l, i)] || [])
                                       .filter(t => memeFamille(
