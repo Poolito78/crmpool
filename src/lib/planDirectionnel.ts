@@ -303,16 +303,29 @@ export function estGrandFormat(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): boo
 export const LAME_TASMAN = 150;
 
 /**
- * Surface FABRIQUÉE d'un panneau Tasman, en m² : la hauteur monte au
- * multiple de lame supérieur (2474 → 17 lames, 2550 mm), la longueur est
- * libre. C'est ce qui sort de l'atelier, donc ce qui se facture.
+ * Le panneau Tasman FABRIQUÉ : la hauteur monte au multiple de 150
+ * supérieur (2474 → 2550), la longueur est libre. Les lattes sont d'abord
+ * des planches de 300 — le plus possible —, complétées d'une de 150 si la
+ * hauteur l'exige : 2100 = 7 × 300 ; 2550 = 8 × 300 + 1 × 150.
  */
 export function surfaceTasman(p: Pick<PanneauPlan, 'largeur' | 'hauteur'>): {
-  lames: number; hauteur: number; surface: number;
+  lames: number; lames300: number; lames150: number; hauteur: number; surface: number;
 } {
-  const lames = Math.ceil(p.hauteur / LAME_TASMAN);
-  const hauteur = lames * LAME_TASMAN;
-  return { lames, hauteur, surface: Math.round((p.largeur * hauteur) / 1000) / 1000 };
+  const hauteur = Math.ceil(p.hauteur / LAME_TASMAN) * LAME_TASMAN;
+  const lames300 = Math.floor(hauteur / 300);
+  const lames150 = (hauteur - lames300 * 300) / LAME_TASMAN;
+  return {
+    lames: lames300 + lames150, lames300, lames150, hauteur,
+    surface: Math.round((p.largeur * hauteur) / 1000) / 1000,
+  };
+}
+
+/** « 8 lattes de 300 + 1 de 150 », « 7 lattes de 300 ». */
+export function composition(t: { lames300: number; lames150: number }): string {
+  const parts = [];
+  if (t.lames300) parts.push(`${t.lames300} latte(s) de 300`);
+  if (t.lames150) parts.push(`${t.lames150} de 150`);
+  return parts.join(' + ');
 }
 
 /** Le panneau a-t-il une pointe ? D21 (et ses variantes) seulement. */
@@ -499,7 +512,7 @@ export function designationPanneau(l: LignePanneauPlan): string {
   if (l.gamme === 'tasman') {
     const t = surfaceTasman(l);
     return `${forme} ${NOM_GAMME.tasman} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`
-      + ` — fabriqué ${l.largeur}x${t.hauteur} (${t.lames} lames de ${LAME_TASMAN}), `
+      + ` — fabriqué ${l.largeur}x${t.hauteur} (${composition(t)}), `
       + `${t.surface.toLocaleString('fr-FR')} m²`;
   }
   return `${forme} ${NOM_GAMME[l.gamme]} ${l.code} ${l.largeur}x${l.hauteur}${classe}${fonds}`;
@@ -669,14 +682,22 @@ export function fixationsEnsemble(
 export const BRIDE_PAL = 'BR.PAL.H10X60.BRUT';
 
 /**
- * Les brides des panneaux Tasman (PAL) d'un ensemble — règle du fabricant :
+ * Les brides des panneaux Tasman (PAL) d'un ensemble :
  *
- *   (nombre de lattes + 2) × nombre de supports
- *   + 4 brides par mètre linéaire de hauteur, pour le profil d'entourage.
+ *   lattes × supports + 2
+ *   + 4 brides par mètre linéaire de hauteur, pour le profil d'entourage,
+ *     arrondi à la bride la plus proche.
  *
- * Les lattes sont celles du panneau FABRIQUÉ (`surfaceTasman`, lames de
- * 150) ; les 4 brides par mètre s'arrondissent à la bride entière. Sans
- * support lu sur le plan, le compte reste à vérifier.
+ * Exemple du chargé d'affaires : PAL de 2100 sur 2 supports = 7 planches
+ * de 300 → 7 × 2 = 14, + 2 = 16, + 2 ml × 4 = 8 → 24. C'est exactement ce
+ * que portent les devis Odoo (AF036471 : 24 brides pour 2100 comme pour
+ * 1950 de haut, sur 2 IPN). ⚠️ La fiche du fabricant écrit « (lattes + 2)
+ * × supports », qui en donnerait 26 : on suit l'exemple, que les devis
+ * confirment.
+ *
+ * Les lattes sont celles du panneau FABRIQUÉ (`surfaceTasman` : planches de
+ * 300, complétées de 150). Sans support lu sur le plan, le compte reste à
+ * vérifier.
  */
 export function bridesPal(
   e: EnsemblePlan,
@@ -689,15 +710,15 @@ export function bridesPal(
   const supports = e.supports.filter(s => !estCoulisseau(s)).length;
   const parPanneau = panneaux.map(p => {
     const t = surfaceTasman(p);
-    return { lattes: t.lames, entourage: Math.ceil((4 * t.hauteur) / 1000) };
+    return { lattes: t.lames, entourage: Math.round((4 * t.hauteur) / 1000) };
   });
-  const detail = parPanneau.map(x => `(${x.lattes} lattes + 2) × ${supports || '?'} + ${x.entourage}`)
+  const detail = parPanneau.map(x => `${x.lattes} lattes × ${supports || '?'} + 2 + ${x.entourage}`)
     .join(' ; ');
   if (!supports) {
     return { reference: null, quantite: 1, description: `Brides PAL — ${detail}`,
       aVerifier: 'aucun support lu sur le plan : nombre de brides PAL à établir' };
   }
-  const quantite = parPanneau.reduce((n, x) => n + (x.lattes + 2) * supports + x.entourage, 0);
+  const quantite = parPanneau.reduce((n, x) => n + x.lattes * supports + 2 + x.entourage, 0);
   return { reference: BRIDE_PAL, quantite, aVerifier: null,
     description: `Bride PAL H10x60 — ${detail}` };
 }
@@ -749,7 +770,7 @@ function lignesDe(
         deja.quantite += pal.quantite;
         if (!deja.ensembles.includes(e.ensemble)) deja.ensembles.push(e.ensemble);
         deja.description = deja.description.split(' — ')[0]
-          + ' — (lattes + 2) × supports + 4 par ml de hauteur';
+          + ' — lattes × supports + 2 + 4 par ml de hauteur';
       } else {
         fixations.set(cle, {
           reference: pal.reference ?? '', description: pal.description, quantite: pal.quantite,

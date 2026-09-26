@@ -242,9 +242,9 @@ describe('Tasman PAL : les grands formats', () => {
 
   it('se chiffre au m² fabriqué, lames de 150 entières', () => {
     expect(surfaceTasman({ largeur: 4151, hauteur: 2474 }))
-      .toEqual({ lames: 17, hauteur: 2550, surface: 10.585 });
+      .toEqual({ lames: 9, lames300: 8, lames150: 1, hauteur: 2550, surface: 10.585 });
     expect(surfaceTasman({ largeur: 3000, hauteur: 2100 }))
-      .toEqual({ lames: 14, hauteur: 2100, surface: 6.3 });
+      .toEqual({ lames: 7, lames300: 7, lames150: 0, hauteur: 2100, surface: 6.3 });
   });
 
   it('part sous la variante Odoo IS D3 du format fabriqué', () => {
@@ -254,7 +254,7 @@ describe('Tasman PAL : les grands formats', () => {
       aVerifier: null, recherche: 'D3 4151 2550 C1',
     });
     expect(l.description).toBe('Panneau Tasman PAL D42b1 4151x2474 classe 1 — fond blanc'
-      + ' — fabriqué 4151x2550 (17 lames de 150), 10,585 m²');
+      + ' — fabriqué 4151x2550 (8 latte(s) de 300 + 1 de 150), 10,585 m²');
   });
 
   it('même hors grille, la variante D3 reste : Odoo seul dit si elle existe', () => {
@@ -361,13 +361,23 @@ describe('section malgré les espaces de pdf.js', () => {
 });
 
 describe('brides PAL des panneaux Tasman', () => {
-  it('(lattes + 2) × supports + 4 par ml de hauteur', () => {
-    /* D42b1 4151x2474 → 17 lattes (2550), sur l'unique TUBE GALV de
-       l'extrait : (17 + 2) × 1 + 4 × 2,55 = 19 + 11 = 30. */
+  it('lattes × supports + 2 + 4 par ml de hauteur', () => {
+    /* D42b1 4151x2474 → 2550 = 8 × 300 + 1 × 150, 9 lattes, sur l'unique
+       TUBE GALV de l'extrait : 9 × 1 + 2 + round(4 × 2,55) = 11 + 10 = 21. */
     expect(bridesPal(lireEnsemble(PAGE_NEUF, 1)!, {})).toEqual({
-      reference: 'BR.PAL.H10X60.BRUT', quantite: 30, aVerifier: null,
-      description: 'Bride PAL H10x60 — (17 lattes + 2) × 1 + 11',
+      reference: 'BR.PAL.H10X60.BRUT', quantite: 21, aVerifier: null,
+      description: 'Bride PAL H10x60 — 9 lattes × 1 + 2 + 10',
     });
+  });
+
+  it("l'exemple du chargé d'affaires : 2100 sur 2 supports → 24", () => {
+    const deux = PAGE_NEUF.replace('D42b1   4151x2474=10.270m ²', 'D42b 3000x2100=6.300m²')
+      .replace('Lg : 5.00   m', 'Lg : 5.00   m\nDéblai (butée 100%)\nTUBE GALV MC 80\nMt : 1341 m.daN\nLg : 5.00 m');
+    expect(bridesPal(lireEnsemble(deux, 1)!, {})).toMatchObject({ quantite: 24 });
+    /* 1950 de haut : 6 × 300 + 1 × 150 = 7 lattes → 14 + 2 + 8 = 24,
+       comme le devis AF036471. */
+    const bas = deux.replace('D42b 3000x2100=6.300m²', 'D42b 3100x1950=6.045m²');
+    expect(bridesPal(lireEnsemble(bas, 1)!, {})).toMatchObject({ quantite: 24 });
   });
 
   it('sans support lu, le compte reste à vérifier', () => {
