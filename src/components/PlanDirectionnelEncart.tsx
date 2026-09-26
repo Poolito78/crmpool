@@ -63,6 +63,27 @@ export default function PlanDirectionnelEncart({
   const matsExistants = useMemo(() => ensembles.filter(matRemplacable), [ensembles]);
   const basculerMat = (nom: string) => onMatsNeufs(matsNeufs.includes(nom)
     ? matsNeufs.filter(n => n !== nom) : [...matsNeufs, nom]);
+  /* L'option se coche sous le titre de son ensemble ; ceux qui n'ont pas de
+     titre dans le tableau (présentation par référence) restent listés au-dessus. */
+  const titres = new Set(lignes.map(l => l.ensemble?.nom).filter(Boolean));
+  const matsHorsTableau = matsExistants.filter(e => !titres.has(e.ensemble));
+  const caseMat = (e: EnsemblePlan) => (
+    <label className="flex items-center gap-1 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={matsNeufs.includes(e.ensemble)}
+        onChange={() => basculerMat(e.ensemble)}
+        className="h-3 w-3"
+      />
+      <span>
+        {matsNeufs.includes(e.ensemble) ? 'Mât neuf ajouté' : 'Mât existant conservé'}
+        {' '}({e.supports.map(s => s.designation).join(' + ')})
+      </span>
+      <span className="text-muted-foreground">
+        — cocher pour un mât neuf, mono de son type, moment Kadri vérifié
+      </span>
+    </label>
+  );
 
   return (
     <div className="rounded-lg border border-primary/40 bg-primary/5 p-2 space-y-2 text-[11px]">
@@ -136,31 +157,20 @@ export default function PlanDirectionnelEncart({
         </div>
       )}
 
-      {matsExistants.length > 0 && (
+      {matsHorsTableau.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium">
             Mât existant conservé
             <span className="ml-2 font-normal text-muted-foreground">
-              pas de mât au devis, colliers sur le support en place — cocher pour ajouter un mât neuf
-              (mono de son type, moment Kadri vérifié)
+              pas de mât au devis, colliers sur le support en place
             </span>
           </p>
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {matsExistants.map(e => (
-              <label key={`${e.page}-${e.ensemble}`} className="flex items-center gap-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={matsNeufs.includes(e.ensemble)}
-                  onChange={() => basculerMat(e.ensemble)}
-                  className="h-3 w-3"
-                />
-                <span>{e.ensemble}</span>
-                <span className="text-muted-foreground">
-                  ({e.supports.map(s => s.designation).join(' + ')})
-                </span>
-              </label>
-            ))}
-          </div>
+          {matsHorsTableau.map(e => (
+            <div key={`${e.page}-${e.ensemble}`} className="flex items-center gap-2">
+              <span className="w-24 shrink-0 font-medium">{e.ensemble}</span>
+              {caseMat(e)}
+            </div>
+          ))}
         </div>
       )}
 
@@ -224,6 +234,15 @@ export default function PlanDirectionnelEncart({
                     </td>
                   </tr>
                 )}
+                {ouvre && (() => {
+                  const m = matsExistants.find(x => x.ensemble === e.nom);
+                  return m ? (
+                    <tr className="bg-muted/20">
+                      <td />
+                      <td colSpan={4} className="px-1.5 py-1">{caseMat(m)}</td>
+                    </tr>
+                  ) : null;
+                })()}
                 <tr className="border-t border-border align-top">
                   <td className="px-1.5 py-1 text-right whitespace-nowrap">
                     {l.quantite}
