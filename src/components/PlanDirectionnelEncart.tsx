@@ -164,6 +164,32 @@ export default function PlanDirectionnelEncart({
         </div>
       )}
 
+      {matsExistants.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium">Mâts neufs</span>
+          <button
+            type="button"
+            onClick={() => onMatsNeufs(matsExistants.map(e => e.ensemble))}
+            disabled={matsNeufs.length === matsExistants.length}
+            className="rounded border border-border bg-background px-2 py-0.5 hover:bg-muted disabled:opacity-40"
+          >
+            Tous
+          </button>
+          <button
+            type="button"
+            onClick={() => onMatsNeufs([])}
+            disabled={!matsNeufs.length}
+            className="rounded border border-border bg-background px-2 py-0.5 hover:bg-muted disabled:opacity-40"
+          >
+            Aucun
+          </button>
+          <span className="text-muted-foreground">
+            {matsNeufs.length} / {matsExistants.length} ensemble(s) à mât existant remplacé par un mât neuf
+            — ou au cas par cas, sous le titre de chaque ensemble
+          </span>
+        </div>
+      )}
+
       {matsHorsTableau.length > 0 && (
         <div className="space-y-1">
           <p className="font-medium">
