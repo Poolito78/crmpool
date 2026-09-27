@@ -263,6 +263,18 @@ la lecture Odoo perdait `display_name` et la réponse de prix rendait le nom du
 modèle (« IS DF [P50] »).
 ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-prix`.
 
+## Plans directionnels : les DV de position (27 sept.)
+
+DV12, DV21a/b, DV43a/b, DV44, DV61 (« Dv21b 600x100 » chez Kadri) ne sont
+pas des Lapérouse P50 : profil P25, deux finitions au choix pour le carnet
+(`FinitionPosition`, sélecteur de l'encart) — **bords pliés par défaut**
+(modèle Odoo `IS BPSP`, référence LUE dans `VARIANTES_BPSP` : deux sans
+`.ST`, quatre absentes) ou **Champlain** `DR25.l.h.Cn.25.IS.BRUT` (grille,
+pas de 100 de haut). Colliers `CO{Ø}SFP25` ; rails : 2 en Champlain, **non
+donnés en bords pliés → à vérifier**. ⚠️ BPSP n'est dans AUCUN contrat
+cadre : Odoo le tarife à la liste de prix du client (ATS 43,30 € là où le
+catalogue R4 dit 34,71 €).
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

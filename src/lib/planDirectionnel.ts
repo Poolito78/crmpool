@@ -28,6 +28,9 @@
  * ou choisi à l'écran — voir `GammeDirectionnelle`. Une cote absente de la
  * grille reste « à vérifier » : une référence fabriquée serait rapprochée
  * d'une voisine chez Odoo.
+ *   Dv21b, DV12, DV43a… (position)   → BPSP.600.100.C1.BP.ST.IS.BRUT (bords
+ *                                      pliés, par défaut) ou DR25 (Champlain
+ *                                      P25) — voir `FinitionPosition`.
  *
  * On ne chiffre QUE la fabrication : ni pose, ni dépose.
  *
@@ -395,8 +398,76 @@ export function estFleche(code: string): boolean {
   return /^D21/i.test(code);
 }
 
+/**
+ * PANNEAUX DE POSITION — DV12, DV21a, DV21b, DV43a, DV43b, DV44, DV61 (Kadri
+ * écrit « Dv21b ») : les petits formats 600 / 900 / 1200 × 100 à 250 du
+ * catalogue, que Lapérouse P50 ne fabrique pas — ils partaient en DF50/DR50,
+ * « format absent de la grille ». Ils sont en profil P25, en deux finitions
+ * au même prix pour tous ces codes :
+ *
+ *   'bp'         BORDS PLIÉS — modèle Odoo « IS BPSP »,
+ *                BPSP.600.100.C1.BP.ST.IS.BRUT. ABSENT DES CONTRATS CADRES :
+ *                chez Odoo, c'est la liste de prix du client qui le tarife.
+ *                La finition par défaut : la seule qui existe en 100 de haut.
+ *   'champlain'  CHAMPLAIN P25 — rectangle « IS DR [P25] »,
+ *                DR25.900.150.C2.25.IS.BRUT, à la grille (prix R4 identiques
+ *                au tableau du catalogue, vérifiés le 27/09/2026). Pas de 100
+ *                de haut.
+ *
+ * DV11, DV21c, DV43c/d et DV42 ont leurs propres articles (DV11.P25…,
+ * DV21CE*…) : ils ne sont pas traités ici.
+ */
+export type FinitionPosition = 'bp' | 'champlain';
+
+export const LIBELLE_FINITION_POSITION: Record<FinitionPosition, string> = {
+  bp: 'Bords pliés (IS BPSP)',
+  champlain: 'Champlain P25 (DR25)',
+};
+
+export function estPanneauPosition(code: string): boolean {
+  return /^DV(12|21[ab]|43[ab]|44|61)$/i.test(code);
+}
+
+/**
+ * Les variantes du modèle Odoo « IS BPSP », relevées le 27/09/2026. Odoo
+ * n'est pas régulier : deux variantes n'ont pas le segment ST
+ * (BPSP.900.250.C1.BP.IS.BRUT) et quatre manquent — 600×200 C1, 1200×100
+ * C2, 1200×250 C1 et C2. La référence se LIT donc ici, elle ne se construit
+ * pas : une référence fabriquée serait rapprochée d'une voisine chez Odoo.
+ * Si Odoo en ajoute, les recopier ici.
+ */
+export const VARIANTES_BPSP: readonly string[] = [
+  'BPSP.600.100.C1.BP.ST.IS.BRUT', 'BPSP.600.100.C2.BP.ST.IS.BRUT',
+  'BPSP.600.150.C1.BP.ST.IS.BRUT', 'BPSP.600.150.C2.BP.ST.IS.BRUT',
+  'BPSP.600.200.C2.BP.ST.IS.BRUT',
+  'BPSP.600.250.C1.BP.ST.IS.BRUT', 'BPSP.600.250.C2.BP.ST.IS.BRUT',
+  'BPSP.900.100.C1.BP.ST.IS.BRUT', 'BPSP.900.100.C2.BP.ST.IS.BRUT',
+  'BPSP.900.150.C1.BP.ST.IS.BRUT', 'BPSP.900.150.C2.BP.ST.IS.BRUT',
+  'BPSP.900.200.C1.BP.ST.IS.BRUT', 'BPSP.900.200.C2.BP.ST.IS.BRUT',
+  'BPSP.900.250.C1.BP.IS.BRUT', 'BPSP.900.250.C2.BP.ST.IS.BRUT',
+  'BPSP.1200.100.C1.BP.IS.BRUT',
+  'BPSP.1200.150.C1.BP.ST.IS.BRUT', 'BPSP.1200.150.C2.BP.ST.IS.BRUT',
+  'BPSP.1200.200.C1.BP.ST.IS.BRUT', 'BPSP.1200.200.C2.BP.ST.IS.BRUT',
+];
+
+/** La variante IS BPSP d'un format et d'une classe, `null` si Odoo ne l'a pas. */
+export function referenceBpsp(largeur: number, hauteur: number, classe: number): string | null {
+  const tete = `BPSP.${largeur}.${hauteur}.C${classe}.`;
+  return VARIANTES_BPSP.find(r => r.startsWith(tete)) ?? null;
+}
+
+/**
+ * Rails d'un panneau de position, lus dans le tableau du catalogue : 2 en
+ * Champlain de 150 à 250. Le tableau ne donne AUCUN nombre de rails pour les
+ * bords pliés de ces formats : `null`, la fixation reste à vérifier.
+ */
+export function railsPosition(finition: FinitionPosition, hauteur: number): number | null {
+  if (finition === 'champlain' && [150, 200, 250].includes(hauteur)) return 2;
+  return null;
+}
+
 /** Pourquoi une ligne n'a pas de référence, quand c'est le cas. */
-export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille';
+export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille' | 'bp-absent' | 'champlain-100';
 
 /**
  * Référence de grille d'un panneau, ou la raison de son absence.
@@ -406,12 +477,24 @@ export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille';
  */
 export function referencePanneau(
   p: Pick<PanneauPlan, 'code' | 'largeur' | 'hauteur'>,
-  gamme: GammeDirectionnelle,
+  gamme: GammePanneau,
   classe: number | null,
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: RaisonSansReference } {
   if (gamme === 'urville') return { raison: 'urville' };
   if (!classe) return { raison: 'classe' };
+  /* Panneau de position : la variante BPSP relevée chez Odoo — hors grille,
+     `existe` ne la juge pas —, ou le DR25 de la grille. */
+  if (gamme === 'bp') {
+    const reference = referenceBpsp(p.largeur, p.hauteur, classe);
+    return reference ? { reference } : { raison: 'bp-absent' };
+  }
+  if (gamme === 'champlain') {
+    if (p.hauteur < 150) return { raison: 'champlain-100' };
+    const reference = `DR25.${p.largeur}.${p.hauteur}.C${classe}.25.IS.BRUT`;
+    if (existe && !existe(reference)) return { raison: 'hors-grille' };
+    return { reference };
+  }
   /* Tasman : la variante Odoo du format FABRIQUÉ, hauteur en lames
      entières. Pas à la grille — `existe` ne la juge donc pas : Odoo dira
      s'il la connaît. */
@@ -431,14 +514,21 @@ export const LIBELLE_RAISON: Record<RaisonSansReference, string> = {
   classe: 'classe de rétroréflexion absente du plan',
   urville: 'Urville absent de la grille — article Odoo à choisir',
   'hors-grille': 'format absent de la grille',
+  'bp-absent': 'bords pliés : format ou classe absent chez Odoo (IS BPSP)',
+  'champlain-100': 'Champlain P25 : pas de 100 de haut — bords pliés seulement',
 };
 
+/** Gamme d'une ligne de panneau : celle du produit Kadri, ou la finition d'un panneau de position. */
+export type GammePanneau = GammeDirectionnelle | FinitionPosition;
+
 /** Nom court de la gamme, tel qu'il part dans la désignation. */
-const NOM_GAMME: Record<GammeDirectionnelle, string> = {
+const NOM_GAMME: Record<GammePanneau, string> = {
   laperouse: 'Lapérouse P50',
   vasco: 'Vasco de Gama dos fermé',
   urville: 'Urville caisson traversant',
   tasman: 'Tasman PAL',
+  bp: 'bords pliés',
+  champlain: 'Champlain P25',
 };
 
 /* ── Regroupement en lignes de devis ────────────────────────────────────── */
@@ -449,8 +539,8 @@ export interface LignePanneauPlan {
   hauteur: number;
   /** Gammes Kadri regroupées sur la ligne. */
   produits: string[];
-  /** Gamme de fabrication retenue. */
-  gamme: GammeDirectionnelle;
+  /** Gamme de fabrication retenue ; finition pour un panneau de position. */
+  gamme: GammePanneau;
   classe: number | null;
   quantite: number;
   /** Ensembles où il figure, dans l'ordre du carnet. */
@@ -474,6 +564,8 @@ export function panneauxAFabriquer(
   existe?: (codification: string) => boolean,
   /** Classe imposée à l'écran, à la place de celle du plan (erreur Kadri). */
   classeForcee?: number | null,
+  /** Finition des panneaux de position, pour tout le carnet. */
+  finition: FinitionPosition = 'bp',
 ): LignePanneauPlan[] {
   const m = new Map<string, LignePanneauPlan>();
   for (const e of ensembles) {
@@ -481,7 +573,8 @@ export function panneauxAFabriquer(
     const classeE = classeForcee || e.classe;
     for (const p of e.panneaux) {
       if (!aFabriquer(p)) continue;
-      const gamme: GammeDirectionnelle = estGrandFormat(p) ? 'tasman' : gammeProduit;
+      const gamme: GammePanneau = estPanneauPosition(p.code) ? finition
+        : estGrandFormat(p) ? 'tasman' : gammeProduit;
       const r = referencePanneau(p, gamme, classeE, existe);
       const reference = 'reference' in r ? r.reference : null;
       const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${classeE}`;
@@ -564,7 +657,8 @@ export function avecMatNeuf(e: EnsemblePlan): EnsemblePlan {
 /** L'ensemble porte-t-il un panneau PAL à fabriquer (grand format ou gamme Tasman) ? */
 export function portePal(e: EnsemblePlan, gammes: Record<string, GammeDirectionnelle> = {}): boolean {
   const gamme = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  return e.panneaux.some(p => aFabriquer(p) && (estGrandFormat(p) || gamme === 'tasman'));
+  return e.panneaux.some(p => aFabriquer(p) && !estPanneauPosition(p.code)
+    && (estGrandFormat(p) || gamme === 'tasman'));
 }
 
 /** Les supports NEUFS, regroupés par désignation et longueur. */
@@ -631,7 +725,8 @@ export function bilanPlan(ensembles: EnsemblePlan[]) {
 
 /** Désignation d'une ligne de panneau, telle qu'elle part au devis. */
 export function designationPanneau(l: LignePanneauPlan): string {
-  const forme = estFleche(l.code) ? 'Panneau directionnel' : 'Panneau';
+  const forme = estPanneauPosition(l.code) ? 'Panneau de position'
+    : estFleche(l.code) ? 'Panneau directionnel' : 'Panneau';
   const fonds = l.fonds.length ? ` — fond ${l.fonds.join('/').toLowerCase()}` : '';
   const classe = l.classe ? ` classe ${l.classe}` : '';
   if (l.gamme === 'tasman') {
@@ -851,13 +946,44 @@ export function fixationsEnsemble(
   e: EnsemblePlan,
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
-): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
+): LigneFixation | null {
   const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  const panneaux = e.panneaux.filter(p => aFabriquer(p)
+  const panneaux = e.panneaux.filter(p => aFabriquer(p) && !estPanneauPosition(p.code)
     && !estGrandFormat(p) && (gammeProduit === 'laperouse' || gammeProduit === 'vasco'));
   if (!panneaux.length) return null;
+  return fixationsProfil(e, panneaux, p => railsLaperouse(p.hauteur), 'P50', existe);
+}
 
-  const railsParPanneau = panneaux.map(p => railsLaperouse(p.hauteur));
+/**
+ * Les fixations des panneaux de POSITION d'un ensemble : même règle — une
+ * par rail et par support, sur la plus petite section —, mais en profil P25
+ * (CO89SFP25.BRUT, BR8080SFP25.BRUT). Les rails se lisent dans le tableau
+ * des DV (`railsPosition`) : en bords pliés, il n'en donne pas, et la ligne
+ * reste à vérifier plutôt que d'en deviner.
+ */
+export function fixationsPosition(
+  e: EnsemblePlan,
+  finition: FinitionPosition,
+  existe?: (codification: string) => boolean,
+): LigneFixation | null {
+  const panneaux = e.panneaux.filter(p => aFabriquer(p) && estPanneauPosition(p.code));
+  if (!panneaux.length) return null;
+  return fixationsProfil(e, panneaux, p => railsPosition(finition, p.hauteur), 'P25', existe,
+    finition === 'bp' ? ' (bords pliés : rails absents du tableau des DV)' : '');
+}
+
+type LigneFixation = { reference: string | null; quantite: number; description: string; aVerifier: string | null };
+
+/** Une fixation par rail et par support, pour les panneaux donnés, en profil P25 ou P50. */
+function fixationsProfil(
+  e: EnsemblePlan,
+  panneaux: PanneauPlan[],
+  railsDe: (p: PanneauPlan) => number | null,
+  profil: 'P25' | 'P50',
+  existe?: (codification: string) => boolean,
+  precisionRails = '',
+): LigneFixation {
+  const railsParPanneau = panneaux.map(railsDe);
   const rails = railsParPanneau.reduce<number>((t, r) => t + (r ?? 0), 0);
   const horsTable = panneaux.filter((_, i) => railsParPanneau[i] === null);
 
@@ -887,7 +1013,7 @@ export function fixationsEnsemble(
   let aVerifier: string | null = null;
   if (horsTable.length) {
     aVerifier = `rails inconnus pour ${horsTable.map(p => `${p.code} ${p.largeur}x${p.hauteur}`).join(', ')}`
-      + ' — hauteur absente de la table';
+      + (precisionRails || ' — hauteur absente de la table');
   } else if (!nbSupports) {
     aVerifier = 'aucun support lu sur le plan : nombre de fixations à établir';
   } else if (!section) {
@@ -895,13 +1021,13 @@ export function fixationsEnsemble(
   }
   if (aVerifier || !section) {
     return { reference: null, quantite: quantite || 1, aVerifier,
-      description: `Fixations P50 — ${detail}` };
+      description: `Fixations ${profil} — ${detail}` };
   }
 
   const reference = 'rond' in section
-    ? `CO${section.rond}SFP50.BRUT` : `BR${section.carre[0]}${section.carre[1]}SFP50.BRUT`;
+    ? `CO${section.rond}SF${profil}.BRUT` : `BR${section.carre[0]}${section.carre[1]}SF${profil}.BRUT`;
   const nom = 'rond' in section
-    ? `Collier Ø${section.rond} simple face P50` : `Bride ${section.carre[0]}x${section.carre[1]} simple face P50`;
+    ? `Collier Ø${section.rond} simple face ${profil}` : `Bride ${section.carre[0]}x${section.carre[1]} simple face ${profil}`;
   if (existe && !existe(reference)) {
     return { reference: null, quantite, description: `${nom} — ${detail} (${porteur})`,
       aVerifier: `${reference} absent de la grille` };
@@ -935,7 +1061,7 @@ export function bridesPal(
   gammes: Record<string, GammeDirectionnelle>,
 ): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
   const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  const panneaux = e.panneaux.filter(p => aFabriquer(p)
+  const panneaux = e.panneaux.filter(p => aFabriquer(p) && !estPanneauPosition(p.code)
     && (estGrandFormat(p) || gammeProduit === 'tasman'));
   if (!panneaux.length) return null;
   const supports = e.supports.filter(s => !estCoulisseau(s)).length;
@@ -1003,8 +1129,9 @@ function lignesDe(
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
   classeForcee?: number | null,
+  finition: FinitionPosition = 'bp',
 ): LigneDemandePlan[] {
-  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe, classeForcee).map(l => {
+  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe, classeForcee, finition).map(l => {
     const classe = l.classe ? ` C${l.classe}` : '';
     return {
       ...(l.gamme === 'tasman'
@@ -1025,8 +1152,9 @@ function lignesDe(
      référence commune s'additionne d'un ensemble à l'autre. */
   const fixations = new Map<string, LigneDemandePlan>();
   for (const e of ensembles) {
-    const f = fixationsEnsemble(e, gammes, existe);
-    if (f) {
+    /* P50 et P25 (panneaux de position) : deux articles, deux lignes. */
+    for (const f of [fixationsEnsemble(e, gammes, existe), fixationsPosition(e, finition, existe)]) {
+      if (!f) continue;
       const cle = f.reference ?? `${e.ensemble}|${f.description}`;
       const deja = fixations.get(cle);
       if (deja && f.reference) {
@@ -1105,14 +1233,16 @@ export function lignesDuPlan(
   classeForcee: number | null = null,
   /** Ensembles dont le mât existant est remplacé par un mât neuf (option). */
   matsNeufs: readonly string[] = [],
+  /** Finition des panneaux de position (DV) : bords pliés par défaut. */
+  finition: FinitionPosition = 'bp',
 ): LigneDemandePlan[] {
   ensembles = ensembles.map(e => (matsNeufs.includes(e.ensemble) ? avecMatNeuf(e) : e));
-  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee);
+  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee, finition);
   /* Le numéro compte les ensembles QUI ONT QUELQUE CHOSE À CHIFFRER, dans
      l'ordre du plan : le devis n'a pas de trou dans sa numérotation. */
   let numero = 0;
   return ensembles.flatMap(e => {
-    const lignes = lignesDe([e], gammes, existe, classeForcee);
+    const lignes = lignesDe([e], gammes, existe, classeForcee, finition);
     if (!lignes.length) return [];
     numero += 1;
     const ensemble = { numero, nom: e.ensemble, section: e.section, page: e.page };

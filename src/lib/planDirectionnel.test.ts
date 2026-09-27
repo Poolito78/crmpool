@@ -5,6 +5,7 @@ import {
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
   railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
   ancragesEnsemble, avecMatNeuf, matRemplacable, designationSupport,
+  estPanneauPosition, referenceBpsp, fixationsPosition,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -500,5 +501,76 @@ describe('ancrage des mâts neufs sur embase', () => {
   it('lit « avec em base » coupé par pdf.js', () => {
     const e = lireEnsemble(PAGE_CAISSON.replace(PIED, `Socle d'ancrage avec em base\n${PIED}`), 3)!;
     expect(e.embase).toBe(true);
+  });
+});
+
+describe('panneaux de position (DV) : bords pliés ou Champlain P25', () => {
+  /* HARF-01 (plan p. 39) : trois Dv21b sur un mât ancré MB. */
+  const e = lireEnsemble(`Plan avec détails
+Hauteur de base 100 mm
+D
+D
+S
+HARF-01
+CAISSON CL2
+MAT ANCRE
+Pose
+Dv21b 600x100=0.060m²
+Blanc 3290
+Pose
+Dv21b 900x100=0.090m²
+Blanc 3290
+Pose
+Dv21b 900x150=0.135m²
+Blanc 3290
+MAT ANCRE MB
+Mt : 80 m.daN
+Lg : 3.00 m
+${PIED}`, 39)!;
+
+  it('reconnaît les DV de position, pas les DV11 ni DV42', () => {
+    expect(e.panneaux.map(p => p.code)).toEqual(['Dv21b', 'Dv21b', 'Dv21b']);
+    for (const c of ['DV12', 'Dv21a', 'DV21B', 'DV43a', 'DV43b', 'DV44', 'DV61']) {
+      expect(estPanneauPosition(c)).toBe(true);
+    }
+    for (const c of ['DV11', 'DV21c', 'DV42a', 'D21', 'D43']) expect(estPanneauPosition(c)).toBe(false);
+  });
+
+  it('bords pliés par défaut : la variante IS BPSP relevée chez Odoo, jamais construite', () => {
+    const l = panneauxAFabriquer([e], {});
+    expect(l.map(x => x.reference)).toEqual([
+      'BPSP.600.100.C2.BP.ST.IS.BRUT', 'BPSP.900.100.C2.BP.ST.IS.BRUT', 'BPSP.900.150.C2.BP.ST.IS.BRUT',
+    ]);
+    expect(designationPanneau(l[0])).toBe('Panneau de position bords pliés Dv21b 600x100 classe 2 — fond blanc');
+    /* Odoo n'est pas régulier : sans ST, ou absente. */
+    expect(referenceBpsp(900, 250, 1)).toBe('BPSP.900.250.C1.BP.IS.BRUT');
+    expect(referenceBpsp(600, 200, 1)).toBeNull();
+    expect(referencePanneau({ code: 'DV12', largeur: 1200, hauteur: 250 }, 'bp', 2))
+      .toEqual({ raison: 'bp-absent' });
+  });
+
+  it('Champlain P25 : le DR25 de la grille, pas de 100 de haut', () => {
+    const grille = new Set(['DR25.900.150.C2.25.IS.BRUT']);
+    const l = panneauxAFabriquer([e], {}, c => grille.has(c), null, 'champlain');
+    expect(l.map(x => x.reference ?? x.raison)).toEqual([
+      'champlain-100', 'champlain-100', 'DR25.900.150.C2.25.IS.BRUT',
+    ]);
+  });
+
+  it('colliers P25, une par rail : 2 rails en Champlain, à vérifier en bords pliés', () => {
+    const seul = { ...e, panneaux: e.panneaux.slice(2) };
+    expect(fixationsPosition(seul, 'champlain')).toMatchObject({
+      reference: 'CO76SFP25.BRUT', quantite: 2, aVerifier: null,
+    });
+    expect(fixationsPosition(e, 'bp')).toMatchObject({ reference: null });
+    expect(fixationsPosition(e, 'bp')!.aVerifier).toMatch(/bords pliés/);
+    /* Ni collier P50, ni Lapérouse. */
+    expect(fixationsEnsemble(e, {})).toBeNull();
+  });
+
+  it('la finition passe jusqu\'aux lignes du devis', () => {
+    const refs = lignesDuPlan([e], {}, undefined, 'reference', null, [], 'champlain').map(l => l.reference);
+    expect(refs).toContain('DR25.900.150.C2.25.IS.BRUT');
+    expect(refs.some(r => r.startsWith('BPSP'))).toBe(false);
   });
 });
