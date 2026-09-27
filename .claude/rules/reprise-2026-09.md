@@ -271,9 +271,9 @@ comme Lapérouse ou Vasco, réglées sur la gamme Kadri qui les porte
 (« MICROSERT CL1 », `gammeProposee` / `gammeDuPanneau`) — **bords pliés par défaut**
 (modèle Odoo `IS BPSP`, référence LUE dans `VARIANTES_BPSP` : deux sans
 `.ST`, quatre absentes) ou **Champlain** `DR25.l.h.Cn.25.IS.BRUT` (grille,
-pas de 100 de haut). Colliers `CO{Ø}SFP25` ; rails : 2 en Champlain, **non
-donnés en bords pliés → à vérifier**. ⚠️ BPSP n'est dans AUCUN contrat
-cadre : Odoo le tarife à la liste de prix du client (ATS 43,30 € là où le
+pas de 100 de haut). Colliers `CO{Ø}SFP25`, **2 rails** par panneau en
+Champlain comme en bords pliés (confirmé le 27/09). BPSP n'est dans aucun
+contrat cadre : Odoo le tarife à la liste de prix du client — **c'est voulu** (ATS 43,30 € là où le
 catalogue R4 dit 34,71 €).
 
 ## Pièges d'implémentation rencontrés

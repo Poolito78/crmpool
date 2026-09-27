@@ -563,13 +563,17 @@ ${PIED}`, 39)!;
     ]);
   });
 
-  it('colliers P25, une par rail : 2 rails en Champlain, à vérifier en bords pliés', () => {
+  it('colliers P25, une par rail : 2 rails en Champlain comme en bords pliés', () => {
     const seul = { ...e, panneaux: e.panneaux.slice(2) };
     expect(fixationsPosition(seul, { 'MICROSERT CL2': 'champlain' })).toMatchObject({
       reference: 'CO76SFP25.BRUT', quantite: 2, aVerifier: null,
     });
-    expect(fixationsPosition(e, { 'MICROSERT CL2': 'bp' })).toMatchObject({ reference: null });
-    expect(fixationsPosition(e, {})!.aVerifier).toMatch(/bords pliés/);
+    /* Trois panneaux en bords pliés, 100 compris, sur un MB : 6 colliers Ø76. */
+    expect(fixationsPosition(e, {})).toMatchObject({
+      reference: 'CO76SFP25.BRUT', quantite: 6, aVerifier: null,
+    });
+    /* En Champlain, les 100 n'ont pas de rails connus : à vérifier. */
+    expect(fixationsPosition(e, { 'MICROSERT CL2': 'champlain' })).toMatchObject({ reference: null });
     /* Ni collier P50, ni Lapérouse. */
     expect(fixationsEnsemble(e, {})).toBeNull();
   });

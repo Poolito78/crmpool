@@ -453,7 +453,8 @@ export function estFleche(code: string): boolean {
  *
  *   'bp'         BORDS PLIÉS — modèle Odoo « IS BPSP »,
  *                BPSP.600.100.C1.BP.ST.IS.BRUT. ABSENT DES CONTRATS CADRES :
- *                chez Odoo, c'est la liste de prix du client qui le tarife.
+ *                chez Odoo, c'est la liste de prix du client qui le tarife —
+ *                et c'est voulu (chargé d'affaires, 27/09/2026).
  *                La finition par défaut : la seule qui existe en 100 de haut.
  *   'champlain'  CHAMPLAIN P25 — rectangle « IS DR [P25] »,
  *                DR25.900.150.C2.25.IS.BRUT, à la grille (prix R4 identiques
@@ -503,12 +504,14 @@ export function referenceBpsp(largeur: number, hauteur: number, classe: number):
 }
 
 /**
- * Rails d'un panneau de position, lus dans le tableau du catalogue : 2 en
- * Champlain de 150 à 250. Le tableau ne donne AUCUN nombre de rails pour les
- * bords pliés de ces formats : `null`, la fixation reste à vérifier.
+ * Rails d'un panneau de position : 2 en Champlain de 150 à 250 (tableau du
+ * catalogue), 2 en bords pliés de 100 à 250 (le tableau ne le dit pas ;
+ * confirmé par le chargé d'affaires le 27/09/2026). Une hauteur hors de ces
+ * formats rend `null` : la fixation reste à vérifier.
  */
 export function railsPosition(finition: FinitionPosition, hauteur: number): number | null {
   if (finition === 'champlain' && [150, 200, 250].includes(hauteur)) return 2;
+  if (finition === 'bp' && [100, 150, 200, 250].includes(hauteur)) return 2;
   return null;
 }
 
@@ -995,7 +998,7 @@ export function fixationsEnsemble(
  * Les fixations des panneaux de POSITION d'un ensemble : même règle — une
  * par rail et par support, sur la plus petite section —, mais en profil P25
  * (CO89SFP25.BRUT, BR8080SFP25.BRUT). Les rails se lisent dans le tableau
- * des DV (`railsPosition`) : en bords pliés, il n'en donne pas, et la ligne
+ * des DV (`railsPosition`) — 2 par panneau ; hors de ces formats, la ligne
  * reste à vérifier plutôt que d'en deviner.
  */
 export function fixationsPosition(
@@ -1007,8 +1010,7 @@ export function fixationsPosition(
     .filter((x): x is { p: PanneauPlan; gamme: FinitionPosition } => estFinitionPosition(x.gamme));
   if (!enP25.length) return null;
   const finition = new Map(enP25.map(x => [x.p, x.gamme]));
-  return fixationsProfil(e, enP25.map(x => x.p), p => railsPosition(finition.get(p)!, p.hauteur), 'P25', existe,
-    enP25.some(x => x.gamme === 'bp') ? ' (bords pliés : rails absents du tableau des DV)' : '');
+  return fixationsProfil(e, enP25.map(x => x.p), p => railsPosition(finition.get(p)!, p.hauteur), 'P25', existe);
 }
 
 type LigneFixation = { reference: string | null; quantite: number; description: string; aVerifier: string | null };
