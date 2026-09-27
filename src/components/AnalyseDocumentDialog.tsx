@@ -12,7 +12,7 @@ import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDoc
 import {
   estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   TAUX_PAL_REFERENCE,
-  type EnsemblePlan, type FinitionPosition, type GammeDirectionnelle, type RegroupementPlan,
+  type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
@@ -250,8 +250,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Classe imposée à tout le carnet quand le plan Kadri se trompe ; `null`
      = celle du plan. */
   const [classePlan, setClassePlan] = useState<number | null>(null);
-  /** Finition des panneaux de position (DV) du carnet : bords pliés ou Champlain P25. */
-  const [finitionPlan, setFinitionPlan] = useState<FinitionPosition>('bp');
   /* Ensembles dont le mât existant est remplacé par un mât neuf, à la
      demande du chargé d'affaires (`avecMatNeuf`). */
   const [matsNeufsPlan, setMatsNeufsPlan] = useState<string[]>([]);
@@ -1173,9 +1171,8 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!planKadri) return [];
     const g = planKadri.grille;
     return lignesDuPlan(planKadri.ensembles, gammesKadri,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan, matsNeufsPlan,
-      finitionPlan);
-  }, [planKadri, gammesKadri, regroupementPlan, classePlan, matsNeufsPlan, finitionPlan]);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan, matsNeufsPlan);
+  }, [planKadri, gammesKadri, regroupementPlan, classePlan, matsNeufsPlan]);
 
   /** Le carnet en demande de devis : un document que l'IA n'a pas touché. */
   const documentDuPlan = useCallback((
@@ -1201,22 +1198,20 @@ const [contratOdoo, setContratOdoo] = useState<
     regroupement: RegroupementPlan,
     classe: number | null,
     matsNeufs: string[] = matsNeufsPlan,
-    finition: FinitionPosition = finitionPlan,
   ) => {
     if (!planKadri) return;
     const g = planKadri.grille;
     const lignes = lignesDuPlan(planKadri.ensembles, gammes,
-      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement, classe, matsNeufs, finition);
+      g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupement, classe, matsNeufs);
     setGammesKadri(gammes);
     setRegroupementPlan(regroupement);
     setClassePlan(classe);
     setMatsNeufsPlan(matsNeufs);
-    setFinitionPlan(finition);
     setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
-  }, [planKadri, documentDuPlan, matsNeufsPlan, finitionPlan]);
+  }, [planKadri, documentDuPlan, matsNeufsPlan]);
   const choisirGammeKadri = useCallback((produit: string, gamme: GammeDirectionnelle) =>
     reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan, classePlan),
   [reconstruirePlan, gammesKadri, regroupementPlan, classePlan]);
@@ -1244,7 +1239,7 @@ const [contratOdoo, setContratOdoo] = useState<
        n'a rien à voir avec celui qu'on avait retenu. */
     setOptionsEnsemble({}); setHauteurSousPanneau({}); setSectionSupport('Ø60');
     setNomAgglo({}); setSupportsAgglo({}); setDptLivraison(''); setNiveauForce('');
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setFinitionPlan('bp'); setTauxPal(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
     setContratOdoo(null); setClientOdoo(null); setTrouvaillesOdoo({}); setFichesOdoo({});
     setOdooMuet(null);
     setClientsProposes([]);
@@ -1475,7 +1470,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerDevisClientId(''); setCreerDevisNumero(''); setCreerDevisDate('');
     setCreerDevisValidite(''); setCreerDevisRefAffaire(''); setCreerDevisChantier(''); setCreerDevisNotes('');
     setApercu(null);
-    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setFinitionPlan('bp'); setTauxPal(null);
+    setPlanKadri(null); setGammesKadri({}); setRegroupementPlan('ensemble'); setClassePlan(null); setMatsNeufsPlan([]); setTauxPal(null);
   }
 
   /* ── aperçu du PDF ─────────────────────────────────────────────────────────
@@ -4955,8 +4950,6 @@ const [contratOdoo, setContratOdoo] = useState<
                                 onRegroupement={r => reconstruirePlan(gammesKadri, r, classePlan)}
                                 classe={classePlan}
                                 onClasse={c => reconstruirePlan(gammesKadri, regroupementPlan, c)}
-                                finition={finitionPlan}
-                                onFinition={f => reconstruirePlan(gammesKadri, regroupementPlan, classePlan, matsNeufsPlan, f)}
                                 matsNeufs={matsNeufsPlan}
                                 onVoirPage={urlPlan
                                   ? page => window.open(`${urlPlan}#page=${page}`, '_blank', 'noopener')

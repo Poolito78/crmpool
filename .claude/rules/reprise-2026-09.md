@@ -266,8 +266,9 @@ modèle (« IS DF [P50] »).
 ## Plans directionnels : les DV de position (27 sept.)
 
 DV12, DV21a/b, DV43a/b, DV44, DV61 (« Dv21b 600x100 » chez Kadri) ne sont
-pas des Lapérouse P50 : profil P25, deux finitions au choix pour le carnet
-(`FinitionPosition`, sélecteur de l'encart) — **bords pliés par défaut**
+pas des Lapérouse P50 : profil P25, deux finitions qui sont des GAMMES
+comme Lapérouse ou Vasco, réglées sur la gamme Kadri qui les porte
+(« MICROSERT CL1 », `gammeProposee` / `gammeDuPanneau`) — **bords pliés par défaut**
 (modèle Odoo `IS BPSP`, référence LUE dans `VARIANTES_BPSP` : deux sans
 `.ST`, quatre absentes) ou **Champlain** `DR25.l.h.Cn.25.IS.BRUT` (grille,
 pas de 100 de haut). Colliers `CO{Ø}SFP25` ; rails : 2 en Champlain, **non

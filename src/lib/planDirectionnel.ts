@@ -30,7 +30,7 @@
  * d'une voisine chez Odoo.
  *   Dv21b, DV12, DV43a… (position)   → BPSP.600.100.C1.BP.ST.IS.BRUT (bords
  *                                      pliés, par défaut) ou DR25 (Champlain
- *                                      P25) — voir `FinitionPosition`.
+ *                                      P25), réglés sur leur gamme Kadri (MICROSERT) — voir `FinitionPosition`.
  *
  * On ne chiffre QUE la fabrication : ni pose, ni dépose.
  *
@@ -292,28 +292,74 @@ export function lirePlanDirectionnel(pages: string[]): EnsemblePlan[] {
  *                face par défaut (l'autre est occultable). Absent de la
  *                grille : c'est Odoo qui la tarife, par sa référence
  *                exacte.
+ *   'bp'         BORDS PLIÉS P25 et
+ *   'champlain'  CHAMPLAIN P25 : les panneaux de POSITION (DV12, DV21a/b…,
+ *                `FinitionPosition`). Chez Kadri, ils vivent dans leur
+ *                propre gamme — « MICROSERT CL1 » —, qui se règle ici comme
+ *                les autres.
  */
-export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville' | 'tasman';
+export type GammeDirectionnelle = 'laperouse' | 'vasco' | 'urville' | 'tasman' | FinitionPosition;
 
 export const LIBELLE_GAMME: Record<GammeDirectionnelle, string> = {
   laperouse: 'Lapérouse P50 (dos ouvert)',
   vasco: 'Vasco de Gama (dos fermé)',
   urville: 'Urville (caisson traversant)',
   tasman: 'Tasman PAL — IS D3 (grand format)',
+  bp: 'Bords pliés P25 — IS BPSP (position)',
+  champlain: 'Champlain P25 — DR25 (position)',
 };
 
 /**
  * Lapérouse P50 par défaut, quoi que Kadri écrive (« CAISSON », « ALU BT/M »…) :
- * c'est la gamme courante d'ISOSIGN. Les deux autres ne se prennent que si
- * elles sont DITES — le nom de la gamme, « dos fermé », « traversant ». Un
- * simple « CAISSON » ne dit pas « traversant ».
+ * c'est la gamme courante d'ISOSIGN. Les autres ne se prennent que si elles
+ * sont DITES — le nom de la gamme, « dos fermé », « traversant », « bords
+ * pliés ». Un simple « CAISSON » ne dit pas « traversant ».
  */
 export function gammeParDefaut(produitKadri: string): GammeDirectionnelle {
   const t = produitKadri.normalize('NFD').replace(/\p{Diacritic}/gu, '').toUpperCase();
   if (/TASMAN|\bPAL\b/.test(t)) return 'tasman';
   if (/URVILLE|TRAVERSANT/.test(t)) return 'urville';
   if (/VASCO|DOS\s*FERME/.test(t)) return 'vasco';
+  if (/CHAMPLAIN/.test(t)) return 'champlain';
+  if (/BORDS?\s*PLIES?/.test(t)) return 'bp';
   return 'laperouse';
+}
+
+/**
+ * La gamme PROPOSÉE pour une gamme Kadri, compte tenu de ses panneaux :
+ * celle que dit son nom, sauf quand elle ne porte QUE des panneaux de
+ * position (« MICROSERT CL1 ») — Lapérouse ne les fabrique pas, ils
+ * partent en bords pliés, la seule finition qui existe en 100 de haut.
+ */
+export function gammeProposee(produitKadri: string, ensembles: EnsemblePlan[]): GammeDirectionnelle {
+  const g = gammeParDefaut(produitKadri);
+  if (g !== 'laperouse') return g;
+  const panneaux = ensembles.filter(e => e.produit === produitKadri)
+    .flatMap(e => e.panneaux.filter(aFabriquer));
+  return panneaux.length && panneaux.every(p => estPanneauPosition(p.code)) ? 'bp' : g;
+}
+
+/**
+ * La gamme où se fabrique UN panneau :
+ *   - Bords pliés / Champlain choisis pour sa gamme Kadri : ceux-là ;
+ *   - un panneau de POSITION sous une gamme P50 (Lapérouse, Vasco) : bords
+ *     pliés — la grille P50 ne porte aucun de ces petits formats ;
+ *   - au-delà de 2500 × 1200 : Tasman ;
+ *   - sinon la gamme de sa gamme Kadri.
+ */
+export function gammeDuPanneau(
+  p: Pick<PanneauPlan, 'code' | 'largeur' | 'hauteur'>,
+  gammeProduit: GammeDirectionnelle,
+): GammeDirectionnelle {
+  if (estFinitionPosition(gammeProduit)) return gammeProduit;
+  if (estPanneauPosition(p.code) && (gammeProduit === 'laperouse' || gammeProduit === 'vasco')) return 'bp';
+  return estGrandFormat(p) ? 'tasman' : gammeProduit;
+}
+
+/** Les gammes des panneaux d'un ensemble, dans l'ordre de ses panneaux à fabriquer. */
+function panneauxEnGamme(e: EnsemblePlan, gammes: Record<string, GammeDirectionnelle>) {
+  const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
+  return e.panneaux.filter(aFabriquer).map(p => ({ p, gamme: gammeDuPanneau(p, gammeProduit) }));
 }
 
 /**
@@ -414,15 +460,15 @@ export function estFleche(code: string): boolean {
  *                au tableau du catalogue, vérifiés le 27/09/2026). Pas de 100
  *                de haut.
  *
- * DV11, DV21c, DV43c/d et DV42 ont leurs propres articles (DV11.P25…,
- * DV21CE*…) : ils ne sont pas traités ici.
+ * La finition se choisit comme une gamme, sur la gamme Kadri qui les porte
+ * (« MICROSERT CL1 »). DV11, DV21c, DV43c/d et DV42 ont leurs propres
+ * articles (DV11.P25…, DV21CE*…) : ils ne sont pas traités ici.
  */
 export type FinitionPosition = 'bp' | 'champlain';
 
-export const LIBELLE_FINITION_POSITION: Record<FinitionPosition, string> = {
-  bp: 'Bords pliés (IS BPSP)',
-  champlain: 'Champlain P25 (DR25)',
-};
+export function estFinitionPosition(g: GammeDirectionnelle): g is FinitionPosition {
+  return g === 'bp' || g === 'champlain';
+}
 
 export function estPanneauPosition(code: string): boolean {
   return /^DV(12|21[ab]|43[ab]|44|61)$/i.test(code);
@@ -477,7 +523,7 @@ export type RaisonSansReference = 'classe' | 'urville' | 'hors-grille' | 'bp-abs
  */
 export function referencePanneau(
   p: Pick<PanneauPlan, 'code' | 'largeur' | 'hauteur'>,
-  gamme: GammePanneau,
+  gamme: GammeDirectionnelle,
   classe: number | null,
   existe?: (codification: string) => boolean,
 ): { reference: string } | { raison: RaisonSansReference } {
@@ -518,11 +564,8 @@ export const LIBELLE_RAISON: Record<RaisonSansReference, string> = {
   'champlain-100': 'Champlain P25 : pas de 100 de haut — bords pliés seulement',
 };
 
-/** Gamme d'une ligne de panneau : celle du produit Kadri, ou la finition d'un panneau de position. */
-export type GammePanneau = GammeDirectionnelle | FinitionPosition;
-
 /** Nom court de la gamme, tel qu'il part dans la désignation. */
-const NOM_GAMME: Record<GammePanneau, string> = {
+const NOM_GAMME: Record<GammeDirectionnelle, string> = {
   laperouse: 'Lapérouse P50',
   vasco: 'Vasco de Gama dos fermé',
   urville: 'Urville caisson traversant',
@@ -539,8 +582,8 @@ export interface LignePanneauPlan {
   hauteur: number;
   /** Gammes Kadri regroupées sur la ligne. */
   produits: string[];
-  /** Gamme de fabrication retenue ; finition pour un panneau de position. */
-  gamme: GammePanneau;
+  /** Gamme de fabrication retenue (`gammeDuPanneau`). */
+  gamme: GammeDirectionnelle;
   classe: number | null;
   quantite: number;
   /** Ensembles où il figure, dans l'ordre du carnet. */
@@ -564,8 +607,6 @@ export function panneauxAFabriquer(
   existe?: (codification: string) => boolean,
   /** Classe imposée à l'écran, à la place de celle du plan (erreur Kadri). */
   classeForcee?: number | null,
-  /** Finition des panneaux de position, pour tout le carnet. */
-  finition: FinitionPosition = 'bp',
 ): LignePanneauPlan[] {
   const m = new Map<string, LignePanneauPlan>();
   for (const e of ensembles) {
@@ -573,8 +614,7 @@ export function panneauxAFabriquer(
     const classeE = classeForcee || e.classe;
     for (const p of e.panneaux) {
       if (!aFabriquer(p)) continue;
-      const gamme: GammePanneau = estPanneauPosition(p.code) ? finition
-        : estGrandFormat(p) ? 'tasman' : gammeProduit;
+      const gamme = gammeDuPanneau(p, gammeProduit);
       const r = referencePanneau(p, gamme, classeE, existe);
       const reference = 'reference' in r ? r.reference : null;
       const cle = reference ?? `${p.code}|${p.largeur}|${p.hauteur}|${gamme}|${classeE}`;
@@ -656,9 +696,7 @@ export function avecMatNeuf(e: EnsemblePlan): EnsemblePlan {
 
 /** L'ensemble porte-t-il un panneau PAL à fabriquer (grand format ou gamme Tasman) ? */
 export function portePal(e: EnsemblePlan, gammes: Record<string, GammeDirectionnelle> = {}): boolean {
-  const gamme = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  return e.panneaux.some(p => aFabriquer(p) && !estPanneauPosition(p.code)
-    && (estGrandFormat(p) || gamme === 'tasman'));
+  return panneauxEnGamme(e, gammes).some(x => x.gamme === 'tasman');
 }
 
 /** Les supports NEUFS, regroupés par désignation et longueur. */
@@ -947,9 +985,8 @@ export function fixationsEnsemble(
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
 ): LigneFixation | null {
-  const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  const panneaux = e.panneaux.filter(p => aFabriquer(p) && !estPanneauPosition(p.code)
-    && !estGrandFormat(p) && (gammeProduit === 'laperouse' || gammeProduit === 'vasco'));
+  const panneaux = panneauxEnGamme(e, gammes)
+    .filter(x => x.gamme === 'laperouse' || x.gamme === 'vasco').map(x => x.p);
   if (!panneaux.length) return null;
   return fixationsProfil(e, panneaux, p => railsLaperouse(p.hauteur), 'P50', existe);
 }
@@ -963,13 +1000,15 @@ export function fixationsEnsemble(
  */
 export function fixationsPosition(
   e: EnsemblePlan,
-  finition: FinitionPosition,
+  gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
 ): LigneFixation | null {
-  const panneaux = e.panneaux.filter(p => aFabriquer(p) && estPanneauPosition(p.code));
-  if (!panneaux.length) return null;
-  return fixationsProfil(e, panneaux, p => railsPosition(finition, p.hauteur), 'P25', existe,
-    finition === 'bp' ? ' (bords pliés : rails absents du tableau des DV)' : '');
+  const enP25 = panneauxEnGamme(e, gammes)
+    .filter((x): x is { p: PanneauPlan; gamme: FinitionPosition } => estFinitionPosition(x.gamme));
+  if (!enP25.length) return null;
+  const finition = new Map(enP25.map(x => [x.p, x.gamme]));
+  return fixationsProfil(e, enP25.map(x => x.p), p => railsPosition(finition.get(p)!, p.hauteur), 'P25', existe,
+    enP25.some(x => x.gamme === 'bp') ? ' (bords pliés : rails absents du tableau des DV)' : '');
 }
 
 type LigneFixation = { reference: string | null; quantite: number; description: string; aVerifier: string | null };
@@ -1060,9 +1099,7 @@ export function bridesPal(
   e: EnsemblePlan,
   gammes: Record<string, GammeDirectionnelle>,
 ): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
-  const gammeProduit = gammes[e.produit] ?? gammeParDefaut(e.produit);
-  const panneaux = e.panneaux.filter(p => aFabriquer(p) && !estPanneauPosition(p.code)
-    && (estGrandFormat(p) || gammeProduit === 'tasman'));
+  const panneaux = panneauxEnGamme(e, gammes).filter(x => x.gamme === 'tasman').map(x => x.p);
   if (!panneaux.length) return null;
   const supports = e.supports.filter(s => !estCoulisseau(s)).length;
   const parPanneau = panneaux.map(p => {
@@ -1129,9 +1166,8 @@ function lignesDe(
   gammes: Record<string, GammeDirectionnelle>,
   existe?: (codification: string) => boolean,
   classeForcee?: number | null,
-  finition: FinitionPosition = 'bp',
 ): LigneDemandePlan[] {
-  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe, classeForcee, finition).map(l => {
+  const out: LigneDemandePlan[] = panneauxAFabriquer(ensembles, gammes, existe, classeForcee).map(l => {
     const classe = l.classe ? ` C${l.classe}` : '';
     return {
       ...(l.gamme === 'tasman'
@@ -1153,7 +1189,7 @@ function lignesDe(
   const fixations = new Map<string, LigneDemandePlan>();
   for (const e of ensembles) {
     /* P50 et P25 (panneaux de position) : deux articles, deux lignes. */
-    for (const f of [fixationsEnsemble(e, gammes, existe), fixationsPosition(e, finition, existe)]) {
+    for (const f of [fixationsEnsemble(e, gammes, existe), fixationsPosition(e, gammes, existe)]) {
       if (!f) continue;
       const cle = f.reference ?? `${e.ensemble}|${f.description}`;
       const deja = fixations.get(cle);
@@ -1233,16 +1269,14 @@ export function lignesDuPlan(
   classeForcee: number | null = null,
   /** Ensembles dont le mât existant est remplacé par un mât neuf (option). */
   matsNeufs: readonly string[] = [],
-  /** Finition des panneaux de position (DV) : bords pliés par défaut. */
-  finition: FinitionPosition = 'bp',
 ): LigneDemandePlan[] {
   ensembles = ensembles.map(e => (matsNeufs.includes(e.ensemble) ? avecMatNeuf(e) : e));
-  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee, finition);
+  if (regroupement === 'reference') return lignesDe(ensembles, gammes, existe, classeForcee);
   /* Le numéro compte les ensembles QUI ONT QUELQUE CHOSE À CHIFFRER, dans
      l'ordre du plan : le devis n'a pas de trou dans sa numérotation. */
   let numero = 0;
   return ensembles.flatMap(e => {
-    const lignes = lignesDe([e], gammes, existe, classeForcee, finition);
+    const lignes = lignesDe([e], gammes, existe, classeForcee);
     if (!lignes.length) return [];
     numero += 1;
     const ensemble = { numero, nom: e.ensemble, section: e.section, page: e.page };

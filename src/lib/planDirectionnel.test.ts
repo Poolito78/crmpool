@@ -5,7 +5,7 @@ import {
   gammeParDefaut, designationPanneau, lignesDuPlan, estGrandFormat, surfaceTasman, titreEnsemble,
   railsLaperouse, sectionSupport, fixationsEnsemble, bridesPal, codificationPal, referenceSupport,
   ancragesEnsemble, avecMatNeuf, matRemplacable, designationSupport,
-  estPanneauPosition, referenceBpsp, fixationsPosition,
+  estPanneauPosition, referenceBpsp, fixationsPosition, gammeProposee,
 } from './planDirectionnel';
 
 /* Extraits de pages telles que pdf.js les rend (`extrairePagesPDF`), espaces
@@ -505,6 +505,7 @@ describe('ancrage des mâts neufs sur embase', () => {
 });
 
 describe('panneaux de position (DV) : bords pliés ou Champlain P25', () => {
+  const ensembles = lirePlanDirectionnel(['garde', PAGE_CAISSON, PAGE_ALU, PAGE_NEUF]);
   /* HARF-01 (plan p. 39) : trois Dv21b sur un mât ancré MB. */
   const e = lireEnsemble(`Plan avec détails
 Hauteur de base 100 mm
@@ -512,7 +513,7 @@ D
 D
 S
 HARF-01
-CAISSON CL2
+MICROSERT CL2
 MAT ANCRE
 Pose
 Dv21b 600x100=0.060m²
@@ -536,6 +537,11 @@ ${PIED}`, 39)!;
     for (const c of ['DV11', 'DV21c', 'DV42a', 'D21', 'D43']) expect(estPanneauPosition(c)).toBe(false);
   });
 
+  it('une gamme Kadri de panneaux de position se propose en bords pliés', () => {
+    expect(gammeProposee('MICROSERT CL2', [e])).toBe('bp');
+    expect(gammeProposee('CAISSON CL1', ensembles)).toBe('laperouse');
+  });
+
   it('bords pliés par défaut : la variante IS BPSP relevée chez Odoo, jamais construite', () => {
     const l = panneauxAFabriquer([e], {});
     expect(l.map(x => x.reference)).toEqual([
@@ -551,7 +557,7 @@ ${PIED}`, 39)!;
 
   it('Champlain P25 : le DR25 de la grille, pas de 100 de haut', () => {
     const grille = new Set(['DR25.900.150.C2.25.IS.BRUT']);
-    const l = panneauxAFabriquer([e], {}, c => grille.has(c), null, 'champlain');
+    const l = panneauxAFabriquer([e], { 'MICROSERT CL2': 'champlain' }, c => grille.has(c));
     expect(l.map(x => x.reference ?? x.raison)).toEqual([
       'champlain-100', 'champlain-100', 'DR25.900.150.C2.25.IS.BRUT',
     ]);
@@ -559,17 +565,17 @@ ${PIED}`, 39)!;
 
   it('colliers P25, une par rail : 2 rails en Champlain, à vérifier en bords pliés', () => {
     const seul = { ...e, panneaux: e.panneaux.slice(2) };
-    expect(fixationsPosition(seul, 'champlain')).toMatchObject({
+    expect(fixationsPosition(seul, { 'MICROSERT CL2': 'champlain' })).toMatchObject({
       reference: 'CO76SFP25.BRUT', quantite: 2, aVerifier: null,
     });
-    expect(fixationsPosition(e, 'bp')).toMatchObject({ reference: null });
-    expect(fixationsPosition(e, 'bp')!.aVerifier).toMatch(/bords pliés/);
+    expect(fixationsPosition(e, { 'MICROSERT CL2': 'bp' })).toMatchObject({ reference: null });
+    expect(fixationsPosition(e, {})!.aVerifier).toMatch(/bords pliés/);
     /* Ni collier P50, ni Lapérouse. */
     expect(fixationsEnsemble(e, {})).toBeNull();
   });
 
   it('la finition passe jusqu\'aux lignes du devis', () => {
-    const refs = lignesDuPlan([e], {}, undefined, 'reference', null, [], 'champlain').map(l => l.reference);
+    const refs = lignesDuPlan([e], { 'MICROSERT CL2': 'champlain' }, undefined, 'reference').map(l => l.reference);
     expect(refs).toContain('DR25.900.150.C2.25.IS.BRUT');
     expect(refs.some(r => r.startsWith('BPSP'))).toBe(false);
   });

@@ -4,9 +4,8 @@ import { AlertTriangle, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
-  bilanPlan, gammeParDefaut, aFabriquer, titreEnsemble, matRemplacable, estPanneauPosition,
-  LIBELLE_GAMME, LIBELLE_FINITION_POSITION, TAUX_PAL_REFERENCE,
-  type EnsemblePlan, type FinitionPosition, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
+  bilanPlan, gammeProposee, aFabriquer, titreEnsemble, matRemplacable, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
+  type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 
 /**
@@ -24,7 +23,7 @@ import {
  * ensemble par ensemble (`avecMatNeuf`).
  */
 export default function PlanDirectionnelEncart({
-  ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse, finition, onFinition,
+  ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
   tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne, designationLigne, onVoirPage,
 }: {
   ensembles: EnsemblePlan[];
@@ -35,9 +34,6 @@ export default function PlanDirectionnelEncart({
   /** Classe imposée au carnet ; `null` = celle du plan Kadri. */
   classe: number | null;
   onClasse: (c: number | null) => void;
-  /** Finition des panneaux de position (DV12, DV21a/b, DV43a/b…), pour tout le carnet. */
-  finition: FinitionPosition;
-  onFinition: (f: FinitionPosition) => void;
   /** Taux PAL au m² saisi ; `null` = référence (140 € en C2) puis contrat. */
   tauxPal: number | null;
   onTauxPal: (t: number | null) => void;
@@ -70,8 +66,6 @@ export default function PlanDirectionnelEncart({
   const total = lignes.reduce((t, l, i) => t + (prixLigne(i)?.prix ?? 0) * l.quantite, 0);
   const aVerifier = lignes.filter((l, i) => l.aVerifier || !prixLigne(i)).length;
   const fabriques = bilan.panneaux.neuf + bilan.panneaux.remplace;
-  const avecPosition = useMemo(() => ensembles.some(e =>
-    e.panneaux.some(p => aFabriquer(p) && estPanneauPosition(p.code))), [ensembles]);
   /* Ensembles à mât existant qu'un mât neuf de la grille pourrait remplacer. */
   const matsExistants = useMemo(() => ensembles.filter(matRemplacable), [ensembles]);
   const basculerMat = (nom: string) => onMatsNeufs(matsNeufs.includes(nom)
@@ -153,23 +147,6 @@ export default function PlanDirectionnelEncart({
         )}
       </div>
 
-      {avecPosition && (
-        <div className="flex items-center gap-2">
-          <span className="font-medium">Panneaux de position</span>
-          <Select value={finition} onValueChange={v => onFinition(v as FinitionPosition)}>
-            <SelectTrigger className="h-7 w-60 text-[11px]"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {(Object.keys(LIBELLE_FINITION_POSITION) as FinitionPosition[]).map(f => (
-                <SelectItem key={f} value={f} className="text-[11px]">{LIBELLE_FINITION_POSITION[f]}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="text-muted-foreground">
-            DV12, DV21a/b, DV43a/b, DV44, DV61 — P25, colliers P25. Champlain : pas de 100 de haut
-          </span>
-        </div>
-      )}
-
       {lignes.some(l => l.tasman) && (
         <div className="flex items-center gap-2">
           <span className="font-medium">Taux PAL Tasman</span>
@@ -211,7 +188,7 @@ export default function PlanDirectionnelEncart({
             <div key={p} className="flex items-center gap-2">
               <span className="w-44 truncate" title={p}>{p}</span>
               <Select
-                value={gammes[p] ?? gammeParDefaut(p)}
+                value={gammes[p] ?? gammeProposee(p, ensembles)}
                 onValueChange={v => onGamme(p, v as GammeDirectionnelle)}
               >
                 <SelectTrigger className="h-7 w-60 text-[11px]"><SelectValue /></SelectTrigger>
@@ -227,8 +204,10 @@ export default function PlanDirectionnelEncart({
             Lapérouse P50 (dos ouvert) par défaut. Vasco de Gama pour un dos fermé ; Urville pour
             un caisson traversant — absent de la grille, il se choisit parmi les articles Odoo
             proposés. Au-delà de 2500 × 1200, le panneau passe en Tasman PAL : variante Odoo
-            IS D3 aux dimensions supérieures du modèle, chiffrée au m² fabriqué. Ni pose ni
-            dépose ne sont chiffrées.
+            IS D3 aux dimensions supérieures du modèle, chiffrée au m² fabriqué. Les panneaux de
+            position (DV12, DV21a/b, DV43a/b, DV44, DV61 — gamme MICROSERT) sont en P25, colliers
+            P25 : bords pliés (IS BPSP) par défaut, ou Champlain (DR25, pas de 100 de haut) ;
+            sous une gamme P50 ils restent en bords pliés. Ni pose ni dépose ne sont chiffrées.
           </p>
         </div>
       )}
