@@ -311,6 +311,15 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   vient de la lecture (`LigneAnalysee.unite`, ajoutée au prompt), à défaut du
   texte de la ligne ou du document (« 22ml »). Sans format lisible, rien n'est
   converti ; un tracé ou une surface écrite gardent leur calcul.
+- **ADR** (`produits.adr`, case « Matière dangereuse (ADR) » de la fiche,
+  migration `20260928160000`, cochée sur ECLIPSE25 / ECLIPSE) : un envoi
+  ISOMARK H2 qui en contient se paie à la **grille au poids, sans franco**
+  (règle du 28/09 ; le tarif dit « franco 1 000 € hors ADR »). Sans ADR, le
+  forfait H2 reste de 51 €.
+- **Le poids de la fiche passe avant le libellé** (`LigneGamme.poidsUnitaire`,
+  `poidsUnitaireDe`) : pour des pavés au m², `produits.poids` = poids d'un m².
+  Le bloc système affiche le poids de l'envoi et nomme ce qui n'en a pas ;
+  le port affiche son poids. ⚠️ Les PAVPREF ont `poids = 0` : à renseigner.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de

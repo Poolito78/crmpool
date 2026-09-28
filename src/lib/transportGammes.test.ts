@@ -113,3 +113,40 @@ describe('répartition des expéditions', () => {
     expect(ports[0].offert).toBe(false);   // franco H1 à 2 700 €, pas 1 000 €
   });
 });
+
+describe('ISOMARK H2 avec une matière dangereuse (ADR)', () => {
+  /* Pavés à coller 15x20, 22 ml : colle Eclipse (ADR) + quartz, 50 kg. */
+  const lignes = [
+    { reference: 'PAVPREF152030', designation: 'm² Pavés préfabriqués à coller 15x20 (<30m²)', quantite: 3.3, montant: 156.75, niveau: 'H2' as const },
+    { reference: 'ECLIPSE25', designation: 'COLLE ECLIPSE (FUT DE 25KG)', quantite: 1, montant: 99.5, niveau: 'H2' as const, adr: true },
+    { reference: 'QUARTZGRI0.7-1.3', designation: 'QUARTZ GRIS CLAIR MI 0,7-1,3 (Cdt 48x25kg)', quantite: 1, montant: 49.85, niveau: 'H2' as const },
+  ];
+
+  it('passe à la grille au poids : 50 kg → 87 €', () => {
+    const p = portIsomark(lignes, true);
+    expect(p.poids).toBe(50);
+    expect(p.montant).toBe(87);
+    expect(p.poidsIncomplet).toBe(true);   // les pavés n'ont pas de poids écrit
+  });
+
+  it('sans franco, même au-delà de 1 000 €', () => {
+    const cher = lignes.map(l => ({ ...l, montant: l.montant * 10 }));
+    expect(portIsomark(cher, true).montant).toBe(87);
+  });
+
+  it('sans ADR, le forfait H2 reste de 51 €', () => {
+    expect(portIsomark(lignes.map(l => ({ ...l, adr: false })), true).montant).toBe(51);
+  });
+});
+
+describe('le poids de la fiche article passe avant le libellé', () => {
+  it('compte les pavés au poids d’un m² porté par la fiche', () => {
+    const p = portIsomark([
+      { reference: 'PAVPREF152030', designation: 'm² Pavés préfabriqués à coller 15x20 (<30m²)',
+        quantite: 3.3, montant: 156.75, niveau: 'H2', poidsUnitaire: 10 },
+      { reference: 'ECLIPSE25', designation: 'COLLE ECLIPSE (FUT DE 25KG)', quantite: 1, montant: 99.5, niveau: 'H2', adr: true },
+    ], true);
+    expect(p.poids).toBeCloseTo(58);
+    expect(p.poidsIncomplet).toBe(false);
+  });
+});

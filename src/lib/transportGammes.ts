@@ -93,6 +93,14 @@ export interface LigneGamme {
   montant: number;
   /** Niveau lu sur la catégorie Odoo — voir `remiseGammes.ts`. */
   niveau?: NiveauGamme;
+  /** Matière dangereuse : un envoi H2 qui en contient se paie au poids. */
+  adr?: boolean;
+  /**
+   * Poids d'UNE unité vendue, en kg, quand la fiche article le porte — pour
+   * des pavés vendus au m², c'est le poids d'un m². Il passe avant celui lu
+   * dans le libellé : « m² Pavés préfabriqués à coller 15x20 » n'en dit rien.
+   */
+  poidsUnitaire?: number;
 }
 
 export interface PortGamme {
@@ -114,7 +122,8 @@ function poidsTotal(lignes: LigneGamme[], sansGranulats = false) {
   let incomplet = false;
   for (const l of lignes) {
     if (sansGranulats && estGranulat(l.designation || l.reference)) continue;
-    const u = poidsDepuisLibelle(l.designation || '');
+    const u = l.poidsUnitaire && l.poidsUnitaire > 0
+      ? l.poidsUnitaire : poidsDepuisLibelle(l.designation || '');
     if (u === null) { incomplet = true; continue; }
     poids += u * (l.quantite || 0);
   }
@@ -132,6 +141,19 @@ function poidsTotal(lignes: LigneGamme[], sansGranulats = false) {
 export function portIsomark(lignes: LigneGamme[], h2 = false): PortGamme {
   const base = lignes.reduce((t, l) => t + (Number(l.montant) || 0), 0);
   const { poids, incomplet } = poidsTotal(lignes);
+
+  /* ADR EN H2 : GRILLE AU POIDS, SANS FRANCO. Le franco H2 est « hors ADR »
+     et le forfait de 51 € ne vaut que pour un envoi sans matière dangereuse
+     (règle du 28/09/2026). La grille est celle écrite pour le H1. */
+  if (h2 && lignes.some(l => l.adr)) {
+    const montant = tarifDeTranche(ISOMARK_H1, poids);
+    return {
+      gamme: 'ISOMARK', montant, offert: false, poids, poidsFranco: poids, base,
+      poidsIncomplet: incomplet,
+      explication: `H2 avec ADR — grille au poids, sans franco : `
+        + `${poids.toFixed(1)} kg → ${montant.toFixed(2)} €`,
+    };
+  }
 
   if (h2) {
     const offert = base >= FRANCO_ISOMARK_H2;

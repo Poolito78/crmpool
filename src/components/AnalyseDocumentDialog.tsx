@@ -59,6 +59,7 @@ import {
   articlePlastique, chiffrerTransport, departement,
 } from '@/lib/transportPlastique';
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
+import { poidsDepuisLibelle } from '@/lib/transportGammes';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
 import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
@@ -114,6 +115,16 @@ function LienFiche({ produit }: { produit: Produit }) {
       {designationProduit(produit)}
     </a>
   );
+}
+
+/**
+ * Le poids d'UNE unité vendue, en kg : la fiche article d'abord (pour des
+ * pavés au m², le poids d'un m²), le conditionnement écrit dans la
+ * désignation ensuite (« FUT DE 25KG »). `null` quand rien ne le dit.
+ */
+function poidsUnitaireDe(p: Produit): number | null {
+  if (p.poids && p.poids > 0) return p.poids;
+  return poidsDepuisLibelle(designationProduit(p));
 }
 
 /** `systemeManuel` : la ligne se chiffre en article, système reconnu ou non. */
@@ -2763,7 +2774,8 @@ const [contratOdoo, setContratOdoo] = useState<
         const remise = prixApplicateur(odoo?.fiche ?? local?.prixTarif ?? local?.prixHT, categorie, local?.catalogue);
         const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : (odoo?.contrat ?? 0));
         lignesGamme.push({ reference: ref, designation, quantite: qte,
-                           montant: (Number(pu) || 0) * qte, niveau });
+                           montant: (Number(pu) || 0) * qte, niveau, adr: !!local?.adr,
+                           poidsUnitaire: local?.poids && local.poids > 0 ? local.poids : undefined });
         return;
       }
       const pu = prixManuel[cle] ?? odoo?.contrat ?? 0;
@@ -2789,7 +2801,8 @@ const [contratOdoo, setContratOdoo] = useState<
       const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : p.prixHT ?? 0);
       if (niveau !== null || estGamme(p.catalogue)) {
         lignesGamme.push({ reference: ref, designation: designationProduit(p), quantite: qte,
-                           montant: (Number(pu) || 0) * qte, niveau });
+                           montant: (Number(pu) || 0) * qte, niveau, adr: !!p.adr,
+                           poidsUnitaire: p.poids && p.poids > 0 ? p.poids : undefined });
       } else {
         baseIsosign += (Number(pu) || 0) * qte;
         lignesIsosign.push({ reference: ref, designation: designationProduit(p) });
@@ -5116,7 +5129,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                 <div key={g.explication} className="flex gap-2" title={g.explication}>
                                   <span className="flex-1 truncate">
                                     Port {g.gamme}{g.explication.startsWith('H2') ? ' H2 (usine)' : g.gamme === 'ISOMARK' ? ' H1' : ''}
-                                    {g.poidsIncomplet && <span className="text-warning"> · poids partiel</span>}
+                                    <span className="text-muted-foreground"> · {String(Math.round(g.poids * 10) / 10).replace('.', ',')} kg</span>
+                                    {g.poidsIncomplet && (
+                                      <span className="text-warning"
+                                        title="Un article de l'envoi n'a pas de poids : renseignez-le sur sa fiche (pavés : poids d'un m²).">
+                                        {' '}· poids partiel
+                                      </span>
+                                    )}
                                   </span>
                                   <span className="font-semibold shrink-0">
                                     {g.offert ? 'offert' : formatMontant(g.montant)}
@@ -5634,6 +5653,33 @@ const [contratOdoo, setContratOdoo] = useState<
                                             <div className="flex items-center justify-between border-t border-primary/20 pt-1">
                                               <span className="text-muted-foreground">
                                                 {declinees.length} composant(s) · {surface} m²
+                                                {(() => {
+                                                  /* LE POIDS DE L'ENVOI, pavés compris : c'est lui
+                                                     qui choisit la tranche du port. Un composant dont
+                                                     ni la fiche ni le libellé ne disent le poids est
+                                                     nommé, pas deviné. */
+                                                  let kg = 0;
+                                                  const sansPoids: string[] = [];
+                                                  for (const ls of declinees) {
+                                                    const p = ls.composant.produitId
+                                                      ? produitParId(produits, ls.composant.produitId) : undefined;
+                                                    if (!p) continue;
+                                                    const u = poidsUnitaireDe(p);
+                                                    if (u == null) { sansPoids.push(ls.composant.role); continue; }
+                                                    kg += u * quantiteComposant(i, ls);
+                                                  }
+                                                  return (
+                                                    <>
+                                                      {' · '}<span className="text-foreground font-medium">{String(Math.round(kg * 10) / 10).replace(".", ",")} kg</span>
+                                                      {sansPoids.length > 0 && (
+                                                        <span className="text-warning"
+                                                          title="Renseignez le poids sur la fiche article (pour des pavés : le poids d'un m²).">
+                                                          {' '}+ {sansPoids.join(', ')} sans poids
+                                                        </span>
+                                                      )}
+                                                    </>
+                                                  );
+                                                })()}
                                               </span>
                                               <span>
                                                 <strong className="text-foreground">{formatMontant(totalHT)}</strong>

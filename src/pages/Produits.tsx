@@ -135,6 +135,7 @@ const emptyProduit = {
   reference: '', referenceOdoo: '', origine: 'crm' as Origine, description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
+  adr: undefined as boolean | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
 };
 
@@ -977,7 +978,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -3636,6 +3637,19 @@ export default function Produits() {
                   />
                   <span className="text-sm font-medium">Disponible à la vente</span>
                   <span className="text-xs text-muted-foreground">(visible dans stock &amp; devis)</span>
+                </label>
+
+                {/* Matière dangereuse : change le port ISOMARK H2 (grille au
+                    poids, sans franco — « hors ADR » au tarif). */}
+                <label className="flex items-center gap-2.5 px-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!form.adr}
+                    onChange={e => setForm(p => ({ ...p, adr: e.target.checked }))}
+                    className="rounded w-4 h-4 accent-primary"
+                  />
+                  <span className="text-sm font-medium">Matière dangereuse (ADR)</span>
+                  <span className="text-xs text-muted-foreground">(port ISOMARK H2 au poids, sans franco)</span>
                 </label>
 
                 {/* Propriétaire de la marchandise */}

@@ -228,6 +228,9 @@ export interface Produit {
   proprietaire?: 'isosign' | 'fournisseur'; // propriétaire de la marchandise
   proprietaireFournisseurId?: string;        // si proprietaire = 'fournisseur'
   disponibleVente?: boolean;                 // produit proposé à la vente
+  /** Matière dangereuse (ADR) : le port H2 passe alors à la grille au poids,
+      sans franco (tarif ISOMARK, « hors ADR »). Absent = non renseigné. */
+  adr?: boolean;
   /** Désignation du modèle Odoo ; les articles qui la partagent en sont les variantes. */
   modeleCle?: string;
   /** Vrai pour l'article qui représente son modèle au premier rang de la liste. */
@@ -784,6 +787,7 @@ function dbToProduit(r: any): Produit {
     proprietaire: (r.proprietaire as 'isosign' | 'fournisseur') || 'isosign',
     proprietaireFournisseurId: r.proprietaire_fournisseur_id || undefined,
     disponibleVente: r.disponible_vente ?? true,
+    adr: r.adr ?? undefined,
     modeleCle: r.modele_cle || undefined,
     estModele: r.est_modele !== false,
     nbVariantes: Number(r.nb_variantes) || 1,
@@ -846,6 +850,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.proprietaire !== undefined ? { proprietaire: p.proprietaire } : {}),
     ...(p.proprietaireFournisseurId !== undefined ? { proprietaire_fournisseur_id: p.proprietaireFournisseurId || null } : {}),
     ...(p.disponibleVente !== undefined ? { disponible_vente: p.disponibleVente } : {}),
+    ...(p.adr !== undefined ? { adr: p.adr } : {}),
     ...(p.achatsHistorique !== undefined ? { achats_historique: p.achatsHistorique && p.achatsHistorique.length > 0 ? p.achatsHistorique : null } : {}),
     ...(p.descriptionVariante !== undefined ? { description_variante: p.descriptionVariante || null } : {}),
   };
