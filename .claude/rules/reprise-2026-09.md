@@ -350,6 +350,7 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   déclenche pas. Les champs many2one libellés « assistant(e) » du devis et
   de la fiche société sont appariés (même libellé et relation, sinon le seul
   de même relation) et recopiés ; `rapport.assistante` dit ce qui a été vu.
+  **Déployé** (odoo-devis version 7, 28/09).
 - La fonction Odoo « (Vide) » n'est pas une fonction : filtrée à la lecture
   des contacts (3 fiches nettoyées en base le 28/09).
 - ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo
