@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { InputNombre } from '@/components/InputNombre';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
@@ -5189,11 +5190,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                               <span className="w-48 shrink-0 truncate text-right text-muted-foreground" title={ls.explication}>
                                                 {ls.kits ? `${ls.kits} kit(s) · ` : ''}{ls.quantiteKg ? `${ls.quantiteKg} ${libelleUnite(ls.composant.unite)}` : '—'}
                                               </span>
-                                              <Input
-                                                type="number" min={0} step="1" value={q}
-                                                onChange={e => setQuantiteManuelle(pr => ({
-                                                  ...pr, [cle]: Math.max(0, Number(e.target.value) || 0),
-                                                }))}
+                                              <InputNombre
+                                                decimales={3} value={q}
+                                                onChange={v => setQuantiteManuelle(pr => ({ ...pr, [cle]: Math.max(0, v) }))}
                                                 className="h-6 w-14 shrink-0 text-[11px]"
                                               />
                                               <span className="w-16 shrink-0 text-muted-foreground">
@@ -5246,11 +5245,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                       </span>
                                     )}
                                     <span className="ml-auto flex items-center gap-1">
-                                      <Input
-                                        type="number" min={0} step="0.1" value={surface}
-                                        onChange={e => setSurfaceSysteme(pr => ({
-                                          ...pr, [i]: Math.max(0, Number(e.target.value) || 0),
-                                        }))}
+                                      <InputNombre
+                                        decimales={3} value={surface}
+                                        onChange={v => setSurfaceSysteme(pr => ({ ...pr, [i]: Math.max(0, v) }))}
                                         className="h-7 w-24 text-xs"
                                       />
                                       <span className="text-muted-foreground">m²</span>
@@ -5411,11 +5408,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                       <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5 text-[11px]">
                                         <div className="flex items-center gap-2">
                                           <span className="shrink-0 text-muted-foreground">Surface :</span>
-                                          <Input
-                                            type="number" min={0} step="0.1" value={surface}
-                                            onChange={e => setSurfaceSysteme(pr => ({
-                                              ...pr, [i]: Math.max(0, Number(e.target.value) || 0),
-                                            }))}
+                                          <InputNombre
+                                            decimales={3} value={surface}
+                                            onChange={v => setSurfaceSysteme(pr => ({ ...pr, [i]: Math.max(0, v) }))}
                                             className="h-7 w-24 text-xs"
                                           />
                                           <span className="text-muted-foreground">m²</span>
@@ -5520,11 +5515,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                                     <span className="w-20 shrink-0 text-right text-muted-foreground" title={ls.explication}>
                                                       {ls.quantiteKg ? `${ls.quantiteKg} ${libelleUnite(ls.composant.unite)}` : '—'}
                                                     </span>
-                                                    <Input
-                                                      type="number" min={0} step="1" value={q}
-                                                      onChange={e => setQuantiteManuelle(pr => ({
-                                                        ...pr, [cle]: Math.max(0, Number(e.target.value) || 0),
-                                                      }))}
+                                                    <InputNombre
+                                                      decimales={3} value={q}
+                                                      onChange={v => setQuantiteManuelle(pr => ({ ...pr, [cle]: Math.max(0, v) }))}
                                                       className="h-6 w-14 shrink-0 text-[11px]"
                                                     />
                                                     <span className="w-16 shrink-0 text-muted-foreground">
@@ -5573,15 +5566,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                       <>
                                         <div className="flex items-center gap-1.5 text-[11px]">
                                           <span className="text-muted-foreground">Qté</span>
-                                          <Input
-                                            type="number" min={0} step="1" value={qte}
-                                            onChange={e => setQuantiteManuelle(p => ({ ...p, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                          <InputNombre
+                                            decimales={3} value={qte}
+                                            onChange={v => setQuantiteManuelle(p => ({ ...p, [cle]: Math.max(0, v) }))}
                                             className="h-7 w-16 text-xs"
                                           />
                                           <span className="text-muted-foreground ml-1">P.U.</span>
-                                          <Input
-                                            type="number" min={0} step="0.01" value={pu}
-                                            onChange={e => setPrixManuel(p => ({ ...p, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                          <InputNombre
+                                            decimales={2} value={pu}
+                                            onChange={v => setPrixManuel(p => ({ ...p, [cle]: Math.max(0, v) }))}
                                             className="h-7 w-24 text-xs"
                                           />
                                           <span className="text-muted-foreground">
@@ -6338,15 +6331,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                           <>
                                             <div className="flex items-center gap-1.5 text-[11px]">
                                               <span className="text-muted-foreground">Qté</span>
-                                              <Input
-                                                type="number" min={0} step="1" value={qte}
-                                                onChange={e => setQuantiteManuelle(pr => ({ ...pr, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                              <InputNombre
+                                                decimales={3} value={qte}
+                                                onChange={v => setQuantiteManuelle(pr => ({ ...pr, [cle]: Math.max(0, v) }))}
                                                 className="h-7 w-16 text-xs"
                                               />
                                               <span className="text-muted-foreground ml-1">P.U.</span>
-                                              <Input
-                                                type="number" min={0} step="0.01" value={pu}
-                                                onChange={e => setPrixManuel(pr => ({ ...pr, [cle]: Math.max(0, Number(e.target.value) || 0) }))}
+                                              <InputNombre
+                                                decimales={2} value={pu}
+                                                onChange={v => setPrixManuel(pr => ({ ...pr, [cle]: Math.max(0, v) }))}
                                                 className="h-7 w-24 text-xs"
                                               />
                                               <span className="text-muted-foreground">
