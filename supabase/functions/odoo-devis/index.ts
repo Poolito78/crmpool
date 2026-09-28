@@ -469,7 +469,7 @@ serve(async (req) => {
         try {
           return await o.kw(modele, "search_read", [domaine, champs], {
             limit: 40,
-            context: { ...(avecSociete && cid ? { allowed_company_ids: [cid] } : {}), active_test: false },
+            context: { ...(avecSociete && cid ? { allowed_company_ids: [cid] } : {}), active_test: false, lang: "fr_FR" },
           });
         } catch (e) {
           return { erreur: (e as Error).message };
@@ -568,8 +568,13 @@ serve(async (req) => {
          chez Odoo faisait échouer l'égalité stricte, et le port retombait
          sur [PORT]. Les modes d'expédition sont peu nombreux : on les lit
          tous, dans la société puis sans elle. */
+      /* ⚠️ EN FRANÇAIS. Le nom d'un mode d'expédition est TRADUIT : sans
+         `lang`, Odoo rend le nom d'origine — « Transport » pour les quatre
+         modes SH, « PORTSH100 » pour leur article — et l'écran d'Odoo,
+         lui, affiche « FRAIS DE PORT SH DE 26 A 100KG ». La comparaison ne
+         pouvait jamais aboutir. */
       const lire = async (modele: string, domaine: unknown[], champs: string[]) => {
-        for (const contexte of [ctx, { active_test: true }]) {
+        for (const contexte of [{ ...ctx, lang: "fr_FR" }, { lang: "fr_FR" }]) {
           try {
             const r = await o.kw(modele, "search_read", [domaine, champs], { limit: 200, context: contexte }) as any[];
             if (r.length) return r;
