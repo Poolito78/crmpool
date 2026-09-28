@@ -216,6 +216,70 @@ export function rapprocherClient<C extends ClientNommable>(
   return { retenu: premier.client, candidats, pourquoi: `reconnu sur « ${premier.mots.join(' ')} »` };
 }
 
+/* ── La personne, quand l'adresse a changé ───────────────────────────────── */
+
+/**
+ * Ce qui précède l'@ d'une boîte partagée ne désigne personne : « contact@ »
+ * ou « devis@ » existent dans toutes les sociétés.
+ */
+const BOITES_GENERIQUES = new Set([
+  'contact', 'contacts', 'info', 'infos', 'devis', 'commercial', 'commerciale',
+  'compta', 'comptabilite', 'facturation', 'factures', 'admin', 'accueil',
+  'bureau', 'secretariat', 'commande', 'commandes', 'achat', 'achats',
+  'noreply', 'no-reply', 'nepasrepondre', 'service', 'sav', 'direction',
+]);
+
+/** La partie personnelle d'une adresse, ou rien si elle ne désigne personne. */
+function partiePersonnelle(email?: string): string | undefined {
+  const local = String(email || '').trim().toLowerCase().split('@')[0];
+  if (!local || local.length < 6 || BOITES_GENERIQUES.has(local)) return undefined;
+  return local;
+}
+
+export interface ContactNommable { prenom?: string; nom?: string; email?: string }
+export interface ClientAvecContacts extends ClientNommable {
+  email?: string;
+  contacts?: ContactNommable[];
+}
+
+/**
+ * Les fiches où la PERSONNE qui écrit est déjà connue, sous une autre adresse.
+ *
+ * Demande du 28/09/2026 : Martial MARLIÈRE écrit de `martialmarliere@gorez.fr`.
+ * Sa fiche — « Empreinte Signalisation », Guise — porte
+ * `martialmarliere@empreintesignalisation.fr`. L'adresse exacte échouait,
+ * le domaine aussi (personne n'est en `@gorez.fr`), et le client restait à
+ * désigner à la main alors que la personne est au fichier.
+ *
+ * Deux signes, chacun suffisant :
+ *  - la même partie personnelle d'adresse (`martialmarliere@…`), hors boîtes
+ *    partagées (« contact@ », « devis@ ») et formes trop courtes ;
+ *  - le prénom ET le nom d'un contact de la fiche, écrits dans le texte en
+ *    mots entiers — le nom seul ne suffit pas, deux MARTIN se croisent.
+ *
+ * Rend TOUTES les fiches qui répondent : à l'appelant de ne retenir qu'une
+ * réponse unique, et de proposer sinon.
+ */
+export function clientsParPersonne<C extends ClientAvecContacts>(
+  texte: string,
+  emails: string[],
+  clients: C[],
+): C[] {
+  const locaux = new Set(emails.map(partiePersonnelle).filter(Boolean) as string[]);
+  const motsTexte = new Set(normaliser(texte).split(' ').filter(Boolean));
+  const nomCite = (ct: ContactNommable) => {
+    const prenom = motsCles(ct.prenom || '');
+    const nom = motsCles(ct.nom || '');
+    return prenom.length > 0 && nom.length > 0
+      && [...prenom, ...nom].every(m => motsTexte.has(m));
+  };
+  return clients.filter(c => {
+    const adresses = [c.email, ...(c.contacts || []).map(ct => ct.email)];
+    if (adresses.some(a => { const l = partiePersonnelle(a); return !!l && locaux.has(l); })) return true;
+    return (c.contacts || []).some(nomCite);
+  });
+}
+
 /* ── Le vocabulaire du métier ────────────────────────────────────────────── */
 
 /**

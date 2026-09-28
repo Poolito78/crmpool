@@ -290,9 +290,15 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   > 300 = ligne sans article, « nous consulter »). La tranche se lit sur le
   chantier entier dans `chiffrerZones`. Colle **Eclipse** (ECLIPSE25) à
   **5 kg/m²** par défaut (le tarif dit 4), en seaux de 25 kg. **Silice
-  0,4/0,9** (article `SILICE0409` créé, sans référence Odoo) à ½ sac par seau :
-  facultative, **cochée d'office quand la demande nomme son rôle**
-  (`composantDemande`).
+  par défaut = QUARTZGRI0.7-1.3** (quartz gris clair 0,7-1,3, sac 25 kg,
+  acheté chez URBADECCO sous sa propre référence — règle du 28/09, migration
+  `20260928120000`), à ½ sac par seau : facultative, **cochée d'office quand
+  la demande nomme son rôle** (`composantDemande`). L'article `SILICE0409`
+  (0,4/0,9 du tarif, créé le 28/09) n'est plus employé par le système.
+- **Client retrouvé par la personne** (`clientsParPersonne`) : même partie
+  personnelle d'adresse (`martialmarliere@gorez.fr` ↔
+  `martialmarliere@empreintesignalisation.fr`) ou prénom + nom d'un contact
+  cités dans le mail — entre l'adresse exacte et le domaine.
 - ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo
   est divisé deux fois par 0,7 (96,96 € pour 47,50 € applicateur), > 300 m² à
   1,41 €, ECLIPSE25 à 202,84 € pour 99,50 €. Le tarif applicateur du

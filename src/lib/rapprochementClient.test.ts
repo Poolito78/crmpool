@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherClient, motsCles, normaliser, motsFrequentsDuCatalogue,
+  rapprocherClient, motsCles, normaliser, motsFrequentsDuCatalogue, clientsParPersonne,
 } from './rapprochementClient';
 
 const c = (id: string, societe: string, nom = '') => ({ id, societe, nom });
@@ -237,5 +237,37 @@ Les Vignes
     if (rangs.includes('agilis-27') && rangs.includes('agilis-roissy')) {
       expect(rangs.indexOf('agilis-roissy')).toBeLessThan(rangs.indexOf('agilis-27'));
     }
+  });
+});
+
+describe('la personne connue sous une autre adresse', () => {
+  const EMPREINTE = {
+    id: 'emp', nom: 'Martial Marlière', societe: 'Empreinte Signalisation ',
+    email: 'martialmarliere@empreintesignalisation.fr',
+    contacts: [
+      { prenom: 'Martial', nom: 'Marlière', email: 'martialmarliere@empreintesignalisation.fr' },
+      { prenom: 'Xavier', nom: 'Fagard', email: 'xavierfagard@empreintesignalisation.fr' },
+    ],
+  };
+  const AUTRE = {
+    id: 'aut', nom: 'Paul Martin', societe: 'SIGNAUX NORD', email: 'contact@signauxnord.fr',
+    contacts: [{ prenom: 'Paul', nom: 'Martin', email: 'contact@signauxnord.fr' }],
+  };
+  const clients = [EMPREINTE, AUTRE];
+
+  /* La demande du 28/09/2026 : écrite de gorez.fr, la fiche est en
+     empreintesignalisation.fr. */
+  it('retrouve la fiche par la partie personnelle de l’adresse', () => {
+    expect(clientsParPersonne('Bonjour, merci de chiffrer', ['martialmarliere@gorez.fr'], clients))
+      .toEqual([EMPREINTE]);
+  });
+
+  it('retrouve la fiche par le prénom et le nom d’un contact cités', () => {
+    expect(clientsParPersonne('Cordialement, Xavier FAGARD', [], clients)).toEqual([EMPREINTE]);
+  });
+
+  it('ne se contente pas du nom seul, ni d’une boîte partagée', () => {
+    expect(clientsParPersonne('Cordialement, M. Fagard', [], clients)).toEqual([]);
+    expect(clientsParPersonne('', ['contact@autre-societe.fr'], clients)).toEqual([]);
   });
 });

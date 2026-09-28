@@ -66,7 +66,7 @@ import {
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
 import {
-  rapprocherClient, motsFrequentsDuCatalogue, type CandidatClient,
+  rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
 import { extrairePDFsDeMsg, extrairePJsDeMsg } from '@/lib/parseMsgPdf';
 import { parseExcel } from '@/lib/parseExcel';
@@ -1025,6 +1025,21 @@ const [contratOdoo, setContratOdoo] = useState<
        déduit. */
     const emailAmbigu = parEmail.length > 1 && !clientParEmail;
 
+    /* LA PERSONNE CONNUE SOUS UNE AUTRE ADRESSE. Martial MARLIÈRE écrit de
+       `martialmarliere@gorez.fr` ; sa fiche porte l'adresse
+       `@empreintesignalisation.fr`. Ni l'adresse exacte ni le domaine ne
+       pouvaient la retrouver. La même partie personnelle d'adresse, ou le
+       prénom et le nom d'un contact écrits dans le mail, la désignent
+       (`clientsParPersonne`). Plus sûr que le domaine — qui dit la société,
+       pas la personne — mais seulement quand une seule fiche répond. */
+    const parPersonne = clientParEmail || emailAmbigu ? []
+      : clientsParPersonne(analyseTexteRef.current || '', indicesTexte.emails, clients);
+    const clientParPersonne = parPersonne.length === 1 ? parPersonne[0] : undefined;
+    if (parPersonne.length) {
+      console.log('[client] la personne est connue sous une autre adresse : %s',
+        parPersonne.map(c => `${c.nom} (${c.societe || '-'})`).join(' | '));
+    }
+
     /* ⚠️ **LE DOMAINE DÉSIGNE LA SOCIÉTÉ, PAS L'AGENCE.** Même défaut que
        ci-dessus, et c'est celui-là qui mordait pour de bon : `clients.find`
        rendait la PREMIÈRE fiche du domaine.
@@ -1082,6 +1097,7 @@ const [contratOdoo, setContratOdoo] = useState<
        pèse que si l'adresse exacte n'a rien tranché. */
     const foundClient = emailAmbigu ? undefined :
       clientParEmail
+      || clientParPersonne
       || (domaineAmbigu ? undefined : clientParDomaine)
       || (societeMail
         ? clients.find(c => contient(c.societe, societeMail)
@@ -1152,7 +1168,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setClientsProposes(
       /* Ne rien proposer quand l'adresse exacte a tranché : une pastille est
          une question, et la question ne se pose plus. */
-      clientParEmail ? []
+      clientParEmail || clientParPersonne ? []
       : domaineAmbigu
         ? dedoublonne([...enLice(parDomaine), ...enLice(duGroupe),
                        ...rapprochementTexte.candidats]).slice(0, 8)
@@ -1160,7 +1176,7 @@ const [contratOdoo, setContratOdoo] = useState<
         ? dedoublonne([...enLice(parEmail), ...enLice(duGroupe),
                        ...rapprochementTexte.candidats]).slice(0, 8)
       : foundClient || rapprochementTexte.retenu ? []
-      : rapprochementTexte.candidats.slice(0, 5));
+      : dedoublonne([...enLice(parPersonne), ...rapprochementTexte.candidats]).slice(0, 5));
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       const nextNum = String(devis.length + 1).padStart(3, '0');
