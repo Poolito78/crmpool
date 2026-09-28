@@ -319,7 +319,7 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - **Le poids de la fiche passe avant le libellé** (`LigneGamme.poidsUnitaire`,
   `poidsUnitaireDe`) : pour des pavés au m², `produits.poids` = poids d'un m².
   Le bloc système affiche le poids de l'envoi et nomme ce qui n'en a pas ;
-  le port affiche son poids. ⚠️ Les PAVPREF ont `poids = 0` : à renseigner.
+  le port affiche son poids. Les PAVPREF pèsent **8 kg/m²** (règle du 28/09, migration `20260928170000`).
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de
