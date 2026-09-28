@@ -2651,6 +2651,33 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [dptLivraison, result, clients, creerDevisClientId]);
 
   /**
+   * Le chiffrage du système du document : composants communs une fois,
+   * pigment par teinte. Un seul calcul pour l'écran et pour le devis.
+   */
+  const chiffrageDocument = useMemo((): LigneChiffreeSysteme[] => {
+    const sys = systemeDuDocument;
+    if (!sys || !zonesDocument.length) return [];
+    const retenus = new Set(
+      sys.composants.filter(c => !c.obligatoire && optionsSysteme[`doc:${c.id}`]).map(c => c.id));
+    return chiffrerZones(sys, zonesDocument, {
+      conditionnelsRetenus: retenus,
+      poidsParProduit: (produitId) => {
+        if (!produitId) return undefined;
+        const p = produitParId(produits, produitId);
+        return p?.poids && p.poids > 0 ? p.poids : undefined;
+      },
+    });
+  }, [systemeDuDocument, zonesDocument, optionsSysteme, produits]);
+
+  const quantiteDocument = useCallback((ls: LigneChiffreeSysteme) =>
+    quantiteManuelle[`doc:${ls.cle}`] ?? ls.contenants ?? Math.round(ls.quantiteKg * 100) / 100,
+  [quantiteManuelle]);
+
+  const produitDocument = useCallback((ls: LigneChiffreeSysteme) =>
+    ls.composant.produitId ? produitParId(produits, ls.composant.produitId) : undefined,
+  [produits]);
+
+  /**
    * Frais de transport des produits plastique STI présents dans la demande.
    *
    * Le barème est celui du classeur ISOSIGN : messagerie au poids contre
@@ -2718,6 +2745,42 @@ const [contratOdoo, setContratOdoo] = useState<
       baseIsosign += (Number(pu) || 0) * qte;
       lignesIsosign.push({ reference: ref, designation: odoo?.designation });
     });
+    /* LES COMPOSANTS D'UN SYSTÈME VOYAGENT AUSSI.
+     *
+     * Une ligne système ne retient aucun article : elle était sautée ici, et
+     * « Pavés à coller » — pavés, colle Eclipse, quartz, tous ISOMARK H2 —
+     * partait sans le port ISOMARK que la même demande portait quand elle
+     * se chiffrait en article (51 € sous le franco de 1 000 €). Chaque
+     * composant rattaché à un article rejoint donc le sac de sa gamme, avec
+     * la quantité et le prix que l'écran lui donne ; un composant sans
+     * article n'a ni gamme ni poids connus et reste de côté. */
+    const composantAuPort = (p: Produit | undefined, qte: number, cle: string) => {
+      if (!p || !(qte > 0)) return;
+      const ref = p.referenceOdoo || p.reference || '';
+      if (!ref || articlePlastique(ref)) return;
+      const categorie = p.categorie || '';
+      const niveau = niveauGamme(categorie, p.catalogue);
+      const remise = prixApplicateur(p.prixTarif ?? p.prixHT, categorie, p.catalogue);
+      const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : p.prixHT ?? 0);
+      if (niveau !== null || estGamme(p.catalogue)) {
+        lignesGamme.push({ reference: ref, designation: designationProduit(p), quantite: qte,
+                           montant: (Number(pu) || 0) * qte, niveau });
+      } else {
+        baseIsosign += (Number(pu) || 0) * qte;
+        lignesIsosign.push({ reference: ref, designation: designationProduit(p) });
+      }
+    };
+    result.lignes.forEach((l, i) => {
+      if (!systemesDetectes.has(i)) return;
+      for (const ls of lignesSystemeDe(i, l.quantite)) {
+        const p = ls.composant.produitId ? produitParId(produits, ls.composant.produitId) : undefined;
+        composantAuPort(p, quantiteComposant(i, ls), `d${i}:${ls.composant.id}`);
+      }
+    });
+    for (const ls of chiffrageDocument) {
+      composantAuPort(produitDocument(ls), quantiteDocument(ls), `doc:${ls.cle}`);
+    }
+
     const isosign = lignesIsosign.length
       ? chiffrerPortIsosign(baseIsosign, lignesIsosign)
       : null;
@@ -2728,7 +2791,9 @@ const [contratOdoo, setContratOdoo] = useState<
     return (detail.length || isosign || gammes.length)
       ? { total, detail, isosign, gammes }
       : null;
-  }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel]);
+  }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel,
+      systemesDetectes, lignesSystemeDe, quantiteComposant, produits,
+      chiffrageDocument, produitDocument, quantiteDocument]);
 
   /* Date de la dernière synchronisation réussie. Une grille périmée est
      indiscernable d'une grille à jour : il faut la montrer. */
@@ -3380,33 +3445,6 @@ const [contratOdoo, setContratOdoo] = useState<
   /** Quantité effectivement retenue pour une ligne. */
   const quantiteDe = useCallback((cle: string, defaut: number) =>
     quantiteManuelle[cle] ?? defaut, [quantiteManuelle]);
-
-  /**
-   * Le chiffrage du système du document : composants communs une fois,
-   * pigment par teinte. Un seul calcul pour l'écran et pour le devis.
-   */
-  const chiffrageDocument = useMemo((): LigneChiffreeSysteme[] => {
-    const sys = systemeDuDocument;
-    if (!sys || !zonesDocument.length) return [];
-    const retenus = new Set(
-      sys.composants.filter(c => !c.obligatoire && optionsSysteme[`doc:${c.id}`]).map(c => c.id));
-    return chiffrerZones(sys, zonesDocument, {
-      conditionnelsRetenus: retenus,
-      poidsParProduit: (produitId) => {
-        if (!produitId) return undefined;
-        const p = produitParId(produits, produitId);
-        return p?.poids && p.poids > 0 ? p.poids : undefined;
-      },
-    });
-  }, [systemeDuDocument, zonesDocument, optionsSysteme, produits]);
-
-  const quantiteDocument = useCallback((ls: LigneChiffreeSysteme) =>
-    quantiteManuelle[`doc:${ls.cle}`] ?? ls.contenants ?? Math.round(ls.quantiteKg * 100) / 100,
-  [quantiteManuelle]);
-
-  const produitDocument = useCallback((ls: LigneChiffreeSysteme) =>
-    ls.composant.produitId ? produitParId(produits, ls.composant.produitId) : undefined,
-  [produits]);
 
   const totalDocument = useMemo(() => chiffrageDocument.reduce((t, ls) =>
     t + quantiteDocument(ls) * prixDe(produitDocument(ls), undefined, `doc:${ls.cle}`), 0),

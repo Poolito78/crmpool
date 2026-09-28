@@ -305,6 +305,12 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - **Note sous les pavés** (`precisionDemande`, `noteSysteme`) : l'aspect et la
   teinte du client (« Pavé rustique couleur Jaune clair ») partent en ligne
   de texte sous le premier composant vendu au m² ; champ modifiable à l'écran.
+- **Le port des gammes compte les composants d'un système** (`transport`,
+  `composantAuPort`) : une ligne système ne retient aucun article et était
+  sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de
+  port H2. Chaque composant rattaché à un article rejoint le sac de sa gamme
+  (ISOMARK H1/H2, ISOFLOOR, sinon ISOSIGN), système de ligne comme système
+  du document.
 - La fonction Odoo « (Vide) » n'est pas une fonction : filtrée à la lecture
   des contacts (3 fiches nettoyées en base le 28/09).
 - ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo
