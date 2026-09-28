@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -189,6 +190,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [fichier, setFichier] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
+  const navigate = useNavigate();
   const [dragging, setDragging] = useState(false);
   const [emlPdfs, setEmlPdfs] = useState<{ name: string; buffer: ArrayBuffer }[]>([]);
   /* ── aperçu du document PDF (pour vérifier pendant la correction) ── */
@@ -3965,6 +3967,10 @@ const [contratOdoo, setContratOdoo] = useState<
     toast.success(`Devis ${creerDevisNumero} créé`,
       nb ? { description: `${nb} article(s) Odoo repris au catalogue.` } : undefined);
     onOpenChange(false);
+    /* Le devis créé s'ouvre aussitôt : c'est là que le travail continue
+       (relecture, envoi, export Odoo). Il fallait sinon aller le chercher dans
+       la liste. `Devis.tsx` ouvre le devis que désigne `editDevis`. */
+    navigate(`/devis?editDevis=${nouveauDevis.id}`);
   }
 
   /* ── quantités pré-remplies pour réception ── */

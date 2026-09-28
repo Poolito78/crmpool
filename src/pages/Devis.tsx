@@ -288,7 +288,10 @@ export default function Devis() {
   useEffect(() => { try { localStorage.setItem('devis_lignes_view', lignesView); } catch { /* ignore */ } }, [lignesView]);
 
   // Auto-open devis editor via ?editDevis=<id> URL param
-  const editDevisHandledRef = useRef(false);
+  /* L'identifiant déjà ouvert par l'URL, pas un simple « déjà fait » : la page
+     reste montée quand l'analyse de document crée un devis et y renvoie
+     (`/devis?editDevis=…`), et un booléen aurait ignoré ce second devis. */
+  const editDevisHandledRef = useRef<string | null>(null);
   // ── Gestion du retour / fermeture du devis ──────────────────────────────────
   // openedViaUrl=true : ouvert depuis une navigation (ex. tableau de bord) → il
   //   existe déjà une vraie entrée d'historique → fermer = revenir en arrière.
@@ -344,9 +347,8 @@ export default function Devis() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   useEffect(() => {
-    if (editDevisHandledRef.current) return;
     const editDevisId = searchParams.get('editDevis');
-    if (!editDevisId) return;
+    if (!editDevisId || editDevisHandledRef.current === editDevisId) return;
     if (devis.length === 0) return; // wait for data
     const d = devis.find(dv => dv.id === editDevisId);
     if (d) {
@@ -354,11 +356,11 @@ export default function Devis() {
       openEdit(d);
       openedViaUrlRef.current = true; // après openEdit (qui réinitialise les refs)
       returnToRef.current = returnTo ? `/${returnTo}` : null; // ex. returnTo=dashboard → /dashboard ; sinon liste devis
-      editDevisHandledRef.current = true;
+      editDevisHandledRef.current = editDevisId;
       // Nettoie le paramètre d'URL sans ajouter d'entrée d'historique (navigate(-1) reste valide)
       setSearchParams({}, { replace: true });
     }
-  }, [devis]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [devis, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
   const [contactId, setContactId] = useState('');
