@@ -182,7 +182,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, produitsCharges, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { produits, produitsCharges, assurerProduits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
   const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -450,6 +450,29 @@ export default function Produits() {
   }
 
   // Auto-open product from query param (e.g. from devis)
+  /* L'ARTICLE DEMANDÉ PAR L'URL S'OUVRE QUAND IL EST LÀ. L'effet ne tournait
+     qu'au montage : dans un onglet neuf (lien « fiche » de l'analyse de
+     document), le catalogue n'était pas encore lu, l'article introuvable, et
+     le paramètre effacé — la page s'ouvrait sans la fiche. On attend donc
+     l'article, on le fait lire au besoin, et on n'abandonne qu'une fois le
+     catalogue entier chargé. */
+  const highlightFait = useRef(false);
+  useEffect(() => {
+    const id = searchParams.get('highlight');
+    if (!id || highlightFait.current) return;
+    const prod = produits.find(p => p.id === id);
+    if (prod) {
+      highlightFait.current = true;
+      openEdit(prod);
+      setSearchParams({}, { replace: true });
+    } else if (produitsCharges) {
+      highlightFait.current = true;
+      setSearchParams({}, { replace: true });
+    } else {
+      void assurerProduits([id]);
+    }
+  }, [produits, produitsCharges]); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const highlightId = searchParams.get('highlight');
     const returnDevis = searchParams.get('returnDevis');
@@ -462,13 +485,9 @@ export default function Produits() {
       setFromDevis(true);
       if (devisId) setReturnDevisId(devisId);
     }
-    if (highlightId) {
-      const prod = produits.find(p => p.id === highlightId);
-      if (prod) {
-        openEdit(prod);
-      }
-      setSearchParams({}, { replace: true });
-    }
+    /* L'ouverture de l'article (`highlight`) vit dans l'effet ci-dessus, qui
+       attend le catalogue. Ici : seulement le retour au devis. */
+    void highlightId;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ensure old products get correct coefficient (now drives revendeur price)

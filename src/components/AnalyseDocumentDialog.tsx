@@ -93,6 +93,28 @@ import { type ExtractedContact } from '@/components/EmailToContactDialog';
  */
 const SEUIL_PRIX_FACTICE = 2;
 
+/**
+ * La désignation d'un article, qui ouvre sa fiche dans un NOUVEL ONGLET.
+ *
+ * Pas dans celui-ci : l'analyse est un dialogue posé sur la page, et y
+ * naviguer laisserait la fiche derrière lui — ou ferait perdre l'analyse en
+ * cours. La page Produits ouvre l'article que désigne `highlight`.
+ */
+function LienFiche({ produit }: { produit: Produit }) {
+  return (
+    <a
+      href={`/produits?highlight=${produit.id}&search=${encodeURIComponent(produit.reference || '')}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`Ouvrir la fiche ${produit.reference} dans un nouvel onglet`}
+      className="hover:text-primary hover:underline"
+      onClick={e => e.stopPropagation()}
+    >
+      {designationProduit(produit)}
+    </a>
+  );
+}
+
 /** `systemeManuel` : la ligne se chiffre en article, système reconnu ou non. */
 const SANS_SYSTEME = '__sans_systeme__';
 
@@ -5184,7 +5206,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                                   .filter(Boolean).join('\n')}
                                               >
                                                 <span className="text-muted-foreground">{ls.composant.role} · </span>
-                                                {p ? designationProduit(p) : ls.libelle}
+                                                {p ? <LienFiche produit={p} /> : ls.libelle}
                                                 {p && ls.zone && <span className="text-primary"> — {ls.zone.couleur ?? ls.zone.libelle}</span>}
                                               </span>
                                               <span className="w-48 shrink-0 truncate text-right text-muted-foreground" title={ls.explication}>
@@ -5504,13 +5526,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                                     <span
                                                       className="flex-1 min-w-0 truncate"
                                                       title={[
-                                                        `${ls.composant.role} — ${p?.description || ls.composant.libelle}`,
+                                                        `${ls.composant.role} — ${p ? designationProduit(p) : ls.composant.libelle}`,
                                                         ls.composant.condition,
                                                         ls.composant.phraseSource,
                                                       ].filter(Boolean).join('\n')}
                                                     >
                                                       <span className="text-muted-foreground">{ls.composant.role} · </span>
-                                                      {p?.description || ls.composant.libelle}
+                                                      {p ? <LienFiche produit={p} /> : ls.composant.libelle}
                                                     </span>
                                                     <span className="w-20 shrink-0 text-right text-muted-foreground" title={ls.explication}>
                                                       {ls.quantiteKg ? `${ls.quantiteKg} ${libelleUnite(ls.composant.unite)}` : '—'}
