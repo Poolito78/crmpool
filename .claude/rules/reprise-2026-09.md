@@ -330,6 +330,10 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   cherche d'abord dans les **modes d'expédition** (`delivery.carrier`) : son
   article fait la ligne (`is_delivery`), et il devient le transporteur du
   devis ; l'article du même nom n'est plus que le repli.
+  ⚠️ **Lu en `lang: fr_FR`** (version 10) : le nom d'un `delivery.carrier`
+  est traduit — sans langue, les quatre modes SH s'appellent « Transport » et
+  leur article « PORTSH100 ». Vérifié par `sonde: "port"` (lecture seule) :
+  modes 9/10/11/12 → PORTSH25/100/700/701, société 13.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de
