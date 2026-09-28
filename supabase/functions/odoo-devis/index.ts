@@ -535,7 +535,26 @@ serve(async (req) => {
        Nom introuvable : générique, et le rapport le dit. */
     const portIds: Record<string, number> = {};
     const portManquants: string[] = [];
+    /* Le MODE D'EXPÉDITION d'abord (delivery.carrier, la liste « Ajoutez un
+       mode d'expédition » d'Odoo) : il désigne lui-même son article, PORTSH100
+       pour « … DE 26 A 100KG ». Le devis le retient comme transporteur. */
+    let transporteurId: number | null = null;
     for (const nom of [...new Set(payload.lines.map((l) => l.port ? l.portNom : undefined).filter(Boolean))] as string[]) {
+      try {
+        const c = await o.kw(
+          "delivery.carrier",
+          "search_read",
+          [[["name", "=ilike", nom]], ["id", "product_id"]],
+          { limit: 1, context: ctx },
+        ) as any[];
+        if (c.length && Array.isArray(c[0].product_id)) {
+          portIds[nom] = c[0].product_id[0];
+          transporteurId = transporteurId ?? c[0].id;
+          continue;
+        }
+      } catch {
+        /* module de livraison absent : on cherche l'article par son nom */
+      }
       try {
         const n = await o.kw(
           "product.product",
@@ -735,6 +754,14 @@ serve(async (req) => {
 
     const erreurs: string[] = [];
 
+    if (transporteurId) {
+      try {
+        await o.kw("sale.order", "write", [[orderId], { carrier_id: transporteurId }], { context: ctx });
+      } catch (e) {
+        erreurs.push(("Mode d'expédition : " + (e as Error).message).slice(0, 140));
+      }
+    }
+
     /* À part, après la création : un champ refusé ne doit pas coûter le devis. */
     if (Object.keys(assistanteVals).length) {
       try {
@@ -793,6 +820,15 @@ serve(async (req) => {
       try {
         const id = await o.kw("sale.order.line", "create", [v], { context: ctx }) as number;
         faites++;
+        /* Ligne d'expédition reconnue comme telle : Odoo la remplace au lieu
+           d'en ajouter une seconde si l'on repasse par « Ajouter l'expédition ». */
+        if (l.port && transporteurId) {
+          try {
+            await o.kw("sale.order.line", "write", [[id], { is_delivery: true }], { context: ctx });
+          } catch {
+            /* champ absent : la ligne reste une ligne ordinaire */
+          }
+        }
         if (l.type === "product") {
           aRetarifer.push({ id, l, garderLibelle: !(l.ref && resolus[l.ref]) });
         }

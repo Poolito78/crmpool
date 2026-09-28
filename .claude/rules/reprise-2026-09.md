@@ -326,7 +326,10 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   26-100, 101-700, > 700), et `odoo-devis` retrouve l'article de ce nom
   (PORTSH100) au lieu du générique. Forfait, franco ou plusieurs expéditions
   payantes : port générique. **Déployé** (odoo-devis version 6, 28/09).
-  Le script console n'en tient pas compte.
+  Le script console n'en tient pas compte. Depuis la version 8, le nom se
+  cherche d'abord dans les **modes d'expédition** (`delivery.carrier`) : son
+  article fait la ligne (`is_delivery`), et il devient le transporteur du
+  devis ; l'article du même nom n'est plus que le repli.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de
