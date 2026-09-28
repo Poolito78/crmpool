@@ -62,7 +62,7 @@ import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme }
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
-  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne,
+  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
   appliquerPrix, type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
@@ -177,7 +177,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
     commandesFournisseur, fournisseurs, produits, produitsCharges, clients, devis,
     produitFournisseurs,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
-    updateProduits, updateProduitFournisseurs,
+    updateProduits, updateProduitFournisseurs, creerProduits,
   } = useCRM();
 
   /* Les mots du client déjà retenus sur un article : on n'apprend pas deux
@@ -1634,7 +1634,12 @@ const [contratOdoo, setContratOdoo] = useState<
            fabrique que la page Devis Fournisseurs (`articleDepuisLigne`). */
         const neuf: Produit = {
           ...articleDepuisLigne({
-            id: generateId(), referenceFournisseur: refFournisseur,
+            id: generateId(),
+            /* Référence UNIQUE en base : libre face au catalogue ET aux
+               articles créés dans ce même lot. */
+            reference: referenceLibre(
+              refFournisseur || (l.description || '').slice(0, 40), [...produits, ...nouveauxArticles]),
+            referenceFournisseur: refFournisseur,
             designation: l.description, prixAchat: prix, tva: l.tva,
             produits, horodate, aujourdhui: today(),
           }),
@@ -1666,16 +1671,23 @@ const [contratOdoo, setContratOdoo] = useState<
       });
     });
 
-    /* Les articles d'abord : un lien fournisseur qui pointe vers un produit
-       pas encore écrit serait orphelin. */
-    if (nouveauxArticles.length || cibles.some(c => c.versArticle)) {
-      updateProduits(prev => [
-        ...nouveauxArticles,
-        ...appliquerPrix({
-          cibles, fournisseurId: dfFournisseurId, liens: produitFournisseurs,
-          produits: prev, horodate, nouvelId: generateId,
-        }).produits,
-      ]);
+    /* Les articles d'abord, ET ATTENDUS : un lien fournisseur qui pointe vers
+       un produit pas encore écrit est refusé par sa clé étrangère. C'est ce qui
+       arrivait (28/09/2026, « Bordures résine GRIS GRANIT ») : l'article était
+       créé en tâche de fond, le lien partait avant lui et se perdait. */
+    if (nouveauxArticles.length) {
+      const refus = await creerProduits(nouveauxArticles);
+      if (refus) {
+        setDfEnCours(false);
+        toast.error(`Article refusé : ${refus}`);
+        return;
+      }
+    }
+    if (cibles.some(c => c.versArticle)) {
+      updateProduits(prev => appliquerPrix({
+        cibles, fournisseurId: dfFournisseurId, liens: produitFournisseurs,
+        produits: prev, horodate, nouvelId: generateId,
+      }).produits);
     }
 
     if (cibles.some(c => c.versLien)) {

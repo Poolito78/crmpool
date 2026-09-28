@@ -1847,6 +1847,35 @@ export function useStore() {
     });
   }, []);
 
+  /**
+   * CRÉE DES ARTICLES ET ATTEND LA BASE.
+   *
+   * `updateProduits` écrit en tâche de fond. C'est juste pour une fiche qu'on
+   * modifie, faux pour un article qu'une autre table va désigner aussitôt :
+   * le lien fournisseur (`produit_fournisseurs`) ou la ligne de devis
+   * fournisseur arrivaient AVANT l'article et étaient refusés par leur clé
+   * étrangère — et quand l'article lui-même était refusé (référence déjà
+   * prise, index `idx_produits_reference_unique`), on ne l'apprenait qu'au
+   * travers de cette seconde erreur. Ici l'écriture est attendue, son refus
+   * rendu tel quel, et l'article n'entre en mémoire qu'une fois en base.
+   */
+  const creerProduits = useCallback(async (nouveaux: Produit[]): Promise<string | null> => {
+    if (!nouveaux.length) return null;
+    const userId = userIdRef.current;
+    if (!userId) return 'session non ouverte';
+    const { error } = await supabase.from('produits')
+      .insert(nouveaux.map(p => produitToDb(p, userId)) as any);
+    if (error) {
+      console.error('[produits création]', error.message);
+      return error.message;
+    }
+    setProduits(prev => {
+      const connus = new Set(prev.map(p => p.id));
+      return [...nouveaux.filter(p => !connus.has(p.id)), ...prev];
+    });
+    return null;
+  }, []);
+
   const updateDevis = useCallback((fn: (prev: Devis[]) => Devis[]) => {
     setDevis(prev => {
       const next = fn(prev);
@@ -1963,7 +1992,7 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────

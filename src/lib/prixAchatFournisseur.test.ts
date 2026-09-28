@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
-  appliquerPrix, articleDepuisLigne,
+  appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -287,5 +287,19 @@ describe('articleDepuisLigne — créer l’article d’une ligne mal rattachée
     expect(p.categorie).toBe('INCONNUE');
     expect(p.prixHT).toBe(0);
     expect(p.origine).toBe('crm');
+  });
+});
+
+describe('la référence d’un article créé est libre', () => {
+  const pris = [{ id: 'a', reference: 'Résine de collage' }, { id: 'b', reference: 'RÉSINE DE COLLAGE-2' }] as Produit[];
+
+  it('reconnaît une référence prise, sans tenir compte de la casse', () => {
+    expect(referencePrise('résine de collage', pris)?.id).toBe('a');
+    expect(referencePrise('autre', pris)).toBeUndefined();
+  });
+
+  it('suffixe jusqu’à trouver une place', () => {
+    expect(referenceLibre('Résine de collage', pris)).toBe('Résine de collage-3');
+    expect(referenceLibre('RESMMA25', pris)).toBe('RESMMA25');
   });
 });

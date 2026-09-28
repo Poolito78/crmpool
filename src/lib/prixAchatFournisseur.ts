@@ -332,6 +332,29 @@ export function articleDepuisLigne(args: {
   };
 }
 
+/** L'article qui porte déjà cette référence, casse comprise ignorée. */
+export function referencePrise(reference: string, produits: Produit[]): Produit | undefined {
+  const r = reference.trim().toUpperCase();
+  return r ? produits.find(p => (p.reference || '').trim().toUpperCase() === r) : undefined;
+}
+
+/**
+ * Une référence libre, dérivée de celle proposée : « X », sinon « X-2 »,
+ * « X-3 »… La référence est UNIQUE en base (`idx_produits_reference_unique`) :
+ * une désignation reprise telle quelle comme référence — ce que fait un article
+ * créé sans référence fournisseur — pouvait déjà exister, et l'article était
+ * refusé.
+ */
+export function referenceLibre(reference: string, produits: Produit[]): string {
+  const base = reference.trim() || 'NOUVEAU';
+  if (!referencePrise(base, produits)) return base;
+  for (let n = 2; n < 1000; n++) {
+    const essai = `${base}-${n}`;
+    if (!referencePrise(essai, produits)) return essai;
+  }
+  return `${base}-${Date.now()}`;
+}
+
 /* ── L'écriture ──────────────────────────────────────────────────────────── */
 
 /** Une ligne dont on a décidé le sort. */

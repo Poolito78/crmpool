@@ -8,7 +8,7 @@ import { useCurrentUser } from '@/hooks/useAuth';
 import { formatMontant, formatDate, generateId } from '@/lib/store';
 import {
   proposerPrix, appliquerPrix, articleDepuisLigne, coefficientVente, prixVenteDepuisAchat,
-  type CibleEcriture,
+  referencePrise, referenceLibre, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { toast } from 'sonner';
@@ -44,7 +44,7 @@ const ETIQUETTE_ACTION: Record<string, { label: string; color: string }> = {
 export default function DevisFournisseurs() {
   const {
     fournisseurs, produits, produitFournisseurs,
-    updateProduits, updateProduitFournisseurs,
+    updateProduits, updateProduitFournisseurs, creerProduits,
   } = useCRM();
   const { canAchat } = useCurrentUser();
   const {
@@ -100,9 +100,24 @@ export default function DevisFournisseurs() {
   async function creerArticle(d: DevisFournisseur, l: DevisFournisseur['lignes'][number]) {
     if (!(l.prixAchat != null && l.prixAchat > 0)) { toast.error('La ligne ne porte pas de prix.'); return; }
     if (!nouvel.designation.trim()) { toast.error('Donnez une désignation.'); return; }
+
+    /* LA RÉFÉRENCE EST UNIQUE EN BASE. Saisie à la main et déjà prise, c'est
+       sans doute l'article qu'on cherchait : on le dit, et on propose de s'y
+       rattacher plutôt que de créer un doublon. Déduite (référence fournisseur
+       ou désignation), on la rend libre d'un suffixe. */
+    const saisie = nouvel.reference.trim();
+    const existant = saisie ? referencePrise(saisie, produits) : undefined;
+    if (existant) {
+      toast.error(`La référence ${existant.reference} existe déjà`, {
+        description: existant.description,
+        action: { label: 'Rattacher à cet article', onClick: () => { void changerArticle(d, l, existant.id); } },
+      });
+      return;
+    }
     const neuf = articleDepuisLigne({
       id: generateId(),
-      reference: nouvel.reference,
+      reference: saisie || referenceLibre(
+        (l.reference || '').trim() || nouvel.designation.trim().slice(0, 40), produits),
       referenceFournisseur: l.reference,
       designation: nouvel.designation,
       prixAchat: l.prixAchat,
@@ -112,7 +127,9 @@ export default function DevisFournisseurs() {
       horodate: new Date().toISOString(),
       aujourdhui: horodateJour(),
     });
-    updateProduits(prev => [neuf, ...prev]);
+    /* L'article d'abord, ATTENDU : la ligne le désigne par une clé étrangère. */
+    const refus = await creerProduits([neuf]);
+    if (refus) { toast.error(`Article refusé : ${refus}`); return; }
     await changerArticle(d, l, neuf.id, neuf.reference);
   }
 
