@@ -755,6 +755,22 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
 
   const { systemes, recharger: rechargerSystemes } = useSystemes();
+  /**
+   * Ajoute une ligne vide à la demande, puis place le curseur dans son
+   * libellé. Elle prend le rang suivant : les réglages des autres lignes,
+   * indexés sur leur rang, ne bougent pas.
+   */
+  const ajouterLigneDemande = useCallback(() => {
+    const rang = result?.lignes.length ?? 0;
+    setResult(prev => prev
+      ? { ...prev, lignes: [...prev.lignes, { reference: '', description: '', quantite: 1 }] }
+      : prev);
+    window.setTimeout(() => {
+      const bloc = document.getElementById(`ligne-demande-${rang}`);
+      bloc?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      bloc?.querySelector<HTMLInputElement>('input')?.focus();
+    }, 50);
+  }, [result]);
   /** Les noms de système, une fois chacun — le sélecteur de ligne les offre. */
   const nomsSystemes = useMemo(() => [...new Set(systemes.map(s => s.nom))], [systemes]);
   const { regles } = useReglesAccompagnement();
@@ -6250,6 +6266,24 @@ const [contratOdoo, setContratOdoo] = useState<
                                 })}
                               </div>
                             )}
+
+                            {/* UNE LIGNE QUE LA DEMANDE N'A PAS ÉCRITE.
+                                « Pavé rustique avec la colle » : la colle
+                                n'a pas de ligne à elle, et rien ne permettait
+                                de l'ajouter avant de créer le devis. La ligne
+                                ajoutée est une ligne de demande comme les
+                                autres : son libellé se tape dans le champ, le
+                                rapprochement, la recherche Odoo et le choix
+                                d'article (ou de système) suivent. */}
+                            <button
+                              type="button"
+                              onClick={ajouterLigneDemande}
+                              className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed
+                                         border-border py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary"
+                            >
+                              <PlusCircle className="w-3.5 h-3.5" />
+                              Ajouter une ligne
+                            </button>
 
                             {(() => {
                               /* LE TOTAL COMPTE CE QUI PARTIRA AU DEVIS.
