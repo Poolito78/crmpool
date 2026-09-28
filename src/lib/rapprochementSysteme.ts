@@ -83,8 +83,23 @@ const MOTS_VIDES = new Set([
 
 function motsSignificatifs(texte: string): string[] {
   return normaliser(texte)
+    /* « 15 x 20 » et « 15x20 » : un format est un seul mot. */
+    .replace(/(\d)\s*x\s*(\d)/g, '$1x$2')
     .split(/[^a-z0-9]+/)
     .filter(m => m.length > 1 && !MOTS_VIDES.has(m) && !/^\d+([.,]\d+)?$/.test(m));
+}
+
+/**
+ * Le radical d'un mot, pour comparer un nom de système à une demande.
+ *
+ * Le client écrit « pavé rustique avec la colle », la base « Pavés à
+ * coller » : sans radical, ni le pluriel ni l'infinitif ne se retrouvaient,
+ * et le système n'était pas reconnu pour une lettre. On retire la finale
+ * (-s, -e, -es, -er, -ee, -ees) des mots de quatre lettres et plus, des DEUX
+ * côtés : la comparaison reste exacte sur ce qui reste.
+ */
+function radical(mot: string): string {
+  return mot.length >= 4 ? mot.replace(/(ees|es|ee|er|e|s)$/, '') : mot;
 }
 
 /** Premier nombre suivi de « mm », en millimètres. */
@@ -327,6 +342,19 @@ export function zoneDeDemande(texte: string, quantite?: number | null): ZoneDema
 /* ── Rapprochement ───────────────────────────────────────────────────────── */
 
 /**
+ * Les variantes dont le FORMAT (« 15x20 », « 10x10 ») figure dans la demande.
+ * Seuls les formats comptent : une variante « 2 mm » se départage à
+ * l'épaisseur, plus bas, et un mot de variante comme « compact » n'est pas une
+ * cote.
+ */
+function parFormat(variantes: Systeme[], motsDemande: Set<string>): Systeme[] {
+  return variantes.filter(v => {
+    const formats = motsSignificatifs(v.variante || '').filter(m => /^\d+x\d+$/.test(m));
+    return formats.length > 0 && formats.every(f => motsDemande.has(f));
+  });
+}
+
+/**
  * Le système que désigne une demande, s'il y en a un.
  *
  * Tous les mots significatifs du nom doivent être présents. À plusieurs noms
@@ -341,7 +369,7 @@ export function rapprocherSysteme(
   const demande = normaliser(texte);
   if (!demande || !systemes.length) return null;
 
-  const motsDemande = new Set(motsSignificatifs(demande));
+  const motsDemande = new Set(motsSignificatifs(demande).map(radical));
   if (!motsDemande.size) return null;
 
   /* Un nom entièrement contenu dans la demande. On garde le plus long : le
@@ -351,7 +379,7 @@ export function rapprocherSysteme(
   const noms = new Set(systemes.map(s => s.nom));
 
   for (const nom of noms) {
-    const mn = motsSignificatifs(nom);
+    const mn = motsSignificatifs(nom).map(radical);
     if (!mn.length) continue;
     /* Un nom d'un seul mot doit être distinctif : « Coracoat », « Corafloor »
        le sont ; un nom de trois lettres ne le serait pas. */
@@ -363,7 +391,50 @@ export function rapprocherSysteme(
   }
 
   if (!meilleurNom) return null;
+  return rapprochementDuNom(meilleurNom, demande, systemes);
+}
 
+/**
+ * Le système CHOISI À LA MAIN pour une ligne, après l'analyse.
+ *
+ * La reconnaissance est exigeante, et c'est voulu : « pavé rustique jaune »
+ * ne nomme aucun système. Le chargé d'affaires qui sait que c'est un pavé à
+ * coller le désigne donc lui-même ; la variante, la surface et les options
+ * se lisent ensuite dans la demande exactement comme si elle l'avait nommé.
+ */
+export function systemeImpose(
+  nom: string,
+  texte: string,
+  systemes: Systeme[],
+): RapprochementSysteme | null {
+  if (!systemes.some(s => s.nom === nom)) return null;
+  const r = rapprochementDuNom(nom, normaliser(texte), systemes);
+  return { ...r, pourquoi: `${r.pourquoi} — choisi à la main` };
+}
+
+/**
+ * Un composant FACULTATIF que la demande réclame elle-même.
+ *
+ * « avec la colle et la silice pour les joints » : la silice est une option
+ * du système, mais le client l'a demandée — la laisser décochée la ferait
+ * disparaître du devis sans que rien ne le dise. Le RÔLE du composant
+ * (« silice », « primaire ») doit figurer en mot entier dans la demande ; son
+ * libellé ne suffit pas, il porte des mots communs à tout le système
+ * (« épaississant colle Eclipse » répondrait à toute demande de colle).
+ */
+export function composantDemande(role: string, texte: string): boolean {
+  const mots = motsSignificatifs(role).map(radical);
+  if (!mots.length) return false;
+  const demande = new Set(motsSignificatifs(texte).map(radical));
+  return mots.every(m => demande.has(m));
+}
+
+function rapprochementDuNom(
+  meilleurNom: string,
+  demande: string,
+  systemes: Systeme[],
+): RapprochementSysteme {
+  const motsDemande = new Set(motsSignificatifs(demande).map(radical));
   const variantes = systemes.filter(s => s.nom === meilleurNom);
   const epaisseurMm = epaisseurDansTexte(demande);
   const surfaceM2 = surfaceDansTexte(demande);
@@ -377,6 +448,10 @@ export function rapprocherSysteme(
     pourquoi = retenu.variante
       ? `${meilleurNom} — ${retenu.variante}`
       : meilleurNom;
+  } else if (parFormat(variantes, motsDemande).length === 1) {
+    /* « Pavé rustique 15×20 » : le format désigne la variante. */
+    retenu = parFormat(variantes, motsDemande)[0];
+    pourquoi = `${meilleurNom} — ${retenu.variante} (format lu dans la demande)`;
   } else if (epaisseurMm != null) {
     const parEpaisseur = variantes.filter(
       v => epaisseurDansTexte(v.variante || '') === epaisseurMm,

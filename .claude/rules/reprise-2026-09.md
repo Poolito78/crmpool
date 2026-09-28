@@ -276,6 +276,39 @@ Champlain comme en bords pliés (confirmé le 27/09). BPSP n'est dans aucun
 contrat cadre : Odoo le tarife à la liste de prix du client — **c'est voulu** (ATS 43,30 € là où le
 catalogue R4 dit 34,71 €).
 
+## Pavés à coller ISOMARK : un système au m² (28 sept.)
+
+Demande EMPREINTE SIGNA « Pavé rustique 15×20 jaune clair avec la colle et la
+silice pour les joints » : aucun système reconnu, et Odoo retenait d'office un
+POCHOIR à 19,20 €. Migration `20260928100000` :
+
+- **Système « Pavés à coller »**, variantes 10x10 / 15x15 / 15x20 (les formats
+  du tarif ; le 10x20 est chez Odoo mais pas au tarif — pas proposé). Pavés
+  **au m²** (`systeme_composants.unite = 'm2'` : la quantité est la surface,
+  jamais convertie en contenants), **un article par tranche de surface**
+  (`surface_min_m2` exclue / `surface_max_m2` incluse : < 30, 31-100, 101-300 ;
+  > 300 = ligne sans article, « nous consulter »). La tranche se lit sur le
+  chantier entier dans `chiffrerZones`. Colle **Eclipse** (ECLIPSE25) à
+  **5 kg/m²** par défaut (le tarif dit 4), en seaux de 25 kg. **Silice
+  0,4/0,9** (article `SILICE0409` créé, sans référence Odoo) à ½ sac par seau :
+  facultative, **cochée d'office quand la demande nomme son rôle**
+  (`composantDemande`).
+- ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo
+  est divisé deux fois par 0,7 (96,96 € pour 47,50 € applicateur), > 300 m² à
+  1,41 €, ECLIPSE25 à 202,84 € pour 99,50 €. Le tarif applicateur du
+  15/07/2026 est rangé en **`prix_tarif` = tarif ÷ 0,7** (le public), que
+  `prixDetail` lit avant `prix_ht` et remise de 30 % (H2) — il l'emporte sur
+  le contrat Odoo quand ils diffèrent. `prix_ht` n'est pas touché (la synchro
+  Odoo le réécrit).
+- **Reconnaissance** : `rapprocherSysteme` compare des **radicaux** (« pavé »
+  = « Pavés », « colle » = « coller ») et **le format choisit la variante**
+  (« 15×20 », « 15 x 20 »).
+- **Système choisi à la main après l'analyse** : lien « chiffrer en
+  système… » sous chaque ligne de demande (`systemeManuel`, `systemeImpose`) ;
+  « aucun — chiffrer en article » annule une reconnaissance.
+- Teintes standard : sable, rouge brun, gris. « Jaune clair » n'y est pas —
+  à valider avec ISOMARK (BAT), le système ne le dit que dans sa description.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

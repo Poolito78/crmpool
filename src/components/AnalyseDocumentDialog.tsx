@@ -43,13 +43,13 @@ import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fix
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import {
-  useSystemes, declinerSysteme, kitsPour, chiffrerZones,
+  useSystemes, declinerSysteme, kitsPour, chiffrerZones, libelleUnite,
   type Systeme, type LigneSysteme, type ZoneSysteme, type LigneChiffreeSysteme,
 } from '@/lib/systemes';
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import {
-  rapprocherSysteme, surfaceDeDemande, zoneDeDemande,
+  rapprocherSysteme, systemeImpose, composantDemande, surfaceDeDemande, zoneDeDemande,
   type RapprochementSysteme, type ZoneDemande,
 } from '@/lib/rapprochementSysteme';
 import {
@@ -90,6 +90,9 @@ import { type ExtractedContact } from '@/components/EmailToContactDialog';
  * deux euros existe, mais il est bien plus rare qu'une fiche non tarifée.
  */
 const SEUIL_PRIX_FACTICE = 2;
+
+/** `systemeManuel` : la ligne se chiffre en article, système reconnu ou non. */
+const SANS_SYSTEME = '__sans_systeme__';
 
 /** Un interlocuteur rattaché à la société cliente, chez Odoo. */
 interface ContactOdoo {
@@ -719,6 +722,14 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [optionsSysteme, setOptionsSysteme] = useState<Record<string, boolean>>({});
   /** Variante choisie pour le système nommé une fois pour tout le document. */
   const [varianteDocument, setVarianteDocument] = useState('');
+  /**
+   * LE SYSTÈME CHOISI À LA MAIN, APRÈS L'ANALYSE. Clé : indice de ligne ;
+   * valeur : le nom du système, ou `SANS_SYSTEME` pour chiffrer la ligne en
+   * article alors qu'un système a été reconnu. « Pavé rustique jaune » ne
+   * nomme aucun système — le chargé d'affaires sait, lui, que c'est un pavé
+   * à coller.
+   */
+  const [systemeManuel, setSystemeManuel] = useState<Record<number, string>>({});
 
   /* ── Devis fournisseur : reprise des prix d'achat ──────────────────────── */
   /** Fournisseur auquel rattacher l'offre. */
@@ -744,6 +755,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
 
   const { systemes, recharger: rechargerSystemes } = useSystemes();
+  /** Les noms de système, une fois chacun — le sélecteur de ligne les offre. */
+  const nomsSystemes = useMemo(() => [...new Set(systemes.map(s => s.nom))], [systemes]);
   const { regles } = useReglesAccompagnement();
   /** Contrat cadre Odoo du client retenu, la société qui le porte, et ses prix. */
 const [contratOdoo, setContratOdoo] = useState<
@@ -1233,6 +1246,7 @@ const [contratOdoo, setContratOdoo] = useState<
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
+    setSystemeManuel({});
     setLibelleManuel({});
     /* Les options d'ensemble sont indexées sur le RANG de la ligne : gardées
        d'une analyse à l'autre, elles cocheraient le support d'un panneau qui
@@ -1815,11 +1829,25 @@ const [contratOdoo, setContratOdoo] = useState<
     const m = new Map<number, RapprochementSysteme>();
     if (!systemes.length) return m;
     (result?.lignes || []).forEach((l, i) => {
-      const r = rapprocherSysteme(texteDemande(l, i), systemes);
+      const manuel = systemeManuel[i];
+      if (manuel === SANS_SYSTEME) return;
+      const r = manuel
+        ? systemeImpose(manuel, texteDemande(l, i), systemes)
+        : rapprocherSysteme(texteDemande(l, i), systemes);
       if (r) m.set(i, r);
     });
     return m;
-  }, [result, systemes, texteDemande]);
+  }, [result, systemes, texteDemande, systemeManuel]);
+
+  /**
+   * Un composant facultatif est-il retenu ? Le choix de l'écran d'abord ; à
+   * défaut, coché si la demande le réclame par son rôle (« avec la silice »),
+   * décoché sinon — la fiche le propose, le chantier le décide.
+   */
+  const optionRetenue = useCallback((i: number, role: string) => (c: { id: string }) =>
+    optionsSysteme[`${i}:${c.id}`]
+      ?? (!!result?.lignes?.[i] && composantDemande(role, texteDemande(result.lignes[i], i))),
+  [optionsSysteme, result, texteDemande]);
 
   /**
    * LE SYSTÈME NOMMÉ UNE FOIS POUR TOUT LE DOCUMENT.
@@ -1948,7 +1976,7 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!sys) return [];
     const retenus = new Set(
       sys.composants
-        .filter(c => !c.obligatoire && optionsSysteme[`${i}:${c.id}`])
+        .filter(c => !c.obligatoire && optionRetenue(i, c.role)(c))
         .map(c => c.id),
     );
     return declinerSysteme(sys, surfaceDeLigne(i, quantite), {
@@ -1962,7 +1990,7 @@ const [contratOdoo, setContratOdoo] = useState<
         return p?.poids && p.poids > 0 ? p.poids : undefined;
       },
     });
-  }, [systemeDeLigne, surfaceDeLigne, optionsSysteme, produits, systemesDetectes]);
+  }, [systemeDeLigne, surfaceDeLigne, optionRetenue, produits, systemesDetectes]);
 
   /**
    * Quantité commandée pour un composant : des contenants entiers quand le
@@ -3490,7 +3518,9 @@ const [contratOdoo, setContratOdoo] = useState<
           produitId: p?.id,
           description: (p ? designationProduit(p) : '') || ls.composant.libelle,
           quantite,
-          unite: p?.unite || (ls.contenants ? 'u' : 'kg'),
+          /* Des pavés se facturent au m², quoi qu'en dise la fiche Odoo
+             (« Units ») : la quantité EST une surface. */
+          unite: ls.composant.unite === 'm2' ? 'm²' : p?.unite || (ls.contenants ? 'u' : 'kg'),
           prixUnitaireHT: prixDe(p, undefined, cle),
           tva: p?.tva ?? l.tva ?? 20,
           remise: 0,
@@ -3637,7 +3667,7 @@ const [contratOdoo, setContratOdoo] = useState<
             ? `${designationProduit(p)}${ls.zone ? ` — ${ls.zone.couleur ?? ls.zone.libelle}` : ''}`
             : ls.libelle,
           quantite: quantiteDocument(ls),
-          unite: p?.unite || (ls.contenants ? 'u' : 'kg'),
+          unite: ls.composant.unite === 'm2' ? 'm²' : p?.unite || (ls.contenants ? 'u' : 'kg'),
           prixUnitaireHT: prixDe(p, undefined, `doc:${ls.cle}`),
           tva: p?.tva ?? 20,
           remise: 0,
@@ -5050,7 +5080,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                                 {p && ls.zone && <span className="text-primary"> — {ls.zone.couleur ?? ls.zone.libelle}</span>}
                                               </span>
                                               <span className="w-48 shrink-0 truncate text-right text-muted-foreground" title={ls.explication}>
-                                                {ls.kits ? `${ls.kits} kit(s) · ` : ''}{ls.quantiteKg ? `${ls.quantiteKg} kg` : '—'}
+                                                {ls.kits ? `${ls.kits} kit(s) · ` : ''}{ls.quantiteKg ? `${ls.quantiteKg} ${libelleUnite(ls.composant.unite)}` : '—'}
                                               </span>
                                               <Input
                                                 type="number" min={0} step="1" value={q}
@@ -5199,6 +5229,49 @@ const [contratOdoo, setContratOdoo] = useState<
                                     )}
                                   </div>
 
+                                  {/* LE SYSTÈME SE CHOISIT AUSSI À LA MAIN.
+                                      La reconnaissance exige le nom du système
+                                      dans la demande ; « pavé rustique jaune »
+                                      ne le porte pas. Un clic le désigne, et la
+                                      variante, la surface et les options se
+                                      lisent ensuite dans la demande comme si
+                                      elle l'avait nommé. Discret tant qu'on n'en
+                                      veut pas : trente panneaux de police n'ont
+                                      pas à porter trente sélecteurs ouverts. */}
+                                  {nomsSystemes.length > 0 && (sysRap || systemeManuel[i] !== undefined ? (
+                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                      <span className="shrink-0">Chiffrer en système :</span>
+                                      <Select
+                                        value={systemeManuel[i] ?? sysRap?.nom ?? SANS_SYSTEME}
+                                        onValueChange={v => {
+                                          setSystemeManuel(pr => ({ ...pr, [i]: v }));
+                                          setVarianteSysteme(pr => { const n = { ...pr }; delete n[i]; return n; });
+                                        }}
+                                      >
+                                        <SelectTrigger className="h-6 w-64 text-[11px]">
+                                          <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          <SelectItem value={SANS_SYSTEME} className="text-xs">
+                                            aucun — chiffrer en article
+                                          </SelectItem>
+                                          <SelectSeparator />
+                                          {nomsSystemes.map(n => (
+                                            <SelectItem key={n} value={n} className="text-xs">{n}</SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      className="text-[11px] text-muted-foreground underline-offset-2 hover:text-primary hover:underline"
+                                      onClick={() => setSystemeManuel(pr => ({ ...pr, [i]: SANS_SYSTEME }))}
+                                    >
+                                      chiffrer en système…
+                                    </button>
+                                  ))}
+
                                   {!sysRap && systemesManquants.has(i) && rap?.confiance !== 'sure' && (
                                     <SystemeIntrouvable
                                       texte={texteDemande(l, i)}
@@ -5280,23 +5353,24 @@ const [contratOdoo, setContratOdoo] = useState<
                                         ) : (
                                           <>
                                             {/* Les composants facultatifs — primaire au
-                                                choix, finition en option — ne sont jamais
-                                                cochés d'office : la fiche les propose, le
-                                                chantier les décide. */}
+                                                choix, finition en option — ne sont cochés
+                                                d'office que si la demande les nomme par
+                                                leur rôle (« avec la silice ») : la fiche
+                                                les propose, le chantier les décide. */}
                                             {facultatifs.length > 0 && (
                                               <div className="flex flex-wrap gap-x-3 gap-y-1 pt-0.5">
                                                 {facultatifs.map(c => (
                                                   <label key={c.id} className="flex items-center gap-1 cursor-pointer">
                                                     <input
                                                       type="checkbox"
-                                                      checked={!!optionsSysteme[`${i}:${c.id}`]}
+                                                      checked={optionRetenue(i, c.role)(c)}
                                                       onChange={e => setOptionsSysteme(pr => ({
                                                         ...pr, [`${i}:${c.id}`]: e.target.checked,
                                                       }))}
                                                     />
                                                     <span title={c.condition || c.phraseSource}>
                                                       {c.libelle}
-                                                      {c.consommation != null ? ` · ${c.consommation} kg/m²` : ''}
+                                                      {c.consommation != null ? ` · ${c.consommation} ${libelleUnite(c.unite)}/m²` : ''}
                                                     </span>
                                                   </label>
                                                 ))}
@@ -5324,7 +5398,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                                       {p?.description || ls.composant.libelle}
                                                     </span>
                                                     <span className="w-20 shrink-0 text-right text-muted-foreground" title={ls.explication}>
-                                                      {ls.quantiteKg ? `${ls.quantiteKg} kg` : '—'}
+                                                      {ls.quantiteKg ? `${ls.quantiteKg} ${libelleUnite(ls.composant.unite)}` : '—'}
                                                     </span>
                                                     <Input
                                                       type="number" min={0} step="1" value={q}
@@ -5334,7 +5408,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                                       className="h-6 w-14 shrink-0 text-[11px]"
                                                     />
                                                     <span className="w-16 shrink-0 text-muted-foreground">
-                                                      {p?.poids ? `× ${p.poids} kg` : 'kg'}
+                                                      {ls.composant.unite === 'm2' ? 'm²'
+                                                        : p?.poids ? `× ${p.poids} kg` : 'kg'}
                                                     </span>
                                                     <span className="w-44 shrink-0 text-right">
                                                       {p

@@ -2118,6 +2118,9 @@ export type Database = {
           ratio_base: number | null
           role: string
           systeme_id: string
+          surface_max_m2: number | null
+          surface_min_m2: number | null
+          unite: string | null
         }
         Insert: {
           au_kit?: boolean
@@ -2136,6 +2139,9 @@ export type Database = {
           ratio_base?: number | null
           role?: string
           systeme_id: string
+          surface_max_m2?: number | null
+          surface_min_m2?: number | null
+          unite?: string | null
         }
         Update: {
           au_kit?: boolean
@@ -2154,6 +2160,9 @@ export type Database = {
           ratio_base?: number | null
           role?: string
           systeme_id?: string
+          surface_max_m2?: number | null
+          surface_min_m2?: number | null
+          unite?: string | null
         }
         Relationships: [
           {

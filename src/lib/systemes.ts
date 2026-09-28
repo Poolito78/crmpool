@@ -65,6 +65,36 @@ export interface SystemeComposant {
    * l'article rattaché, lui, l'emporte toujours.
    */
   conditionnementKg?: number;
+  /**
+   * L'unité de `consommation` quand ce n'est pas le kilo. Des pavés à coller
+   * se vendent au m² : « 1 m² par m² », et la quantité commandée est la
+   * surface, pas une masse convertie en seaux. Absente = kg/m².
+   */
+  unite?: UniteComposant;
+  /**
+   * La tranche de surface où le composant s'applique, bornes en m² — la
+   * borne basse EXCLUE, la haute INCLUSE. Le tarif ISOMARK des pavés change
+   * d'article selon la surface commandée (< 30 m², 31 à 100, 101 à 300) :
+   * chaque tranche est un composant, et seule celle qui contient la surface
+   * est retenue.
+   */
+  surfaceMinM2?: number;
+  surfaceMaxM2?: number;
+}
+
+/** `kg` : consommation en kg/m² (le cas des résines). `m2` : en m²/m². */
+export type UniteComposant = 'kg' | 'm2';
+
+/** « kg » ou « m² », pour l'écran et pour la ligne de devis. */
+export function libelleUnite(unite?: UniteComposant): string {
+  return unite === 'm2' ? 'm²' : 'kg';
+}
+
+/** Le composant s'applique-t-il à cette surface ? Voir `surfaceMinM2`. */
+export function composantDansTranche(c: SystemeComposant, surfaceM2: number): boolean {
+  if (c.surfaceMinM2 != null && !(surfaceM2 > c.surfaceMinM2)) return false;
+  if (c.surfaceMaxM2 != null && surfaceM2 > c.surfaceMaxM2) return false;
+  return true;
 }
 
 export interface Systeme {
@@ -119,6 +149,9 @@ function dbToComposant(r: any): SystemeComposant {
     phraseSource: r.phrase_source || undefined,
     auKit: r.au_kit ?? false,
     conditionnementKg: r.conditionnement_kg != null ? Number(r.conditionnement_kg) : undefined,
+    unite: r.unite === 'm2' ? 'm2' : undefined,
+    surfaceMinM2: r.surface_min_m2 != null ? Number(r.surface_min_m2) : undefined,
+    surfaceMaxM2: r.surface_max_m2 != null ? Number(r.surface_max_m2) : undefined,
   };
 }
 
@@ -146,7 +179,10 @@ export function dbToSysteme(r: any): Systeme {
 
 export interface LigneSysteme {
   composant: SystemeComposant;
-  /** Quantité en kg pour la surface demandée. */
+  /**
+   * Quantité pour la surface demandée, en kg — ou en m² pour un composant
+   * qui se vend à la surface (`composant.unite === 'm2'`).
+   */
   quantiteKg: number;
   /** Nombre de contenants, arrondi au supérieur — on n'achète pas un demi-seau. */
   contenants?: number;
@@ -203,7 +239,7 @@ export function declinerSysteme(
   const surfaceKit = systeme.surfaceKitM2 ?? 0;
 
   const retenus = systeme.composants.filter(
-    c => c.obligatoire || conditionnelsRetenus?.has(c.id),
+    c => (c.obligatoire || conditionnelsRetenus?.has(c.id)) && composantDansTranche(c, surfaceM2),
   );
 
   /* LA BASE SERT DE RÉFÉRENCE AUX RATIOS ET AUX POURCENTAGES.
@@ -215,11 +251,14 @@ export function declinerSysteme(
    * On cherche donc, dans l'ordre : la base déclarée, puis la couche qui en
    * tient lieu, puis n'importe quel composant qui sache dire un dosage. */
   const ROLE_PORTEUR = /base|masse|rev[eê]tement|liant|autolissant|mortier/i;
+  /* Un composant vendu au m² — le pavé — n'a pas de masse : il ne sert
+     jamais de référence à un ratio en kilos. */
+  const pesables = retenus.filter(c => c.unite !== 'm2');
   const base =
-    retenus.find(c => c.role === 'base' && c.consommation != null)
-    ?? retenus.find(c => ROLE_PORTEUR.test(c.role) && c.consommation != null)
-    ?? retenus.find(c => c.consommation != null)
-    ?? retenus[0];
+    pesables.find(c => c.role === 'base' && c.consommation != null)
+    ?? pesables.find(c => ROLE_PORTEUR.test(c.role) && c.consommation != null)
+    ?? pesables.find(c => c.consommation != null)
+    ?? pesables[0];
   const masseBase = base?.consommation ? base.consommation * surfaceM2 : 0;
 
   return retenus.map((c) => {
@@ -228,7 +267,13 @@ export function declinerSysteme(
 
     let kitsComposant: number | undefined;
 
-    if (c.consommation != null && c.auKit && kits) {
+    if (c.consommation != null && c.unite === 'm2') {
+      /* Vendu à la surface : 4 m² de pavés pour 4 m² de chantier. */
+      kg = c.consommation * surfaceM2;
+      explication = c.consommation === 1
+        ? `${surfaceM2} m²`
+        : `${c.consommation} m²/m² × ${surfaceM2} m²`;
+    } else if (c.consommation != null && c.auKit && kits) {
       /* Le petit mélange se prépare entier : 20 kits de 5 m² pour 96,5 m². */
       kitsComposant = kits;
       kg = c.consommation * surfaceKit * kits;
@@ -262,8 +307,11 @@ export function declinerSysteme(
       explication = 'aucun dosage dans la fiche';
     }
 
-    /* L'article du catalogue dit le contenant ; à défaut, la fiche. */
-    const poids = poidsParProduit?.(c.produitId) ?? c.conditionnementKg;
+    /* L'article du catalogue dit le contenant ; à défaut, la fiche. Un
+       composant vendu au m² n'a pas de contenant : la surface est la
+       quantité. */
+    const poids = c.unite === 'm2' ? undefined
+      : poidsParProduit?.(c.produitId) ?? c.conditionnementKg;
     return {
       composant: c,
       quantiteKg: Math.round(kg * 1000) / 1000,
@@ -316,7 +364,7 @@ const EST_PIGMENT = /\bpigments?\b/i;
  * de teinte ne sert jamais une zone d'une autre couleur.
  */
 export function chiffrerZones(
-  systeme: Systeme,
+  systemeEntier: Systeme,
   zones: ZoneSysteme[],
   options: {
     temperatureSupport?: number;
@@ -327,6 +375,17 @@ export function chiffrerZones(
   const { poidsParProduit } = options;
   const utiles = zones.filter(z => z.surfaceM2 > 0);
   if (!utiles.length) return [];
+
+  /* LA TRANCHE SE LIT SUR LE CHANTIER ENTIER, pas zone par zone : trois
+     zones de 20 m² font une commande de 60 m², au tarif « 31 à 100 m² ».
+     Une fois la tranche choisie, ses bornes n'ont plus à jouer. */
+  const surfaceChantier = utiles.reduce((s, z) => s + z.surfaceM2, 0);
+  const systeme: Systeme = {
+    ...systemeEntier,
+    composants: systemeEntier.composants
+      .filter(c => composantDansTranche(c, surfaceChantier))
+      .map(({ surfaceMinM2: _min, surfaceMaxM2: _max, ...c }) => c),
+  };
 
   const teinteDe = (c: SystemeComposant) =>
     EST_PIGMENT.test(c.role) || EST_PIGMENT.test(c.libelle)
@@ -382,12 +441,15 @@ export function chiffrerZones(
   const surfaceTotale = utiles.reduce((s, z) => s + z.surfaceM2, 0);
   const communs = [...cumul.values()].map(l => {
     const kg = Math.round(l.quantiteKg * 1000) / 1000;
-    const poids = poidsParProduit?.(l.composant.produitId) ?? l.composant.conditionnementKg;
-    const contenants = kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined;
     const c = l.composant;
+    const poids = c.unite === 'm2' ? undefined
+      : poidsParProduit?.(c.produitId) ?? c.conditionnementKg;
+    const contenants = kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined;
     const explication = kg <= 0
       ? 'aucun dosage calculable dans la fiche'
-      : l.kits
+      : c.unite === 'm2'
+        ? `${kg} m²`
+        : l.kits
         ? `${l.kits} kits de ${systeme.surfaceKitM2} m² × ${c.consommation} kg/m² = ${kg} kg`
         : c.consommation != null
           ? `${c.consommation} kg/m² × ${Math.round(surfaceTotale * 1000) / 1000} m² = ${kg} kg`

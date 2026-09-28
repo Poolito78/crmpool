@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
+  rapprocherSysteme, systemeImpose, composantDemande, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -117,6 +117,44 @@ describe('reconnaissance d’un système dans une demande', () => {
     expect(fr.surfaceM2).toBe(100);
     expect(rapprocherSysteme('FLOWSHIELD CONFORT 3MM', CATALOGUE)!.retenu).toBe(COMFORT_3);
     expect(rapprocherSysteme('peran confort 2,5mm', CATALOGUE)!.nom).toBe('Peran Comfort');
+  });
+
+  /* La demande EMPREINTE SIGNA du 28/09/2026 : ni le pluriel ni l'infinitif
+     du nom en base, et le format dit la variante. */
+  it('reconnaît « Pavés à coller » dans « pavé … avec la colle » et lit le format', () => {
+    const P1010 = systeme('Pavés à coller', '10x10');
+    const P1515 = systeme('Pavés à coller', '15x15');
+    const P1520 = systeme('Pavés à coller', '15x20');
+    const GEL = systeme('Pavé gel Flowfast 208', 'Pavé / mortier gel');
+    const cat = [...CATALOGUE, P1010, P1515, P1520, GEL];
+    const r = rapprocherSysteme(
+      'Pavé rustique 15×20 jaune clair avec la colle et la silice pour les joints', cat)!;
+    expect(r.nom).toBe('Pavés à coller');
+    expect(r.retenu).toBe(P1520);
+    expect(r.pourquoi).toMatch(/format lu/);
+    expect(rapprocherSysteme('Pavés rustiques 15 x 15 à coller', cat)!.retenu).toBe(P1515);
+    /* Sans format, la variante reste à choisir. */
+    expect(rapprocherSysteme('pavés collés, 12 m²', cat)!.retenu).toBeUndefined();
+    /* Le pavé gel n'a rien d'un pavé collé. */
+    expect(rapprocherSysteme('Pavé gel Flowfast 208', cat)!.nom).toBe('Pavé gel Flowfast 208');
+    expect(rapprocherSysteme('pavé autobloquant 10x10', cat)).toBeNull();
+  });
+
+  it('impose un système choisi à la main, variante lue dans la demande', () => {
+    const P1520 = systeme('Pavés à coller', '15x20');
+    const cat = [...CATALOGUE, systeme('Pavés à coller', '10x10'), P1520];
+    const r = systemeImpose('Pavés à coller', 'Pavé rustique jaune 15 x 20, 4 m²', cat)!;
+    expect(r.retenu).toBe(P1520);
+    expect(r.surfaceM2).toBe(4);
+    expect(r.pourquoi).toMatch(/choisi à la main/);
+    expect(systemeImpose('Inconnu', 'pavé', cat)).toBeNull();
+  });
+
+  it('coche l’option que la demande réclame, par son rôle', () => {
+    const demande = 'Pavé rustique 15×20 avec la colle et la silice pour les joints';
+    expect(composantDemande('silice', demande)).toBe(true);
+    expect(composantDemande('primaire', demande)).toBe(false);
+    expect(composantDemande('finition (alternative)', demande)).toBe(false);
   });
 
   it('ne reconnaît rien sans systèmes en base', () => {

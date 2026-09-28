@@ -183,3 +183,52 @@ describe('un système, plusieurs zones', () => {
     expect(l.find(x => x.cle === 'j:z2')).toBeUndefined();
   });
 });
+
+/* Pavés à coller 15x20, tarif ISOMARK du 15/07/2026 : un article par tranche
+   de surface, la colle Eclipse à 5 kg/m² en seaux de 25 kg, la silice 0,4/0,9
+   à ½ sac par seau de colle, sur demande. */
+const PAVES: Systeme = {
+  id: 's4', nom: 'Pavés à coller', variante: '15x20', support: 'tous', actif: true,
+  composants: [
+    composant({ id: 'p30', libelle: '< 30 m²', role: 'pavés', consommation: 1, unite: 'm2', surfaceMaxM2: 30 }),
+    composant({ id: 'p100', libelle: '31 à 100 m²', role: 'pavés', consommation: 1, unite: 'm2', surfaceMinM2: 30, surfaceMaxM2: 100 }),
+    composant({ id: 'p300', libelle: '101 à 300 m²', role: 'pavés', consommation: 1, unite: 'm2', surfaceMinM2: 100, surfaceMaxM2: 300 }),
+    composant({ id: 'e', libelle: 'Colle Eclipse', role: 'base', consommation: 5, conditionnementKg: 25 }),
+    composant({ id: 's', libelle: 'Silice 0,4/0,9', role: 'silice', ratioBase: 0.5, conditionnementKg: 25, obligatoire: false }),
+  ],
+};
+
+describe('composants vendus au m² et tranches de surface', () => {
+  it('retient la seule tranche qui contient la surface', () => {
+    const ids = (s: number) => declinerSysteme(PAVES, s).map(x => x.composant.id);
+    expect(ids(4)).toEqual(['p30', 'e']);
+    expect(ids(30)).toEqual(['p30', 'e']);          // borne haute incluse
+    expect(ids(30.5)).toEqual(['p100', 'e']);
+    expect(ids(250)).toEqual(['p300', 'e']);
+    expect(ids(400)).toEqual(['e']);                 // > 300 m² : nous consulter
+  });
+
+  it('commande la surface, pas des contenants, et la colle en seaux', () => {
+    const l = declinerSysteme(PAVES, 4, { conditionnelsRetenus: new Set(['s']) });
+    const par = (id: string) => l.find(x => x.composant.id === id)!;
+    expect(par('p30').quantiteKg).toBe(4);
+    expect(par('p30').contenants).toBeUndefined();
+    expect(par('p30').explication).toBe('4 m²');
+    expect(par('e').quantiteKg).toBe(20);            // 5 kg/m² × 4
+    expect(par('e').contenants).toBe(1);
+    /* La silice se rapporte à la COLLE, jamais aux m² de pavés. */
+    expect(par('s').quantiteKg).toBe(10);
+    expect(par('s').contenants).toBe(1);
+  });
+
+  it('lit la tranche sur le chantier entier quand il a plusieurs zones', () => {
+    const l = chiffrerZones(PAVES, [
+      { id: 'a', libelle: 'a', surfaceM2: 20, bande: false },
+      { id: 'b', libelle: 'b', surfaceM2: 20, bande: false },
+    ]);
+    const paves = l.filter(x => x.composant.role === 'pavés');
+    expect(paves.map(x => x.composant.id)).toEqual(['p100']);
+    expect(paves[0].quantiteKg).toBe(40);
+    expect(paves[0].contenants).toBeUndefined();
+  });
+});
