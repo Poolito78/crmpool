@@ -7,8 +7,10 @@ import { useCRM } from '@/lib/StoreContext';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { formatMontant, formatDate, generateId } from '@/lib/store';
 import {
-  proposerPrix, appliquerPrix, type CibleEcriture,
+  proposerPrix, appliquerPrix, articleDepuisLigne, coefficientVente, prixVenteDepuisAchat,
+  type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
+import ProduitCombobox from '@/components/ProduitCombobox';
 import { toast } from 'sonner';
 import {
   useDevisFournisseur, STATUT_DEVIS_FOURNISSEUR, type DevisFournisseur,
@@ -16,7 +18,7 @@ import {
 import { exportToExcel } from '@/lib/exportExcel';
 import {
   Search, ChevronRight, ChevronDown, AlertCircle, FileSearch, Trash2,
-  Archive, CheckCircle2, Download, Loader2, Check,
+  Archive, CheckCircle2, Download, Loader2, Check, Pencil, X, PlusCircle, Unlink,
 } from 'lucide-react';
 
 /**
@@ -27,6 +29,8 @@ import {
  * chercher ici, c'est ce qu'on a reçu et ce qu'on en a fait — un tarif lu mais
  * non appliqué est justement ce qui ne se voyait nulle part.
  */
+
+const horodateJour = () => new Date().toISOString().split('T')[0];
 
 /** Ce que la ligne dit de son sort. */
 const ETIQUETTE_ACTION: Record<string, { label: string; color: string }> = {
@@ -45,6 +49,7 @@ export default function DevisFournisseurs() {
   const { canAchat } = useCurrentUser();
   const {
     devis, chargement, erreur, recharger, supprimer, changerStatut, marquerAppliquees,
+    rattacherLigne,
   } = useDevisFournisseur();
 
   const [search, setSearch] = useState('');
@@ -56,6 +61,60 @@ export default function DevisFournisseurs() {
   const [versLien, setVersLien] = useState<Record<string, boolean>>({});
   const [versArticle, setVersArticle] = useState<Record<string, boolean>>({});
   const [enCours, setEnCours] = useState<string | null>(null);
+  /** La ligne dont on corrige l'article, une à la fois. */
+  const [edition, setEdition] = useState<string | null>(null);
+  /** Ce qu'on saisit pour créer l'article de la ligne en cours d'édition. */
+  const [nouvel, setNouvel] = useState<{ reference: string; designation: string; categorie: string }>(
+    { reference: '', designation: '', categorie: '' });
+
+  /** Les catégories du catalogue, pour la saisie d'un article neuf. */
+  const categories = useMemo(
+    () => [...new Set(produits.map(p => p.categorie).filter(Boolean) as string[])].sort(),
+    [produits]);
+
+  const editer = (l: DevisFournisseur['lignes'][number]) => {
+    if (edition === l.id) { setEdition(null); return; }
+    setEdition(l.id);
+    setNouvel({
+      reference: l.reference || '',
+      designation: l.designation || '',
+      /* La catégorie de l'article retenu à tort n'est pas une indication : on
+         part de rien plutôt que de reconduire l'erreur. */
+      categorie: '',
+    });
+  };
+
+  /** Rattache la ligne à un article existant, ou la détache. */
+  async function changerArticle(
+    d: DevisFournisseur, l: DevisFournisseur['lignes'][number], produitId?: string, reference?: string,
+  ) {
+    const erreurRattache = await rattacherLigne(d.id, l.id, produitId);
+    if (erreurRattache) { toast.error(`Rattachement refusé : ${erreurRattache}`); return; }
+    setSelection(prev => ({ ...prev, [l.id]: !!produitId && l.prixAchat != null && l.prixAchat > 0 }));
+    setEdition(null);
+    const ref = reference ?? produitParId(produitId)?.reference;
+    toast.success(produitId ? `Ligne rattachée à ${ref ?? "l'article"}.` : 'Ligne détachée.');
+  }
+
+  /** Crée l'article de la ligne, puis l'y rattache. */
+  async function creerArticle(d: DevisFournisseur, l: DevisFournisseur['lignes'][number]) {
+    if (!(l.prixAchat != null && l.prixAchat > 0)) { toast.error('La ligne ne porte pas de prix.'); return; }
+    if (!nouvel.designation.trim()) { toast.error('Donnez une désignation.'); return; }
+    const neuf = articleDepuisLigne({
+      id: generateId(),
+      reference: nouvel.reference,
+      referenceFournisseur: l.reference,
+      designation: nouvel.designation,
+      prixAchat: l.prixAchat,
+      categorie: nouvel.categorie,
+      fournisseurId: d.fournisseurId,
+      produits,
+      horodate: new Date().toISOString(),
+      aujourdhui: horodateJour(),
+    });
+    updateProduits(prev => [neuf, ...prev]);
+    await changerArticle(d, l, neuf.id, neuf.reference);
+  }
 
   const nomFournisseur = (d: DevisFournisseur) =>
     fournisseurs.find(f => f.id === d.fournisseurId)?.nom || d.fournisseurNom || '—';
@@ -232,6 +291,10 @@ export default function DevisFournisseurs() {
         </div>
       )}
 
+      <datalist id="df-categories">
+        {categories.map(c => <option key={c} value={c} />)}
+      </datalist>
+
       <div className="md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border overflow-hidden">
         <div className="flex-1 min-h-0 overflow-auto">
           <table className="w-full text-sm">
@@ -364,7 +427,7 @@ export default function DevisFournisseurs() {
                                 const etiquette = ETIQUETTE_ACTION[prop?.action || l.action || ''];
                                 const actuel = prop?.prixLien ?? prop?.prixArticle;
                                 const ecart = prop?.ecartLien ?? prop?.ecartArticle;
-                                return (
+                                return [
                                   <tr key={l.id} className="border-t border-border/50">
                                     <td className="py-1">
                                       <input
@@ -399,9 +462,21 @@ export default function DevisFournisseurs() {
                                       </td>
                                     )}
                                     <td className="py-1 pr-3">
-                                      {article
-                                        ? <span title={article.description}>{article.reference}</span>
-                                        : <span className="text-muted-foreground">non rattaché</span>}
+                                      <div className="flex items-center gap-1">
+                                        {article
+                                          ? <span title={article.description}>{article.reference}</span>
+                                          : <span className="text-muted-foreground">non rattaché</span>}
+                                        {/* LE RAPPROCHEMENT SE CORRIGE ICI : autre
+                                            article, détacher, ou créer l'article. */}
+                                        <button
+                                          type="button"
+                                          className="p-0.5 rounded text-muted-foreground hover:text-primary hover:bg-muted"
+                                          title={article ? "Changer d'article, détacher ou créer l'article" : "Rattacher ou créer l'article"}
+                                          onClick={() => editer(l)}
+                                        >
+                                          {edition === l.id ? <X className="w-3 h-3" /> : <Pencil className="w-3 h-3" />}
+                                        </button>
+                                      </div>
                                     </td>
                                     <td className="py-1">
                                       <div className="flex items-center gap-1.5">
@@ -418,8 +493,71 @@ export default function DevisFournisseurs() {
                                         )}
                                       </div>
                                     </td>
-                                  </tr>
-                                );
+                                  </tr>,
+                                  edition === l.id && (() => {
+                                    const coef = nouvel.categorie.trim()
+                                      ? coefficientVente(produits, nouvel.categorie.trim()) : null;
+                                    const vente = l.prixAchat ? prixVenteDepuisAchat(l.prixAchat, coef) : undefined;
+                                    return (
+                                      <tr key={`${l.id}-edition`} className="bg-background">
+                                        <td />
+                                        <td colSpan={canAchat ? 7 : 5} className="py-2 pr-3">
+                                          <div className="rounded-lg border p-2 space-y-2">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                              <span className="text-muted-foreground shrink-0">Rattacher à :</span>
+                                              <div className="w-80 max-w-full">
+                                                <ProduitCombobox
+                                                  produits={produits}
+                                                  value={l.produitId || ''}
+                                                  onSelect={id => void changerArticle(d, l, id)}
+                                                />
+                                              </div>
+                                              {article && (
+                                                <Button size="sm" variant="outline" className="h-7 text-xs"
+                                                  onClick={() => void changerArticle(d, l, undefined)}>
+                                                  <Unlink className="w-3 h-3 mr-1" />Détacher de {article.reference}
+                                                </Button>
+                                              )}
+                                            </div>
+                                            <div className="flex flex-wrap items-end gap-2 border-t pt-2">
+                                              <span className="text-muted-foreground shrink-0 self-center">ou créer l'article :</span>
+                                              <label className="space-y-0.5">
+                                                <span className="block text-[10px] text-muted-foreground">Référence</span>
+                                                <Input className="h-7 w-40 text-xs" value={nouvel.reference}
+                                                  placeholder={l.reference || 'référence MonCRM'}
+                                                  onChange={e => setNouvel(n => ({ ...n, reference: e.target.value }))} />
+                                              </label>
+                                              <label className="space-y-0.5 flex-1 min-w-[16rem]">
+                                                <span className="block text-[10px] text-muted-foreground">Désignation</span>
+                                                <Input className="h-7 text-xs" value={nouvel.designation}
+                                                  onChange={e => setNouvel(n => ({ ...n, designation: e.target.value }))} />
+                                              </label>
+                                              <label className="space-y-0.5">
+                                                <span className="block text-[10px] text-muted-foreground">Catégorie</span>
+                                                <Input className="h-7 w-56 text-xs" value={nouvel.categorie}
+                                                  list="df-categories" placeholder="ex. ISOMARK / H2"
+                                                  onChange={e => setNouvel(n => ({ ...n, categorie: e.target.value }))} />
+                                              </label>
+                                              <Button size="sm" className="h-7 text-xs" onClick={() => void creerArticle(d, l)}>
+                                                <PlusCircle className="w-3 h-3 mr-1" />Créer et rattacher
+                                              </Button>
+                                            </div>
+                                            {canAchat && l.prixAchat != null && (
+                                              <p className="text-[11px] text-muted-foreground">
+                                                Achat {formatMontant(l.prixAchat)} ·{' '}
+                                                {vente != null
+                                                  ? <>vente proposée {formatMontant(vente)} (coef. {coef!.coef.toFixed(2)} mesuré sur {coef!.effectif} articles « {coef!.categorie} »)</>
+                                                  : <span className="text-warning">pas de prix de vente : {nouvel.categorie.trim()
+                                                      ? 'la catégorie ne donne pas de coefficient fiable'
+                                                      : 'choisissez une catégorie'} — à saisir sur la fiche</span>}
+                                              </p>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    );
+                                  })(),
+                                ];
                               })}
                             </tbody>
                           </table>

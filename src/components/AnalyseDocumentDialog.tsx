@@ -61,7 +61,7 @@ import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme }
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
-  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat,
+  rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne,
   appliquerPrix, type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
@@ -1623,17 +1623,15 @@ const [contratOdoo, setContratOdoo] = useState<
 
       /* Article absent qu'on demande à créer. */
       if (prop?.action === 'absent' && dfCreer[i] && prix != null) {
+        /* Sans coefficient fiable, pas de prix de vente inventé. Même
+           fabrique que la page Devis Fournisseurs (`articleDepuisLigne`). */
         const neuf: Produit = {
-          id: generateId(),
-          reference: refFournisseur || (l.description || '').slice(0, 40) || 'NOUVEAU',
-          description: l.description || '',
-          prixAchat: prix, coefficient: 1,
-          /* Sans coefficient fiable, pas de prix de vente inventé. */
+          ...articleDepuisLigne({
+            id: generateId(), referenceFournisseur: refFournisseur,
+            designation: l.description, prixAchat: prix, tva: l.tva,
+            produits, horodate, aujourdhui: today(),
+          }),
           prixHT: prixVenteDepuisAchat(prix, prop.coefficient) ?? 0,
-          coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
-          tva: l.tva ?? 20, unite: 'u', stock: 0, stockMin: 0,
-          prixAchatMaj: horodate,
-          dateCreation: today(),
         };
         nouveauxArticles.push(neuf);
         produitId = neuf.id;

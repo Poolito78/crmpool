@@ -283,6 +283,55 @@ export function prixVenteDepuisAchat(
   return Math.round(prixAchat * coefficient.coef * 100) / 100;
 }
 
+/**
+ * L'article à CRÉER pour une ligne de document fournisseur.
+ *
+ * Deux chemins y mènent, et doivent produire la même fiche : l'analyse de
+ * document (ligne « hors catalogue » cochée à créer) et la page Devis
+ * Fournisseurs, où l'on corrige après coup une ligne rattachée au mauvais
+ * article — la résine méthacrylate URBADECO du 28/09/2026 était partie sur
+ * GRANITROUGE1-3, un granulat.
+ *
+ * Fonction PURE. Le prix de vente ne se propose que si la catégorie donne un
+ * coefficient fiable (`prixVenteDepuisAchat`) : sinon zéro, qui se voit au
+ * premier devis.
+ */
+export function articleDepuisLigne(args: {
+  id: string;
+  referenceFournisseur?: string;
+  reference?: string;
+  designation?: string;
+  prixAchat: number;
+  categorie?: string;
+  fournisseurId?: string;
+  tva?: number;
+  produits: Produit[];
+  horodate: string;
+  aujourdhui: string;
+}): Produit {
+  const designation = (args.designation || '').trim();
+  const reference = (args.reference || '').trim()
+    || (args.referenceFournisseur || '').trim()
+    || designation.slice(0, 40)
+    || 'NOUVEAU';
+  const categorie = (args.categorie || '').trim() || undefined;
+  const coefficient = categorie ? coefficientVente(args.produits, categorie) : null;
+  return {
+    id: args.id,
+    reference,
+    description: designation,
+    prixAchat: args.prixAchat, coefficient: 1,
+    prixHT: prixVenteDepuisAchat(args.prixAchat, coefficient) ?? 0,
+    coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
+    tva: args.tva ?? 20, unite: 'u', stock: 0, stockMin: 0,
+    prixAchatMaj: args.horodate,
+    dateCreation: args.aujourdhui,
+    origine: 'crm',
+    ...(categorie ? { categorie } : {}),
+    ...(args.fournisseurId ? { fournisseurId: args.fournisseurId } : {}),
+  };
+}
+
 /* ── L'écriture ──────────────────────────────────────────────────────────── */
 
 /** Une ligne dont on a décidé le sort. */

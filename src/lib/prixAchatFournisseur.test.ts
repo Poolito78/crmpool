@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
-  appliquerPrix,
+  appliquerPrix, articleDepuisLigne,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -264,5 +264,28 @@ describe('application des prix', () => {
     });
     expect(LIENS).toEqual(liensAvant);
     expect(PRODUITS[0].prixAchat).toBe(80);
+  });
+});
+
+describe('articleDepuisLigne — créer l’article d’une ligne mal rattachée', () => {
+  /* La résine méthacrylate URBADECO du 28/09/2026, partie sur un granulat. */
+  const base = {
+    id: 'neuf', designation: 'Résine de collage méthacrylate NEUTRE + durcisseur (fût 25 kg)',
+    prixAchat: 3.15, produits: [] as Produit[], horodate: '2026-09-28T10:00:00Z', aujourdhui: '2026-09-28',
+  };
+
+  it('prend la référence saisie, sinon celle du fournisseur, sinon la désignation', () => {
+    expect(articleDepuisLigne({ ...base, reference: 'RESMMA25' }).reference).toBe('RESMMA25');
+    expect(articleDepuisLigne({ ...base, referenceFournisseur: 'UB-12' }).reference).toBe('UB-12');
+    expect(articleDepuisLigne(base).reference).toBe(base.designation.slice(0, 40));
+  });
+
+  it('porte le prix d’achat, le fournisseur, et aucun prix de vente sans coefficient', () => {
+    const p = articleDepuisLigne({ ...base, fournisseurId: 'f-urba', categorie: 'INCONNUE' });
+    expect(p.prixAchat).toBe(3.15);
+    expect(p.fournisseurId).toBe('f-urba');
+    expect(p.categorie).toBe('INCONNUE');
+    expect(p.prixHT).toBe(0);
+    expect(p.origine).toBe('crm');
   });
 });

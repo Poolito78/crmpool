@@ -237,6 +237,46 @@ export function useDevisFournisseur() {
     }));
   }, []);
 
+  /**
+   * RATTACHE UNE LIGNE À UN AUTRE ARTICLE — ou la détache (`produitId`
+   * absent).
+   *
+   * Le rapprochement de la lecture se trompe : la résine méthacrylate
+   * URBADECO du 28/09/2026 était partie sur GRANITROUGE1-3, un granulat, et
+   * rien ne permettait de la corriger. La ligne repasse à « non appliquée » :
+   * le prix posé sur le mauvais article n'a rien à voir avec le nouveau, qui
+   * doit pouvoir le recevoir.
+   *
+   * ⚠️ `produit_id` est une clé étrangère. Un article qu'on vient de CRÉER
+   * s'écrit en tâche de fond (`updateProduits`) : la ligne peut arriver avant
+   * lui et être refusée (23503). On réessaie alors quelques fois, le temps que
+   * l'article soit en base, au lieu d'échouer sur une course.
+   */
+  const rattacherLigne = useCallback(async (
+    devisId: string,
+    ligneId: string,
+    produitId?: string,
+  ): Promise<string | null> => {
+    const maj = { produit_id: produitId ?? null, applique: false, applique_le: null };
+    let message: string | null = null;
+    for (let essai = 0; essai < 8; essai++) {
+      const { error } = await supabase.from('devis_fournisseur_lignes')
+        .update(maj as never).eq('id', ligneId);
+      if (!error) { message = null; break; }
+      message = error.message;
+      if (error.code !== '23503') break;
+      await new Promise(r => setTimeout(r, 400 * (essai + 1)));
+    }
+    if (message) { console.error('[df_lignes rattacher]', message); return message; }
+
+    setDevis(prev => prev.map(d => d.id !== devisId ? d : {
+      ...d,
+      lignes: d.lignes.map(l => l.id !== ligneId ? l
+        : { ...l, produitId, applique: false, appliqueLe: undefined }),
+    }));
+    return null;
+  }, []);
+
   const supprimer = useCallback(async (id: string) => {
     const { error } = await supabase.from('devis_fournisseur').delete().eq('id', id);
     if (error) { console.error('[devis_fournisseur delete]', error.message); return error.message; }
@@ -250,5 +290,8 @@ export function useDevisFournisseur() {
     setDevis(prev => prev.map(d => d.id === id ? { ...d, statut } : d));
   }, []);
 
-  return { devis, chargement, erreur, recharger, enregistrer, marquerAppliquees, supprimer, changerStatut };
+  return {
+    devis, chargement, erreur, recharger, enregistrer, marquerAppliquees, rattacherLigne,
+    supprimer, changerStatut,
+  };
 }
