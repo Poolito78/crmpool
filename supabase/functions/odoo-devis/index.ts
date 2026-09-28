@@ -730,11 +730,19 @@ serve(async (req) => {
     if (payload.ref && champChantier) vals[champChantier] = String(payload.ref).slice(0, 200);
     else if (payload.ref) vals.client_order_ref = String(payload.ref).slice(0, 200);
     if (contactId && champContact) vals[champContact] = contactId;
-    Object.assign(vals, assistanteVals);
 
     const orderId = await o.kw("sale.order", "create", [vals], { context: ctx }) as number;
 
     const erreurs: string[] = [];
+
+    /* À part, après la création : un champ refusé ne doit pas coûter le devis. */
+    if (Object.keys(assistanteVals).length) {
+      try {
+        await o.kw("sale.order", "write", [[orderId], assistanteVals], { context: ctx });
+      } catch (e) {
+        erreurs.push(("Assistante : " + (e as Error).message).slice(0, 140));
+      }
+    }
 
     if (payload.note) {
       try {
