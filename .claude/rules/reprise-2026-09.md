@@ -206,8 +206,7 @@ reste en NEG.ISO. `codeNegoce` (`odooSync.ts`) lit la gamme sur l'article
 système sans article. La ligne envoyée porte `negoce` ; `odoo-devis`, le pont
 et le script console résolvent chaque code, et retombent sur NEG.ISO si le
 code manque chez Odoo (`rapport.negoceIntrouvable`).
-⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis` — sans cela la
-fonction ignore `negoce` et tout part encore en NEG.ISO.
+**Déployé** (odoo-devis version 6, 28/09).
 
 ## L'export Odoo et la référence manquante (18 sept.)
 
@@ -237,9 +236,7 @@ rien ne le disait. Odoo porte pourtant `FLOWFASTPRIMER107.20` en 20 kg.
 - ⚠️ **On ne devine toujours pas à la place de l'utilisateur.** Un candidat
   sous le seuil est proposé, jamais retenu. C'est la règle de la maison : un
   rail en trop se facture, un rail en moins manque au chantier.
-- ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis`. Sans cela le
-  rapport ne porte pas `aRattacher` et l'écran n'a rien à proposer (le front
-  le supporte : liste vide).
+- **Déployé** (odoo-devis version 6, 28/09) : le rapport porte `aRattacher`.
 - ⚠️ Les helpers `conditionnement` / `conditionnementCompatible` vivent dans
   la fonction Edge : **vitest ne les couvre pas** (`include: src/**`). Ils ont
   été vérifiés sur les vraies données du catalogue.
@@ -328,8 +325,8 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   payé à la tranche de poids porte « FRAIS DE PORT SH DE 26 A 100KG » (1-25,
   26-100, 101-700, > 700), et `odoo-devis` retrouve l'article de ce nom
   (PORTSH100) au lieu du générique. Forfait, franco ou plusieurs expéditions
-  payantes : port générique. ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis`
-  (sinon `portNom` est ignoré). Le script console n'en tient pas compte.
+  payantes : port générique. **Déployé** (odoo-devis version 6, 28/09).
+  Le script console n'en tient pas compte.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de
