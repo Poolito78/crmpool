@@ -1688,6 +1688,7 @@ const [contratOdoo, setContratOdoo] = useState<
         cibles.push({
           produitId, prix, reference: refFournisseur,
           versLien: !!dfVersLien[i], versArticle: !!dfVersArticle[i],
+          designation: l.description, quantite: l.quantite, unite: l.unite,
         });
       }
 

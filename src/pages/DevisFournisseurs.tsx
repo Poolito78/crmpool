@@ -238,6 +238,7 @@ export default function DevisFournisseurs() {
       reference: l.reference,
       versLien: auLien,
       versArticle: auxArticles,
+      designation: l.designation, quantite: l.quantite, unite: l.unite,
     }));
 
     if (auxArticles) {

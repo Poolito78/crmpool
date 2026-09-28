@@ -367,6 +367,42 @@ export interface CibleEcriture {
   versLien: boolean;
   /** Écrire sur le `prixAchat` de la fiche article. */
   versArticle: boolean;
+  /** La ligne du document, pour reconnaître un prix au kilo. */
+  designation?: string;
+  quantite?: number;
+  unite?: string;
+}
+
+/**
+ * ⚠️ **UN PRIX AU KILO N'EST PAS LE PRIX DU FÛT.**
+ *
+ * La fiche article porte le prix du CONDITIONNEMENT. URBADECO chiffre la
+ * colle Eclipse « (Fût de 25kg) » par 175 kg à 3,15 € : le prix lu est au
+ * kilo, et l'écrire tel quel sur ECLIPSE25 affichait 97,8 % de marge.
+ *
+ * On ne convertit que sur preuve : unité « kg » écrite sur la ligne, ou
+ * conditionnement annoncé par la désignation égal au poids de l'article ET
+ * quantité en multiple de ce conditionnement. Et jamais si le prix converti
+ * dépasserait le prix de vente : 25 sacs de 25 kg à 17,50 € sont des sacs.
+ * Le doute laisse le prix lu, tel quel.
+ */
+export function prixConditionnement(
+  prix: number,
+  produit: Pick<Produit, 'poids' | 'prixHT'> | undefined,
+  ligne: { designation?: string; quantite?: number; unite?: string },
+): number {
+  const poids = produit?.poids ?? 0;
+  if (!(poids > 1) || !(prix > 0)) return prix;
+  const auKilo = /^kgs?$/i.test((ligne.unite || '').trim());
+  const m = (ligne.designation || '').match(/(\d+(?:[.,]\d+)?)\s*kgs?\b/i);
+  const annonce = m ? Number(m[1].replace(',', '.')) : 0;
+  const q = ligne.quantite ?? 0;
+  const enKilos = annonce > 0 && Math.abs(annonce - poids) < 0.01
+    && q > annonce && Math.abs(q / annonce - Math.round(q / annonce)) < 1e-6;
+  if (!auKilo && !enKilos) return prix;
+  const converti = Math.round(prix * poids * 100) / 100;
+  if ((produit?.prixHT ?? 0) > 0 && converti > produit!.prixHT) return prix;
+  return converti;
 }
 
 /**
@@ -390,7 +426,11 @@ export function appliquerPrix(args: {
   const { cibles, fournisseurId, horodate, nouvelId } = args;
 
   const versArticle = new Map<string, number>();
-  for (const c of cibles) if (c.versArticle) versArticle.set(c.produitId, c.prix);
+  for (const c of cibles) {
+    if (!c.versArticle) continue;
+    const produit = args.produits.find(p => p.id === c.produitId);
+    versArticle.set(c.produitId, prixConditionnement(c.prix, produit, c));
+  }
 
   const produits = versArticle.size
     ? args.produits.map(p => {

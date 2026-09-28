@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
+  prixConditionnement, rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
@@ -301,5 +301,28 @@ describe('la référence d’un article créé est libre', () => {
   it('suffixe jusqu’à trouver une place', () => {
     expect(referenceLibre('Résine de collage', pris)).toBe('Résine de collage-3');
     expect(referenceLibre('RESMMA25', pris)).toBe('RESMMA25');
+  });
+});
+
+describe('prixConditionnement', () => {
+  const eclipse = { poids: 25, prixHT: 202.84 } as Produit;
+  const quartz = { poids: 25, prixHT: 32.64 } as Produit;
+
+  it('ramène un prix au kilo au fût (URBADECO, 175 kg de colle en fûts de 25 kg)', () => {
+    expect(prixConditionnement(3.15, eclipse,
+      { designation: 'Résine de collage (Fût de 25kg)', quantite: 175 })).toBe(78.75);
+  });
+
+  it('convertit quand la ligne écrit « kg »', () => {
+    expect(prixConditionnement(3.15, eclipse, { unite: 'kg', quantite: 10 })).toBe(78.75);
+  });
+
+  it('laisse un prix au sac : 25 sacs de 25 kg à 17,50 €', () => {
+    expect(prixConditionnement(17.5, quartz,
+      { designation: 'Quartz (sac de 25kg)', quantite: 50 })).toBe(17.5);
+  });
+
+  it('ne touche à rien sans preuve', () => {
+    expect(prixConditionnement(3.15, eclipse, { designation: 'Colle Eclipse', quantite: 7 })).toBe(3.15);
   });
 });
