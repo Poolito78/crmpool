@@ -454,12 +454,35 @@ serve(async (req) => {
     const dryRun = !!entree?.dryRun;
     const partnerId = entree?.partnerId ? Number(entree.partnerId) : null;
 
-    if (!payload?.lines?.length) {
+    if (entree?.sonde !== "port" && !payload?.lines?.length) {
       return json({ erreur: "Devis vide : rien à créer dans Odoo." }, 400);
     }
 
     const o = new Odoo();
-    const cid = payload.company_id || null;
+    const cid = payload?.company_id || null;
+
+    /* SONDE, en lecture seule : ce qu'Odoo porte comme modes d'expédition et
+       articles de port, avec leur société. Sert à comprendre pourquoi un nom
+       ne se résout pas — rien n'est écrit. */
+    if (entree?.sonde === "port") {
+      const lire = async (modele: string, domaine: unknown[], champs: string[], avecSociete: boolean) => {
+        try {
+          return await o.kw(modele, "search_read", [domaine, champs], {
+            limit: 40,
+            context: { ...(avecSociete && cid ? { allowed_company_ids: [cid] } : {}), active_test: false },
+          });
+        } catch (e) {
+          return { erreur: (e as Error).message };
+        }
+      };
+      return json({
+        societe: cid,
+        modes: await lire("delivery.carrier", [["name", "ilike", "port"]], ["id", "name", "product_id", "company_id", "active"], false),
+        modesSociete: await lire("delivery.carrier", [["name", "ilike", "port"]], ["id", "name", "product_id", "company_id"], true),
+        articles: await lire("product.product", ouBien([["default_code", "ilike", "PORT"], ["name", "ilike", "FRAIS DE PORT"]]),
+          ["id", "default_code", "name", "company_id", "active", "sale_ok"], false),
+      });
+    }
     const ctx: Record<string, unknown> = cid ? { allowed_company_ids: [cid] } : {};
 
     // ---- 1. la société ------------------------------------------------
@@ -539,33 +562,36 @@ serve(async (req) => {
        mode d'expédition » d'Odoo) : il désigne lui-même son article, PORTSH100
        pour « … DE 26 A 100KG ». Le devis le retient comme transporteur. */
     let transporteurId: number | null = null;
-    for (const nom of [...new Set(payload.lines.map((l) => l.port ? l.portNom : undefined).filter(Boolean))] as string[]) {
-      try {
-        const c = await o.kw(
-          "delivery.carrier",
-          "search_read",
-          [[["name", "=ilike", nom]], ["id", "product_id"]],
-          { limit: 1, context: ctx },
-        ) as any[];
-        if (c.length && Array.isArray(c[0].product_id)) {
-          portIds[nom] = c[0].product_id[0];
-          transporteurId = transporteurId ?? c[0].id;
+    const nomsPort = [...new Set(payload.lines.map((l) => l.port ? l.portNom : undefined).filter(Boolean))] as string[];
+    if (nomsPort.length) {
+      /* Comparés « à la lettre près » (nu) : un espace double ou un accent
+         chez Odoo faisait échouer l'égalité stricte, et le port retombait
+         sur [PORT]. Les modes d'expédition sont peu nombreux : on les lit
+         tous, dans la société puis sans elle. */
+      const lire = async (modele: string, domaine: unknown[], champs: string[]) => {
+        for (const contexte of [ctx, { active_test: true }]) {
+          try {
+            const r = await o.kw(modele, "search_read", [domaine, champs], { limit: 200, context: contexte }) as any[];
+            if (r.length) return r;
+          } catch {
+            /* modèle absent (module de livraison) ou droits : on passe */
+          }
+        }
+        return [] as any[];
+      };
+      const modes = await lire("delivery.carrier", [["name", "ilike", "port"]], ["id", "name", "product_id"]);
+      const articles = await lire("product.product",
+        ouBien([["default_code", "ilike", "PORT"], ["name", "ilike", "FRAIS DE PORT"]]), ["id", "name"]);
+      for (const nom of nomsPort) {
+        const mode = modes.find((c) => nu(c.name) === nu(nom) && Array.isArray(c.product_id));
+        if (mode) {
+          portIds[nom] = mode.product_id[0];
+          transporteurId = transporteurId ?? mode.id;
           continue;
         }
-      } catch {
-        /* module de livraison absent : on cherche l'article par son nom */
-      }
-      try {
-        const n = await o.kw(
-          "product.product",
-          "search_read",
-          [[["name", "=ilike", nom]], ["id", "default_code"]],
-          { limit: 1, context: ctx },
-        ) as any[];
-        if (n.length) portIds[nom] = n[0].id;
+        const article = articles.find((p) => nu(p.name) === nu(nom));
+        if (article) portIds[nom] = article.id;
         else portManquants.push(nom);
-      } catch {
-        portManquants.push(nom);
       }
     }
     const portDe = (l: Ligne) => (l.portNom && portIds[l.portNom]) || payload.port_id;
