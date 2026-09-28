@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, systemeImpose, composantDemande, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
+  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -302,5 +302,20 @@ describe('zones d’un système nommé dans l’en-tête', () => {
 
   it('un seau de primaire n’est pas une zone', () => {
     expect(zoneDeDemande('Flowfast 107 primaire 20 kg', 4)).toBeUndefined();
+  });
+});
+
+describe('la précision de la demande sous les pavés', () => {
+  it('reprend l’aspect et la teinte du client', () => {
+    expect(precisionDemande(
+      'Pavé rustique 15×20 jaune clair avec la colle et la silice pour les joints', 'Pavé'))
+      .toBe('Pavé rustique couleur Jaune clair');
+    expect(precisionDemande('pavés coupe droite rouge brun 10x10', 'Pavé'))
+      .toBe('Pavé coupe droite couleur Rouge brun');
+    expect(precisionDemande('pavés gris foncé', 'Pavé')).toBe('Pavé couleur Gris foncé');
+  });
+
+  it('ne dit rien quand la demande ne précise ni aspect ni teinte', () => {
+    expect(precisionDemande('pavés à coller 15x20, 12 m²', 'Pavé')).toBeUndefined();
   });
 });

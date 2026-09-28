@@ -475,6 +475,34 @@ function rapprochementDuNom(
 }
 
 /**
+ * La précision que le client a donnée sur ce qu'on pose : l'aspect et la
+ * teinte. « Pavé rustique 15×20 jaune clair avec la colle… » →
+ * « Pavé rustique couleur Jaune clair ».
+ *
+ * Le système chiffre des articles — « m² Pavés préfabriqués à coller 15x20 »
+ * — qui ne disent ni l'aspect ni la teinte. Sans cette phrase, le devis
+ * perdait ce que le client avait demandé, et la commande partait sans.
+ * `sujet` est le nom de ce qu'on pose (« Pavé ») ; rien n'est rendu quand la
+ * demande ne dit ni aspect ni teinte.
+ */
+export function precisionDemande(texte: string, sujet: string): string | undefined {
+  const t = normaliser(texte);
+  const aspect = t.match(/\b(rustiques?|coupe droite|arrondis?)\b/)?.[1];
+  const teinte = t.match(
+    /\b(rouge brun|gris granit|jaune|blanc|rouge|gris|sable|noir|vert|bleu|orange|beige|ocre|brun|anthracite|terre cuite)s?(?:\s+(clair|fonce|pale|vif))?\b/);
+  if (!aspect && !teinte) return undefined;
+  const couleur = teinte
+    ? [teinte[1], teinte[2] === 'fonce' ? 'foncé' : teinte[2] === 'pale' ? 'pâle' : teinte[2]]
+      .filter(Boolean).join(' ')
+    : undefined;
+  return [
+    sujet,
+    aspect?.replace(/s$/, ''),
+    couleur ? `couleur ${couleur.charAt(0).toUpperCase()}${couleur.slice(1)}` : undefined,
+  ].filter(Boolean).join(' ');
+}
+
+/**
  * Surface à chiffrer pour une ligne.
  *
  * La demande porte parfois « 30 m² » dans son libellé ; le plus souvent la

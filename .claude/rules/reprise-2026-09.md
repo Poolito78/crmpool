@@ -298,7 +298,15 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - **Client retrouvé par la personne** (`clientsParPersonne`) : même partie
   personnelle d'adresse (`martialmarliere@gorez.fr` ↔
   `martialmarliere@empreintesignalisation.fr`) ou prénom + nom d'un contact
-  cités dans le mail — entre l'adresse exacte et le domaine.
+  cités dans le mail — entre l'adresse exacte et le domaine. Et **après la
+  réponse d'Odoo** : si aucun client n'est retenu, le contact Odoo
+  présélectionné et la fiche Odoo sont cherchés au fichier de la même façon
+  (réponse unique seulement, jamais par-dessus un choix).
+- **Note sous les pavés** (`precisionDemande`, `noteSysteme`) : l'aspect et la
+  teinte du client (« Pavé rustique couleur Jaune clair ») partent en ligne
+  de texte sous le premier composant vendu au m² ; champ modifiable à l'écran.
+- La fonction Odoo « (Vide) » n'est pas une fonction : filtrée à la lecture
+  des contacts (3 fiches nettoyées en base le 28/09).
 - ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo
   est divisé deux fois par 0,7 (96,96 € pour 47,50 € applicateur), > 300 m² à
   1,41 €, ECLIPSE25 à 202,84 € pour 99,50 €. Le tarif applicateur du

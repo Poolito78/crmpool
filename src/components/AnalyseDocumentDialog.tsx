@@ -49,7 +49,7 @@ import {
 import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import {
-  rapprocherSysteme, systemeImpose, composantDemande, surfaceDeDemande, zoneDeDemande,
+  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
   type RapprochementSysteme, type ZoneDemande,
 } from '@/lib/rapprochementSysteme';
 import {
@@ -730,6 +730,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * à coller.
    */
   const [systemeManuel, setSystemeManuel] = useState<Record<number, string>>({});
+  /**
+   * La note posée sous ce qu'on pose (les pavés), corrigée à la main. Clé :
+   * indice de ligne. Absente = celle que la demande dicte (`precisionDemande`).
+   */
+  const [noteSysteme, setNoteSysteme] = useState<Record<number, string>>({});
 
   /* ── Devis fournisseur : reprise des prix d'achat ──────────────────────── */
   /** Fournisseur auquel rattacher l'offre. */
@@ -1278,7 +1283,7 @@ const [contratOdoo, setContratOdoo] = useState<
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
-    setSystemeManuel({});
+    setSystemeManuel({}); setNoteSysteme({});
     setLibelleManuel({});
     /* Les options d'ensemble sont indexées sur le RANG de la ligne : gardées
        d'une analyse à l'autre, elles cocheraient le support d'un panneau qui
@@ -2034,6 +2039,24 @@ const [contratOdoo, setContratOdoo] = useState<
       ?? ls.contenants
       ?? Math.round(ls.quantiteKg * 100) / 100,
   [quantiteManuelle]);
+
+  /**
+   * LA PRÉCISION DU CLIENT SOUS LES PAVÉS.
+   *
+   * « Pavé rustique 15×20 jaune clair » : le système chiffre « m² Pavés
+   * préfabriqués à coller 15x20 », qui ne dit ni l'aspect ni la teinte. Une
+   * ligne de texte les reprend sous le premier composant vendu au m² —
+   * « Pavé rustique couleur Jaune clair » — modifiable à l'écran, vide si la
+   * demande ne précise rien.
+   */
+  const noteDeSysteme = useCallback((i: number, sys?: Systeme): string => {
+    if (noteSysteme[i] !== undefined) return noteSysteme[i];
+    const surface = sys?.composants.find(c => c.unite === 'm2');
+    const l = result?.lignes?.[i];
+    if (!surface || !l) return '';
+    const sujet = (surface.libelle.split(/\s+/)[0] || '').replace(/s$/i, '');
+    return precisionDemande(texteDemande(l, i), sujet) ?? '';
+  }, [noteSysteme, result, texteDemande]);
 
   const candidatsPour = useCallback(
     (i: number) => rapprochements.get(i)?.candidats ?? [],
@@ -2954,7 +2977,12 @@ const [contratOdoo, setContratOdoo] = useState<
         /* Les interlocuteurs de la société. On présélectionne celui dont
            l'adresse est celle de l'expéditeur — pas celui dont le prénom
            traîne dans le corps du message. */
-        const cts = (data?.contacts || []) as ContactOdoo[];
+        /* Odoo écrit « (Vide) » dans la fonction de certains contacts : ce
+           n'est pas une fonction, et elle finissait sur la fiche client. */
+        const cts = ((data?.contacts || []) as ContactOdoo[]).map(c => ({
+          ...c,
+          fonction: /^\s*\(?\s*(vide|néant|neant|-+)?\s*\)?\s*$/i.test(c.fonction || '') ? '' : c.fonction,
+        }));
         setContactsOdoo(cts);
         /* Le NOM du signataire prime sur l'adresse.
            Le bloc de signature de REFLEX porte « Thierry BARAILLER » au-dessus
@@ -2995,7 +3023,28 @@ const [contratOdoo, setContratOdoo] = useState<
               || (c.contacts || []).some(ct =>
                 String(ct.email || '').trim().toLowerCase() === mailOdoo))
           : false;
-        if (!cli && !dejaAuFichier && data?.coordonnees?.nom) {
+        /* ODOO A RECONNU LA SOCIÉTÉ, LE FICHIER DOIT SUIVRE.
+         *
+         * Demande EMPREINTE SIGNA du 28/09/2026 : Odoo trouvait la société,
+         * son contrat cadre et son interlocuteur « Martial MARLIERE »
+         * (`martialmarliere@gorez.fr`), et l'écran restait sans client — la
+         * fiche MonCRM « Martial Marlière / Empreinte Signalisation » porte une
+         * autre adresse. Le contact présélectionné et la fiche Odoo désignent
+         * pourtant une personne connue : on la cherche au fichier
+         * (`clientsParPersonne`, adresse personnelle ou prénom + nom), et on ne
+         * retient qu'une réponse UNIQUE, sans jamais remplacer un client déjà
+         * choisi. */
+        const ctPre = parNom || parMail;
+        const connusParOdoo = cli ? [] : clientsParPersonne(
+          [ctPre?.nom, data?.coordonnees?.nom].filter(Boolean).join('\n'),
+          [ctPre?.email, data?.coordonnees?.email].filter((e): e is string => !!e),
+          clients);
+        if (connusParOdoo.length === 1) {
+          console.log('[client] reconnu par le contact Odoo : %s (%s)',
+            connusParOdoo[0].nom, connusParOdoo[0].societe || '-');
+          setCreerDevisClientId(prev => prev || connusParOdoo[0].id);
+        }
+        if (!cli && !dejaAuFichier && !connusParOdoo.length && data?.coordonnees?.nom) {
           setClientOdoo({ ...data.coordonnees, societe: data.societe || data.coordonnees.nom });
         } else setClientOdoo(null);
         if (data?.contrat) {
@@ -3565,6 +3614,16 @@ const [contratOdoo, setContratOdoo] = useState<
           note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
         };
       });
+
+      /* La précision du client, sous ce qu'on pose. */
+      const note = noteDeSysteme(i, sys).trim();
+      const rangSurface = declinees.findIndex(ls => ls.composant.unite === 'm2');
+      if (note) {
+        composants.splice(rangSurface + 1, 0, {
+          id: generateId(), type: 'texte', description: note,
+          quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
+        });
+      }
 
       return [entete, ...composants];
     };
@@ -5404,6 +5463,19 @@ const [contratOdoo, setContratOdoo] = useState<
                                                     </span>
                                                   </label>
                                                 ))}
+                                              </div>
+                                            )}
+
+                                            {sys.composants.some(c => c.unite === 'm2') && (
+                                              <div className="flex items-center gap-2 pt-0.5">
+                                                <span className="shrink-0 text-muted-foreground">Note sous les {
+                                                  (sys.composants.find(c => c.unite === 'm2')!.libelle.split(/\s+/)[0] || '').toLowerCase()}&nbsp;:</span>
+                                                <Input
+                                                  value={noteDeSysteme(i, sys)}
+                                                  placeholder="ex. Pavé rustique couleur Jaune clair"
+                                                  onChange={e => setNoteSysteme(pr => ({ ...pr, [i]: e.target.value }))}
+                                                  className="h-7 text-xs"
+                                                />
                                               </div>
                                             )}
 
