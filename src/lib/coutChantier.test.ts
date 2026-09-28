@@ -22,4 +22,10 @@ describe('coût chantier', () => {
     expect(total).toBeCloseTo(190 + 4 * 5 * 99.5 / 25 + 22.85);   // 292,45
     expect(parM2).toBeCloseTo(73.11, 2);
   });
+
+  it('compte la surface posée, pas les m² entiers commandés', () => {
+    const posee = lignes.map(l => l.id === '1' ? { ...l, quantite: 4, surfaceM2: 3.3 } : l);
+    const { total } = coutChantier(posee, produits, 0);
+    expect(total).toBeCloseTo(3.3 * 47.5 + 4 * 5 * 99.5 / 25 + 22.85);
+  });
 });

@@ -212,7 +212,7 @@ describe('composants vendus au m² et tranches de surface', () => {
     const l = declinerSysteme(PAVES, 4, { conditionnelsRetenus: new Set(['s']) });
     const par = (id: string) => l.find(x => x.composant.id === id)!;
     expect(par('p30').quantiteKg).toBe(4);
-    expect(par('p30').contenants).toBeUndefined();
+    expect(par('p30').contenants).toBe(4);
     expect(par('p30').explication).toBe('4 m²');
     expect(par('e').quantiteKg).toBe(20);            // 5 kg/m² × 4
     expect(par('e').contenants).toBe(1);
@@ -229,6 +229,14 @@ describe('composants vendus au m² et tranches de surface', () => {
     const paves = l.filter(x => x.composant.role === 'pavés');
     expect(paves.map(x => x.composant.id)).toEqual(['p100']);
     expect(paves[0].quantiteKg).toBe(40);
-    expect(paves[0].contenants).toBeUndefined();
+    expect(paves[0].contenants).toBe(40);
+  });
+
+  it('commande le m² entier supérieur mais garde la surface posée', () => {
+    const l = declinerSysteme(PAVES, 3.3);
+    const p = l.find(x => x.composant.id === 'p30')!;
+    expect(p.quantiteKg).toBe(3.3);                  // coût chantier
+    expect(p.contenants).toBe(4);                    // quantité du devis
+    expect(p.explication).toBe('3.3 m² posés → 4 m² commandés (m² entier)');
   });
 });

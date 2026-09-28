@@ -4,7 +4,7 @@
  * pour créer un devis CRMPool dans Odoo (sale.order + lignes).
  */
 
-import type { Devis, Client, Produit, Contact } from './store';
+import type { Devis, Client, Produit, Contact, LigneDevis } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 
@@ -172,6 +172,15 @@ export interface OdooPayload {
 }
 
 /**
+ * Surface réellement posée d'une ligne vendue au m² : surface × consommation
+ * quand la ligne les porte (système), sinon la quantité commandée.
+ */
+export function m2Consommes(l: Pick<LigneDevis, 'quantite' | 'surfaceM2' | 'consommation'>): number {
+  if ((l.surfaceM2 || 0) > 0 && (l.consommation || 0) > 0) return l.surfaceM2! * l.consommation!;
+  return l.quantite || 0;
+}
+
+/**
  * Le coût chantier : la matière CONSOMMÉE, HT, rapportée au m².
  *
  * La note Odoo divisait le total TTC du devis par la surface — TVA, port et
@@ -191,10 +200,11 @@ export function coutChantier(
     /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
        système portent « 1 m²/m² » en consommation : le calcul au kilo les
        divisait par leur poids (8 kg/m²), et 4 m² à 47,50 € comptaient
-       23,75 € au lieu de 190 € — coût chantier 31,55 €/m² pour 73,11. La
-       quantité EST la surface consommée. */
+       23,75 € au lieu de 190 € — coût chantier 31,55 €/m² pour 73,11.
+       ⚠️ Et on compte la surface POSÉE, pas la commandée : 3,3 m² posés
+       se commandent 4 m² (m² entier), le coût chantier en compte 3,3. */
     if (/^m(²|2)$/i.test((l.unite || '').trim())) {
-      total += (l.quantite || 0) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+      total += m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
       continue;
     }
     const prod = l.produitId ? produitParId(produits, l.produitId) : null;

@@ -624,19 +624,73 @@ serve(async (req) => {
 
     let champChantier: string | null = null;
     let champContact: string | null = null;
+    /* Champs many2one du devis dont le libellé dit « assistant(e) ». */
+    const champsAssistante: { champ: string; libelle: string; relation: string }[] = [];
     try {
       const tous = await o.kw("sale.order", "fields_get", [], {
-        attributes: ["string", "type"],
+        attributes: ["string", "type", "relation", "readonly"],
         context: ctx,
       }) as Record<string, any>;
       for (const k of Object.keys(tous)) {
         const s = String(tous[k]?.string || "").toLowerCase();
         if (!champChantier && s.includes("chantier")) champChantier = k;
+        if (s.includes("assistant") && tous[k]?.type === "many2one") {
+          champsAssistante.push({ champ: k, libelle: String(tous[k].string), relation: String(tous[k].relation || "") });
+        }
       }
       if (tous.x_studio_contact_de_laffaire) champContact = "x_studio_contact_de_laffaire";
     } catch {
       /* champs optionnels */
     }
+
+    /* L'ASSISTANTE DE LA FICHE CLIENT SUIT LE DEVIS.
+     *
+     * Dans l'écran d'Odoo, choisir le client remplit l'assistante du devis :
+     * c'est un « onchange » de l'interface, que la création par l'API ne
+     * déclenche pas — le devis arrivait sans elle. On la recopie donc de la
+     * fiche société : champ du même libellé et de la même relation, sinon
+     * le seul champ « assistant(e) » de même relation. Rien de lisible →
+     * rien d'écrit, et le rapport dit ce qui a été vu. */
+    const assistanteVals: Record<string, number> = {};
+    const rapportAssistante: Record<string, unknown> = { devis: champsAssistante.map((c) => c.champ) };
+    if (champsAssistante.length) {
+      try {
+        const champsP = await o.kw("res.partner", "fields_get", [], {
+          attributes: ["string", "type", "relation"],
+          context: ctx,
+        }) as Record<string, any>;
+        const candidatsP = Object.keys(champsP)
+          .filter((k) => champsP[k]?.type === "many2one"
+            && String(champsP[k]?.string || "").toLowerCase().includes("assistant"))
+          .map((k) => ({ champ: k, libelle: String(champsP[k].string), relation: String(champsP[k].relation || "") }));
+        rapportAssistante.fiche = candidatsP.map((c) => c.champ);
+        const appariement: [string, string][] = [];
+        for (const cd of champsAssistante) {
+          const memeRelation = candidatsP.filter((c) => c.relation === cd.relation);
+          const cp = memeRelation.find((c) => c.libelle.toLowerCase() === cd.libelle.toLowerCase())
+            ?? (memeRelation.length === 1 ? memeRelation[0] : undefined);
+          if (cp) appariement.push([cd.champ, cp.champ]);
+        }
+        if (appariement.length) {
+          const lus = await o.kw("res.partner", "read", [[societe.id], appariement.map(([, cp]) => cp)], {
+            context: ctx,
+          }) as any[];
+          const fiche = lus[0] || {};
+          const retenus: Record<string, string> = {};
+          for (const [cd, cp] of appariement) {
+            const v = fiche[cp];
+            if (Array.isArray(v) && typeof v[0] === "number") {
+              assistanteVals[cd] = v[0];
+              retenus[cd] = String(v[1] ?? v[0]);
+            }
+          }
+          rapportAssistante.retenue = retenus;
+        }
+      } catch (e) {
+        rapportAssistante.erreur = ((e as Error).message || "").slice(0, 160);
+      }
+    }
+    (rapport as Record<string, unknown>).assistante = rapportAssistante;
 
     /* LE CONTACT SUIT L'AFFAIRE. Absent chez Odoo, il y est créé sous la
        société, avec ce que MonCRM sait de lui : le devis part toujours avec
@@ -676,6 +730,7 @@ serve(async (req) => {
     if (payload.ref && champChantier) vals[champChantier] = String(payload.ref).slice(0, 200);
     else if (payload.ref) vals.client_order_ref = String(payload.ref).slice(0, 200);
     if (contactId && champContact) vals[champContact] = contactId;
+    Object.assign(vals, assistanteVals);
 
     const orderId = await o.kw("sale.order", "create", [vals], { context: ctx }) as number;
 

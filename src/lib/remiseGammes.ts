@@ -215,3 +215,29 @@ export function prixApplicateur(
       + `${pub.toFixed(2)} € public → ${prix.toFixed(2)} €`,
   };
 }
+
+/**
+ * Prix d'un article ISOMARK / ISOFLOOR pour un client donné — la même règle
+ * à l'analyse d'une demande et dans le devis.
+ *
+ * La remise négociée sur la fiche client d'abord (sur le public), le tarif
+ * applicateur de la gamme sinon (sur `prixTarif`, à défaut le public).
+ *
+ * ⚠️ **LE DEVIS NE DOIT PAS RETOMBER SUR LE PRIX REVENDEUR DE LA FICHE.**
+ * Celui-ci est recopié d'Odoo, et les prix Odoo des pavés sont faux :
+ * passer DEV-2026-114 en R4 remettait les pavés à 67,87 € (public Odoo
+ * × 0,7) au lieu des 47,50 € du tarif applicateur que l'analyse avait
+ * posés, et la colle Eclipse à 141,99 € au lieu de 99,50 €.
+ *
+ * `null` : l'article n'est pas de ces gammes, ou aucune remise ne s'y lit.
+ */
+export function prixGamme(
+  p: { prixHT?: number | null; prixTarif?: number | null; categorie?: string; catalogue?: string },
+  remisesParCategorie?: Record<string, number>,
+): PrixGamme | null {
+  if (!estGamme(p.catalogue) && niveauGamme(p.categorie, p.catalogue) === null) return null;
+  const negociee = prixRevendeur(p.prixHT, p.categorie, remisesParCategorie);
+  if (negociee) return negociee;
+  const gamme = prixApplicateur(p.prixTarif ?? p.prixHT, p.categorie, p.catalogue);
+  return gamme && gamme.remise > 0 ? gamme : null;
+}

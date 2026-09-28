@@ -333,6 +333,23 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   port H2. Chaque composant rattaché à un article rejoint le sac de sa gamme
   (ISOMARK H1/H2, ISOFLOOR, sinon ISOSIGN), système de ligne comme système
   du document.
+- **Pavés commandés au m² entier, coût chantier à la surface posée** (règle
+  du 28/09) : 3,3 m² posés → 4 m² au devis (`m2Commandes`, `systemes.ts`) ;
+  `quantiteKg` et `LigneDevis.surfaceM2` gardent 3,3, que `coutChantier`
+  (`m2Consommes`) et `DevisPreview` comptent. `calcQuantiteSurface`
+  (`Devis.tsx`) traite une ligne en m² en m²/m², jamais au poids.
+- ⚠️ **Le devis ne re-tarife plus un article ISOMARK / ISOFLOOR au prix
+  revendeur de la fiche** (recopié d'Odoo, faux sur les pavés) : passer
+  DEV-2026-114 en R4 remettait les pavés à 67,87 € et l'Eclipse à 141,99 €.
+  `prixDeBase` applique `prixGamme` (`remiseGammes.ts`) — remise client, sinon
+  tarif applicateur sur `prixTarif` —, la règle de l'analyse.
+- **Le port partait en [PORT] générique** depuis le devis ouvert :
+  `preparerOdoo` reconstruisait le devis sans `fraisPortLibelle`. Corrigé.
+- **L'assistante de la fiche client suit le devis Odoo** (`odoo-devis`) :
+  l'écran d'Odoo la remplit par un onchange que la création par l'API ne
+  déclenche pas. Les champs many2one libellés « assistant(e) » du devis et
+  de la fiche société sont appariés (même libellé et relation, sinon le seul
+  de même relation) et recopiés ; `rapport.assistante` dit ce qui a été vu.
 - La fonction Odoo « (Vide) » n'est pas une fonction : filtrée à la lecture
   des contacts (3 fiches nettoyées en base le 28/09).
 - ⚠️ **LES PRIX ODOO DES PAVÉS SONT FAUX, LE TARIF FAIT FOI.** Le public Odoo

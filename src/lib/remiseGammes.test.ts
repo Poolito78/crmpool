@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  niveauGamme, prixApplicateur, prixRevendeur, familleRemise, REMISE_GAMME,
+  niveauGamme, prixApplicateur, prixRevendeur, familleRemise, REMISE_GAMME, prixGamme,
 } from './remiseGammes';
 
 describe('niveau lu dans la catégorie Odoo', () => {
@@ -154,5 +154,22 @@ describe('prix revendeur — la fiche client avant le tarif de gamme', () => {
     expect(prixRevendeur(192.53, 'PU', HORUS)!.libelle).toBe('remise client PU');
     expect(prixApplicateur(100, 'PU')!.libelle).toBe('ISOFLOOR');
     expect(prixApplicateur(100, 'ISOMARK / H1')!.libelle).toBe('ISOMARK H1');
+  });
+});
+
+describe('prixGamme', () => {
+  const pave = { prixHT: 96.96, prixTarif: 67.86, categorie: 'ISOMARK / H2', catalogue: 'ISOMARK' };
+
+  it('prend le tarif applicateur sur prixTarif, pas le public Odoo', () => {
+    expect(prixGamme(pave)?.prix).toBe(47.5);
+  });
+
+  it('la remise négociée du client passe avant la gamme', () => {
+    const r = prixGamme({ ...pave, categorie: 'ISOMARK / FLOORING / EPOXY' }, { EPOXY: 40 });
+    expect(r?.libelle).toBe('remise client EPOXY');
+  });
+
+  it('rien hors ISOMARK / ISOFLOOR', () => {
+    expect(prixGamme({ prixHT: 50, categorie: 'SIGNALISATION POLICE', catalogue: 'ISOSIGN' })).toBeNull();
   });
 });

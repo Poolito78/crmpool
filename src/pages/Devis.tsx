@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { NIVEAUX_TARIF, LIBELLE_NIVEAU, estNiveauTarif, prixAuNiveau, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
+import { prixGamme } from '@/lib/remiseGammes';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuCheckboxItem } from '@/components/ui/dropdown-menu';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
@@ -606,11 +607,16 @@ export default function Devis() {
       if (odooNom === null) return;
       const contact = (selectedClient.contacts || []).find(ct => ct.id === contactId);
       const contactNom = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : undefined;
+      const enregistre = devis.find(d => d.id === editingId);
       const current: DevisType = {
-        id: editingId, numero: devis.find(d => d.id === editingId)?.numero || editingId,
+        id: editingId, numero: enregistre?.numero || editingId,
         clientId, contactId: contactId || undefined,
         dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier,
         systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+        /* Le mode d'expédition (« FRAIS DE PORT SH DE 26 A 100KG ») vit sur le
+           devis enregistré, pas dans le formulaire : l'oublier ici envoyait
+           le port sous l'article générique [PORT]. */
+        ...(fraisPortHT > 0 && enregistre?.fraisPortLibelle ? { fraisPortLibelle: enregistre.fraisPortLibelle } : {}),
         surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
       };
       const opts = { surface: surfaceGlobaleM2 || 0, contactNom, contact, odooPartnerName: odooNom };
@@ -1273,8 +1279,13 @@ export default function Devis() {
     setDragOverId(null);
   }
 
-  function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number): number {
+  function calcQuantiteSurface(produit: typeof produits[0], surface: number, consoOverride?: number, unite?: string): number {
     const conso = consoOverride || produit.consommation;
+    /* Une ligne vendue au m² (pavés d'un système) : conso en m²/m², pas en
+       kg — le poids de la fiche est celui d'un m². Commandée au m² entier. */
+    if (unite && /^m(²|2)$/i.test(unite.trim()) && conso && conso > 0) {
+      return Math.ceil(surface * conso - 1e-9);
+    }
     if (!conso || conso <= 0 || !produit.poids || produit.poids <= 0) return 1;
     const kgNeeded = surface * conso;
     return Math.ceil(kgNeeded / produit.poids);
@@ -1317,6 +1328,10 @@ export default function Devis() {
       const r = prixAuNiveau(produit, niveau, grille, grilleR4);
       if (r) return r.prix;
     }
+    /* ISOMARK / ISOFLOOR : la règle de l'analyse (remise client, sinon tarif
+       applicateur), jamais le prix revendeur recopié d'Odoo — voir `prixGamme`. */
+    const gamme = prixGamme(produit, clients.find(c => c.id === clientId)?.remisesParCategorie);
+    if (gamme) return gamme.prix;
     const palier = getPrixPourQuantite(produit, quantite);
     return isRevendeur ? palier.prixRevendeur : palier.prixHT;
   }
@@ -1720,7 +1735,7 @@ export default function Devis() {
       if (!p || !p.poids) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const conso = l.consommation || p.consommation;
       if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
-      const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation);
+      const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation, l.unite);
       const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
       return { ...l, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
     }));
@@ -3158,7 +3173,7 @@ export default function Devis() {
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                   const surface = parseFloat(e.target.value) || 0;
                                   const conso = l.consommation ?? prod?.consommation;
-                                  const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation) : l.quantite;
+                                  const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
@@ -3167,7 +3182,7 @@ export default function Devis() {
                                   const raw = e.target.value;
                                   const conso = raw === '' ? undefined : parseFloat(raw);
                                   const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso) : l.quantite;
+                                  const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));

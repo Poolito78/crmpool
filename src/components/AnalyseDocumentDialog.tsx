@@ -3877,6 +3877,10 @@ const [contratOdoo, setContratOdoo] = useState<
           tva: p?.tva ?? 20,
           remise: 0,
           consommation: ls.composant.consommation,
+          /* Vendu au m² : la surface posée reste sur la ligne, le coût
+             chantier la compte au lieu des m² entiers commandés. */
+          ...(ls.composant.unite === 'm2' && ls.quantiteKg > 0
+            ? { surfaceM2: Math.round(ls.quantiteKg / (ls.composant.consommation || 1) * 1000) / 1000 } : {}),
           ...(p ? {} : { gamme: 'ISOFLOOR' }),
           note: [ls.composant.role, ls.explication].filter(Boolean).join(' — '),
         };

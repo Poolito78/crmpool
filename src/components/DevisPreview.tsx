@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo, promptOdooPartnerName } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, m2Consommes } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
@@ -809,7 +809,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                consommée, elle se compte à son prix, pas au kilo — même règle
                que `coutChantier` (odooSync.ts). */
             if (/^m(²|2)$/i.test((l.unite || '').trim())) {
-              sumCoutConsoHT += (l.quantite || 0) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+              sumCoutConsoHT += m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
               continue;
             }
             const surfLigne = getSurfaceLigne(l.id);

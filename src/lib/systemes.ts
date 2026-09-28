@@ -315,11 +315,32 @@ export function declinerSysteme(
     return {
       composant: c,
       quantiteKg: Math.round(kg * 1000) / 1000,
-      contenants: kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined,
-      explication,
+      contenants: c.unite === 'm2' ? m2Commandes(kg)
+        : kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined,
+      explication: c.unite === 'm2' ? explicationM2(kg, explication) : explication,
       ...(kitsComposant ? { kits: kitsComposant } : {}),
     };
   });
+}
+
+/**
+ * UN COMPOSANT VENDU AU m² SE COMMANDE AU m² ENTIER (règle du 28/09).
+ *
+ * 22 ml de pavés 15×20 font 3,3 m² posés ; ISOMARK les livre au m² : on en
+ * commande 4. La quantité du devis est ce qui se commande, `quantiteKg`
+ * garde la surface réellement posée — c'est elle que compte le coût
+ * chantier, jamais les 0,7 m² de chute.
+ */
+function m2Commandes(m2: number): number | undefined {
+  return m2 > 0 ? Math.ceil(m2 - 1e-9) : undefined;
+}
+
+function explicationM2(m2: number, base: string): string {
+  const commandes = m2Commandes(m2);
+  const reel = Math.round(m2 * 1000) / 1000;
+  return commandes && commandes !== reel
+    ? `${base} posés → ${commandes} m² commandés (m² entier)`
+    : base;
 }
 
 /* ── Un système, plusieurs zones ─────────────────────────────────────────── */
@@ -444,11 +465,12 @@ export function chiffrerZones(
     const c = l.composant;
     const poids = c.unite === 'm2' ? undefined
       : poidsParProduit?.(c.produitId) ?? c.conditionnementKg;
-    const contenants = kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined;
+    const contenants = c.unite === 'm2' ? m2Commandes(kg)
+      : kg > 0 && poids ? Math.ceil(kg / poids - 1e-9) : undefined;
     const explication = kg <= 0
       ? 'aucun dosage calculable dans la fiche'
       : c.unite === 'm2'
-        ? `${kg} m²`
+        ? explicationM2(kg, `${kg} m²`)
         : l.kits
         ? `${l.kits} kits de ${systeme.surfaceKitM2} m² × ${c.consommation} kg/m² = ${kg} kg`
         : c.consommation != null
