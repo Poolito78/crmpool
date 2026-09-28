@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
+  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, lineaireDeDemande, surfaceDepuisLineaire, surfaceDeDemande, epaisseurDansTexte, surfaceDansTexte, traceDansTexte, zoneDeDemande, surfaceFleche, surfacePictogramme,
 } from './rapprochementSysteme';
 import { declinerSysteme, type Systeme, type SystemeComposant } from './systemes';
 
@@ -317,5 +317,28 @@ describe('la précision de la demande sous les pavés', () => {
 
   it('ne dit rien quand la demande ne précise ni aspect ni teinte', () => {
     expect(precisionDemande('pavés à coller 15x20, 12 m²', 'Pavé')).toBeUndefined();
+  });
+});
+
+describe('des mètres linéaires de pavés', () => {
+  it('lit les ml dans l’unité, la ligne ou le document', () => {
+    expect(lineaireDeDemande({ texteLigne: 'Pavé rustique 15×20', quantite: 22, unite: 'ml' })).toBe(22);
+    expect(lineaireDeDemande({ texteLigne: 'Pavé rustique 15×20 — 22 ml', quantite: 1 })).toBe(22);
+    expect(lineaireDeDemande({
+      texteLigne: 'Pavé rustique 15×20 jaune clair', quantite: 22,
+      texteDocument: 'Bonjour, merci de chiffrer 22ml de pavé rustique 15x20',
+    })).toBe(22);
+    expect(lineaireDeDemande({ texteLigne: 'Pavé 15x20', quantite: 22, unite: 'm²' })).toBeUndefined();
+    expect(lineaireDeDemande({
+      texteLigne: 'Pavé 15x20', quantite: 22, texteDocument: '122 ml de bordure',
+    })).toBeUndefined();
+  });
+
+  it('convertit en m² sur le plus petit côté du format', () => {
+    const s = surfaceDepuisLineaire(22, '15x20')!;
+    expect(s.largeurM).toBe(0.15);
+    expect(s.surfaceM2).toBeCloseTo(3.3);
+    expect(s.calcul).toBe('22 ml × 0,15 m = 3,3 m²');
+    expect(surfaceDepuisLineaire(22, '2 mm')).toBeUndefined();
   });
 });

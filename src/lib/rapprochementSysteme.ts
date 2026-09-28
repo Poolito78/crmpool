@@ -503,6 +503,50 @@ export function precisionDemande(texte: string, sujet: string): string | undefin
 }
 
 /**
+ * La longueur, en mètres linéaires, que la demande donne au lieu d'une
+ * surface : « 22 ml », « 22 mètres linéaires ». L'unité lue par l'analyse
+ * (`unite`) fait foi ; à défaut le texte de la ligne, puis celui du document
+ * entier, pourvu qu'il écrive ce nombre-là suivi de « ml ».
+ */
+export function lineaireDeDemande(args: {
+  texteLigne: string;
+  quantite?: number | null;
+  unite?: string | null;
+  texteDocument?: string;
+}): number | undefined {
+  const ML = /^(ml|m\.?\s*l\.?|metres? lineaires?|mètres? linéaires?)$/i;
+  const q = args.quantite && args.quantite > 0 ? args.quantite : undefined;
+  if (args.unite && ML.test(args.unite.trim()) && q) return q;
+  const enLigne = normaliser(args.texteLigne)
+    .match(/(\d+(?:[.,]\d+)?)\s*(?:ml|metres? lineaires?)\b/);
+  if (enLigne) return enNombre(enLigne[1]);
+  if (q && args.texteDocument) {
+    const n = String(q).replace('.', '[.,]');
+    const re = new RegExp(`(^|[^\\d.,])${n}\\s*(?:ml|metres? lineaires?)\\b`);
+    if (re.test(normaliser(args.texteDocument))) return q;
+  }
+  return undefined;
+}
+
+/**
+ * Une longueur posée en BANDE, convertie en surface : la largeur est le plus
+ * petit côté du format (« 15x20 » → 0,15 m). 22 ml de pavés 15×20 font
+ * 3,3 m², pas 22. Rien sans format lisible — on ne devine pas une largeur.
+ */
+export function surfaceDepuisLineaire(ml: number, variante?: string):
+  { surfaceM2: number; largeurM: number; calcul: string } | undefined {
+  const f = normaliser(variante || '').match(/(\d+(?:[.,]\d+)?)\s*x\s*(\d+(?:[.,]\d+)?)/);
+  if (!f || !(ml > 0)) return undefined;
+  const largeurM = Math.min(enNombre(f[1]), enNombre(f[2])) / 100;
+  if (!(largeurM > 0)) return undefined;
+  const surfaceM2 = Math.round(ml * largeurM * 1000) / 1000;
+  return {
+    surfaceM2, largeurM,
+    calcul: `${enFrancais(ml)} ml × ${enFrancais(largeurM)} m = ${enFrancais(surfaceM2)} m²`,
+  };
+}
+
+/**
  * Surface à chiffrer pour une ligne.
  *
  * La demande porte parfois « 30 m² » dans son libellé ; le plus souvent la

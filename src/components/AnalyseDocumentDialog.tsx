@@ -52,6 +52,7 @@ import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import {
   rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
+  lineaireDeDemande, surfaceDepuisLineaire,
   type RapprochementSysteme, type ZoneDemande,
 } from '@/lib/rapprochementSysteme';
 import {
@@ -2030,10 +2031,34 @@ const [contratOdoo, setContratOdoo] = useState<
     return rap.retenu;
   }, [systemesDetectes, varianteSysteme]);
 
+  /**
+   * DES MÈTRES LINÉAIRES, PAS DES MÈTRES CARRÉS.
+   *
+   * « 22 ml » de pavés 15×20 : la quantité 22 était prise pour une surface,
+   * sept fois trop grande. Quand la demande donne une longueur (unité lue,
+   * ou « ml » écrit dans la ligne ou le document) et que la variante a un
+   * format, la bande se chiffre sur le plus petit côté : 22 × 0,15 = 3,3 m².
+   * Un tracé (« 0,10 m × 965 ml ») ou une surface écrite gardent leur calcul.
+   */
+  const lineaireDeLigne = useCallback((i: number, quantite?: number | null) => {
+    const rap = systemesDetectes.get(i);
+    const l = result?.lignes?.[i];
+    if (!rap || !l || rap.surfaceM2 != null || rap.trace) return undefined;
+    const choisi = varianteSysteme[i];
+    const sys = (choisi && rap.variantes.find(v => v.id === choisi)) || rap.retenu;
+    const ml = lineaireDeDemande({
+      texteLigne: texteDemande(l, i), quantite, unite: l.unite,
+      texteDocument: [texte, analyseTexteRef.current].filter(Boolean).join('\n'),
+    });
+    return ml ? surfaceDepuisLineaire(ml, sys?.variante) : undefined;
+  }, [systemesDetectes, result, varianteSysteme, texteDemande, texte]);
+
   /** Surface chiffrée pour une ligne système, correction manuelle comprise. */
   const surfaceDeLigne = useCallback((i: number, quantite?: number | null) =>
-    surfaceSysteme[i] ?? surfaceDeDemande(systemesDetectes.get(i), quantite),
-  [surfaceSysteme, systemesDetectes]);
+    surfaceSysteme[i]
+      ?? lineaireDeLigne(i, quantite)?.surfaceM2
+      ?? surfaceDeDemande(systemesDetectes.get(i), quantite),
+  [surfaceSysteme, systemesDetectes, lineaireDeLigne]);
 
   /**
    * Le système d'une ligne, décliné sur sa surface.
@@ -3655,7 +3680,10 @@ const [contratOdoo, setContratOdoo] = useState<
         id: generateId(), type: 'groupe',
         description: `${sys.nom}${sys.variante ? ` — ${sys.variante}` : ''} · ${
           surfaceSysteme[i] == null && systemesDetectes.get(i)?.trace
-            ? systemesDetectes.get(i)!.trace!.calcul : `${surface} m²`}`,
+            ? systemesDetectes.get(i)!.trace!.calcul
+            : surfaceSysteme[i] == null && lineaireDeLigne(i, l.quantite)
+              ? lineaireDeLigne(i, l.quantite)!.calcul
+              : `${surface} m²`}`,
         quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
       };
 
@@ -5474,6 +5502,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                             className="h-7 w-24 text-xs"
                                           />
                                           <span className="text-muted-foreground">m²</span>
+                                          {surfaceSysteme[i] == null && (() => {
+                                            const lin = lineaireDeLigne(i, l.quantite);
+                                            return lin ? (
+                                              <span className="text-primary"
+                                                title="La demande donne une longueur : la bande se chiffre sur le plus petit côté du format.">
+                                                {lin.calcul} (bande de {String(lin.largeurM).replace('.', ',')} m)
+                                              </span>
+                                            ) : null;
+                                          })()}
                                           {sysRap.trace && surfaceSysteme[i] == null && (
                                             <span
                                               className="text-muted-foreground"

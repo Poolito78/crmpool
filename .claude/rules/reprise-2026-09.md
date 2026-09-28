@@ -305,6 +305,12 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - **Note sous les pavés** (`precisionDemande`, `noteSysteme`) : l'aspect et la
   teinte du client (« Pavé rustique couleur Jaune clair ») partent en ligne
   de texte sous le premier composant vendu au m² ; champ modifiable à l'écran.
+- **Des mètres linéaires ne sont pas des m²** (`lineaireDeDemande`,
+  `surfaceDepuisLineaire`, `lineaireDeLigne`) : « 22 ml » de pavés 15×20 se
+  chiffre en bande sur le plus petit côté du format, 22 × 0,15 = 3,3 m². L'unité
+  vient de la lecture (`LigneAnalysee.unite`, ajoutée au prompt), à défaut du
+  texte de la ligne ou du document (« 22ml »). Sans format lisible, rien n'est
+  converti ; un tracé ou une surface écrite gardent leur calcul.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de

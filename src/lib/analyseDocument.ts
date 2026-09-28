@@ -40,6 +40,12 @@ export interface LigneAnalysee {
   reference: string;
   description: string;
   quantite: number;
+  /**
+   * L'unité écrite par le client (« u », « ml », « m² », « kg »), quand il en
+   * écrit une. « 22 ml » de pavés n'est pas « 22 m² » : sans l'unité, la
+   * quantité devenait une surface sept fois trop grande.
+   */
+  unite?: string;
   prixUnitaireHT?: number;
   tva?: number;
 }
@@ -94,6 +100,7 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
       "reference": "référence article ou null",
       "description": "désignation de l'article",
       "quantite": 0,
+      "unite": "unité écrite par le client (u, ml, m², kg, l…) ou null",
       "prixUnitaireHT": nombre ou null,
       "tva": taux TVA en % ou null
     }
@@ -128,6 +135,9 @@ Extraction des lignes d'une demande de devis :
 - Chaque article cité devient une ligne, même sans référence ni prix.
 - La quantité se lit dans le texte : « 14u », « 14 u », « 14 unités », « 14x »,
   « x14 » et « 14 pièces » valent tous 14. Sans quantité indiquée, mets 1.
+- « unite » reprend l'unité écrite : « 22 ml » → quantite 22, unite « ml »
+  (mètres LINÉAIRES, une longueur) ; « 30 m² » → unite « m² » (une surface).
+  Ne confonds jamais les deux. Sans unité écrite, mets null.
 - « description » reprend les mots du client tels quels — « J11 », « galette à
   coller », « colle » — sans les traduire ni les compléter : le rapprochement
   avec le catalogue est fait ensuite par l'application.
