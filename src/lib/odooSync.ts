@@ -80,6 +80,8 @@ interface LigneScript {
   pu?: number;    // prix unitaire HT AVANT remise
   rem?: number;   // remise % (sera calculée en net, remise=0 dans Odoo)
   port?: boolean; // ligne de frais de port (produit service dédié)
+  /** Mode d'expédition Odoo du port : l'article de port se retrouve par ce nom. */
+  portNom?: string;
   /** Article de négoce si la référence manque chez Odoo — défaut : celui du devis. */
   negoce?: string;
 }
@@ -123,12 +125,13 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
   if (devis.fraisPortHT && devis.fraisPortHT > 0) {
     result.push({
       type: 'product',
-      desc: 'Frais de port',
+      desc: devis.fraisPortLibelle || 'Frais de port',
       ref: undefined,
       qty: 1,
       pu: devis.fraisPortHT,
       rem: 0,
       port: true,
+      ...(devis.fraisPortLibelle ? { portNom: devis.fraisPortLibelle } : {}),
     });
   }
 
@@ -185,6 +188,15 @@ export function coutChantier(
   let total = 0;
   for (const l of lignes) {
     if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
+    /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
+       système portent « 1 m²/m² » en consommation : le calcul au kilo les
+       divisait par leur poids (8 kg/m²), et 4 m² à 47,50 € comptaient
+       23,75 € au lieu de 190 € — coût chantier 31,55 €/m² pour 73,11. La
+       quantité EST la surface consommée. */
+    if (/^m(²|2)$/i.test((l.unite || '').trim())) {
+      total += (l.quantite || 0) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+      continue;
+    }
     const prod = l.produitId ? produitParId(produits, l.produitId) : null;
     const conso = l.consommation || prod?.consommation || 0;
     const surfLigne = l.surfaceM2 || surfaceGlobaleM2;

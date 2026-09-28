@@ -320,6 +320,16 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   `poidsUnitaireDe`) : pour des pavés au m², `produits.poids` = poids d'un m².
   Le bloc système affiche le poids de l'envoi et nomme ce qui n'en a pas ;
   le port affiche son poids. Les PAVPREF pèsent **8 kg/m²** (règle du 28/09, migration `20260928170000`).
+- **Coût chantier : une ligne au m² se compte au m²** (`coutChantier`,
+  `DevisPreview`) : les pavés (conso « 1 m²/m² ») étaient divisés par leur
+  poids — DEV-2026-112 annonçait 31,55 €/m² pour 73,11.
+- **Le port part sous son mode d'expédition Odoo** (`modeExpeditionSH`,
+  `devis.frais_port_libelle`, migration `20260928180000`) : un envoi unique
+  payé à la tranche de poids porte « FRAIS DE PORT SH DE 26 A 100KG » (1-25,
+  26-100, 101-700, > 700), et `odoo-devis` retrouve l'article de ce nom
+  (PORTSH100) au lieu du générique. Forfait, franco ou plusieurs expéditions
+  payantes : port générique. ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-devis`
+  (sinon `portNom` est ignoré). Le script console n'en tient pas compte.
 - **Le port des gammes compte les composants d'un système** (`transport`,
   `composantAuPort`) : une ligne système ne retient aucun article et était
   sautée — « Pavés à coller », tout en ISOMARK H2, partait sans les 51 € de

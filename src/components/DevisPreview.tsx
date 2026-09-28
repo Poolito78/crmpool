@@ -805,6 +805,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           // â"€â"€ Totaux ligne récapitulatif â"€â"€
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
           for (const { conso, isComposite, compDatas, prod, l } of allLines) {
+            /* Vendu au m² (pavés d'un système) : la quantité EST la surface
+               consommée, elle se compte à son prix, pas au kilo — même règle
+               que `coutChantier` (odooSync.ts). */
+            if (/^m(²|2)$/i.test((l.unite || '').trim())) {
+              sumCoutConsoHT += (l.quantite || 0) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+              continue;
+            }
             const surfLigne = getSurfaceLigne(l.id);
             if (isComposite) {
               if (conso > 0) {

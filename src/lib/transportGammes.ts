@@ -39,6 +39,19 @@ const ISOFLOOR: Tranche[] = [
   { jusqua: null, prix: 230 },
 ];
 
+/**
+ * Le MODE D'EXPÉDITION Odoo d'une tranche de poids — « FRAIS DE PORT SH DE
+ * 26 A 100KG » — tel qu'il est nommé dans Odoo (Ventes → Modes d'expédition),
+ * où son article de port porte le même nom (PORTSH100 pour 26-100 kg). Les
+ * bornes sont celles de la grille ISOMARK : 25, 100, 700 kg.
+ */
+export function modeExpeditionSH(poids: number): string {
+  if (poids <= 25) return 'FRAIS DE PORT SH DE 1 A 25KG';
+  if (poids <= 100) return 'FRAIS DE PORT SH DE 26 A 100KG';
+  if (poids <= 700) return 'FRAIS DE PORT SH DE 101 A 700KG';
+  return 'FRAIS DE PORT SH > 700KG';
+}
+
 /** Franco ISOMARK H1, en euros HT. */
 export const FRANCO_ISOMARK_H1 = 2700;
 /** Franco ISOMARK H2, en euros HT, hors ADR. */
@@ -115,6 +128,12 @@ export interface PortGamme {
   /** Des lignes n'ont pas de poids lisible : le calcul est incomplet. */
   poidsIncomplet: boolean;
   explication: string;
+  /**
+   * Le mode d'expédition Odoo, quand le port se paie à la tranche de poids
+   * (`modeExpeditionSH`). Absent pour un forfait ou un envoi offert : aucun
+   * mode d'Odoo n'y correspond, on n'en choisit pas un au hasard.
+   */
+  modeExpedition?: string;
 }
 
 function poidsTotal(lignes: LigneGamme[], sansGranulats = false) {
@@ -149,7 +168,7 @@ export function portIsomark(lignes: LigneGamme[], h2 = false): PortGamme {
     const montant = tarifDeTranche(ISOMARK_H1, poids);
     return {
       gamme: 'ISOMARK', montant, offert: false, poids, poidsFranco: poids, base,
-      poidsIncomplet: incomplet,
+      poidsIncomplet: incomplet, modeExpedition: modeExpeditionSH(poids),
       explication: `H2 avec ADR — grille au poids, sans franco : `
         + `${poids.toFixed(1)} kg → ${montant.toFixed(2)} €`,
     };
@@ -170,6 +189,7 @@ export function portIsomark(lignes: LigneGamme[], h2 = false): PortGamme {
   return {
     gamme: 'ISOMARK', montant, offert, poids, poidsFranco: poids, base,
     poidsIncomplet: incomplet,
+    ...(offert ? {} : { modeExpedition: modeExpeditionSH(poids) }),
     explication: `H1 — ${base.toFixed(2)} € HT, franco à ${FRANCO_ISOMARK_H1} € : `
       + (offert ? 'offert' : `${poids.toFixed(1)} kg → ${montant.toFixed(2)} €`),
   };

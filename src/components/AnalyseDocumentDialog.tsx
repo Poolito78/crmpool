@@ -4052,6 +4052,21 @@ const [contratOdoo, setContratOdoo] = useState<
        * ressaisir à la main, ou l'oublier. */
       fraisPortHT: transport?.total || undefined,
       fraisPortTVA: transport?.total ? 20 : undefined,
+      /* LE BON ARTICLE DE PORT CHEZ ODOO. Un envoi unique, payé à la tranche
+         de poids, porte le nom du mode d'expédition Odoo — « FRAIS DE PORT
+         SH DE 26 A 100KG » — par lequel l'envoi retrouve PORTSH100. Plusieurs
+         expéditions payantes (ISOSIGN + ISOMARK, plastique…) n'en désignent
+         aucune à elles seules : le port reste alors générique. */
+      ...(() => {
+        if (!transport?.total) return {};
+        const payants = [
+          ...transport.gammes.filter(g => g.montant > 0),
+          ...(transport.isosign && !transport.isosign.offert && transport.isosign.montant > 0 ? [transport.isosign] : []),
+          ...transport.detail,
+        ];
+        const seul = payants.length === 1 ? transport.gammes.find(g => g.montant > 0) : undefined;
+        return seul?.modeExpedition ? { fraisPortLibelle: seul.modeExpedition } : {};
+      })(),
       /* L'INTERLOCUTEUR SUIT LE DEVIS.
        *
        * L'écran désignait déjà la bonne personne dans « Contact de l'affaire »

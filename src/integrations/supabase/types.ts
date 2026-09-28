@@ -720,6 +720,8 @@ export type Database = {
           date_validite: string | null
           frais_port_auto: boolean | null
           frais_port_ht: number | null
+
+          frais_port_libelle: string | null
           frais_port_tva: number | null
           id: string
           lignes: Json
@@ -754,6 +756,8 @@ export type Database = {
           date_validite?: string | null
           frais_port_auto?: boolean | null
           frais_port_ht?: number | null
+
+          frais_port_libelle?: string | null
           frais_port_tva?: number | null
           id?: string
           lignes?: Json
@@ -788,6 +792,8 @@ export type Database = {
           date_validite?: string | null
           frais_port_auto?: boolean | null
           frais_port_ht?: number | null
+
+          frais_port_libelle?: string | null
           frais_port_tva?: number | null
           id?: string
           lignes?: Json

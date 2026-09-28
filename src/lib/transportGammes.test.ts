@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   poidsDepuisLibelle, estGranulat, portIsomark, portIsofloor,
-  FRANCO_ISOMARK_H1, FRANCO_ISOFLOOR_KG, portGammes,
+  FRANCO_ISOMARK_H1, FRANCO_ISOFLOOR_KG, portGammes, modeExpeditionSH,
 } from './transportGammes';
 
 const ligne = (designation: string, quantite: number, montant: number) =>
@@ -148,5 +148,21 @@ describe('le poids de la fiche article passe avant le libellé', () => {
     ], true);
     expect(p.poids).toBeCloseTo(58);
     expect(p.poidsIncomplet).toBe(false);
+  });
+});
+
+describe('le mode d’expédition Odoo d’une tranche de poids', () => {
+  it('nomme la tranche comme Odoo', () => {
+    expect(modeExpeditionSH(20)).toBe('FRAIS DE PORT SH DE 1 A 25KG');
+    expect(modeExpeditionSH(76.4)).toBe('FRAIS DE PORT SH DE 26 A 100KG');
+    expect(modeExpeditionSH(300)).toBe('FRAIS DE PORT SH DE 101 A 700KG');
+    expect(modeExpeditionSH(900)).toBe('FRAIS DE PORT SH > 700KG');
+  });
+
+  it('ne le pose que sur un port payé au poids', () => {
+    const l = [{ reference: 'ECLIPSE25', designation: 'COLLE ECLIPSE (FUT DE 25KG)', quantite: 3, montant: 300, niveau: 'H2' as const }];
+    expect(portIsomark(l, true).modeExpedition).toBeUndefined();          // forfait H2
+    expect(portIsomark(l.map(x => ({ ...x, adr: true })), true).modeExpedition)
+      .toBe('FRAIS DE PORT SH DE 26 A 100KG');                            // ADR : 75 kg
   });
 });

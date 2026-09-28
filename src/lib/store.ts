@@ -532,6 +532,12 @@ export interface Devis {
   dateRealisation?: string; // date de réalisation prévue/effective (YYYY-MM-DD)
   fraisPortHT?: number;
   fraisPortTVA?: number;
+  /**
+   * Le mode d'expédition Odoo des frais de port — « FRAIS DE PORT SH DE 26 A
+   * 100KG ». L'envoi vers Odoo y retrouve l'article de port (PORTSH100) au
+   * lieu du « FRAIS DE PORT » générique. Absent = port générique.
+   */
+  fraisPortLibelle?: string;
   fraisPortAuto?: boolean;
   modeCalcul?: 'standard' | 'surface';
   surfaceGlobaleM2?: number;
@@ -881,6 +887,7 @@ function dbToDevis(r: any): Devis {
     dateRealisation: r.date_realisation || undefined,
     fraisPortHT: r.frais_port_ht != null ? Number(r.frais_port_ht) : undefined,
     fraisPortTVA: r.frais_port_tva != null ? Number(r.frais_port_tva) : undefined,
+    fraisPortLibelle: r.frais_port_libelle || undefined,
     fraisPortAuto: r.frais_port_auto != null ? Boolean(r.frais_port_auto) : undefined,
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
@@ -921,6 +928,7 @@ function devisToDb(d: Devis, userId: string) {
     ...(d.dateRealisation !== undefined ? { date_realisation: d.dateRealisation || null } : {}),
     frais_port_ht: d.fraisPortHT ?? 0,
     frais_port_tva: d.fraisPortTVA ?? 20,
+    ...(d.fraisPortLibelle !== undefined ? { frais_port_libelle: d.fraisPortLibelle || null } : {}),
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,
