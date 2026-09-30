@@ -126,6 +126,12 @@ export interface Systeme {
    * toujours en petits mélanges, quelle que soit sa longueur.
    */
   kitSurfaceMaxM2?: number;
+  /**
+   * Le système vient d'un devis modèle (statut « système »), pas de la table
+   * `systemes` : son nom est celui d'un devis, où les nombres — 107, 319 —
+   * distinguent les combinaisons. Voir `systemesDevis.ts`.
+   */
+  depuisDevis?: boolean;
   actif: boolean;
   composants: SystemeComposant[];
 }

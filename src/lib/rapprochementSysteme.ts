@@ -378,13 +378,26 @@ export function rapprocherSysteme(
   let meilleurPoids = 0;
   const noms = new Set(systemes.map(s => s.nom));
 
+  /* Les mots de la demande, nombres compris : « 107 » et « 319 » distinguent
+     les combinaisons des devis modèles. */
+  const motsBruts = new Set(normaliser(demande).split(/[^a-z0-9]+/).filter(Boolean).map(radical));
+  const depuisDevis = new Set(systemes.filter(s => s.depuisDevis).map(s => s.nom));
+  const base = new Set(systemes.filter(s => !s.depuisDevis).map(s => s.nom));
+
   for (const nom of noms) {
-    const mn = motsSignificatifs(nom).map(radical);
+    const modele = depuisDevis.has(nom) && !base.has(nom);
+    /* Le nom d'un modèle de devis garde ses nombres entiers (107, 319) : sans
+       eux « 319 Road » et « 107 + 319 Road » ne se distinguent plus. */
+    const mn = modele
+      ? normaliser(nom).split(/[^a-z0-9]+/)
+        .filter(m => m.length > 1 && !MOTS_VIDES.has(m) && !/^\d+[.,]\d+$/.test(m))
+      .map(radical)
+      : motsSignificatifs(nom).map(radical);
     if (!mn.length) continue;
     /* Un nom d'un seul mot doit être distinctif : « Coracoat », « Corafloor »
        le sont ; un nom de trois lettres ne le serait pas. */
     if (mn.length === 1 && mn[0].length < 5) continue;
-    if (!mn.every(m => motsDemande.has(m))) continue;
+    if (!mn.every(m => (modele ? motsBruts : motsDemande).has(m))) continue;
 
     const poids = mn.length * 1000 + nom.length;
     if (poids > meilleurPoids) { meilleurPoids = poids; meilleurNom = nom; }
