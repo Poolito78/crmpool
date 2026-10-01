@@ -584,3 +584,48 @@ ${PIED}`, 39)!;
     expect(refs.some(r => r.startsWith('BPSP'))).toBe(false);
   });
 });
+
+describe('plan Tasman sur IPN (AF038821)', () => {
+  /* Page telle que pdf.js la rend : intitulés vides après « Hauteur de
+     base », puis dossier / section / ensemble / produit / support. Aucun sort. */
+  const page = (ens: string, cote: string, mt: number, lg: string) => `Plan avec Détails
+Surface totale 6,30 m²
+Hauteur de base 100 mm
+Fixations
+Accessoires
+Entourage
+AF038821
+0001
+${ens}
+TASMAN CL2
+I ALU
+${cote}
+Blanc 3870
+I ALU IC
+Mt : ${mt} m.daN
+Lg : ${lg} m
+I ALU IC
+Mt : ${mt} m.daN
+Lg : ${lg} m
+Signal 'Projet et Patrimoine' V 9.6.5 © Kadri Signal 2022 01/10/2026 10:20:04`;
+  const e = lirePlanDirectionnel([
+    page('0001', 'D42b 3900x2400=9.360m²', 1932, '5.00'),
+    page('0002', 'D42b 3000x2100=6.300m²', 1124, '4.30'),
+  ]);
+
+  it('lit le cartouche, le panneau neuf et les deux IPN', () => {
+    expect(e[0]).toMatchObject({ dossier: 'AF038821', ensemble: '0001', classe: 2 });
+    expect(e[0].panneaux[0].sort).toBe('neuf');
+    expect(e[0].supports).toHaveLength(2);
+  });
+
+  it('chiffre comme le devis : D3 C2, IPN3 de la section nommée, (lattes+2) × supports brides', () => {
+    const l = lignesDuPlan(e, {}, undefined, 'ensemble');
+    const ref = (r: string) => l.filter(x => x.reference === r).map(x => x.quantite);
+    expect(ref('D3.3900.2400.C2.ST.IS.BRUT')).toEqual([1]);
+    expect(ref('D3.3000.2100.C2.ST.IS.BRUT')).toEqual([1]);
+    expect(ref('IPN3.5000.BRUT')).toEqual([2]);
+    expect(ref('IPN3.4300.BRUT')).toEqual([2]);
+    expect(l.filter(x => x.reference === 'BR.PAL.H10X60.BRUT').map(x => x.quantite)).toEqual([20, 18]);
+  });
+});

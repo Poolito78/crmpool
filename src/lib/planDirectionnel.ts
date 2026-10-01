@@ -132,7 +132,17 @@ function sortDe(mots: string): SortPanneau {
  */
 function cartouche(lignes: string[]) {
   const i = lignes.findIndex(l => /^Hauteur de base/i.test(l));
-  const suite = i >= 0 ? lignes.slice(i + 1, i + 7) : [];
+  let suite = i >= 0 ? lignes.slice(i + 1, i + 7) : [];
+  /* VARIANTE « TASMAN » (PAL) : après « Hauteur de base » viennent d'abord
+     les intitulés « Fixations / Accessoires / Entourage » — sans valeur —,
+     puis dossier, section, ensemble, produit, support (pas de sous-dossier).
+     C'est le plan d'AF038821 : « AF038821 / 0001 / 0002 / TASMAN CL2 / I ALU ». */
+  if (i >= 0 && /^(Fixations|Accessoires|Entourage)$/i.test(lignes[i + 1] || '')) {
+    let k = i + 1;
+    while (/^(Fixations|Accessoires|Entourage)$/i.test(lignes[k] || '')) k++;
+    const [dossier = '', section = '', ensemble = '', produit = '', sup = ''] = lignes.slice(k, k + 5);
+    return { dossier, section, ensemble, produit, support: sup.split(/\s{2,}/)[0].trim() };
+  }
   /* La ligne du support porte parfois, collée, l'adresse du concepteur :
      « MAT TRAV REHAUSSE  47 av. de LUGO… ». */
   const support = (suite[5] || '').split(/\s{2,}|\s+\d+\s+av\.?\s/i)[0].trim();
@@ -190,7 +200,7 @@ export function lireCotePanneau(ligne: string): Omit<PanneauPlan, 'sort' | 'fond
 const MOTIF_SORT = /^(?:Existant|Pose|D[ée]pose|ASupprimer)+$/i;
 const MOTIF_FOND = /^(Blanc|Vert|Bleu|Jaune|Noir|Rouge|Marron|Orange|Gris|Brun|Violet)/i;
 const MOTIF_SUPPORT =
-  /^(MAT(TRAV|ANCRE)|TUBE|Coulisseau|CANDELABRE|IPN|HEA|PORTIQUE|POTENCE|POTELET)/i;
+  /^(MAT(TRAV|ANCRE)|TUBE|Coulisseau|CANDELABRE|IPN|IALU|HEA|PORTIQUE|POTENCE|POTELET)/i;
 
 /**
  * Lit une page de plan, un élément de texte par ligne (voir
@@ -202,6 +212,11 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
   const plates = lignes.map(sansEspaces);
   const c = cartouche(lignes);
 
+  /* Un plan TASMAN (PAL) n'écrit aucun sort : ses panneaux sont des
+     panneaux NEUFS à fabriquer. Sans mention nulle part sur la page, on ne
+     peut pas les croire « existants » comme dans un plan d'ancien format. */
+  const sansSort = /^TASMAN/i.test(c.produit) && !plates.some(p => MOTIF_SORT.test(p));
+
   const panneaux: PanneauPlan[] = [];
   lignes.forEach((l, j) => {
     const cote = lireCotePanneau(l);
@@ -212,7 +227,7 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
     const fond = (plates[j + 1] || '').match(MOTIF_FOND)?.[1];
     panneaux.push({
       ...cote,
-      sort: MOTIF_SORT.test(dessus) ? sortDe(dessus) : 'existant',
+      sort: MOTIF_SORT.test(dessus) ? sortDe(dessus) : sansSort ? 'neuf' : 'existant',
       fond: fond ? fond[0].toUpperCase() + fond.slice(1).toLowerCase() : undefined,
     });
   });
@@ -800,6 +815,18 @@ export const SUPPORTS_IPN: { article: string; section: string; moment: number }[
   { article: 'IPN5', section: 'IE', moment: 7118 },
 ];
 
+/**
+ * L'IPN que le plan NOMME : « I ALU IC » = section IC = IPN3. Kadri a déjà
+ * choisi la section, on la suit tant que son moment admissible couvre le
+ * moment calculé (AF038821 : 1124 daN.m en IC, que le plus petit IPN
+ * suffisant — IPN2 — aurait ramené d'une taille).
+ */
+export function ipnNomme(designation: string, moment?: number) {
+  const m = sansEspaces(designation).toUpperCase().match(/^IALUI([A-E])$/);
+  const ipn = m ? SUPPORTS_IPN.find(x => x.section === `I${m[1]}`) : undefined;
+  return ipn && (moment === undefined || moment <= ipn.moment) ? ipn : null;
+}
+
 /** Le plus petit IPN dont le moment admissible couvre `moment`, `null` au-delà d'IE. */
 export function ipnPourMoment(moment: number) {
   return SUPPORTS_IPN.find(x => x.moment >= moment) ?? null;
@@ -831,8 +858,9 @@ export function referenceSupport(
   /* PANNEAU PAL : des IPN, quel que soit le support que Kadri dessine —
      le plus petit dont le moment admissible couvre le moment Kadri. */
   if (s.pal) {
-    if (s.moment === undefined) return { raison: 'moment Kadri non lu : IPN à choisir' };
-    const ipn = ipnPourMoment(s.moment);
+    const nomme = ipnNomme(s.designation, s.moment);
+    if (s.moment === undefined && !nomme) return { raison: 'moment Kadri non lu : IPN à choisir' };
+    const ipn = nomme ?? ipnPourMoment(s.moment!);
     if (!ipn) return { raison: `moment ${s.moment} daN.m au-delà d'un IE : support à étudier` };
     const lg = s.longueurTotale ?? s.longueur;
     if (!lg) return { raison: 'longueur du support non lue sur le plan' };
@@ -864,7 +892,7 @@ export function designationSupport(s: LigneSupportPlan): string {
   const lg = s.longueurTotale ?? s.longueur;
   const cote = lg ? ` — longueur ${lg.toLocaleString('fr-FR')} m (plan Kadri)` : '';
   if (s.pal) {
-    const ipn = s.moment !== undefined ? ipnPourMoment(s.moment) : null;
+    const ipn = ipnNomme(s.designation, s.moment) ?? (s.moment !== undefined ? ipnPourMoment(s.moment) : null);
     return ipn
       ? `Support IPN ${ipn.section}${cote} — moment ${s.moment} ≤ ${ipn.moment} daN.m (au lieu de ${s.designation})`
       : `Support IPN${cote} (au lieu de ${s.designation})`;
@@ -1104,17 +1132,25 @@ export function bridesPal(
   const panneaux = panneauxEnGamme(e, gammes).filter(x => x.gamme === 'tasman').map(x => x.p);
   if (!panneaux.length) return null;
   const supports = e.supports.filter(s => !estCoulisseau(s)).length;
+  /* SUR IPN (« I ALU IC »), c'est la fiche du fabricant : (lattes + 2) ×
+     supports, sans bride d'entourage. Vérifié sur AF038821 — 3000×2100 sur
+     2 IPN = 18, 3900×2400 sur 2 IPN = 20 —, là où le même panneau sur tube
+     (AF036471) en porte 24. */
+  const surIpn = e.supports.some(x => /^IALU/i.test(sansEspaces(x.designation)));
   const parPanneau = panneaux.map(p => {
     const t = surfaceTasman(p);
-    return { lattes: t.lames, entourage: Math.round((4 * t.hauteur) / 1000) };
+    return { lattes: t.lames, entourage: surIpn ? 0 : Math.round((4 * t.hauteur) / 1000) };
   });
-  const detail = parPanneau.map(x => `${x.lattes} lattes × ${supports || '?'} + 2 + ${x.entourage}`)
-    .join(' ; ');
+  const detail = parPanneau.map(x => (surIpn
+    ? `(${x.lattes} lattes + 2) × ${supports || '?'}`
+    : `${x.lattes} lattes × ${supports || '?'} + 2 + ${x.entourage}`)).join(' ; ');
   if (!supports) {
     return { reference: null, quantite: 1, description: `Brides PAL — ${detail}`,
       aVerifier: 'aucun support lu sur le plan : nombre de brides PAL à établir' };
   }
-  const quantite = parPanneau.reduce((n, x) => n + x.lattes * supports + 2 + x.entourage, 0);
+  const quantite = parPanneau.reduce((n, x) => n + (surIpn
+    ? (x.lattes + 2) * supports
+    : x.lattes * supports + 2 + x.entourage), 0);
   return { reference: BRIDE_PAL, quantite, aVerifier: null,
     description: `Bride PAL H10x60 — ${detail}` };
 }
@@ -1216,7 +1252,8 @@ function lignesDe(
         deja.quantite += pal.quantite;
         if (!deja.ensembles.includes(e.ensemble)) deja.ensembles.push(e.ensemble);
         deja.description = deja.description.split(' — ')[0]
-          + ' — lattes × supports + 2 + 4 par ml de hauteur';
+          + (/^\(/.test(deja.description.split(' — ')[1] ?? '') ? ' — (lattes + 2) × supports'
+            : ' — lattes × supports + 2 + 4 par ml de hauteur');
       } else {
         fixations.set(cle, {
           reference: pal.reference ?? '', description: pal.description, quantite: pal.quantite,
