@@ -1515,20 +1515,32 @@ const [contratOdoo, setContratOdoo] = useState<
        message conserve, lui, l'agence de livraison quand elle y est citée. */
     if (emailTexte) emailTexte = coupeSignature(emailTexte);
 
+    /* Un dépôt s'AJOUTE à ce qui est déjà dans la zone (PDF et texte), il ne
+       le remplace pas : on ne lance alors pas l'analyse d'office, l'utilisateur
+       peut encore déposer d'autres pièces avant de cliquer « Analyser ». */
+    const dejaPdfs: { name: string; buffer: ArrayBuffer }[] = emlPdfs.length > 0
+      ? emlPdfs
+      : fichier && estPdf(fichier) ? [{ name: fichier.name, buffer: await fichier.arrayBuffer() }] : [];
+    const dejaQuelqueChose = dejaPdfs.length > 0 || texte.trim().length > 0;
+    const texteFinal = [texte.trim(), emailTexte].filter(Boolean).join('\n\n');
+
     if (allPdfBuffers.length > 0) {
-      if (emailTexte) setTexte(emailTexte);
-      setEmlPdfs(allPdfBuffers);
-      const blob = new Blob([allPdfBuffers[0].buffer], { type: 'application/pdf' });
-      const firstFile = new File([blob], allPdfBuffers[0].name, { type: 'application/pdf' });
+      const tous = [...dejaPdfs, ...allPdfBuffers];
+      if (texteFinal) setTexte(texteFinal);
+      setEmlPdfs(tous);
+      const blob = new Blob([tous[0].buffer], { type: 'application/pdf' });
+      const firstFile = new File([blob], tous[0].name, { type: 'application/pdf' });
       setFichier(firstFile);
-      lancerAnalyse(firstFile, emailTexte, allPdfBuffers);
+      if (dejaQuelqueChose) toast.success(`${allPdfBuffers.length} pièce${allPdfBuffers.length > 1 ? 's' : ''} ajoutée${allPdfBuffers.length > 1 ? 's' : ''} — cliquez sur Analyser`);
+      else lancerAnalyse(firstFile, emailTexte, tous);
     } else if (emailTexte) {
-      setTexte(emailTexte);
-      lancerAnalyse(null, emailTexte, []);
+      setTexte(texteFinal);
+      if (dejaQuelqueChose) toast.success('Texte ajouté — cliquez sur Analyser');
+      else lancerAnalyse(null, emailTexte, []);
     } else if (files.length > 0) {
       toast.error('Format non reconnu — utilisez PDF, Excel (.xlsx), email (.eml/.msg)');
     }
-  }, [lancerAnalyse]);
+  }, [lancerAnalyse, emlPdfs, fichier, texte]);
 
   /* ── drag & drop ── */
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -4356,7 +4368,7 @@ const [contratOdoo, setContratOdoo] = useState<
                   className="self-start flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  {fichier ? 'Changer le fichier' : 'Parcourir PDF, Excel, email (.eml)…'}
+                  {fichier ? 'Ajouter un fichier' :'Parcourir PDF, Excel, email (.eml)…'}
                 </button>
                 <input ref={fileRef} type="file"
                   accept="application/pdf,.eml,message/rfc822,.xlsx,.xls,.csv,.ods,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
@@ -4384,8 +4396,7 @@ const [contratOdoo, setContratOdoo] = useState<
                         }
                       } catch { toast.error('Impossible de lire le fichier Excel'); }
                     } else {
-                      setFichier(f);
-                      lancerAnalyse(f, texte, emlPdfs);
+                      await processFiles([f]);
                     }
                   }} />
               </div>
