@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, Sele
 import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, PlusCircle, Package, Receipt, Mail, Users, Truck, Sparkles, Eye, EyeOff, ExternalLink, ChevronRight, Check } from 'lucide-react';
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
+import { lireBonsPourExecution, pagesEnImages, ensemblesBpe, estTasmanPal, type BonPourExecution } from '@/lib/bonPourExecution';
 import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
   estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
@@ -1350,14 +1351,43 @@ const [contratOdoo, setContratOdoo] = useState<
         /* UN PLAN KADRI NE PASSE PAS PAR L'IA. Cent pages de cotes résumées
            par un modèle, ce sont des quantités inventées ; lues une à une,
            ce sont celles du bureau d'études. */
-        const pages = await extrairePagesPDF(await pdfFile.arrayBuffer()).catch(() => [] as string[]);
+        let planFile = pdfFile;
+        let pages = await extrairePagesPDF(await pdfFile.arrayBuffer()).catch(() => [] as string[]);
+        /* Plusieurs PDF déposés : le plan Kadri est celui qui se lit en texte ;
+           les autres, sans texte du tout, sont des bons pour exécution (images)
+           dont on lit les panneaux Tasman. */
+        let bons: { name: string; buffer: ArrayBuffer }[] = [];
+        if (pdfsCtx.length > 1) {
+          const lus = await Promise.all(pdfsCtx.map(async s => ({
+            s, pg: await extrairePagesPDF(s.buffer).catch(() => [] as string[]),
+          })));
+          const plan = lus.find(x => estPlanKadri(x.pg));
+          if (plan) {
+            pages = plan.pg;
+            planFile = new File([plan.s.buffer], plan.s.name, { type: 'application/pdf' });
+            bons = lus.filter(x => x !== plan && x.pg.every(t => t.replace(/\s/g, '').length < 40)).map(x => x.s);
+          }
+        }
         if (estPlanKadri(pages)) {
           const ensembles = lirePlanDirectionnel(pages);
+          if (bons.length) {
+            const lus: BonPourExecution[] = [];
+            for (const b of bons) {
+              lus.push(...await lireBonsPourExecution(await pagesEnImages(b.buffer), lus.length + 1));
+            }
+            const dossier = ensembles[0]?.dossier ?? '';
+            const sup = ensemblesBpe(lus, dossier).map(e => ({ ...e, section: ensembles[0]?.section ?? '' }));
+            ensembles.push(...sup);
+            const ecartes = lus.length - lus.filter(estTasmanPal).length;
+            if (sup.length) toast.success(`Bons pour exécution : ${lus.filter(estTasmanPal).length} panneau(x) Tasman ajouté(s)`);
+            else toast.warning('Bons pour exécution : aucun panneau Tasman lu');
+            if (ecartes > 0) toast.warning(`${ecartes} bon(s) pour exécution non Tasman : à chiffrer à la main`);
+          }
           /* La grille R4 dit quelles références existent. Illisible, on
              s'en passe : les références partent telles quelles, et Odoo
              dira lui-même s'il les connaît. */
           const grille = await chargerGrille('R4').catch(() => undefined);
-          setPlanKadri({ ensembles, grille, fichier: pdfFile });
+          setPlanKadri({ ensembles, grille, fichier: planFile });
           analysis = documentDuPlan(ensembles, lignesDuPlan(ensembles, {},
             grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {

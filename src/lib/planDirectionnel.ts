@@ -88,6 +88,8 @@ export interface EnsemblePlan {
   supports: SupportPlan[];
   /** « Socle d'ancrage avec embase » : les mâts de l'ensemble sont sur embase. */
   embase: boolean;
+  /** Panneaux venus d'un bon pour exécution : pas de plan, donc ni support ni brides. */
+  sansSupport?: boolean;
 }
 
 /** Un panneau que le chantier demande de fabriquer. */
@@ -1129,6 +1131,7 @@ export function bridesPal(
   e: EnsemblePlan,
   gammes: Record<string, GammeDirectionnelle>,
 ): { reference: string | null; quantite: number; description: string; aVerifier: string | null } | null {
+  if (e.sansSupport) return null;
   const panneaux = panneauxEnGamme(e, gammes).filter(x => x.gamme === 'tasman').map(x => x.p);
   if (!panneaux.length) return null;
   const supports = e.supports.filter(s => !estCoulisseau(s)).length;
