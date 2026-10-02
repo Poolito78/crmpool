@@ -52,8 +52,26 @@ const appliquerMiseAJour = registerSW({
 async function rechargerNouvelleVersion() {
   let recharge = false;
   const recharger = () => { if (!recharge) { recharge = true; window.location.reload(); } };
+  /* Si la nouvelle version n'a pas pris la main au bout de 3 s (installation
+     encore en cours, version en attente remplacée, autre fenêtre de l'app
+     ouverte), un simple rechargement serait resservi par l'ANCIEN cache et la
+     bannière reviendrait : « le bouton ne fait rien ». On purge alors le
+     service worker et les caches, comme pour les chunks périmés, ce qui force
+     le réseau. */
+  const purgerPuisRecharger = async () => {
+    if (recharge) return;
+    try {
+      const regs = await navigator.serviceWorker?.getRegistrations();
+      await Promise.all((regs ?? []).map(r => r.unregister()));
+      if ('caches' in window) {
+        const cles = await caches.keys();
+        await Promise.all(cles.map(k => caches.delete(k)));
+      }
+    } catch { /* on recharge quand même */ }
+    recharger();
+  };
   navigator.serviceWorker?.addEventListener('controllerchange', recharger);
-  setTimeout(recharger, 3000);
+  setTimeout(() => { void purgerPuisRecharger(); }, 3000);
   try {
     const reg = enregistrement ?? await navigator.serviceWorker?.getRegistration();
     await reg?.update().catch(() => { /* hors ligne */ });
@@ -61,7 +79,7 @@ async function rechargerNouvelleVersion() {
     if (enAttente) enAttente.postMessage({ type: 'SKIP_WAITING' });
     else appliquerMiseAJour(true);
   } catch {
-    recharger();
+    void purgerPuisRecharger();
   }
 }
 
