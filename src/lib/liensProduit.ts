@@ -99,9 +99,29 @@ export function designation(p: ProduitLiable): string {
   return d || (p.reference || '').trim() || 'Article';
 }
 
+/** Le site de production : la seule adresse qu'un client puisse ouvrir. */
+export const ORIGINE_PUBLIQUE = 'https://crmpool.vercel.app';
+
+/**
+ * L'origine à mettre dans un lien de mail.
+ *
+ * `window.location.origin` n'est juste que sur le site de production : un
+ * devis préparé depuis `localhost:8080` (dev) ou une fenêtre d'application
+ * donnerait au client un lien qui ne mène nulle part chez lui. Toute origine
+ * locale ou non sécurisée retombe donc sur la production.
+ */
+function origineAjoignable(origine: string): string {
+  const o = origine.trim().replace(/\/+$/, '');
+  if (!/^https:\/\//i.test(o)) return ORIGINE_PUBLIQUE;
+  if (/^https:\/\/(localhost|127\.0\.0\.1|\[::1\]|[^/]*\.localhost|[^/]*\.test)(:|\/|$)/i.test(o)) return ORIGINE_PUBLIQUE;
+  return o;
+}
+
 /** L'adresse de la fiche publique de l'article. */
 export function urlFichePublique(produitId: string, origine?: string): string {
-  const base = (origine ?? (typeof window !== 'undefined' ? window.location.origin : '')).replace(/\/+$/, '');
+  const base = origine !== undefined
+    ? origine.replace(/\/+$/, '')
+    : origineAjoignable(typeof window !== 'undefined' ? window.location.origin : '');
   return `${base}/p/${produitId}`;
 }
 

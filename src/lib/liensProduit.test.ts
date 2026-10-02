@@ -142,6 +142,19 @@ describe('adresse de la fiche publique', () => {
   it('ne double pas la barre oblique', () => {
     expect(urlFichePublique('p1', 'https://crmpool.vercel.app/')).toBe('https://crmpool.vercel.app/p/p1');
   });
+
+  it('retombe sur la production quand la page est servie en local', () => {
+    const w = globalThis as { window?: unknown };
+    const avant = w.window;
+    try {
+      w.window = { location: { origin: 'http://localhost:8080' } };
+      expect(urlFichePublique('p1')).toBe('https://crmpool.vercel.app/p/p1');
+      w.window = { location: { origin: 'https://crmpool.vercel.app' } };
+      expect(urlFichePublique('p1')).toBe('https://crmpool.vercel.app/p/p1');
+    } finally {
+      if (avant === undefined) delete w.window; else w.window = avant;
+    }
+  });
 });
 
 describe('rendu', () => {
