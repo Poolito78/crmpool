@@ -4227,6 +4227,7 @@ const [contratOdoo, setContratOdoo] = useState<
           quantite: l.quantite || undefined,
           quantiteUnite: l.unite || undefined,
           prixHT: prix,
+          produitId: produitDeLigne(i)?.id,
           description: ref,
           dateRenseignement: jour,
         });
@@ -7025,27 +7026,47 @@ const [contratOdoo, setContratOdoo] = useState<
                       )}
                     </div>
 
-                    <div className="space-y-1.5">
-                      {result.lignes.map((l, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs">
-                          <Checkbox
-                            checked={!dcExclues[i]}
-                            onCheckedChange={v => setDcExclues(prev => ({ ...prev, [i]: !v }))}
-                          />
-                          <span className="flex-1 min-w-0 truncate" title={l.description}>
-                            {l.reference ? <span className="font-mono text-muted-foreground mr-1.5">{l.reference}</span> : null}
-                            {l.description}
-                          </span>
-                          <span className="text-muted-foreground shrink-0">× {l.quantite}{l.unite ? ` ${l.unite}` : ''}</span>
-                          <Input
-                            className="h-7 w-24 text-xs text-right"
-                            inputMode="decimal"
-                            value={dcPrix[i] ?? (l.prixUnitaireHT != null ? String(l.prixUnitaireHT) : '')}
-                            onChange={e => setDcPrix(prev => ({ ...prev, [i]: e.target.value }))}
-                            placeholder="Prix HT"
-                          />
-                        </div>
-                      ))}
+                    <div className="space-y-2.5">
+                      {result.lignes.map((l, i) => {
+                        const article = produitDeLigne(i);
+                        return (
+                          <div key={i} className="space-y-1">
+                            <div className="flex items-center gap-2 text-xs">
+                              <Checkbox
+                                checked={!dcExclues[i]}
+                                onCheckedChange={v => setDcExclues(prev => ({ ...prev, [i]: !v }))}
+                              />
+                              <span className="flex-1 min-w-0 truncate" title={l.description}>
+                                {l.reference ? <span className="font-mono text-muted-foreground mr-1.5">{l.reference}</span> : null}
+                                {l.description}
+                              </span>
+                              <span className="text-muted-foreground shrink-0">× {l.quantite}{l.unite ? ` ${l.unite}` : ''}</span>
+                              <Input
+                                className="h-7 w-24 text-xs text-right"
+                                inputMode="decimal"
+                                value={dcPrix[i] ?? (l.prixUnitaireHT != null ? String(l.prixUnitaireHT) : '')}
+                                onChange={e => setDcPrix(prev => ({ ...prev, [i]: e.target.value }))}
+                                placeholder="Prix HT"
+                              />
+                            </div>
+                            {/* Notre article équivalent : c'est lui qui permet de comparer
+                                notre prix au leur dans le chiffrage (useVeilleParProduit). */}
+                            <div className="pl-6">
+                              <ProduitCombobox
+                                produits={produits}
+                                suggestions={candidatsPour(i)}
+                                value={article?.id ?? ''}
+                                onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
+                              />
+                              {!article && (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Aucun article rapproché : le prix sera enregistré sans équivalent ISOSIGN.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
 
                     <Button onClick={handleEnregistrerDevisConcurrent} disabled={dcEnCours} className="w-full" size="sm">
