@@ -810,6 +810,10 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dcEnCours, setDcEnCours] = useState(false);
   /** Le client chez qui ce prix concurrent a été rencontré (facultatif). */
   const [dcClientId, setDcClientId] = useState('');
+  /** Création d'un client sans quitter le panneau : formulaire replié par défaut. */
+  const [dcNouveauClient, setDcNouveauClient] = useState(false);
+  const [dcNouveauSociete, setDcNouveauSociete] = useState('');
+  const [dcNouveauEmail, setDcNouveauEmail] = useState('');
 
   const { systemes: systemesFiches, recharger: rechargerSystemes } = useSystemes();
   /* Les fiches Flowcrete de la table, puis les combinaisons que portent les
@@ -2983,7 +2987,12 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [result, accompagnements, produits, produitDeLigne, systemesDetectes, systemeDocument]);
 
   useEffect(() => {
-    const cli = clients.find(c => c.id === creerDevisClientId);
+    /* Devis d'un CONCURRENT : le partenaire du document est le concurrent, pas
+       un client d'ISOSIGN. Odoo se questionne avec le client choisi dans le
+       panneau — et avec lui seul : chercher « Reflex » comme client Odoo
+       ramènerait un contrat qui n'a rien à voir. */
+    const estConcurrent = result?.typeDocument === 'devis_concurrent';
+    const cli = clients.find(c => c.id === (estConcurrent ? dcClientId : creerDevisClientId));
     /* Sans client MonCRM, on interroge quand même Odoo avec ce que le message
        a livré : l'adresse de l'expéditeur suffit à retrouver la société et son
        contrat. C'est ainsi que procède le Chiffrage. */
@@ -3010,6 +3019,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
     const critere = cli
       ? { email: cli.email, societe: cli.societe, nom: cli.nom, ville: cli.ville }
+      : estConcurrent ? null
       : (sigOdoo?.email || indices.emails[0] || sigOdoo?.societe
          || societeDuTexte || result?.nomPartenaire)
         ? {
@@ -3313,7 +3323,7 @@ const [contratOdoo, setContratOdoo] = useState<
     // `quantiteManuelle` volontairement hors dépendances :
     // les inclure relancerait l'appel Odoo à chaque frappe dans une quantité.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [creerDevisClientId, clients, referencesDuDevis, result, signature, niveauForce,
+  }, [creerDevisClientId, dcClientId, clients, referencesDuDevis, result, signature, niveauForce,
       gammePanneau, classePanneau, libelleManuel, nomAgglo, hcAgglo, mentionAgglo,
       systemesDetectes, estLigneSysteme, systemeDocument]);
 
@@ -4201,6 +4211,21 @@ const [contratOdoo, setContratOdoo] = useState<
       })
     : undefined;
 
+  function handleCreerClientConcurrent() {
+    const societe = dcNouveauSociete.trim();
+    if (!societe) { toast.error('Indiquez le nom du client'); return; }
+    const id = generateId();
+    updateClients(prev => [{
+      id, nom: societe, societe, email: dcNouveauEmail.trim(), telephone: '',
+      adresse: '', ville: '', codePostal: '', notes: '',
+      dateCreation: new Date().toISOString(), adressesLivraison: [],
+    }, ...prev]);
+    setDcClientId(id);
+    setDcNouveauClient(false);
+    setDcNouveauSociete(''); setDcNouveauEmail('');
+    toast.success(`Client "${societe}" créé`);
+  }
+
   async function handleEnregistrerDevisConcurrent() {
     if (!result) return;
     const lignes = result.lignes
@@ -4223,6 +4248,7 @@ const [contratOdoo, setContratOdoo] = useState<
       const ref = result.numeroDocument ? `Devis ${result.numeroDocument}` : 'Devis concurrent';
       let faits = 0;
       for (const { l, i, prix } of lignes) {
+        const odoo = choixOdoo[i];
         const p = await addProduitConcurrent({
           concurrentId,
           nom: l.description || l.reference || 'Article',
@@ -4230,10 +4256,12 @@ const [contratOdoo, setContratOdoo] = useState<
           quantite: l.quantite || undefined,
           quantiteUnite: l.unite || undefined,
           prixHT: prix,
-          produitId: produitDeLigne(i)?.id,
+          produitId: (odoo && produits.find(p => p.referenceOdoo === odoo.reference || p.reference === odoo.reference)?.id)
+            ?? produitDeLigne(i)?.id,
           clientId: clientDc?.id,
           clientNom: clientDc ? (clientDc.societe || clientDc.nom) : undefined,
-          description: ref,
+          /* Équivalent Odoo absent de la base produits : on garde au moins sa référence. */
+          description: odoo ? `${ref} — Odoo : ${odoo.reference}` : ref,
           dateRenseignement: jour,
         });
         /* Une ligne enregistrée se décoche : un second clic ne la double pas. */
@@ -7040,6 +7068,31 @@ const [contratOdoo, setContratOdoo] = useState<
                         </SelectContent>
                       </Select>
                       {suggestionsClient(setDcClientId)}
+                      {!dcNouveauClient ? (
+                        <button
+                          type="button"
+                          onClick={() => setDcNouveauClient(true)}
+                          className="mt-1.5 inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                        ><PlusCircle className="w-3.5 h-3.5" />Créer un client</button>
+                      ) : (
+                        <div className="mt-2 rounded-lg border border-border bg-background/60 p-2 space-y-2">
+                          <div className="grid grid-cols-2 gap-2">
+                            <Input className="h-8 text-xs" placeholder="Société / nom *" value={dcNouveauSociete}
+                              onChange={e => setDcNouveauSociete(e.target.value)} />
+                            <Input className="h-8 text-xs" placeholder="E-mail" value={dcNouveauEmail}
+                              onChange={e => setDcNouveauEmail(e.target.value)} />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" className="h-7 text-xs" onClick={handleCreerClientConcurrent}>Créer et choisir</Button>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setDcNouveauClient(false)}>Annuler</Button>
+                          </div>
+                        </div>
+                      )}
+                      <p className="text-[11px] text-muted-foreground mt-1.5">
+                        {dcClientId
+                          ? 'Les articles se cherchent aussi dans Odoo, tarifés pour ce client.'
+                          : 'Choisissez un client pour chercher aussi les articles dans Odoo.'}
+                      </p>
                     </div>
 
                     <div className="space-y-2.5">
@@ -7074,11 +7127,62 @@ const [contratOdoo, setContratOdoo] = useState<
                                 value={article?.id ?? ''}
                                 onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
                               />
-                              {!article && (
-                                <p className="text-[11px] text-muted-foreground mt-0.5">
-                                  Aucun article rapproché : le prix sera enregistré sans équivalent ISOSIGN.
-                                </p>
-                              )}
+                              {(() => {
+                                /* Odoo : la référence exacte d'abord, puis la recherche par mots,
+                                   avec le même contrôle de famille que l'écran des devis. */
+                                const brute = String(l.reference || '').trim().toUpperCase();
+                                const exacte = brute ? fichesOdoo[brute] : undefined;
+                                const props = [
+                                  ...(exacte ? [exacte] : []),
+                                  ...(trouvaillesOdoo[texteRechercheOdoo(l, i)] || [])
+                                    .filter(t => t.reference !== exacte?.reference
+                                      && memeFamille(texteDemande(l, i), `${t.reference} ${t.designation || ''}`)),
+                                ].slice(0, 4);
+                                const choisi = choixOdoo[i];
+                                return (
+                                  <>
+                                    {props.length > 0 && (
+                                      <div className="mt-1 rounded border border-primary/30 bg-primary/5 p-1 space-y-0.5">
+                                        <p className="text-[10px] font-medium text-primary">Trouvé dans Odoo</p>
+                                        {props.map(t => {
+                                          const actif = choisi?.reference === t.reference;
+                                          return (
+                                            <button
+                                              key={t.reference}
+                                              type="button"
+                                              title={actif ? 'Cliquez pour retirer ce choix' : 'Cliquez pour retenir cet article'}
+                                              onClick={() => {
+                                                odooDOfficeRef.current.delete(i);
+                                                setChoixOdoo(prev => {
+                                                  const n = { ...prev };
+                                                  if (actif) delete n[i]; else n[i] = t;
+                                                  return n;
+                                                });
+                                                setRefusOdoo(prev => {
+                                                  const n = new Set(prev);
+                                                  if (actif) n.add(i); else n.delete(i);
+                                                  return n;
+                                                });
+                                              }}
+                                              className={`flex w-full items-baseline gap-2 text-[11px] rounded px-1 py-0.5 text-left ${
+                                                actif ? 'bg-primary/20 ring-1 ring-primary' : 'hover:bg-primary/10'}`}
+                                            >
+                                              <Check className={`w-3 h-3 shrink-0 ${actif ? 'text-primary' : 'opacity-0'}`} />
+                                              <span className="font-mono text-[10px]">{t.reference}</span>
+                                              <span className="truncate flex-1" title={t.designation}>{t.designation}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {!article && !choisi && (
+                                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                                        Aucun article rapproché : le prix sera enregistré sans équivalent ISOSIGN.
+                                      </p>
+                                    )}
+                                  </>
+                                );
+                              })()}
                             </div>
                           </div>
                         );
