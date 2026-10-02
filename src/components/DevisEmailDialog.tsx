@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers } from 'lucide-react';
-import { type Devis, type Client, type Produit, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
@@ -375,12 +375,31 @@ Restant à ta disposition pour tout complément d'information.`
     if (!devis || !open) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
     let annule = false;
 
-    const articles = devis.lignes
-      .map(l => produits.find(p => p.id === l.produitId))
-      .filter((p): p is Produit => !!p)
-      .filter((p, i, arr) => arr.findIndex(x => x.id === p.id) === i);
+    const idsDuDevis = Array.from(new Set(
+      devis.lignes
+        .filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte')
+        .map(l => l.produitId)
+        .filter((id): id is string => !!id),
+    ));
+    if (idsDuDevis.length === 0) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
 
-    if (articles.length === 0) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
+    /* Le catalogue en mémoire peut être incomplet (une tranche de 22 000
+       articles qui a expiré au chargement) : un article du devis absent de
+       `produits` faisait disparaître tout le bloc, sans un mot. On lit alors
+       ces articles-là directement en base. */
+    const connus = new Map(produits.map(p => [p.id, p]));
+    const manquants = idsDuDevis.filter(id => !connus.has(id));
+
+    (async () => {
+      if (manquants.length > 0) {
+        const { data: lus } = await supabase.from('produits').select('*').in('id', manquants);
+        for (const r of lus ?? []) { const p = dbToProduitPublic(r); connus.set(p.id, p); }
+      }
+      if (annule) return;
+      const articles = idsDuDevis
+        .map(id => connus.get(id))
+        .filter((p): p is Produit => !!p);
+      if (articles.length === 0) { setLiensProduit([]); setSelectedLiensIds(new Set()); return; }
 
     /* Les photos sont bornées aux articles du devis. Les documents de FAMILLE
        sont lus en entier : la table n'a qu'une ligne par document réellement
@@ -420,6 +439,7 @@ Restant à ta disposition pour tout complément d'information.`
           liens.filter(l => l.cible !== 'page' && l.cible !== 'categorie').map(l => l.id),
         ));
       });
+    })();
 
     return () => { annule = true; };
   }, [devis, open, produits]);
