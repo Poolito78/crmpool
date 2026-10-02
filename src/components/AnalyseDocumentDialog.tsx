@@ -808,6 +808,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dcExclues, setDcExclues] = useState<Record<number, boolean>>({});
   const [dcPrix, setDcPrix] = useState<Record<number, string>>({});
   const [dcEnCours, setDcEnCours] = useState(false);
+  /** Le client chez qui ce prix concurrent a été rencontré (facultatif). */
+  const [dcClientId, setDcClientId] = useState('');
 
   const { systemes: systemesFiches, recharger: rechargerSystemes } = useSystemes();
   /* Les fiches Flowcrete de la table, puis les combinaisons que portent les
@@ -1312,7 +1314,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setRegroupementPlan(regroupement);
     setClassePlan(classe);
     setMatsNeufsPlan(matsNeufs);
-    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
+    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
@@ -1334,7 +1336,7 @@ const [contratOdoo, setContratOdoo] = useState<
        client et le contact du document précédent resteraient en place. */
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
-    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set());
+    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
@@ -4216,6 +4218,7 @@ const [contratOdoo, setContratOdoo] = useState<
         if (!cree) { toast.error('Création du concurrent impossible'); return; }
         concurrentId = cree.id;
       }
+      const clientDc = clients.find(c => c.id === dcClientId);
       const jour = result.dateDocument || new Date().toISOString().split('T')[0];
       const ref = result.numeroDocument ? `Devis ${result.numeroDocument}` : 'Devis concurrent';
       let faits = 0;
@@ -4228,6 +4231,8 @@ const [contratOdoo, setContratOdoo] = useState<
           quantiteUnite: l.unite || undefined,
           prixHT: prix,
           produitId: produitDeLigne(i)?.id,
+          clientId: clientDc?.id,
+          clientNom: clientDc ? (clientDc.societe || clientDc.nom) : undefined,
           description: ref,
           dateRenseignement: jour,
         });
@@ -7024,6 +7029,17 @@ const [contratOdoo, setContratOdoo] = useState<
                           onChange={e => setDcNom(e.target.value)}
                         />
                       )}
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Client chez qui ce prix a été rencontré</Label>
+                      <Select value={dcClientId} onValueChange={setDcClientId}>
+                        <SelectTrigger className="h-9 mt-1"><SelectValue placeholder="Aucun client (facultatif)…" /></SelectTrigger>
+                        <SelectContent>
+                          {clients.map(c => <SelectItem key={c.id} value={c.id}>{c.societe || c.nom}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                      {suggestionsClient(setDcClientId)}
                     </div>
 
                     <div className="space-y-2.5">
