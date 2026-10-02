@@ -22,6 +22,13 @@ export type TypeDocument =
    * flèche — ici les prix sont ceux qu'on PAIE, pas ceux qu'on demande.
    */
   | 'devis_fournisseur'
+  /**
+   * Le devis d'un CONCURRENT à notre client — rapporté par le client, jamais
+   * émis pour nous. Ses prix alimentent la veille concurrence. Jamais deviné
+   * par l'IA : on ne le choisit qu'à la main (« Corriger le type »), car il
+   * ressemble en tout point à un devis fournisseur.
+   */
+  | 'devis_concurrent'
   | 'autre';
 
 export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
@@ -33,6 +40,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   facture_client:       { label: 'Facture client',        color: 'bg-warning/10 text-warning' },
   demande_devis:        { label: 'Demande de devis',      color: 'bg-primary/10 text-primary' },
   devis_fournisseur:    { label: 'Devis fournisseur',     color: 'bg-info/10 text-info' },
+  devis_concurrent:     { label: 'Devis concurrent',      color: 'bg-destructive/10 text-destructive' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
 };
 

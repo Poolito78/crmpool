@@ -71,6 +71,7 @@ import {
   appliquerPrix, type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
+import { useConcurrents } from '@/lib/concurrents';
 import {
   rapprocherClient, clientsParPersonne, motsFrequentsDuCatalogue, type CandidatClient,
 } from '@/lib/rapprochementClient';
@@ -797,6 +798,16 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /** Nom déjà cherché chez Odoo : l'effet se rejoue, pas la requête. */
   const chercheFaitePour = useRef<string | null>(null);
   const { enregistrer: enregistrerDevisFournisseur } = useDevisFournisseur();
+
+  /* Devis d'un concurrent : les prix relevés vont à la veille concurrence. */
+  const { concurrents: concurrentsVeille, addConcurrent, addProduit: addProduitConcurrent } = useConcurrents();
+  /** Concurrent choisi ; '' = à choisir, '__nouveau' = créé sous le nom du document. */
+  const [dcConcurrentId, setDcConcurrentId] = useState('');
+  const [dcNom, setDcNom] = useState('');
+  /** Lignes décochées (rang) ; prix corrigés à la main (rang → texte). */
+  const [dcExclues, setDcExclues] = useState<Record<number, boolean>>({});
+  const [dcPrix, setDcPrix] = useState<Record<number, string>>({});
+  const [dcEnCours, setDcEnCours] = useState(false);
 
   const { systemes: systemesFiches, recharger: rechargerSystemes } = useSystemes();
   /* Les fiches Flowcrete de la table, puis les combinaisons que portent les
@@ -4177,6 +4188,57 @@ const [contratOdoo, setContratOdoo] = useState<
   const isFact = result && (result.typeDocument === 'facture_fournisseur' || result.typeDocument === 'facture_client');
   const isAutre = result && result.typeDocument === 'autre';
   const isDevisFournisseur = result && isDevisFourn(result.typeDocument);
+  const isDevisConcurrent = result && result.typeDocument === 'devis_concurrent';
+
+  /** Concurrent déjà connu dont le nom ressemble à celui du document. */
+  const concurrentPressenti = isDevisConcurrent && result?.nomPartenaire
+    ? concurrentsVeille.find(c => {
+        const a = c.nom.trim().toLowerCase();
+        const b = result.nomPartenaire!.trim().toLowerCase();
+        return a === b || a.includes(b) || b.includes(a);
+      })
+    : undefined;
+
+  async function handleEnregistrerDevisConcurrent() {
+    if (!result) return;
+    const lignes = result.lignes
+      .map((l, i) => ({ l, i, prix: Number((dcPrix[i] ?? String(l.prixUnitaireHT ?? '')).replace(',', '.')) }))
+      .filter(x => !dcExclues[x.i] && x.prix > 0);
+    if (!lignes.length) { toast.error('Aucune ligne avec un prix à enregistrer'); return; }
+
+    setDcEnCours(true);
+    try {
+      let concurrentId = dcConcurrentId || concurrentPressenti?.id || '';
+      if (!concurrentId || concurrentId === '__nouveau') {
+        const nom = (dcNom || result.nomPartenaire || '').trim();
+        if (!nom) { toast.error('Indiquez le nom du concurrent'); return; }
+        const cree = await addConcurrent({ nom });
+        if (!cree) { toast.error('Création du concurrent impossible'); return; }
+        concurrentId = cree.id;
+      }
+      const jour = result.dateDocument || new Date().toISOString().split('T')[0];
+      const ref = result.numeroDocument ? `Devis ${result.numeroDocument}` : 'Devis concurrent';
+      let faits = 0;
+      for (const { l, i, prix } of lignes) {
+        const p = await addProduitConcurrent({
+          concurrentId,
+          nom: l.description || l.reference || 'Article',
+          reference: l.reference || undefined,
+          quantite: l.quantite || undefined,
+          quantiteUnite: l.unite || undefined,
+          prixHT: prix,
+          description: ref,
+          dateRenseignement: jour,
+        });
+        /* Une ligne enregistrée se décoche : un second clic ne la double pas. */
+        if (p) { faits++; setDcExclues(prev => ({ ...prev, [i]: true })); }
+      }
+      if (faits === lignes.length) toast.success(`${faits} prix concurrent enregistré${faits > 1 ? 's' : ''}`);
+      else toast.error(`${faits}/${lignes.length} prix enregistrés — réessayez pour le reste`);
+    } finally {
+      setDcEnCours(false);
+    }
+  }
 
   const typeMeta = result ? TYPE_LABELS[result.typeDocument] : null;
 
@@ -4261,6 +4323,8 @@ const [contratOdoo, setContratOdoo] = useState<
     setDfVersArticle({});
     setDfCreer({});
     dfTouche.current = false;
+    setDcExclues({});
+    setDcPrix({});
   }
 
   // Panneau d'aperçu (un seul rendu à la fois : sous la zone d'import avant
@@ -6926,6 +6990,68 @@ const [contratOdoo, setContratOdoo] = useState<
                       <p className="text-sm font-semibold mb-0.5">Facture détectée</p>
                       <p className="text-xs text-muted-foreground">Rapprochez-la manuellement de la commande correspondante dans le CRM.</p>
                     </div>
+                  </div>
+                )}
+
+                {/* ═══ Devis concurrent → relevé de prix pour la veille ═══ */}
+                {isDevisConcurrent && result && (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-3 sm:p-4 space-y-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">Devis d'un concurrent</p>
+                      <p className="text-xs text-muted-foreground">
+                        Ces prix ne sont ni les nôtres ni ceux d'un fournisseur : ils sont enregistrés
+                        dans la veille concurrence. Corrigez-les si besoin, décochez ce qu'il ne faut pas garder.
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label className="text-xs">Concurrent</Label>
+                      <Select
+                        value={dcConcurrentId || concurrentPressenti?.id || (result.nomPartenaire ? '__nouveau' : '')}
+                        onValueChange={setDcConcurrentId}
+                      >
+                        <SelectTrigger className="h-9 mt-1"><SelectValue placeholder="Choisir le concurrent…" /></SelectTrigger>
+                        <SelectContent>
+                          {concurrentsVeille.map(c => <SelectItem key={c.id} value={c.id}>{c.nom}</SelectItem>)}
+                          <SelectItem value="__nouveau">+ Nouveau concurrent</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {(dcConcurrentId === '__nouveau' || (!dcConcurrentId && !concurrentPressenti)) && (
+                        <Input
+                          className="h-8 text-xs mt-2" placeholder="Nom du concurrent"
+                          value={dcNom || result.nomPartenaire || ''}
+                          onChange={e => setDcNom(e.target.value)}
+                        />
+                      )}
+                    </div>
+
+                    <div className="space-y-1.5">
+                      {result.lignes.map((l, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <Checkbox
+                            checked={!dcExclues[i]}
+                            onCheckedChange={v => setDcExclues(prev => ({ ...prev, [i]: !v }))}
+                          />
+                          <span className="flex-1 min-w-0 truncate" title={l.description}>
+                            {l.reference ? <span className="font-mono text-muted-foreground mr-1.5">{l.reference}</span> : null}
+                            {l.description}
+                          </span>
+                          <span className="text-muted-foreground shrink-0">× {l.quantite}{l.unite ? ` ${l.unite}` : ''}</span>
+                          <Input
+                            className="h-7 w-24 text-xs text-right"
+                            inputMode="decimal"
+                            value={dcPrix[i] ?? (l.prixUnitaireHT != null ? String(l.prixUnitaireHT) : '')}
+                            onChange={e => setDcPrix(prev => ({ ...prev, [i]: e.target.value }))}
+                            placeholder="Prix HT"
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button onClick={handleEnregistrerDevisConcurrent} disabled={dcEnCours} className="w-full" size="sm">
+                      {dcEnCours ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PlusCircle className="w-4 h-4 mr-2" />}
+                      Enregistrer les prix concurrent
+                    </Button>
                   </div>
                 )}
 
