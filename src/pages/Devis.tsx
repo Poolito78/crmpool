@@ -3,7 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
-import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, type OdooPayload } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -3433,9 +3433,11 @@ export default function Devis() {
                                 {kgReel !== null && (() => {
                                   const poidsConditionne = couvertureLigne ? Math.round(l.quantite * couvertureLigne * 100) / 100 : prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
                                   const uniteChantier = couvertureLigne ? 'm²' : 'kg';
+                                  const coutLigneChantier = coutChantierLigne(l, produits, surfaceGlobaleM2);
                                   return (
                                     <span className="italic">
                                       ↳ {kgReel} {uniteChantier} chantier
+                                      {coutLigneChantier > 0 && <span className="not-italic font-medium" title="Coût chantier de la ligne : matière consommée (surface × conso) au prix net HT"> ({formatMontant(coutLigneChantier)})</span>}
                                       {poidsConditionne != null && poidsConditionne !== kgReel && (
                                         <span className="text-muted-foreground/70"> · {poidsConditionne} {uniteChantier} cond.</span>
                                       )}

@@ -5,6 +5,7 @@
  */
 
 import type { Devis, Client, Produit, Contact, LigneDevis } from './store';
+import { couvertureM2 } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 
@@ -189,35 +190,42 @@ export function m2Consommes(l: Pick<LigneDevis, 'quantite' | 'surfaceM2' | 'cons
  * celui de l'écran : surface × consommation × prix au kilo net pour un
  * article qui porte une consommation, prix conditionné net pour les autres.
  */
+export function coutChantierLigne(
+  l: LigneDevis,
+  produits: Produit[],
+  surfaceGlobaleM2: number,
+): number {
+  if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return 0;
+  /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
+     système portent « 1 m²/m² » en consommation : le calcul au kilo les
+     divisait par leur poids (8 kg/m²), et 4 m² à 47,50 € comptaient
+     23,75 € au lieu de 190 € — coût chantier 31,55 €/m² pour 73,11.
+     ⚠️ Et on compte la surface POSÉE, pas la commandée : 3,3 m² posés
+     se commandent 4 m² (m² entier), le coût chantier en compte 3,3. */
+  if (/^m(²|2)$/i.test((l.unite || '').trim())) {
+    return m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+  }
+  const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+  const conso = l.consommation || prod?.consommation || 0;
+  const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
+  const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+  /* Article consommé au m² (toile de verre) : une unité couvre N m², le coût
+     chantier est la part de rouleau consommée, pas le rouleau entier. */
+  const couverture = couvertureM2(prod);
+  if (couverture && surfLigne > 0 && l.prixUnitaireHT) return surfLigne * (conso > 0 ? conso : 1) * (net / couverture);
+  if (conso > 0 && surfLigne > 0) {
+    const poids = prod?.poids || null;
+    return poids && l.prixUnitaireHT ? surfLigne * conso * (net / poids) : 0;
+  }
+  return l.prixUnitaireHT > 0 ? (l.quantite || 0) * net : 0;
+}
+
 export function coutChantier(
   lignes: Devis['lignes'],
   produits: Produit[],
   surfaceGlobaleM2: number,
 ): { total: number; parM2: number | null } {
-  let total = 0;
-  for (const l of lignes) {
-    if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') continue;
-    /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
-       système portent « 1 m²/m² » en consommation : le calcul au kilo les
-       divisait par leur poids (8 kg/m²), et 4 m² à 47,50 € comptaient
-       23,75 € au lieu de 190 € — coût chantier 31,55 €/m² pour 73,11.
-       ⚠️ Et on compte la surface POSÉE, pas la commandée : 3,3 m² posés
-       se commandent 4 m² (m² entier), le coût chantier en compte 3,3. */
-    if (/^m(²|2)$/i.test((l.unite || '').trim())) {
-      total += m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
-      continue;
-    }
-    const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-    const conso = l.consommation || prod?.consommation || 0;
-    const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
-    const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
-    if (conso > 0 && surfLigne > 0) {
-      const poids = prod?.poids || null;
-      if (poids && l.prixUnitaireHT) total += surfLigne * conso * (net / poids);
-    } else if (l.prixUnitaireHT > 0) {
-      total += (l.quantite || 0) * net;
-    }
-  }
+  const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2), 0);
   const surfaceRef = surfaceGlobaleM2 > 0
     ? surfaceGlobaleM2
     : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
