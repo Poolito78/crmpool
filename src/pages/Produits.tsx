@@ -2118,6 +2118,15 @@ export default function Produits() {
             </div>}
 
             {/* ─── Prix par palier ─── */}
+            {(() => {
+            /* Forfait par commande des composants : réparti sur la quantité du palier
+               (15 € / 8 u = 1,88 € par unité) pour que le palier montre le coût RÉEL. */
+            const forfaitCde = composants.reduce((sum, c) => {
+              const cp = c.forfaitCommande ? produits.find(pr => pr.id === c.produitId) : undefined;
+              return cp ? sum + cp.prixAchat * c.quantite : sum;
+            }, 0);
+            const forfaitUnitaire = (qteMin: number) => (forfaitCde > 0 && qteMin > 0 ? forfaitCde / qteMin : 0);
+            return (
             <div className="border border-border rounded-md p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground">Prix par palier (quantité / poids)</p>
@@ -2192,6 +2201,12 @@ export default function Produits() {
                               className="h-7 text-xs w-full text-right"
                             />
                             {form.poids > 0 && palier.prixAchat > 0 && <div className="text-[10px] text-muted-foreground/70 text-right pr-0.5">{formatMontant(palier.prixAchat / form.poids)}/kg</div>}
+                            {forfaitUnitaire(palier.qteMin) > 0 && (
+                              <div className="text-[10px] text-right pr-0.5 text-foreground" title="Forfait par commande réparti sur la quantité du palier">
+                                + forfait {formatMontant(forfaitCde)}/{palier.qteMin} u = {formatMontant(forfaitUnitaire(palier.qteMin))}
+                                <div className="font-semibold">coût réel {formatMontant(palier.prixAchat + forfaitUnitaire(palier.qteMin))}</div>
+                              </div>
+                            )}
                           </td>
                           )}
                           <td className="py-1 px-1">
@@ -2223,7 +2238,7 @@ export default function Produits() {
                           {canAchat && (
                           <td className="py-1 px-2 text-right text-muted-foreground whitespace-nowrap">
                             {palier.prixRevendeur > 0 && palier.prixAchat > 0
-                              ? `${Math.round((palier.prixRevendeur - palier.prixAchat) / palier.prixRevendeur * 100 * 10) / 10}%`
+                              ? `${Math.round((palier.prixRevendeur - palier.prixAchat - forfaitUnitaire(palier.qteMin)) / palier.prixRevendeur * 100 * 10) / 10}%`
                               : '—'}
                           </td>
                           )}
@@ -2247,6 +2262,8 @@ export default function Produits() {
                 </div>
               )}
             </div>
+            );
+            })()}
 
             {/* ─── Variantes produit ─── */}
             <div className="border border-border rounded-md p-3 space-y-2">
