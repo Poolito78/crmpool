@@ -78,7 +78,7 @@ const TABLE_LIGNE_COLS: { key: TLCKey; label: string; width: number; optional?: 
   { key: 'ref',         label: 'Réf.',          width: 192 },
   { key: 'description', label: 'Description',   width: 320 },
   { key: 'surface',     label: 'Surface m²',    width: 80,  optional: 'surface' },
-  { key: 'conso',       label: 'Conso. kg/m²',  width: 80,  optional: 'conso' },
+  { key: 'conso',       label: 'Conso. kg/m²',  width: 96,  optional: 'conso' },
   { key: 'poids',       label: 'Poids kg',      width: 64,  optional: 'poids' },
   { key: 'qte',         label: 'Qté',           width: 64 },
   { key: 'unite',       label: 'Unité',         width: 56 },
@@ -3389,7 +3389,7 @@ export default function Devis() {
                                   <div className="flex-1 min-w-[120px]"><Label className="text-xs">Description</Label>{cell.description}</div>
                                   {variantEls}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
-                                    <div key={c.key} style={{ width: c.width }} className="shrink-0">
+                                    <div key={c.key} style={{ width: c.key === 'conso' && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.width }} className="shrink-0">
                                       {c.key === 'qte' && hasAutoCalc ? (
                                         <button type="button" onClick={() => basculerQteAuto(l.id)} className="text-xs font-medium text-primary hover:underline text-left"
                                           title="Clic : recalcule à la surface de la ligne. Re-clic : au besoin cumulé du chantier (0 si l'article est déjà porté par une autre ligne).">
