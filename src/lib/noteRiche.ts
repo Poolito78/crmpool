@@ -70,49 +70,58 @@ export function noteEnHtml(note: string): string {
   }).join('');
 }
 
-export interface ResultatFormat { valeur: string; debut: number; fin: number }
+/** Segments voisins de même style fusionnés, segments vides écartés. */
+function fusionner(segs: SegmentNote[]): SegmentNote[] {
+  const sortie: SegmentNote[] = [];
+  for (const s of segs) {
+    if (!s.texte) continue;
+    const d = sortie[sortie.length - 1];
+    if (d && !!d.gras === !!s.gras && d.couleur === s.couleur) d.texte += s.texte;
+    else sortie.push({ ...s });
+  }
+  return sortie;
+}
 
-/** Sépare les espaces de bord de la sélection : les balises doivent coller au texte. */
-function rogner(valeur: string, debut: number, fin: number): [number, number] {
-  while (debut < fin && /\s/.test(valeur[debut])) debut++;
-  while (fin > debut && /\s/.test(valeur[fin - 1])) fin--;
-  return [debut, fin];
+/** Segments → note balisée (le contraire de `noteSegments`). */
+export function segmentsEnNote(segs: SegmentNote[]): string {
+  return fusionner(segs).map(s => {
+    let t = s.texte;
+    if (s.couleur) t = `{{${s.couleur}|${t}}}`;
+    if (s.gras) t = `**${t}**`;
+    return t;
+  }).join('');
 }
 
 /**
- * Met la sélection en gras (bascule : déjà en gras → on l'enlève) ou lui pose
- * une couleur (`null` = retire la couleur posée juste autour de la sélection).
- * Rend la nouvelle valeur et la sélection à restaurer, ou `null` si rien à faire.
+ * Met en gras (bascule : tout déjà en gras → on l'enlève) ou colore (`null` =
+ * couleur par défaut) la plage [debut, fin[ du TEXTE AFFICHÉ de la note — les
+ * balises n'y comptent pas. Rend la nouvelle note, ou `null` si rien à faire.
  */
-export function formaterSelection(
-  valeur: string,
-  debutBrut: number,
-  finBrut: number,
+export function formaterPlage(
+  note: string,
+  debut: number,
+  fin: number,
   format: { gras: true } | { couleur: string | null },
-): ResultatFormat | null {
-  const [debut, fin] = rogner(valeur, debutBrut, finBrut);
+): string | null {
   if (fin <= debut) return null;
-  const avant = valeur.slice(0, debut);
-  const sel = valeur.slice(debut, fin);
-  const apres = valeur.slice(fin);
-
-  if ('gras' in format) {
-    if (avant.endsWith('**') && apres.startsWith('**')) {
-      return { valeur: avant.slice(0, -2) + sel + apres.slice(2), debut: debut - 2, fin: fin - 2 };
-    }
-    return { valeur: `${avant}**${sel}**${apres}`, debut: debut + 2, fin: fin + 2 };
+  const decoupe: { seg: SegmentNote; dedans: boolean }[] = [];
+  let pos = 0;
+  for (const seg of noteSegments(note)) {
+    const a = pos, b = pos + seg.texte.length;
+    pos = b;
+    const x = Math.max(a, debut) - a, y = Math.min(b, fin) - a;
+    if (y <= x) { decoupe.push({ seg, dedans: false }); continue; }
+    if (x > 0) decoupe.push({ seg: { ...seg, texte: seg.texte.slice(0, x) }, dedans: false });
+    decoupe.push({ seg: { ...seg, texte: seg.texte.slice(x, y) }, dedans: true });
+    if (y < seg.texte.length) decoupe.push({ seg: { ...seg, texte: seg.texte.slice(y) }, dedans: false });
   }
-
-  // Couleur : d'abord retirer celle qui entoure exactement la sélection.
-  const m = /\{\{#[0-9a-fA-F]{3,8}\|$/.exec(avant);
-  if (m && apres.startsWith('}}')) {
-    const nu = avant.slice(0, m.index) + sel + apres.slice(2);
-    const d = debut - m[0].length;
-    if (format.couleur == null) return { valeur: nu, debut: d, fin: d + sel.length };
-    const balise = `{{${format.couleur}|`;
-    return { valeur: `${avant.slice(0, m.index)}${balise}${sel}}}${apres.slice(2)}`, debut: m.index + balise.length, fin: m.index + balise.length + sel.length };
-  }
-  if (format.couleur == null) return null;
-  const balise = `{{${format.couleur}|`;
-  return { valeur: `${avant}${balise}${sel}}}${apres}`, debut: debut + balise.length, fin: fin + balise.length };
+  const choisis = decoupe.filter(d => d.dedans).map(d => d.seg);
+  if (!choisis.length) return null;
+  const toutGras = choisis.every(sg => sg.gras);
+  const segs = decoupe.map(({ seg, dedans }) => {
+    if (!dedans) return seg;
+    if ('gras' in format) return { ...seg, gras: !toutGras };
+    return { ...seg, couleur: format.couleur ?? undefined };
+  });
+  return segmentsEnNote(segs.map(sg => (sg.gras ? sg : { texte: sg.texte, couleur: sg.couleur })));
 }
