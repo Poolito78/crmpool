@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
@@ -2233,7 +2233,7 @@ export default function Devis() {
                     if (l.type && l.type !== 'ligne') return acc;
                     const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
-                    return acc + puA * l.quantite;
+                    return acc + puA * l.quantite + forfaitCommandeLigne(l, d.lignes, id => produitParId(produits, id));
                   }, 0);
                   const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
                   const margeD = totalHTD > 0 ? ((totalHTD - totalAchat) / totalHTD * 100) : 0;
@@ -2362,7 +2362,7 @@ export default function Devis() {
             // prixAchatLigne (override manuel / surcharge) prioritaire, sinon palier ; pas de remise sur l'achat
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             const puA = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
-            return acc + puA * l.quantite;
+            return acc + puA * l.quantite + forfaitCommandeLigne(l, d.lignes, id => produitParId(produits, id));
           }, 0);
           const totalHTD = calculerTotalDevis(d.lignes, 0, 0).totalHT;
           const margeD = totalHTD - totalAchatD;
@@ -3237,7 +3237,7 @@ export default function Devis() {
                         <>
                             {/* ── Cellules (contenu réutilisé cartes + tableau) ── */}
                             {(() => {
-                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) : 0);
+                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                               const margeLigne = t.totalHT - achatLigne;
                               const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
                               const cell: Record<TLCKey, ReactNode> = {
@@ -3616,7 +3616,7 @@ export default function Devis() {
                 if (l.type && l.type !== 'ligne') return acc;
                 const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                 const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat : 0);
-                return acc + puAchat * l.quantite;
+                return acc + puAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
               }, 0);
               // Inclure transport dans le total achat pour marge/coeff cohérents avec comparatif
               const portAchatApercu = (() => {
@@ -3821,7 +3821,8 @@ export default function Devis() {
                         const puVente = l.prixUnitaireHT * (1 - (l.remise || 0) / 100);
                         // Surcharges et lignes libres : utiliser prixAchatLigne stocké (calculé sur base achat)
                         const puAchat = l.prixAchatLigne != null ? l.prixAchatLigne : (prixPalier?.prixAchat ?? 0);
-                        const totAchat = puAchat * l.quantite;
+                        const forfaitL = forfaitCommandeLigne(l, lignes, id => produitParId(produits, id));
+                        const totAchat = puAchat * l.quantite + forfaitL;
                         const totVente = puVente * l.quantite;
                         const marge = totVente - totAchat;
                         const margePct = totVente > 0 ? (marge / totVente) * 100 : 0;

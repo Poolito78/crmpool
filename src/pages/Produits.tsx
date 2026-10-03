@@ -504,7 +504,7 @@ export default function Produits() {
       if (!p.composants || p.composants.length === 0) return p.prixAchat ?? 0;
       const total = p.composants.reduce((sum, c) => {
         const comp = produits.find(pr => pr.id === c.produitId);
-        if (!comp) return sum;
+        if (!comp || c.forfaitCommande) return sum; // le forfait par commande reste hors du prix unitaire
         // Recursive for nested composites
         const compPrix = (comp.composants && comp.composants.length > 0)
           ? calcPrixAchatCompose(comp)
@@ -968,7 +968,7 @@ export default function Produits() {
     if (comps.length > 0) {
       const total = comps.reduce((sum, c) => {
         const cp = produits.find(pr => pr.id === c.produitId);
-        if (!cp) return sum;
+        if (!cp || c.forfaitCommande) return sum; // le forfait par commande reste hors du prix unitaire
         if (c.poidsKg != null) {
           const qte = cp.unite?.toLowerCase() === 'kg' ? c.poidsKg : (cp.poids && cp.poids > 0 ? c.poidsKg / cp.poids : c.poidsKg);
           return sum + cp.prixAchat * qte;
@@ -2460,7 +2460,7 @@ export default function Produits() {
                   return p.prixAchat * c.quantite;
                 }
                 function recalcPrix(updated: typeof composants) {
-                  const total = updated.reduce((sum, c) => sum + prixComposant(c), 0);
+                  const total = updated.reduce((sum, c) => sum + (c.forfaitCommande ? 0 : prixComposant(c)), 0);
                   if (total > 0) updateFormPrix({ prixAchat: Math.round(total * 100) / 100 });
                 }
                 // Propage les modifications de quantité aux composants en mode %
@@ -2713,6 +2713,16 @@ export default function Produits() {
                           {compProd ? formatMontant(prixComposant(comp)) : '—'}
                         </span>
                         <button type="button"
+                          title="Forfait par commande : son coût s'ajoute une seule fois au coût d'achat du devis, quel que soit le nombre de pièces, et reste hors du prix d'achat unitaire."
+                          onClick={() => {
+                            const updated = [...composants];
+                            updated[idx] = { ...updated[idx], forfaitCommande: !comp.forfaitCommande || undefined };
+                            setComposants(updated);
+                            recalcPrix(updated);
+                          }}
+                          className={`text-xs px-1.5 py-1 rounded border shrink-0 whitespace-nowrap ${comp.forfaitCommande ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border text-muted-foreground hover:text-primary hover:border-primary'}`}
+                        >Forfait / cde</button>
+                        <button type="button"
                           onClick={() => {
                             const updated = composants.filter((_, i) => i !== idx);
                             const searches = composantSearches.filter((_, i) => i !== idx);
@@ -2769,13 +2779,22 @@ export default function Produits() {
                   <span className="text-muted-foreground">Prix achat calculé</span>
                   <span>{formatMontant(composants.reduce((sum, c) => {
                     const p = produits.find(pr => pr.id === c.produitId);
-                    if (!p) return sum;
+                    if (!p || c.forfaitCommande) return sum;
                     if (c.poidsKg != null) {
                       const qte = p.unite?.toLowerCase() === 'kg' ? c.poidsKg : (p.poids && p.poids > 0 ? c.poidsKg / p.poids : c.poidsKg);
                       return sum + p.prixAchat * qte;
                     }
                     if (c.consommationPct != null) return sum + p.prixAchat * c.consommationPct / 100;
                     return sum + p.prixAchat * c.quantite;
+                  }, 0))}</span>
+                </div>
+              )}
+              {composants.some(c => c.forfaitCommande) && (
+                <div className="flex justify-between text-xs font-medium">
+                  <span className="text-muted-foreground" title="Ajouté UNE fois au coût d'achat du devis, quel que soit le nombre de pièces ; absent du prix d'achat unitaire ci-dessus.">+ Forfait par commande (1 fois par devis)</span>
+                  <span>{formatMontant(composants.reduce((sum, c) => {
+                    const p = produits.find(pr => pr.id === c.produitId);
+                    return c.forfaitCommande && p ? sum + p.prixAchat * c.quantite : sum;
                   }, 0))}</span>
                 </div>
               )}

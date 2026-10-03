@@ -114,6 +114,12 @@ export interface ComposantProduit {
   consommationPct?: number;   // si défini : quantite = baseQuantite × consommationPct / 100
   baseComposantId?: string;   // (optionnel) produitId d'un autre composant — synchronise baseQuantite automatiquement
   baseQuantite?: number;      // valeur de base pour le calcul % (saisie manuelle ou issue de baseComposantId)
+  /**
+   * Forfait PAR COMMANDE (préparation, mise à disposition…) : son coût d'achat
+   * s'ajoute UNE fois au coût du devis, quel que soit le nombre de pièces. Il
+   * reste donc HORS du prix d'achat unitaire de l'article (`calcPrixAchatCompose`).
+   */
+  forfaitCommande?: boolean;
   poidsKg?: number;           // si défini : mode poids — quantite = poidsKg / produit.poids (ou = poidsKg si unite kg)
 }
 
@@ -2426,6 +2432,33 @@ export function consoPourSurface(
   const c = consoLigne ?? p.consommation;
   if (couvertureM2(p)) return c && c > 0 ? c : 1;
   return p.poids && p.poids > 0 && c != null && c > 0 ? c : null;
+}
+
+/** Coût d'achat des composants « forfait par commande » d'un article (une fois par commande). */
+export function forfaitAchatCommande(p: Pick<Produit, 'composants'>, parId: (id: string) => Produit | undefined): number {
+  return (p.composants || []).reduce((s, c) => {
+    if (!c.forfaitCommande) return s;
+    const cp = parId(c.produitId);
+    return s + (cp ? cp.prixAchat * c.quantite : 0);
+  }, 0);
+}
+
+/**
+ * Forfait par commande à ajouter au coût d'achat d'UNE ligne de devis : porté par
+ * la première ligne de l'article seulement (un article sur deux lignes ne facture
+ * pas son forfait deux fois), et jamais quand le coût d'achat de la ligne a été
+ * saisi à la main.
+ */
+export function forfaitCommandeLigne(
+  l: Pick<LigneDevis, 'id' | 'produitId' | 'type' | 'prixAchatLigne'>,
+  lignes: Pick<LigneDevis, 'id' | 'produitId' | 'type'>[],
+  parId: (id: string) => Produit | undefined,
+): number {
+  if (!l.produitId || (l.type && l.type !== 'ligne') || l.prixAchatLigne != null) return 0;
+  const premiere = lignes.find(x => x.produitId === l.produitId && (!x.type || x.type === 'ligne'));
+  if (premiere?.id !== l.id) return 0;
+  const p = parId(l.produitId);
+  return p ? forfaitAchatCommande(p, parId) : 0;
 }
 
 export function getPrixPourQuantite(
