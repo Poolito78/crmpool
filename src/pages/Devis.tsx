@@ -1190,8 +1190,13 @@ export default function Devis() {
   }
 
   function updateLigne(id: string, field: string, value: any) {
-    setLignes(prev => prev.map(l => {
-      if (l.id !== id) return l;
+    setLignes(prev => {
+      /* UNE REMISE SUIT L'ARTICLE : le même article sur une autre ligne reprend la
+         remise saisie, pour que son tarif soit identique dans tout le devis. */
+      const cible = field === 'remise' ? prev.find(l => l.id === id) : undefined;
+      const memeArticle = (l: LigneDevis) => !!cible?.produitId && l.produitId === cible.produitId && (!l.type || l.type === 'ligne');
+      return prev.map(l => {
+      if (l.id !== id) return memeArticle(l) ? { ...l, remise: value as number } : l;
       const updated = { ...l, [field]: value };
       // Recalcule le prix si la quantité change et que le produit a des paliers
       if (field === 'quantite' && l.produitId) {
@@ -1202,7 +1207,8 @@ export default function Devis() {
         }
       }
       return updated;
-    }));
+      });
+    });
   }
 
   function removeLigne(id: string) {
@@ -1538,6 +1544,8 @@ export default function Devis() {
         : null;
       setLignes(prev => prev.map(l => {
         if (l.id !== ligneId) return l;
+        // Le même article déjà remisé sur une autre ligne : sa remise est reprise (même tarif dans tout le devis).
+        const remiseReprise = prev.find(x => x.id !== ligneId && x.produitId === p.id && (!x.type || x.type === 'ligne') && (x.remise || 0) > 0)?.remise ?? 0;
         const quantite = autoQuantite !== null ? autoQuantite : l.quantite;
         const prix = prixDeBase(p, quantite, client?.estRevendeur);
         // Initialise les variantes : première option de chaque dimension
@@ -1547,7 +1555,7 @@ export default function Devis() {
             if (dim.options.length > 0) variantesChoisies[dim.id] = dim.options[0].label;
           });
         }
-        return { ...l, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: 0, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
+        return { ...l, produitId: p.id, description: designationProduit(p), prixUnitaireHT: prix, tva: p.tva, unite: p.unite, remise: remiseReprise, quantite, surfaceM2: surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, variantesChoisies: Object.keys(variantesChoisies).length > 0 ? variantesChoisies : undefined };
       }));
       // Initialise le fournisseur prioritaire pour cette ligne dans le comparatif
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
