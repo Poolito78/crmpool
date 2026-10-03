@@ -463,8 +463,8 @@ export async function generatePdfFromElement(
           // Sous-titre : sa propre ligne, plus petit, légèrement estompé, ajusté à la largeur de la cellule.
           pdf.setFont('helvetica', 'normal');
           const subW = pdf.getStringUnitWidth(cell.sub);
-          pdf.setFontSize(Math.min(cell.fontSizePt * 0.75, Math.max(3.5, subW > 0 ? availW * pdf.internal.scaleFactor / subW : 6)));
-          pdf.setTextColor(255 - 0.2 * 51, 255 - 0.2 * 255, 255 - 0.2 * 255);
+          pdf.setFontSize(Math.min(cell.fontSizePt * 0.92, Math.max(4, subW > 0 ? availW * pdf.internal.scaleFactor / subW : 7)));
+          pdf.setTextColor(255 - 0.1 * 51, 255 - 0.1 * 255, 255 - 0.1 * 255);
           const subY = y + row.hMm / 2 + row.hMm * 0.22;
           const sx = cell.alignH === 'center' ? cell.xMm + cell.wMm / 2 : cell.alignH === 'right' ? cell.xMm + cell.wMm - hPad : cell.xMm + hPad;
           pdf.text(cell.sub, sx, subY, { align: cell.alignH === 'center' ? 'center' : cell.alignH === 'right' ? 'right' : 'left', baseline: 'middle' });
