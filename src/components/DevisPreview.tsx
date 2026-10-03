@@ -899,7 +899,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <col style={{ width: '42px' }} />{/* Total KG cond */}
                 <col style={{ width: '64px' }} />{/* Unité prix */}
                 <col style={{ width: '50px' }} />{/* (Kg) */}
-                <col style={{ width: '76px' }} />{/* Total HT */}
+                <col style={{ width: showCoutLigne ? '88px' : '76px' }} />{/* Total HT */}
               </colgroup>
               <thead>
                 {/* Centrage vertical : texte directement dans <th>, align-middle Tailwind.
@@ -942,7 +942,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <th className="align-middle"
                       style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
                   <th className="align-middle"
-                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT{showCoutLigne && <div style={{ fontSize: '8px', fontWeight: 'normal', color: '#d4d4d4', whiteSpace: 'nowrap' }}>(Total Consommé)</div>}</th>
+                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT{showCoutLigne && <><br /><span style={{ fontSize: '9px', fontWeight: 'normal', color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>(Total consommé)</span></>}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1181,7 +1181,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {showRemise && <th className="text-right py-2 font-semibold">P.U. HT</th>}
                 {showRemise && <th className="text-right py-2 font-semibold">Rem.</th>}
                 <th className="text-right py-2 font-semibold">P.U. net HT</th>
-                <th className="text-right py-2 font-semibold">Total HT{showCoutLigne && <div className="text-[9px] font-normal text-muted-foreground whitespace-nowrap">(Total Consommé)</div>}</th>
+                <th className="text-right py-2 font-semibold">Total HT{showCoutLigne && <><br /><span className="text-[9px] font-normal text-muted-foreground whitespace-nowrap">(Total consommé)</span></>}</th>
               </tr>
             </thead>
             <tbody>
