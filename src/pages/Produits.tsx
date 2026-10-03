@@ -2579,8 +2579,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[4rem]"
-                              style={{ width: `${Math.max(6, String(comp.poidsKg ?? '').length + 2)}ch` }}
+                              className="text-sm min-w-[8rem]"
+                              style={{ width: `${Math.max(11, String(comp.poidsKg ?? '').length + 5)}ch` }}
                               placeholder="kg"
                             />
                             <span className="text-xs text-muted-foreground">kg</span>
@@ -2685,8 +2685,8 @@ export default function Produits() {
                                 setComposants(propagated);
                                 recalcPrix(propagated);
                               }}
-                              className="text-sm min-w-[4rem]"
-                              style={{ width: `${Math.max(6, String(comp.quantite).length + 2)}ch` }}
+                              className="text-sm min-w-[8rem]"
+                              style={{ width: `${Math.max(11, String(comp.quantite).length + 5)}ch` }}
                               placeholder="Qté"
                             />
                             <button type="button" title="Saisir en poids (kg)"
