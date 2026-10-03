@@ -1,5 +1,5 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
-import { type Devis, type Client, type Produit, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -193,11 +193,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     // Pour les produits composites, ne pas recalculer la quantité depuis la surface
     const isComposite = !!(prod?.composants && prod.composants.length > 0);
     if (isComposite) return { ...l, surfaceM2: surface };
-    const conso = l.consommation || prod?.consommation || 0;
-    const poids = prod?.poids || 1;
-    if (conso && poids) {
+    /* LA QUANTITÉ RETENUE AU DEVIS FAIT FOI. Elle peut venir de « Qté
+       chantier » (besoin cumulé de plusieurs lignes, 0 sur celles dont
+       l'article est porté ailleurs) ou d'une saisie forcée : la recalculer
+       ici à la surface la faisait diverger du devis (4 rouleaux de toile au
+       lieu d'1). On ne recalcule que si la surface a été retouchée DANS
+       l'aperçu, ligne par ligne ou par la surface globale. */
+    const modifiee = surfacesParLigne[l.id] !== undefined && surfacesParLigne[l.id] !== (l.surfaceM2 || 0);
+    if (!modifiee) return { ...l, surfaceM2: surface };
+    const consoSurface = consoPourSurface(prod, l.consommation || undefined);
+    if (consoSurface != null && prod) {
       // Math.ceil identique à calcQuantiteSurface dans Devis.tsx → totaux cohérents
-      const newQty = Math.ceil(surface * conso / poids);
+      const couverture = couvertureM2(prod);
+      const newQty = Math.ceil(surface * consoSurface / (couverture ?? prod.poids!) - 1e-9);
       return { ...l, surfaceM2: surface, quantite: newQty > 0 ? newQty : l.quantite };
     }
     return { ...l, surfaceM2: surface };
@@ -833,8 +841,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 const poidsParentRecap = prod?.poids || 0;
                 const totalKgRecap = surfLigne > 0 ? surfLigne * conso : 0;
                 if (poidsParentRecap > 0 && totalKgRecap > 0) {
-                  const unitesRecap = Math.ceil(totalKgRecap / poidsParentRecap);
-                  sumCondKg += Math.round(unitesRecap * poidsParentRecap * 10) / 10;
+                  sumCondKg += Math.round((l.quantite || 0) * poidsParentRecap * 10) / 10;
                   sumTotalKg += Math.round(totalKgRecap * 100) / 100;
                 }
               }
@@ -848,7 +855,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               if (totalKgP != null) {
                 sumTotalKg += Math.round(totalKgP * 100) / 100;
                 if (poidsP) {
-                  sumCondKg += Math.ceil(totalKgP / poidsP) * poidsP;
+                  sumCondKg += (l.quantite || 0) * poidsP;
                 }
                 const prixKgP = poidsP && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - l.remise / 100) / poidsP : null;
                 if (prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
@@ -1075,8 +1082,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? fmt(conso) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? fmt(totalKgConso, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unitesComp ?? (l.quantite || '')}</td>
-                            <td className="py-1.5 px-1 text-right">{condKgComp ?? (poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : '')}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite || ''}</td>
+                            <td className="py-1.5 px-1 text-right">{poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
@@ -1094,8 +1101,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{conso > 0 ? fmt(conso) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{kg != null ? fmt(kg, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{unites ?? (l.quantite || '')}</td>
-                            <td className="py-1.5 px-1 text-right">{condKg ?? (poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : '')}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite || ''}</td>
+                            <td className="py-1.5 px-1 text-right">{poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale))}</td>
