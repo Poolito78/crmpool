@@ -1207,6 +1207,8 @@ export default function Devis() {
 
   /** Sélection en cours dans la note d'une ligne : la barre gras / couleur n'apparaît que si du texte est sélectionné. */
   const [noteSel, setNoteSel] = useState<{ id: string; debut: number; fin: number } | null>(null);
+  /** Note en cours de saisie : une note mise en forme n'affiche ses balises (** et {{#…|…}}) que pendant la saisie. */
+  const [noteEnSaisie, setNoteEnSaisie] = useState<string | null>(null);
 
   /** Gras ou couleur sur le texte sélectionné de la note d'une ligne. */
   function formaterNote(id: string, format: { gras: true } | { couleur: string | null }) {
@@ -3408,26 +3410,32 @@ export default function Devis() {
                                   ))}
                                 </div>
                               )}
+                              {noteEstMiseEnForme(l.note) && noteEnSaisie !== l.id && (
+                                <div
+                                  onClick={() => { setNoteEnSaisie(l.id); setTimeout(() => { const t = document.getElementById(`note-${l.id}`) as HTMLTextAreaElement | null; t?.focus(); t?.setSelectionRange(t.value.length, t.value.length); }, 0); }}
+                                  title="Cliquer pour modifier la note"
+                                  className="w-full text-xs text-muted-foreground whitespace-pre-line leading-5 px-3 py-1 cursor-text rounded-md border border-transparent hover:border-input">
+                                  <NoteRiche note={l.note!} />
+                                </div>
+                              )}
                               <textarea
                                 id={`note-${l.id}`}
+                                hidden={noteEstMiseEnForme(l.note) && noteEnSaisie !== l.id}
                                 value={l.note || ''}
                                 onSelect={e => { const t = e.currentTarget; setNoteSel(t.selectionEnd > t.selectionStart ? { id: l.id, debut: t.selectionStart, fin: t.selectionEnd } : null); }}
-                                onBlur={() => setNoteSel(null)}
+                                onBlur={() => { setNoteSel(null); setNoteEnSaisie(cur => cur === l.id ? null : cur); }}
                                 onChange={e => {
                                   updateLigne(l.id, 'note', e.target.value || undefined);
                                   e.target.style.height = 'auto';
                                   e.target.style.height = e.target.scrollHeight + 'px';
                                 }}
-                                onFocus={e => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
+                                onFocus={e => { setNoteEnSaisie(l.id); e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px'; }}
                                 onPaste={e => handleLigneNotePaste(l.id, e)}
                                 placeholder="Note (optionnelle)… Ctrl+V pour coller une image"
                                 rows={1}
                                 style={{ resize: 'none', overflow: 'hidden', minHeight: '1.5rem' }}
                                 className="w-full text-xs text-muted-foreground bg-transparent border border-transparent hover:border-input focus:border-input rounded-md px-3 py-1 outline-none leading-5"
                               />
-                              {noteEstMiseEnForme(l.note) && (
-                                <p className="px-3 text-xs text-muted-foreground whitespace-pre-line leading-5" title="Rendu de la note dans le devis"><NoteRiche note={l.note!} /></p>
-                              )}
                               {(lineImages[l.id] || []).length > 0 && (
                                 <div className="flex flex-wrap gap-1.5 mt-1">
                                   {(lineImages[l.id] || []).map((img, i) => (
