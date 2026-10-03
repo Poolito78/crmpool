@@ -13,6 +13,8 @@ import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
 import { useProduitImages } from '@/lib/produitImages';
+import NoteRiche from '@/components/NoteRiche';
+import { noteEnTexte } from '@/lib/noteRiche';
 
 // ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
 const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
@@ -1066,12 +1068,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         ) : null}
                         {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
                         {l.note && (() => {
-                          const rsNote = getRalStyle(l.note!);
+                          const rsNote = getRalStyle(noteEnTexte(l.note!));
                           return (
                             <div style={{ marginTop: '2px' }}>
                               {rsNote
-                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{l.note}</span>
-                                : <span style={{ fontSize: '0.65rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line' }}>{l.note}</span>
+                                ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.65rem', fontStyle: 'italic', whiteSpace: 'pre-line' }}>{noteEnTexte(l.note!) === l.note ? l.note : <NoteRiche note={l.note!} />}</span>
+                                : <span style={{ fontSize: '0.65rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line' }}>{noteEnTexte(l.note!) === l.note ? l.note : <NoteRiche note={l.note!} />}</span>
                               }
                             </div>
                           );
@@ -1295,7 +1297,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
                           {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
                           {(l.note || (dataUrlImages[l.id] || []).filter(Boolean).length > 0) && (() => {
-                            const rsNote = l.note ? getRalStyle(l.note) : null;
+                            const rsNote = l.note ? getRalStyle(noteEnTexte(l.note)) : null;
                             const imgs = (dataUrlImages[l.id] || []).filter(Boolean).map(url => ({ url, name: '' }));
                             return (
                               <div style={{ marginTop: '4px' }}>
@@ -1303,8 +1305,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                   <img key={i} src={img.url} alt="" width={48} height={38} onClick={() => setZoomImage(allLineImages[l.id]?.[i]?.url || img.url)} style={{ display: 'inline-block', width: '48px', height: '38px', borderRadius: '2px', border: '1px solid rgba(0,0,0,0.1)', marginRight: '5px', verticalAlign: 'middle', cursor: 'zoom-in' }} />
                                 ))}
                                 {l.note && (rsNote
-                                  ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{l.note}</span>
-                                  : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{l.note}</span>
+                                  ? <span style={{ backgroundColor: rsNote.backgroundColor, color: rsNote.color, padding: '2px 6px', borderRadius: '3px', fontSize: '0.7rem', fontStyle: 'italic', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{noteEnTexte(l.note!) === l.note ? l.note : <NoteRiche note={l.note!} />}</span>
+                                  : <span style={{ fontSize: '0.75rem', fontStyle: 'italic', color: '#888', whiteSpace: 'pre-line', verticalAlign: 'middle' }}>{noteEnTexte(l.note!) === l.note ? l.note : <NoteRiche note={l.note!} />}</span>
                                 )}
                               </div>
                             );

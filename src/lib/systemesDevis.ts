@@ -1,4 +1,5 @@
 import type { Devis } from '@/lib/store';
+import { noteEnTexte } from '@/lib/noteRiche';
 import type { Systeme, SystemeComposant } from '@/lib/systemes';
 
 /**
@@ -46,7 +47,7 @@ export function systemeDepuisDevis(d: Devis): Systeme | null {
     /* Un article se reconnaît par exclusion (type absent = article). */
     if (l.type === 'soustotal' || l.type === 'texte') return;
     if (!l.produitId) return;
-    const note = l.note || undefined;
+    const note = noteEnTexte(l.note) || undefined;
     const lue = l.consommation != null && l.consommation > 0
       ? l.consommation
       : (() => {
