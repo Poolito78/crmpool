@@ -848,12 +848,15 @@ Restant à ta disposition pour tout complément d'information.`
                 { key: 'showRemise',     label: 'Remises' },
                 { key: 'showComposants', label: 'Composants' },
                 { key: 'showKgRecap',    label: 'Récap. KG' },
+                { key: 'showCoutChantier', label: 'Coût chantier' },
+                { key: 'showCoutLigne',  label: 'Coût chantier par ligne' },
+                { key: 'showLiens',      label: 'Fiches techniques et photos' },
               ].map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
                   <input
                     type="checkbox"
                     className="rounded"
-                    checked={previewOptions[key as keyof PreviewOptions]}
+                    checked={!!previewOptions[key as keyof PreviewOptions]}
                     onChange={e => handleOptionChange({ ...previewOptions, [key]: e.target.checked })}
                     disabled={generating}
                   />

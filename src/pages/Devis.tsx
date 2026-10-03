@@ -4586,7 +4586,7 @@ export default function Devis() {
           aria-hidden="true"
         >
           <DevisPreview
-            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}`}
+            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}-${previewOptions.showCoutChantier}-${previewOptions.showCoutLigne}`}
             devis={{ ...emailDevis, statut: 'envoyé' }}
             client={clients.find(c => c.id === emailDevis.clientId)}
             produits={produits}
@@ -4597,6 +4597,8 @@ export default function Devis() {
             initialShowComposants={previewOptions.showComposants}
             initialShowKgRecap={previewOptions.showKgRecap}
             initialShowLiens={previewOptions.showLiens}
+            initialShowCoutChantier={previewOptions.showCoutChantier}
+            initialShowCoutLigne={previewOptions.showCoutLigne}
           />
         </div>
       )}
