@@ -3268,7 +3268,7 @@ export default function Devis() {
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                                 }} className="h-8 text-sm" placeholder={couvertureLigne ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
-                                poids: <Input value={couvertureLigne ? `${couvertureLigne} m²` : prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
+                                poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
                                 qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => {
                                   updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
                                   // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
@@ -3312,7 +3312,7 @@ export default function Devis() {
                                 ),
                                 total: <span className="text-sm font-semibold h-8 flex items-center justify-end text-right">{formatMontant(t.totalHT)}</span>,
                               };
-                              const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: 'Surface m²', conso: 'Conso. kg/m²', poids: 'Poids kg', qte: hasAutoCalc ? (l.qteMode === 'chantier' ? 'Qté chantier' : l.qteMode === 'manuel' ? 'Qté manuel' : 'Qté auto') : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
+                              const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: 'Surface m²', conso: couvertureLigne ? 'Conso. m²' : 'Conso. kg/m²', poids: 'Poids kg', qte: hasAutoCalc ? (l.qteMode === 'chantier' ? 'Qté chantier' : l.qteMode === 'manuel' ? 'Qté manuel' : 'Qté auto') : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
                               const actionsCell = (
                                 <div className="flex items-center h-8 gap-0.5">
                                   <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
