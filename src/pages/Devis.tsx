@@ -1792,16 +1792,29 @@ export default function Devis() {
     // Évite d'écraser les surfaces individuelles à l'ouverture du formulaire
     if (prevSurfaceGlobaleRef.current === surfaceGlobaleM2) return;
     prevSurfaceGlobaleRef.current = surfaceGlobaleM2;
+    appliquerSurfaceGlobale();
+  }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
+
+  /**
+   * Remet TOUTES les lignes à la surface globale et recalcule leurs quantités.
+   * Appelé quand la surface globale change, et par le bouton « Appliquer » :
+   * sans lui, retoucher la surface d'une ligne n'avait aucun moyen de revenir
+   * à la surface globale tant que celle-ci gardait la même valeur.
+   */
+  function appliquerSurfaceGlobale() {
+    if (surfaceGlobaleM2 <= 0) return;
     const client = clients.find(c => c.id === clientId);
-    setLignes(prev => prev.map(l => {
+    setLignes(prev => recalcChantier(prev.map(l => {
+      if (l.type && l.type !== 'ligne') return l;
       if (!l.produitId) return l;
       const p = produitParId(produits, l.produitId);
-      if (!p || consoPourSurface(p, l.consommation || undefined) == null) return { ...l, surfaceM2: surfaceGlobaleM2 };
+      const sansManuel = l.qteMode === 'manuel' ? { qteMode: undefined } : {};
+      if (!p || consoPourSurface(p, l.consommation || undefined) == null) return { ...l, ...sansManuel, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation, l.unite);
       const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
-      return { ...l, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
-    }));
-  }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
+      return { ...l, ...sansManuel, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
+    })));
+  }
 
   // Auto-calcul frais de port basé sur le poids
   useEffect(() => {
@@ -2860,8 +2873,14 @@ export default function Devis() {
                 <div className="flex items-end gap-4 flex-wrap">
                   <div className="w-32">
                     <Label className="text-xs">Surface globale (m²)</Label>
-                    <Input data-voice="surface" type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" title="Si surface + conso. renseignées → quantité calculée automatiquement" />
+                    <Input data-voice="surface" type="number" step="0.01" value={surfaceGlobaleM2 || ''} onChange={e => setSurfaceGlobaleM2(parseFloat(e.target.value) || 0)} placeholder="Optionnel…" className="h-8 text-sm" title="Si surface + conso. renseignées → quantité calculée automatiquement" onKeyDown={e => { if (e.key === 'Enter') appliquerSurfaceGlobale(); }} />
                   </div>
+                  {surfaceGlobaleM2 > 0 && (
+                    <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => { saveSnapshot(); appliquerSurfaceGlobale(); }}
+                      title="Remet toutes les lignes à cette surface et recalcule leurs quantités (annule les surfaces et quantités retouchées ligne par ligne ; les consommations saisies sur une ligne sont conservées)">
+                      <RotateCcw className="w-3 h-3 mr-1" /> Appliquer aux lignes
+                    </Button>
+                  )}
                   <div className="w-32">
                     <Label className="text-xs">% de réussite</Label>
                     <select value={probabiliteReussite} onChange={e => setProbabiliteReussite(Number(e.target.value))} className="h-8 w-full rounded-md border border-input bg-background px-2 text-sm">
