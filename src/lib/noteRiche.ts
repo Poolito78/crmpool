@@ -24,27 +24,46 @@ export const COULEURS_NOTE: { nom: string; hex: string | null }[] = [
   { nom: 'Bleu', hex: '#2563eb' },
 ];
 
-const RE_GRAS = /\*\*([\s\S]+?)\*\*/;
-const RE_COULEUR = /\{\{(#[0-9a-fA-F]{3,8})\|([\s\S]+?)\}\}/;
+const RE_JETON = /\*\*|\{\{#[0-9a-fA-F]{3,8}\||\}\}/g;
 
-type Style = { gras?: boolean; couleur?: string };
-
-function analyser(s: string, style: Style, sortie: SegmentNote[]): void {
-  while (s.length > 0) {
-    const g = RE_GRAS.exec(s);
-    const c = RE_COULEUR.exec(s);
-    const m = g && c ? (g.index <= c.index ? g : c) : (g || c);
-    if (!m) { sortie.push({ texte: s, ...style }); return; }
-    if (m.index > 0) sortie.push({ texte: s.slice(0, m.index), ...style });
-    if (m === g) analyser(m[1], { ...style, gras: true }, sortie);
-    else analyser(m[2], { ...style, couleur: m[1] }, sortie);
-    s = s.slice(m.index + m[0].length);
-  }
-}
-
+/**
+ * Lit la note comme une suite de BASCULES, pas comme des parenthèses : le gras
+ * s'ouvre et se ferme avec `**`, la couleur s'ouvre avec `{{#hex|` et se ferme
+ * avec `}}`, et les deux peuvent se CHEVAUCHER (`**a {{#c|b** c}}`) — c'est ce
+ * qu'écrit une sélection qui déborde d'une couleur. Une balise sans sa
+ * partenaire reste du texte littéral.
+ */
 export function noteSegments(note: string): SegmentNote[] {
+  const jetons = [...note.matchAll(RE_JETON)].map(m => ({ t: m[0], i: m.index! }));
+  const valide = new Set<number>();
+  // `**` : appariés deux à deux, le dernier impair reste littéral.
+  const etoiles = jetons.map((j, k) => (j.t === '**' ? k : -1)).filter(k => k >= 0);
+  etoiles.slice(0, etoiles.length - (etoiles.length % 2)).forEach(k => valide.add(k));
+  // Couleurs : ouvertures et `}}` appariés comme des parenthèses.
+  const pile: number[] = [];
+  jetons.forEach((j, k) => {
+    if (j.t.startsWith('{{')) pile.push(k);
+    else if (j.t === '}}' && pile.length) { valide.add(pile.pop()!); valide.add(k); }
+  });
+
   const sortie: SegmentNote[] = [];
-  analyser(note, {}, sortie);
+  const couleurs: string[] = [];
+  let gras = false;
+  let pos = 0;
+  const poser = (texte: string) => {
+    if (!texte) return;
+    const c = couleurs[couleurs.length - 1];
+    sortie.push({ texte, ...(gras ? { gras: true } : {}), ...(c ? { couleur: c } : {}) });
+  };
+  jetons.forEach((j, k) => {
+    if (!valide.has(k)) return;
+    poser(note.slice(pos, j.i));
+    pos = j.i + j.t.length;
+    if (j.t === '**') gras = !gras;
+    else if (j.t === '}}') couleurs.pop();
+    else couleurs.push(j.t.slice(2, -1));
+  });
+  poser(note.slice(pos));
   return sortie;
 }
 
@@ -55,7 +74,7 @@ export function noteEnTexte(note: string | undefined | null): string {
 }
 
 export function noteEstMiseEnForme(note: string | undefined | null): boolean {
-  return !!note && (RE_GRAS.test(note) || RE_COULEUR.test(note));
+  return !!note && noteSegments(note).some(s => s.gras || s.couleur);
 }
 
 const echapper = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

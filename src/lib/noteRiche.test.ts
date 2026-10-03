@@ -9,6 +9,14 @@ describe('noteRiche', () => {
   it('laisse littérale une balise mal fermée', () => {
     expect(noteEnTexte('prix ** à voir')).toBe('prix ** à voir');
   });
+  it('lit une mise en forme qui se chevauche, sans afficher de balise', () => {
+    const n = '**(OPTIONNELLE SI {{#111111|LA COULEUR)**}}';
+    expect(noteEnTexte(n)).toBe('(OPTIONNELLE SI LA COULEUR)');
+    expect(noteSegments(n)).toEqual([
+      { texte: '(OPTIONNELLE SI ', gras: true },
+      { texte: 'LA COULEUR)', gras: true, couleur: '#111111' },
+    ]);
+  });
   it('échappe le HTML', () => {
     expect(noteEnHtml('<b>**x**')).toBe('&lt;b&gt;<strong>x</strong>');
   });
