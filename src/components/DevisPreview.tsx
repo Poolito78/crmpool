@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo, promptOdooPartnerName, m2Consommes } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, m2Consommes, coutChantierLigne } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
@@ -99,8 +99,10 @@ interface Props {
   initialShowComposants?: boolean;
   initialShowKgRecap?: boolean;
   initialShowCoutChantier?: boolean;
+  /** Coût chantier consommé de chaque ligne, entre parenthèses sous son Total HT. */
+  initialShowCoutLigne?: boolean;
   initialShowLiens?: boolean;
-  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean; showLiens?: boolean }) => void;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean; showCoutLigne?: boolean; showLiens?: boolean }) => void;
   onPrint?: () => void;
   lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
@@ -116,12 +118,13 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
   const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
+  const [showCoutLigne, setShowCoutLigne] = useState(initialShowCoutLigne);
   const [showLiens, setShowLiens] = useState(initialShowLiens);
   const { principaleDe, chargement: chargementImages } = useProduitImages();
   const [printing, setPrinting] = useState(false);
@@ -155,6 +158,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setFetchedLineImages(map);
   }, [devis.id]);
   useEffect(() => { loadLineImages(); }, [loadLineImages]);
+  /** Coût chantier consommé d'une ligne : entre parenthèses, en gris comme le prix au kg, sous le Total HT. */
+  function coutLigneEl(cout: number) {
+    if (!showCoutLigne || !(cout > 0)) return null;
+    return <div className="text-[10px] font-normal text-muted-foreground whitespace-nowrap" title="Coût chantier consommé de la ligne">({formatMontant(cout)})</div>;
+  }
+
   function getSurfaceLigne(ligneId: string): number {
     if (surfacesParLigne[ligneId] !== undefined) return surfacesParLigne[ligneId];
     const ligne = devis.lignes.find(l => l.id === ligneId);
@@ -506,7 +515,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
+              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
               m²/conso
             </label>
             {showConso && (
@@ -523,26 +532,31 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   m²
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier }); }} className="rounded" />
+                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier, showCoutLigne }); }} className="rounded" />
                   Récap. KG
                 </label>
               </>
             )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked }); }} className="rounded" />
+              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked, showCoutLigne }); }} className="rounded" />
               Coût chantier
             </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+                   title="Sous le Total HT de chaque ligne : le coût chantier consommé (surface × conso), entre parenthèses, en gris.">
+              <input type="checkbox" checked={showCoutLigne} onChange={e => { setShowCoutLigne(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne: e.target.checked }); }} className="rounded" />
+              Coût / ligne
+            </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier }); }} className="rounded" />
+              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
               Remise
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
                    title="Ajoute en bas du devis les fiches techniques et photos des articles. Les liens restent cliquables dans le PDF.">
-              <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showLiens: e.target.checked }); }} className="rounded" />
+              <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens: e.target.checked }); }} className="rounded" />
               Fiches &amp; photos
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier }); }} className="rounded" />
+              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
               Composants
             </label>
           </div>
@@ -1065,7 +1079,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{condKgComp ?? (poidsComp && l.quantite ? Math.round(l.quantite * poidsComp * 10) / 10 : '')}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKgComp != null ? `(${formatMontant(prixKgComp)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(compDatas.reduce((sum, c) => sum + (c.totalKgComp != null && c.prixKg != null ? c.totalKgComp * c.prixKg : 0), 0))}</td>
                           </>
                         );
                       })() : (() => {
@@ -1084,7 +1098,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{condKg ?? (poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : '')}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale))}</td>
                           </>
                         );
                       })()}
@@ -1287,7 +1301,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
                         {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
                         <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}</td>
+                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: getSurfaceLigne(l.id) || undefined }, produits, surfaceGlobale))}</td>
                       </tr>
                       {showComposants && composants && composants.length > 0 && composants.map(comp => {
                         const compProd = produits.find(p => p.id === comp.produitId);

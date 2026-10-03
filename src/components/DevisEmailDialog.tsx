@@ -246,6 +246,9 @@ export interface PreviewOptions {
   showKgRecap: boolean;
   /** Bloc « Fiches techniques et photos » en bas du devis. */
   showLiens?: boolean;
+  showCoutChantier?: boolean;
+  /** Coût chantier consommé de chaque ligne sous son Total HT. */
+  showCoutLigne?: boolean;
 }
 
 interface Props {
