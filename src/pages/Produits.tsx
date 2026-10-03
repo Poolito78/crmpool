@@ -137,6 +137,7 @@ const emptyProduit = {
   disponibleVente: true,
   adr: undefined as boolean | undefined,
   consoUnite: undefined as 'kg' | 'm2' | undefined,
+  notes: undefined as string | undefined,
   surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
 };
@@ -980,7 +981,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2 });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2981,6 +2982,19 @@ export default function Produits() {
                 </button>
               )}
               </div>{/* fin p-3 space-y-3 */}
+            </div>
+
+            {/* Notes libres de la fiche : texte, chiffres, ce qu'on veut retenir — internes, jamais imprimées au devis. */}
+            <div className="border border-border rounded-lg bg-muted/30 p-3 space-y-1.5">
+              <Label className="text-sm font-semibold">Notes</Label>
+              <textarea
+                value={form.notes ?? ''}
+                onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
+                rows={4}
+                placeholder="Notes libres sur l'article (texte, chiffres, conditions d'emploi, remarques fournisseur…)"
+                className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 outline-none focus:border-ring resize-y"
+              />
+              <p className="text-[11px] text-muted-foreground">Internes : elles n'apparaissent ni sur le devis ni dans le PDF.</p>
             </div>
 
             {/* Picker composant */}

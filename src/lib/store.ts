@@ -216,6 +216,8 @@ export interface Produit {
    * vente couvre `surfaceUniteM2` m²). Absent = kg.
    */
   consoUnite?: 'kg' | 'm2';
+  /** Notes libres de la fiche (texte et chiffres saisis à la main) — internes, jamais imprimées au devis. */
+  notes?: string;
   /** m² couverts par UNE unité de vente (rouleau de 100,78 m²). Lu seulement si `consoUnite` = 'm2'. */
   surfaceUniteM2?: number;
   stock: number;
@@ -796,6 +798,7 @@ function dbToProduit(r: any): Produit {
     poids: r.poids != null ? Number(r.poids) : undefined,
     consommation: r.consommation != null ? Number(r.consommation) : undefined,
     consoUnite: r.conso_unite === 'm2' ? 'm2' : undefined,
+    notes: r.notes || undefined,
     surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
     stock: Number(r.stock) || 0,
     stockMin: Number(r.stock_min) || 0,
@@ -857,6 +860,8 @@ function produitToDb(p: Produit, userId: string) {
     /* Spread conditionnel : sans la colonne (migration pas encore passée),
        PostgREST rejetterait toute la ligne. Envoyées seulement si la fiche
        les porte ; repasser en kg écrit 'kg'. */
+    /* Seulement si la fiche porte des notes (ou vient d'en vider) : sans la colonne, PostgREST rejetterait la ligne. */
+    ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     stock: p.stock,
     stock_min: p.stockMin,
