@@ -1566,8 +1566,14 @@ export default function Devis() {
 
   // Recalculer les prix quand le client change (revendeur / remises par catégorie)
   const prevClientIdRef = useRef(clientId);
+  const prevDialogOpenRef = useRef(dialogOpen);
   useEffect(() => {
-    if (!dialogOpen || clientId === prevClientIdRef.current) {
+    /* ⚠️ L'OUVERTURE d'un devis charge son client d'un coup (populateForm) : ce
+       n'est pas un changement de client. Sans cette garde, la réouverture
+       re-tarifait les lignes et remettait toutes les remises à 0. */
+    const venaitDOuvrir = dialogOpen && !prevDialogOpenRef.current;
+    prevDialogOpenRef.current = dialogOpen;
+    if (!dialogOpen || venaitDOuvrir || clientId === prevClientIdRef.current) {
       prevClientIdRef.current = clientId;
       return;
     }
