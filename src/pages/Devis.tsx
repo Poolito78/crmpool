@@ -1337,13 +1337,19 @@ export default function Devis() {
       const p = cur?.produitId ? produitParId(produits, cur.produitId) : null;
       if (!cur || !p) return prev;
       if (cur.qteMode === 'surface') {
-        return recalcChantier(prev.map(l => l.id === id ? { ...l, qteMode: 'chantier' as const } : l));
+        // Toutes les lignes de cet article passent en mode chantier d'un coup.
+        return recalcChantier(prev.map(l => l.produitId === cur.produitId ? { ...l, qteMode: 'chantier' as const } : l));
       }
-      const surface = cur.surfaceM2 || surfaceGlobaleM2;
-      const quantite = calcQuantiteSurface(p, surface, cur.consommation, cur.unite);
+      // Retour à la surface : idem pour toutes les lignes de l'article.
       const client = clients.find(c => c.id === clientId);
-      const prixUnitaireHT = getPrixLigne(p, quantite, cur.variantesChoisies, client?.estRevendeur);
-      return recalcChantier(prev.map(l => l.id === id ? { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT } : l));
+      return recalcChantier(prev.map(l => {
+        if (l.produitId !== cur.produitId) return l;
+        const conso = l.consommation ?? p.consommation;
+        const surface = l.surfaceM2 || surfaceGlobaleM2;
+        if (!(surface > 0 && conso != null && conso > 0)) return { ...l, qteMode: 'surface' as const };
+        const quantite = calcQuantiteSurface(p, surface, l.consommation, l.unite);
+        return { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
+      }));
     });
   }
 
