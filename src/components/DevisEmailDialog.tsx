@@ -348,13 +348,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     setDateEnvoi(new Date().toISOString().split('T')[0]);
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
     setTo(client?.email || '');
-    setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
+    setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}${devis.chantier?.trim() ? ` — ${devis.chantier.trim()}` : ''}`);
 
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(
 `Bonjour${client?.nom ? ` ${client.nom}` : ''},
 
-Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.
+Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.${devis.chantier?.trim() ? `\nChantier : ${devis.chantier.trim()}` : ''}
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
 
 Restant à ta disposition pour tout complément d'information.`
