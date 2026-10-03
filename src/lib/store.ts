@@ -463,6 +463,13 @@ export interface LigneDevis {
    * de celui-ci.
    */
   gamme?: string;
+  /**
+   * D'où vient la quantité d'une ligne chiffrée à la surface (bouton « Qté auto »).
+   * `surface` : arrondi au conditionnement de CETTE ligne ; `chantier` : besoin
+   * cumulé de toutes les lignes du même article, porté par la première — les
+   * autres passent à 0 ; `manuel` : saisie forcée. Absent = auto à la surface.
+   */
+  qteMode?: 'surface' | 'chantier' | 'manuel';
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

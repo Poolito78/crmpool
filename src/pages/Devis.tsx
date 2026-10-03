@@ -1291,6 +1291,62 @@ export default function Devis() {
     return Math.ceil(kgNeeded / produit.poids);
   }
 
+  /**
+   * Quantités des lignes en mode « Qté chantier » : le besoin en kg de TOUTES
+   * les lignes d'un même article est arrondi une seule fois au conditionnement,
+   * et porté par la première ligne en mode chantier. Les autres passent à 0 :
+   * l'article est déjà disponible sur une autre ligne. Ce que portent les
+   * lignes qui ne sont pas en mode chantier est déduit du besoin.
+   */
+  function recalcChantier(ls: LigneDevis[]): LigneDevis[] {
+    const client = clients.find(c => c.id === clientId);
+    const qtes = new Map<string, number>();
+    const traites = new Set<string>();
+    for (const l of ls) {
+      if (l.qteMode !== 'chantier' || !l.produitId || traites.has(l.produitId)) continue;
+      traites.add(l.produitId);
+      const p = produitParId(produits, l.produitId);
+      if (!p?.poids || p.poids <= 0 || /^m(²|2)$/i.test((l.unite || '').trim())) continue;
+      const memes = ls.filter(x => x.produitId === l.produitId);
+      let kg = 0;
+      for (const x of memes) {
+        const s = x.surfaceM2 || surfaceGlobaleM2;
+        const c = x.consommation ?? p.consommation;
+        if (s > 0 && c != null && c > 0) kg += s * c;
+      }
+      if (kg <= 0) continue;
+      const besoin = Math.ceil(kg / p.poids - 1e-9);
+      const ailleurs = memes.filter(x => x.qteMode !== 'chantier').reduce((s, x) => s + (x.quantite || 0), 0);
+      let reste = Math.max(0, besoin - ailleurs);
+      for (const x of memes.filter(x => x.qteMode === 'chantier')) { qtes.set(x.id, reste); reste = 0; }
+    }
+    if (!qtes.size) return ls;
+    return ls.map(l => {
+      const q = qtes.get(l.id);
+      if (q == null || q === l.quantite) return l;
+      const p = l.produitId ? produitParId(produits, l.produitId) : null;
+      return { ...l, quantite: q, ...(p && q > 0 ? { prixUnitaireHT: getPrixLigne(p, q, l.variantesChoisies, client?.estRevendeur) } : {}) };
+    });
+  }
+
+  /** Clic sur « Qté auto » : recalcul à la surface, puis au besoin du chantier, en alternance. */
+  function basculerQteAuto(id: string) {
+    saveSnapshot();
+    setLignes(prev => {
+      const cur = prev.find(l => l.id === id);
+      const p = cur?.produitId ? produitParId(produits, cur.produitId) : null;
+      if (!cur || !p) return prev;
+      if (cur.qteMode === 'surface') {
+        return recalcChantier(prev.map(l => l.id === id ? { ...l, qteMode: 'chantier' as const } : l));
+      }
+      const surface = cur.surfaceM2 || surfaceGlobaleM2;
+      const quantite = calcQuantiteSurface(p, surface, cur.consommation, cur.unite);
+      const client = clients.find(c => c.id === clientId);
+      const prixUnitaireHT = getPrixLigne(p, quantite, cur.variantesChoisies, client?.estRevendeur);
+      return recalcChantier(prev.map(l => l.id === id ? { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT } : l));
+    });
+  }
+
   /** Somme des prixDiff des variantes choisies sur une ligne */
   function getVarianteDiff(produit: typeof produits[0], variantesChoisies?: Record<string, string>): number {
     if (!produit.variantes?.length || !variantesChoisies) return 0;
@@ -3176,7 +3232,7 @@ export default function Devis() {
                                   const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
+                                  setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                                 }} className="h-8 text-sm" placeholder="m²" />,
                                 conso: <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onFocus={e => e.target.select()} onChange={e => {
                                   const raw = e.target.value;
@@ -3185,10 +3241,14 @@ export default function Devis() {
                                   const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li));
+                                  setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                                 }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
                                 poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
-                                qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" readOnly={hasAutoCalc} />,
+                                qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => {
+                                  updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
+                                  // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
+                                  if (hasAutoCalc) setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, qteMode: 'manuel' as const } : li)));
+                                }} className="h-8 text-sm" title={hasAutoCalc ? 'Quantité modifiable : la forcer passe la ligne en « Qté manuel » ; cliquer sur le libellé la recalcule.' : undefined} />,
                                 unite: <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />,
                                 prixht: (
                                   <div>
@@ -3227,7 +3287,7 @@ export default function Devis() {
                                 ),
                                 total: <span className="text-sm font-semibold h-8 flex items-center justify-end text-right">{formatMontant(t.totalHT)}</span>,
                               };
-                              const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: 'Surface m²', conso: 'Conso. kg/m²', poids: 'Poids kg', qte: hasAutoCalc ? 'Qté auto' : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
+                              const labels: Record<TLCKey, string> = { ref: 'Réf.', description: 'Description', surface: 'Surface m²', conso: 'Conso. kg/m²', poids: 'Poids kg', qte: hasAutoCalc ? (l.qteMode === 'chantier' ? 'Qté chantier' : l.qteMode === 'manuel' ? 'Qté manuel' : 'Qté auto') : 'Qté', unite: 'Unité', prixht: 'Prix HT', remise: 'Rem. %', netht: 'Net HT', marge: 'Marge / Coeff', total: 'Total HT' };
                               const actionsCell = (
                                 <div className="flex items-center h-8 gap-0.5">
                                   <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-muted-foreground hover:text-foreground disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
@@ -3265,7 +3325,15 @@ export default function Devis() {
                                   <div className="flex-1 min-w-[120px]"><Label className="text-xs">Description</Label>{cell.description}</div>
                                   {variantEls}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
-                                    <div key={c.key} style={{ width: c.width }} className="shrink-0"><Label className="text-xs">{labels[c.key]}</Label>{cell[c.key]}</div>
+                                    <div key={c.key} style={{ width: c.width }} className="shrink-0">
+                                      {c.key === 'qte' && hasAutoCalc ? (
+                                        <button type="button" onClick={() => basculerQteAuto(l.id)} className="text-xs font-medium text-primary hover:underline text-left"
+                                          title="Clic : recalcule à la surface de la ligne. Re-clic : au besoin cumulé du chantier (0 si l'article est déjà porté par une autre ligne).">
+                                          {labels[c.key]}
+                                        </button>
+                                      ) : <Label className="text-xs">{labels[c.key]}</Label>}
+                                      {cell[c.key]}
+                                    </div>
                                   ))}
                                   <div className="shrink-0 flex flex-col items-end">
                                     <Label className="text-xs">Total HT</Label>
