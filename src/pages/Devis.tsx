@@ -3240,6 +3240,9 @@ export default function Devis() {
                               const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                               const margeLigne = t.totalHT - achatLigne;
                               const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
+                              // Marge sous 30 % (coefficient 1,43) : le prix de vente passe en rouge — réservé à qui voit les coûts.
+                              const margeBasse = canAchat && coeffLigne != null && coeffLigne < 1.43;
+                              const classePrixVente = `h-8 text-sm${margeBasse ? ' text-destructive font-semibold border-destructive/60' : ''}`;
                               const cell: Record<TLCKey, ReactNode> = {
                                 ref: (
                                   <div className="flex gap-0.5 items-center">
@@ -3279,7 +3282,7 @@ export default function Devis() {
                                 unite: <Input value={l.unite || ''} onChange={e => updateLigne(l.id, 'unite', e.target.value)} className="h-8 text-sm" />,
                                 prixht: (
                                   <div>
-                                    <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className="h-8 text-sm" placeholder="0,00" />
+                                    <Input type="number" step="0.01" value={l.prixUnitaireHT || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'prixUnitaireHT', parseFloat(e.target.value) || 0)} className={classePrixVente} placeholder="0,00" title={margeBasse ? 'Marge inférieure à 30 % (coefficient < 1,43)' : undefined} />
                                     {(() => {
                                       const releves = prod ? veilleParProduit.get(prod.id) : undefined;
                                       const r = releves?.[0];
@@ -3305,7 +3308,7 @@ export default function Devis() {
                                   </div>
                                 ),
                                 remise: <Input type="number" value={l.remise || ''} onFocus={e => e.target.select()} onChange={e => updateLigne(l.id, 'remise', e.target.value === '' ? 0 : parseFloat(e.target.value))} className="h-8 text-sm" />,
-                                netht: <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className="h-8 text-sm" placeholder="0,00" />,
+                                netht: <Input type="number" step="0.01" value={l.prixUnitaireHT > 0 ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) * 100) / 100 : ''} onFocus={e => e.target.select()} onChange={e => { const net = parseFloat(e.target.value) || 0; const ht = l.remise < 100 ? Math.round(net / (1 - l.remise / 100) * 100) / 100 : net; updateLigne(l.id, 'prixUnitaireHT', ht); }} className={classePrixVente} placeholder="0,00" title={margeBasse ? 'Marge inférieure à 30 % (coefficient < 1,43)' : undefined} />,
                                 marge: (
                                   <div className="h-8 flex flex-col justify-center text-right leading-tight">
                                     <span className={`text-xs font-medium ${coeffLigne == null ? 'text-muted-foreground' : coeffLigne >= 1.6 ? 'text-emerald-600 dark:text-emerald-400' : coeffLigne >= 1.43 ? 'text-orange-500' : 'text-destructive'}`}>{formatMontant(margeLigne)}</span>
