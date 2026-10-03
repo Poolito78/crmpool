@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
@@ -997,8 +997,7 @@ export default function Devis() {
     const applySurface = (l: LigneDevis): LigneDevis => {
       if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-      const conso = l.consommation ?? prod?.consommation;
-      if (prod && conso && prod.poids) {
+      if (prod && consoPourSurface(prod, l.consommation) != null) {
         const quantite = calcQuantiteSurface(prod, surf, l.consommation);
         const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null);
         return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
@@ -1286,6 +1285,9 @@ export default function Devis() {
     if (unite && /^m(²|2)$/i.test(unite.trim()) && conso && conso > 0) {
       return Math.ceil(surface * conso - 1e-9);
     }
+    /* Consommation au m² (toile de verre) : une unité couvre `surfaceUniteM2` m². */
+    const couverture = couvertureM2(produit);
+    if (couverture) return Math.ceil(surface * (conso && conso > 0 ? conso : 1) / couverture - 1e-9);
     if (!conso || conso <= 0 || !produit.poids || produit.poids <= 0) return 1;
     const kgNeeded = surface * conso;
     return Math.ceil(kgNeeded / produit.poids);
@@ -1306,16 +1308,17 @@ export default function Devis() {
       if (l.qteMode !== 'chantier' || !l.produitId || traites.has(l.produitId)) continue;
       traites.add(l.produitId);
       const p = produitParId(produits, l.produitId);
-      if (!p?.poids || p.poids <= 0 || /^m(²|2)$/i.test((l.unite || '').trim())) continue;
+      const parUnite = couvertureM2(p) ?? p?.poids;
+      if (!p || !parUnite || parUnite <= 0 || /^m(²|2)$/i.test((l.unite || '').trim())) continue;
       const memes = ls.filter(x => x.produitId === l.produitId);
       let kg = 0;
       for (const x of memes) {
         const s = x.surfaceM2 || surfaceGlobaleM2;
-        const c = x.consommation ?? p.consommation;
-        if (s > 0 && c != null && c > 0) kg += s * c;
+        const c = consoPourSurface(p, x.consommation);
+        if (s > 0 && c != null) kg += s * c;
       }
       if (kg <= 0) continue;
-      const besoin = Math.ceil(kg / p.poids - 1e-9);
+      const besoin = Math.ceil(kg / parUnite - 1e-9);
       const ailleurs = memes.filter(x => x.qteMode !== 'chantier').reduce((s, x) => s + (x.quantite || 0), 0);
       let reste = Math.max(0, besoin - ailleurs);
       for (const x of memes.filter(x => x.qteMode === 'chantier')) { qtes.set(x.id, reste); reste = 0; }
@@ -1344,9 +1347,8 @@ export default function Devis() {
       const client = clients.find(c => c.id === clientId);
       return recalcChantier(prev.map(l => {
         if (l.produitId !== cur.produitId) return l;
-        const conso = l.consommation ?? p.consommation;
         const surface = l.surfaceM2 || surfaceGlobaleM2;
-        if (!(surface > 0 && conso != null && conso > 0)) return { ...l, qteMode: 'surface' as const };
+        if (!(surface > 0 && consoPourSurface(p, l.consommation) != null)) return { ...l, qteMode: 'surface' as const };
         const quantite = calcQuantiteSurface(p, surface, l.consommation, l.unite);
         return { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
       }));
@@ -1529,7 +1531,7 @@ export default function Devis() {
     }
     if (p) {
       const client = clients.find(c => c.id === clientId);
-      const autoQuantite = (surfaceGlobaleM2 > 0 && p.consommation && p.poids)
+      const autoQuantite = (surfaceGlobaleM2 > 0 && consoPourSurface(p) != null)
         ? calcQuantiteSurface(p, surfaceGlobaleM2)
         : null;
       setLignes(prev => prev.map(l => {
@@ -1794,9 +1796,7 @@ export default function Devis() {
     setLignes(prev => prev.map(l => {
       if (!l.produitId) return l;
       const p = produitParId(produits, l.produitId);
-      if (!p || !p.poids) return { ...l, surfaceM2: surfaceGlobaleM2 };
-      const conso = l.consommation || p.consommation;
-      if (!conso) return { ...l, surfaceM2: surfaceGlobaleM2 };
+      if (!p || consoPourSurface(p, l.consommation || undefined) == null) return { ...l, surfaceM2: surfaceGlobaleM2 };
       const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation, l.unite);
       const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
       return { ...l, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
@@ -3162,11 +3162,12 @@ export default function Devis() {
                     const coeff = prod && prod.coefficient > 0 ? prod.coefficient : null;
                     const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                     const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
-                    const consoLigne = l.consommation ?? prod?.consommation;
+                    const couvertureLigne = couvertureM2(prod);
+                    const consoLigne = consoPourSurface(prod, l.consommation) ?? (l.consommation ?? prod?.consommation);
                     const kgReel = surfaceVal > 0 && consoLigne != null && consoLigne > 0
                       ? Math.round(surfaceVal * consoLigne * 1000) / 1000 : null;
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
-                    const hasAutoCalc = !!(surfaceVal > 0 && consoLigne != null && consoLigne > 0 && prod?.poids && prod.poids > 0);
+                    const hasAutoCalc = !!(surfaceVal > 0 && consoPourSurface(prod, l.consommation) != null);
                     // Teinte choisie en toutes lettres (« RAL 7042 Gris signalisation A »), lue sur la ligne elle-même
                     const teintesLigne = Object.values(l.variantesChoisies || {})
                       .map(v => ({ texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
@@ -3234,22 +3235,21 @@ export default function Devis() {
                                 description: <Input data-voice="ligne-desc" data-ligne-id={l.id} value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                   const surface = parseFloat(e.target.value) || 0;
-                                  const conso = l.consommation ?? prod?.consommation;
-                                  const quantite = prod && conso && prod.poids ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
+                                  const quantite = prod && consoPourSurface(prod, l.consommation) != null ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                                 }} className="h-8 text-sm" placeholder="m²" />,
-                                conso: <Input type="number" step="0.01" value={l.consommation ?? prod?.consommation ?? ''} onFocus={e => e.target.select()} onChange={e => {
+                                conso: <Input type="number" step="0.01" value={l.consommation ?? (couvertureLigne ? consoLigne : prod?.consommation) ?? ''} onFocus={e => e.target.select()} onChange={e => {
                                   const raw = e.target.value;
                                   const conso = raw === '' ? undefined : parseFloat(raw);
                                   const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = prod && prod.poids && conso != null && conso > 0 ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
+                                  const quantite = prod && consoPourSurface(prod, conso) != null ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
-                                }} className="h-8 text-sm" placeholder={prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
-                                poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
+                                }} className="h-8 text-sm" placeholder={couvertureLigne ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
+                                poids: <Input value={couvertureLigne ? `${couvertureLigne} m²` : prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
                                 qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => {
                                   updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
                                   // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
@@ -3412,12 +3412,13 @@ export default function Devis() {
                                 {canAchat && coeff !== null && <span>Coeff: {coeff.toFixed(2)}</span>}
                                 {prixKg !== null && <span>{formatMontant(prixKg)}/kg</span>}
                                 {kgReel !== null && (() => {
-                                  const poidsConditionne = prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
+                                  const poidsConditionne = couvertureLigne ? Math.round(l.quantite * couvertureLigne * 100) / 100 : prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
+                                  const uniteChantier = couvertureLigne ? 'm²' : 'kg';
                                   return (
                                     <span className="italic">
-                                      ↳ {kgReel} kg chantier
+                                      ↳ {kgReel} {uniteChantier} chantier
                                       {poidsConditionne != null && poidsConditionne !== kgReel && (
-                                        <span className="text-muted-foreground/70"> · {poidsConditionne} kg cond.</span>
+                                        <span className="text-muted-foreground/70"> · {poidsConditionne} {uniteChantier} cond.</span>
                                       )}
                                     </span>
                                   );
@@ -4667,7 +4668,7 @@ export default function Devis() {
               }
             }
             // Autres lignes avec consommation → quantité chantier = conso × surface / poids (en unités)
-            if (l.consommation != null && l.consommation > 0 && surfaceGlobaleM2 > 0 && prod?.poids) {
+            if (l.consommation != null && l.consommation > 0 && surfaceGlobaleM2 > 0 && consoPourSurface(prod, l.consommation) != null) {
               const quantite = calcQuantiteSurface(prod, surfaceGlobaleM2, l.consommation);
               const prix = getPrixLigne(prod, quantite, l.variantesChoisies, cl?.estRevendeur);
               return { ...l, surfaceM2: surfaceGlobaleM2, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
@@ -4749,8 +4750,7 @@ export default function Devis() {
           const applySurface = (ls: LigneDevis[]): LigneDevis[] => surf > 0 ? ls.map(l => {
             if (l.type && l.type !== 'ligne') return l;
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-            const conso = l.consommation ?? prod?.consommation;
-            if (prod && conso && prod.poids) {
+            if (prod && consoPourSurface(prod, l.consommation) != null) {
               const quantite = calcQuantiteSurface(prod, surf, l.consommation);
               const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur);
               return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };

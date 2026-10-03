@@ -136,6 +136,8 @@ const emptyProduit = {
   proprietaire: 'isosign' as 'isosign' | 'fournisseur', proprietaireFournisseurId: '',
   disponibleVente: true,
   adr: undefined as boolean | undefined,
+  consoUnite: undefined as 'kg' | 'm2' | undefined,
+  surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
 };
 
@@ -978,7 +980,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2 });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2356,7 +2358,30 @@ export default function Produits() {
               <div><Label>TVA %</Label><InputNombre decimales={2} value={form.tva} onChange={v => setForm(p => ({ ...p, tva: v }))} /></div>
               <div><Label>Unité</Label><Input value={form.unite} onChange={e => setForm(p => ({ ...p, unite: e.target.value }))} /></div>
               <div><Label>Poids (kg)</Label><InputNombre decimales={3} value={form.poids} onChange={v => setForm(p => ({ ...p, poids: v }))} /></div>
-              <div><Label>Conso. (kg/m²)</Label><InputNombre decimales={3} value={form.consommation} onChange={v => setForm(p => ({ ...p, consommation: v }))} placeholder="Ex: 1,5" /></div>
+              <div>
+                <Label>Conso. ({form.consoUnite === 'm2' ? 'm²/m²' : 'kg/m²'})</Label>
+                <InputNombre decimales={3} value={form.consommation} onChange={v => setForm(p => ({ ...p, consommation: v }))} placeholder={form.consoUnite === 'm2' ? '1 par défaut' : 'Ex: 1,5'} />
+              </div>
+            </div>
+            {/* Article consommé au m² (toile de verre…) : une unité de vente couvre N m², le devis en déduit la quantité à la surface. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div>
+                <Label>Consommation en</Label>
+                <Select value={form.consoUnite === 'm2' ? 'm2' : 'kg'} onValueChange={v => setForm(p => ({ ...p, consoUnite: v as 'kg' | 'm2' }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="kg">kg/m² (poids)</SelectItem>
+                    <SelectItem value="m2">m² (surface de l'unité)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {form.consoUnite === 'm2' && (
+                <div>
+                  <Label>m² par unité de vente</Label>
+                  <InputNombre decimales={2} value={form.surfaceUniteM2 ?? 0} onChange={v => setForm(p => ({ ...p, surfaceUniteM2: v > 0 ? v : undefined }))} placeholder="Ex: 100,78" />
+                  {!(form.surfaceUniteM2 && form.surfaceUniteM2 > 0) && <p className="text-[10px] text-destructive mt-0.5">À renseigner : sans elle, la quantité n'est pas calculée.</p>}
+                </div>
+              )}
             </div>
             {form.poids > 0 && (() => {
               const paKg = form.prixAchat / form.poids;

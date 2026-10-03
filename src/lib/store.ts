@@ -204,6 +204,14 @@ export interface Produit {
   unite: string;
   poids?: number;
   consommation?: number;
+  /**
+   * Ce que `consommation` mesure : `kg` (kg/m², le cas général) ou `m2`
+   * (m² d'article par m² traité — toile de verre, treillis : une unité de
+   * vente couvre `surfaceUniteM2` m²). Absent = kg.
+   */
+  consoUnite?: 'kg' | 'm2';
+  /** m² couverts par UNE unité de vente (rouleau de 100,78 m²). Lu seulement si `consoUnite` = 'm2'. */
+  surfaceUniteM2?: number;
   stock: number;
   stockMin: number;
   fournisseurId?: string;
@@ -781,6 +789,8 @@ function dbToProduit(r: any): Produit {
     unite: r.unite,
     poids: r.poids != null ? Number(r.poids) : undefined,
     consommation: r.consommation != null ? Number(r.consommation) : undefined,
+    consoUnite: r.conso_unite === 'm2' ? 'm2' : undefined,
+    surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
     stock: Number(r.stock) || 0,
     stockMin: Number(r.stock_min) || 0,
     fournisseurId: r.fournisseur_id || undefined,
@@ -838,6 +848,10 @@ function produitToDb(p: Produit, userId: string) {
     unite: p.unite,
     poids: p.poids ?? null,
     consommation: p.consommation ?? null,
+    /* Spread conditionnel : sans la colonne (migration pas encore passée),
+       PostgREST rejetterait toute la ligne. Envoyées seulement si la fiche
+       les porte ; repasser en kg écrit 'kg'. */
+    ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     stock: p.stock,
     stock_min: p.stockMin,
     fournisseur_id: p.fournisseurId || null,
@@ -2394,6 +2408,26 @@ export function calculerFournisseurPrioritaire(
  * en tenant compte des paliers définis sur le produit.
  * Si pas de palier, retourne les prix de base du produit.
  */
+/** m² couverts par une unité de vente, pour un article dont la consommation se compte en m² (toile de verre…). `null` sinon. */
+export function couvertureM2(p?: Pick<Produit, 'consoUnite' | 'surfaceUniteM2'> | null): number | null {
+  return p?.consoUnite === 'm2' && p.surfaceUniteM2 && p.surfaceUniteM2 > 0 ? p.surfaceUniteM2 : null;
+}
+
+/**
+ * Consommation à retenir pour chiffrer une ligne à la surface, ou `null` si
+ * l'article ne s'y prête pas. En kg/m² il faut un poids et une conso ; en m²,
+ * la couverture de l'unité suffit et une conso absente ou nulle vaut 1 m²/m².
+ */
+export function consoPourSurface(
+  p: Pick<Produit, 'consoUnite' | 'surfaceUniteM2' | 'consommation' | 'poids'> | null | undefined,
+  consoLigne?: number,
+): number | null {
+  if (!p) return null;
+  const c = consoLigne ?? p.consommation;
+  if (couvertureM2(p)) return c && c > 0 ? c : 1;
+  return p.poids && p.poids > 0 && c != null && c > 0 ? c : null;
+}
+
 export function getPrixPourQuantite(
   produit: Produit,
   quantite: number
