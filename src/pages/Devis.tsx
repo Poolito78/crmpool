@@ -3186,9 +3186,14 @@ export default function Devis() {
                     const t = calculerTotalLigne(l);
                     const prod = l.produitId ? produitParId(produits, l.produitId) : null;
                     const prixNetHT = l.prixUnitaireHT * (1 - l.remise / 100);
-                    const tauxMarque = prod && prixNetHT > 0 ? ((prixNetHT - prod.prixAchat) / prixNetHT) * 100 : null;
+                    /* Marge et coefficient RÉELS de la ligne : prix net (remise comprise) contre le coût d'achat
+                       au palier de la quantité, forfait par commande compris. La remise baisse le prix de vente,
+                       jamais le coût d'achat. */
+                    const achatReelLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
+                    const venteReelleLigne = prixNetHT * l.quantite;
+                    const tauxMarque = prod && achatReelLigne > 0 && venteReelleLigne > 0 ? ((venteReelleLigne - achatReelLigne) / venteReelleLigne) * 100 : null;
                     // Coeff revendeur du produit (depuis la fiche), indépendant du prix public saisi dans le devis
-                    const coeff = prod && prod.coefficient > 0 ? prod.coefficient : null;
+                    const coeff = prod && achatReelLigne > 0 && venteReelleLigne > 0 ? venteReelleLigne / achatReelLigne : null;
                     const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                     const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
                     const couvertureLigne = couvertureM2(prod);
@@ -3245,7 +3250,7 @@ export default function Devis() {
                         <>
                             {/* ── Cellules (contenu réutilisé cartes + tableau) ── */}
                             {(() => {
-                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100) + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
+                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                               const margeLigne = t.totalHT - achatLigne;
                               const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
                               // Marge sous 30 % (coefficient 1,43) : le prix de vente passe en rouge — réservé à qui voit les coûts.

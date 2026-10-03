@@ -512,7 +512,7 @@ function PrevisionnelDevis({ devis, clients, produits }: { devis: ReturnType<typ
         if (!l.produitId) return acc + (l.prixAchatLigne ?? 0) * l.quantite;
         const prod = produits.find(p => p.id === l.produitId);
         if (!prod) return acc;
-        return acc + getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite * (1 - (l.remise || 0) / 100);
+        return acc + getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite; // la remise baisse le prix de vente, pas le coût d'achat
       }, 0);
       const totalHTLignes = calculerTotalDevis(d.lignes, 0, 0).totalHT;
       const marge = totalHTLignes - totalAchat;
