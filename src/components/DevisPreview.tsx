@@ -835,6 +835,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               continue;
             }
             const surfLigne = getSurfaceLigne(l.id);
+            /* Article consommé au m² (toile de verre) : son coût chantier est la
+               part de rouleau réellement consommée, et ses m² ne sont pas des kg —
+               ni dans les kg/m², ni dans le total KG. */
+            if (couvertureM2(prod)) {
+              sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale);
+              continue;
+            }
             if (isComposite) {
               if (conso > 0) {
                 sumConsoKgM2 += conso;
@@ -931,7 +938,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <th className="align-middle"
                       style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
                   <th className="align-middle"
-                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT</th>
+                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT{showCoutLigne && <div style={{ fontSize: '8px', fontWeight: 'normal', color: '#d4d4d4', whiteSpace: 'nowrap' }}>(Total Consommé)</div>}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1170,7 +1177,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 {showRemise && <th className="text-right py-2 font-semibold">P.U. HT</th>}
                 {showRemise && <th className="text-right py-2 font-semibold">Rem.</th>}
                 <th className="text-right py-2 font-semibold">P.U. net HT</th>
-                <th className="text-right py-2 font-semibold">Total HT</th>
+                <th className="text-right py-2 font-semibold">Total HT{showCoutLigne && <div className="text-[9px] font-normal text-muted-foreground whitespace-nowrap">(Total Consommé)</div>}</th>
               </tr>
             </thead>
             <tbody>
