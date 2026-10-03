@@ -3243,6 +3243,19 @@ export default function Devis() {
                               // Marge sous 30 % (coefficient 1,43) : le prix de vente passe en rouge — réservé à qui voit les coûts.
                               const margeBasse = canAchat && coeffLigne != null && coeffLigne < 1.43;
                               const classePrixVente = `h-8 text-sm${margeBasse ? ' text-destructive font-semibold border-destructive/60' : ''}`;
+                              /* Consommation de la ligne : saisie à la main (l'usage s'efface) ou choisie
+                                 dans la liste de l'article (l'usage suit, en info-bulle). */
+                              const appliquerConso = (conso: number | undefined, usage?: string) => {
+                                const surface = l.surfaceM2 || surfaceGlobaleM2;
+                                const quantite = prod && consoPourSurface(prod, conso) != null ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
+                                const client = clients.find(c => c.id === clientId);
+                                const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
+                                setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, consoUsage: usage || undefined, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
+                              };
+                              const optionsConso = prod ? [
+                                ...(prod.consommation ? [{ valeur: prod.consommation, usage: 'Par défaut' }] : []),
+                                ...(prod.consommations || []),
+                              ] : [];
                               const cell: Record<TLCKey, ReactNode> = {
                                 ref: (
                                   <div className="flex gap-0.5 items-center">
@@ -3264,15 +3277,28 @@ export default function Devis() {
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                                 }} className="h-8 text-sm" placeholder="m²" />,
-                                conso: <Input type="number" step="0.01" value={l.consommation ?? (couvertureLigne ? consoLigne : prod?.consommation) ?? ''} onFocus={e => e.target.select()} onChange={e => {
-                                  const raw = e.target.value;
-                                  const conso = raw === '' ? undefined : parseFloat(raw);
-                                  const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                  const quantite = prod && consoPourSurface(prod, conso) != null ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
-                                  const client = clients.find(c => c.id === clientId);
-                                  const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                  setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
-                                }} className="h-8 text-sm" placeholder={couvertureLigne ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />,
+                                conso: (
+                                  <div className="flex items-center gap-0.5">
+                                    <Input type="number" step="0.01" value={l.consommation ?? (couvertureLigne ? consoLigne : prod?.consommation) ?? ''} onFocus={e => e.target.select()}
+                                      onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value))}
+                                      title={l.consoUsage ? `Usage : ${l.consoUsage}` : undefined}
+                                      className="h-8 text-sm" placeholder={couvertureLigne ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²'} />
+                                    {(prod?.consommations?.length ?? 0) > 0 && (
+                                      <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                          <button type="button" title="Choisir une consommation selon l'usage" className="h-8 w-5 shrink-0 rounded text-muted-foreground hover:bg-muted flex items-center justify-center"><ChevronDown className="w-3.5 h-3.5" /></button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                          {optionsConso.map((o, k) => (
+                                            <DropdownMenuItem key={k} title={o.usage || 'Sans usage précisé'} onSelect={() => appliquerConso(o.valeur, o.usage === 'Par défaut' ? undefined : o.usage)}>
+                                              <span className="font-medium mr-2">{o.valeur}</span><span className="text-muted-foreground">{o.usage || '—'}</span>
+                                            </DropdownMenuItem>
+                                          ))}
+                                        </DropdownMenuContent>
+                                      </DropdownMenu>
+                                    )}
+                                  </div>
+                                ),
                                 poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
                                 qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => {
                                   updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
@@ -3434,7 +3460,7 @@ export default function Devis() {
                                   const coutLigneChantier = coutChantierLigne(l, produits, surfaceGlobaleM2);
                                   return (
                                     <span className="italic">
-                                      ↳ {kgReel} {uniteChantier} chantier
+                                      ↳ {kgReel} {uniteChantier} chantier{l.consoUsage ? <span className="not-italic"> ({l.consoUsage})</span> : null}
                                       {coutLigneChantier > 0 && <span className="not-italic font-medium" title="Coût chantier de la ligne : matière consommée (surface × conso) au prix net HT"> ({formatMontant(coutLigneChantier)})</span>}
                                       {poidsConditionne != null && poidsConditionne !== kgReel && (
                                         <span className="text-muted-foreground/70"> · {poidsConditionne} {uniteChantier} cond.</span>

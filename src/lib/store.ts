@@ -134,6 +134,12 @@ export interface LigneKit {
   note?: string;
 }
 
+/** Une consommation d'un article pour un usage précis (« Primaire », « Finition »…), en plus de la consommation par défaut. */
+export interface ConsoUsage {
+  valeur: number;
+  usage: string;
+}
+
 export interface PrixPalier {
   qteMin: number;        // quantité/poids minimum pour déclencher ce palier
   prixAchat: number;     // prix achat HT à ce palier
@@ -220,6 +226,8 @@ export interface Produit {
   notes?: string;
   /** m² couverts par UNE unité de vente (rouleau de 100,78 m²). Lu seulement si `consoUnite` = 'm2'. */
   surfaceUniteM2?: number;
+  /** Autres consommations, chacune avec son usage — proposées au choix sur la ligne de devis. */
+  consommations?: ConsoUsage[];
   stock: number;
   stockMin: number;
   fournisseurId?: string;
@@ -486,6 +494,8 @@ export interface LigneDevis {
    * autres passent à 0 ; `manuel` : saisie forcée. Absent = auto à la surface.
    */
   qteMode?: 'surface' | 'chantier' | 'manuel';
+  /** Usage de la consommation retenue sur la ligne, quand elle vient de la liste de l'article (« Primaire »). */
+  consoUsage?: string;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';
@@ -799,6 +809,7 @@ function dbToProduit(r: any): Produit {
     consommation: r.consommation != null ? Number(r.consommation) : undefined,
     consoUnite: r.conso_unite === 'm2' ? 'm2' : undefined,
     notes: r.notes || undefined,
+    consommations: Array.isArray(r.consommations) && r.consommations.length ? r.consommations : undefined,
     surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
     stock: Number(r.stock) || 0,
     stockMin: Number(r.stock_min) || 0,
@@ -861,6 +872,7 @@ function produitToDb(p: Produit, userId: string) {
        PostgREST rejetterait toute la ligne. Envoyées seulement si la fiche
        les porte ; repasser en kg écrit 'kg'. */
     /* Seulement si la fiche porte des notes (ou vient d'en vider) : sans la colonne, PostgREST rejetterait la ligne. */
+    ...(p.consommations !== undefined ? { consommations: p.consommations.filter(c => c.valeur > 0).length ? p.consommations.filter(c => c.valeur > 0) : null } : {}),
     ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     stock: p.stock,

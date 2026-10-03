@@ -11,7 +11,7 @@ import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
 } from '@/lib/categorieDocuments';
-import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
+import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
@@ -138,6 +138,7 @@ const emptyProduit = {
   adr: undefined as boolean | undefined,
   consoUnite: undefined as 'kg' | 'm2' | undefined,
   notes: undefined as string | undefined,
+  consommations: undefined as ConsoUsage[] | undefined,
   surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
 };
@@ -981,7 +982,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2380,6 +2381,23 @@ export default function Produits() {
                 <Label>Conso. ({form.consoUnite === 'm2' ? 'm²/m²' : 'kg/m²'})</Label>
                 <InputNombre decimales={3} value={form.consommation} onChange={v => setForm(p => ({ ...p, consommation: v }))} placeholder={form.consoUnite === 'm2' ? '1 par défaut' : 'Ex: 1,5'} />
               </div>
+            </div>
+            {/* Autres consommations par usage : choisies sur la ligne de devis, l'usage s'affiche en info-bulle. */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Autres consommations (par usage)</Label>
+                <button type="button" onClick={() => setForm(p => ({ ...p, consommations: [...(p.consommations || []), { valeur: 0, usage: '' }] }))}
+                  className="text-xs text-primary hover:underline flex items-center gap-1"><Plus className="h-3 w-3" /> Ajouter une consommation</button>
+              </div>
+              {(form.consommations || []).map((c, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-32 shrink-0">
+                    <InputNombre decimales={3} value={c.valeur} onChange={v => setForm(p => ({ ...p, consommations: (p.consommations || []).map((x, j) => j === i ? { ...x, valeur: v } : x) }))} placeholder={form.consoUnite === 'm2' ? 'm²/m²' : 'kg/m²'} />
+                  </div>
+                  <Input value={c.usage} onChange={e => setForm(p => ({ ...p, consommations: (p.consommations || []).map((x, j) => j === i ? { ...x, usage: e.target.value } : x) }))} placeholder="Usage : primaire, finition, 2 couches…" className="flex-1" />
+                  <button type="button" title="Supprimer" onClick={() => setForm(p => ({ ...p, consommations: (p.consommations || []).filter((_, j) => j !== i) }))} className="text-muted-foreground hover:text-destructive"><Trash className="w-4 h-4" /></button>
+                </div>
+              ))}
             </div>
             {/* Article consommé au m² (toile de verre…) : une unité de vente couvre N m², le devis en déduit la quantité à la surface. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
