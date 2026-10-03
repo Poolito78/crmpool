@@ -380,7 +380,7 @@ export async function generatePdfFromElement(
   type TheadRowData = {
     yMm: number; hMm: number;
     hasBgRed: boolean; // true seulement si le <tr> a effectivement un fond rouge (#CC0000)
-    cells: { xMm: number; wMm: number; text: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number; hasBorderLeft: boolean }[];
+    cells: { xMm: number; wMm: number; text: string; sub?: string; alignH: string; fontSizePt: number; bold: boolean; italic: boolean; opacity: number; hasBorderLeft: boolean }[];
   };
   const theadRowData: TheadRowData[] = [];
   {
@@ -395,10 +395,18 @@ export async function generatePdfFromElement(
         const cs = window.getComputedStyle(th);
         let thLeft = 0; let d: HTMLElement | null = th;
         while (d && d !== captureEl) { thLeft += d.offsetLeft; d = d.offsetParent as HTMLElement | null; }
+        /* Une cellule peut porter un sous-titre (`[data-pdf-sub]`, ex. « (Total
+           consommé) » sous « Total HT ») : il se dessine sur sa propre ligne, plus
+           petit — concaténé au titre il était réduit à l'illisible. */
+        const subEl = th.querySelector<HTMLElement>('[data-pdf-sub]');
+        const sub = subEl?.textContent?.trim() || undefined;
+        let titre = th.textContent?.trim() ?? '';
+        if (sub) { const c = th.cloneNode(true) as HTMLElement; c.querySelector('[data-pdf-sub]')?.remove(); titre = c.textContent?.trim() ?? ''; }
         cells.push({
           xMm: thLeft * dX,
           wMm: th.offsetWidth * dX,
-          text: th.textContent?.trim() ?? '',
+          text: titre,
+          sub,
           alignH: cs.textAlign,
           fontSizePt: parseFloat(cs.fontSize) * 0.75,
           bold: parseInt(cs.fontWeight) >= 600,
@@ -447,10 +455,20 @@ export async function generatePdfFromElement(
         pdf.setFontSize(useFontPt);
         const bl = (c: number) => Math.round(255 * cell.opacity + c * (1 - cell.opacity));
         pdf.setTextColor(bl(204), bl(0), bl(0));
-        const midY = y + row.hMm / 2;
+        const midY = y + row.hMm / 2 - (cell.sub ? row.hMm * 0.17 : 0);
         if (cell.alignH === 'center') pdf.text(cell.text, cell.xMm + cell.wMm / 2, midY, { align: 'center', baseline: 'middle' });
         else if (cell.alignH === 'right') pdf.text(cell.text, cell.xMm + cell.wMm - hPad, midY, { align: 'right', baseline: 'middle' });
         else pdf.text(cell.text, cell.xMm + hPad, midY, { align: 'left', baseline: 'middle' });
+        if (cell.sub) {
+          // Sous-titre : sa propre ligne, plus petit, légèrement estompé, ajusté à la largeur de la cellule.
+          pdf.setFont('helvetica', 'normal');
+          const subW = pdf.getStringUnitWidth(cell.sub);
+          pdf.setFontSize(Math.min(cell.fontSizePt * 0.75, Math.max(3.5, subW > 0 ? availW * pdf.internal.scaleFactor / subW : 6)));
+          pdf.setTextColor(255 - 0.2 * 51, 255 - 0.2 * 255, 255 - 0.2 * 255);
+          const subY = y + row.hMm / 2 + row.hMm * 0.22;
+          const sx = cell.alignH === 'center' ? cell.xMm + cell.wMm / 2 : cell.alignH === 'right' ? cell.xMm + cell.wMm - hPad : cell.xMm + hPad;
+          pdf.text(cell.sub, sx, subY, { align: cell.alignH === 'center' ? 'center' : cell.alignH === 'right' ? 'right' : 'left', baseline: 'middle' });
+        }
       });
     });
     pdf.setTextColor(0, 0, 0);

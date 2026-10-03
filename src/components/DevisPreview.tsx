@@ -942,7 +942,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <th className="align-middle"
                       style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>(Kg)</th>
                   <th className="align-middle"
-                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT{showCoutLigne && <><br /><span style={{ fontSize: '9px', fontWeight: 'normal', color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>(Total consommé)</span></>}</th>
+                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', fontWeight: 'bold' }}>Total HT{showCoutLigne && <><br /><span data-pdf-sub style={{ fontSize: '9px', fontWeight: 'normal', color: 'rgba(255,255,255,0.8)', whiteSpace: 'nowrap' }}>(Total consommé)</span></>}</th>
                 </tr>
               </thead>
               <tbody>
