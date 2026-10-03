@@ -2617,8 +2617,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[4rem]"
-                              style={{ width: `${Math.max(6, String(comp.consommationPct ?? '').length + 2)}ch` }}
+                              className="text-sm min-w-[8rem]"
+                              style={{ width: `${Math.max(11, String(comp.consommationPct ?? '').length + 5)}ch` }}
                               placeholder="%"
                             />
                             <span className="text-xs text-muted-foreground">% ×</span>
@@ -2634,8 +2634,8 @@ export default function Produits() {
                                 setComposants(updated);
                                 recalcPrix(updated);
                               }}
-                              className="text-sm min-w-[4rem]"
-                              style={{ width: `${Math.max(6, String(comp.baseQuantite ?? 'base').length + 2)}ch` }}
+                              className="text-sm min-w-[8rem]"
+                              style={{ width: `${Math.max(11, String(comp.baseQuantite ?? 'base').length + 5)}ch` }}
                               placeholder="base"
                             />
                             {basesDisponibles.length > 0 && (
@@ -2652,7 +2652,7 @@ export default function Produits() {
                                   setComposants(updated);
                                   recalcPrix(updated);
                                 }}
-                                className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground max-w-[90px]"
+                                className="text-xs border border-border rounded px-1.5 py-1 bg-background text-foreground min-w-[8rem] max-w-[14rem]"
                                 title="Lier à un autre composant"
                               >
                                 <option value="">lier…</option>
