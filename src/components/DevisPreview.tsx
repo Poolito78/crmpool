@@ -137,6 +137,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [savedFolderName, setSavedFolderName] = useState<string | null>(null);
   // Ref mis à jour pendant le rendu de la table m²/conso — lu dans la section Totaux
   const coutChantierRef = useRef<number | null>(null);
+  const coutChantierTotalRef = useRef<number>(0);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
@@ -881,6 +882,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             ? Math.round(sumCoutConsoHT / refSurface * 100) / 100 : null;
           // Exposer au reste du rendu (section Totaux)
           coutChantierRef.current = coutChantierM2;
+          coutChantierTotalRef.current = sumCoutConsoHT;
 
           // Formate un nombre en supprimant les zéros inutiles après la virgule
           // ex: 1.50 → "1.5" | 325.00 → "325" | 0.65 → "0.65" | 10.065 → "10.065"
@@ -1347,7 +1349,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             {showCoutChantier && coutChantierRef.current != null && (
               <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
                 <span>Coût chantier</span>
-                <span>{coutChantierRef.current.toFixed(2)} €/m²</span>
+                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2)} €/m²</span>
               </div>
             )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
