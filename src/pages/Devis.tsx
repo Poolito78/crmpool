@@ -2416,6 +2416,9 @@ export default function Devis() {
                         MODÈLE
                       </span>
                     )}
+                    {d.statut === 'système' && (d.systeme || d.referenceAffaire) && !(visDevisTableCols.has('systeme') && d.systeme) && (
+                      <span className="text-sm font-semibold text-foreground">{d.systeme || d.referenceAffaire}</span>
+                    )}
                     {d.statut === 'archivé' && d.archiveRaison && (
                       <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${RAISON_ARCHIVE[d.archiveRaison]?.color || 'bg-muted text-muted-foreground'}`}>
                         {RAISON_ARCHIVE[d.archiveRaison]?.label}
