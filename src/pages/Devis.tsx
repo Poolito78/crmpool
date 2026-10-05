@@ -39,6 +39,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { getRalInfo, libelleTeinte } from '@/lib/ralColors';
 import VarianteSelect from '@/components/VarianteSelect';
+import { PRESETS_MOQUETTE, presetEnCours, presetRenseigne, roleMoquette } from '@/lib/moquettePierre';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 
 // ── Colonnes du tableau liste devis ───────────────────────────────────────────
@@ -1527,6 +1528,28 @@ export default function Devis() {
     });
   }
 
+  /* Moquette de pierre : les lignes Flowbind et marbre du devis, et le choix d'épaisseur en cours. */
+  const lignesMoquette = lignes.filter(l => l.produitId && roleMoquette(produitParId(produits, l.produitId)?.reference));
+  const presetMoquette = presetEnCours(lignesMoquette.map(l => l.consoUsage));
+
+  function appliquerPresetMoquette(presetId: string) {
+    const preset = PRESETS_MOQUETTE.find(p => p.id === presetId);
+    if (!preset || !presetRenseigne(preset)) return;
+    saveSnapshot();
+    const client = clients.find(c => c.id === clientId);
+    setLignes(prev => recalcChantier(prev.map(l => {
+      const prod = l.produitId ? produitParId(produits, l.produitId) : undefined;
+      const role = roleMoquette(prod?.reference);
+      if (!prod || !role) return l;
+      const conso = role === 'flowbind' ? preset.flowbindKgM2! : preset.granulatKgM2!;
+      const surface = l.surfaceM2 || surfaceGlobaleM2;
+      const quantite = surface > 0 ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
+      const prixUnitaireHT = getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur);
+      return { ...l, consommation: conso, consoUsage: preset.label, quantite, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), prixUnitaireHT };
+    })));
+    toast.success(`${preset.label} : ${lignesMoquette.length} ligne(s) Flowbind / marbre recalculée(s)`);
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produitParId(produits, produitId);
     if (!p) return;
@@ -2886,6 +2909,22 @@ export default function Devis() {
               <div>
                 <Label>Système</Label>
                 <Input data-voice="systeme" placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
+                {lignesMoquette.length > 0 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Label className="text-xs shrink-0">Épaisseur moquette</Label>
+                    <Select value={presetMoquette?.id ?? ''} onValueChange={appliquerPresetMoquette}>
+                      <SelectTrigger className="h-8 w-64 text-sm"><SelectValue placeholder="Choisir sol / vertical…" /></SelectTrigger>
+                      <SelectContent>
+                        {PRESETS_MOQUETTE.map(p => (
+                          <SelectItem key={p.id} value={p.id} disabled={!presetRenseigne(p)}>
+                            {p.label}{presetRenseigne(p) ? '' : ' — valeurs à renseigner'}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-xs text-muted-foreground">Règle la conso. du Flowbind et du marbre ({lignesMoquette.length} ligne{lignesMoquette.length > 1 ? 's' : ''}).</span>
+                  </div>
+                )}
               </div>
               {/* Surface globale + % de réussite */}
               <div className="border border-border rounded-lg p-3 bg-muted/30">
