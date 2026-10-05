@@ -3239,9 +3239,13 @@ export default function Devis() {
                        jamais le coût d'achat. */
                     const achatReelLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                     const venteReelleLigne = prixNetHT * l.quantite;
-                    const tauxMarque = prod && achatReelLigne > 0 && venteReelleLigne > 0 ? ((venteReelleLigne - achatReelLigne) / venteReelleLigne) * 100 : null;
+                    /* Quantité absente : marge et coeff se lisent sur une unité (indépendants de la quantité). */
+                    const sansQte = !!prod && !l.quantite;
+                    const achatRef = sansQte ? getPrixPourQuantite(prod, 1).prixAchat : achatReelLigne;
+                    const venteRef = sansQte ? prixNetHT : venteReelleLigne;
+                    const tauxMarque = prod && achatRef > 0 && venteRef > 0 ? ((venteRef - achatRef) / venteRef) * 100 : null;
                     // Coeff revendeur du produit (depuis la fiche), indépendant du prix public saisi dans le devis
-                    const coeff = prod && achatReelLigne > 0 && venteReelleLigne > 0 ? venteReelleLigne / achatReelLigne : null;
+                    const coeff = prod && achatRef > 0 && venteRef > 0 ? venteRef / achatRef : null;
                     const prixKg = prod?.poids && prod.poids > 0 ? prixNetHT / prod.poids : null;
                     const surfaceVal = l.surfaceM2 || surfaceGlobaleM2;
                     const couvertureLigne = couvertureM2(prod);
@@ -3300,7 +3304,14 @@ export default function Devis() {
                             {(() => {
                               const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                               const margeLigne = t.totalHT - achatLigne;
-                              const coeffLigne = achatLigne > 0 ? t.totalHT / achatLigne : null;
+                              /* Quantité vide ou nulle (ligne chiffrée à la surface, surface pas encore saisie) :
+                                 le coefficient se lit alors sur UNE unité — il ne dépend pas de la quantité. */
+                              const coeffLigne = achatLigne > 0
+                                ? t.totalHT / achatLigne
+                                : !l.quantite && prod ? (() => {
+                                  const achat1 = getPrixPourQuantite(prod, 1).prixAchat;
+                                  return achat1 > 0 && prixNetHT > 0 ? prixNetHT / achat1 : null;
+                                })() : null;
                               // Marge sous 30 % (coefficient 1,43) : le prix de vente passe en rouge — réservé à qui voit les coûts.
                               const margeBasse = canAchat && coeffLigne != null && coeffLigne < 1.43;
                               const classePrixVente = `h-8 text-sm${margeBasse ? ' text-destructive font-semibold border-destructive/60' : ''}`;
@@ -3308,7 +3319,7 @@ export default function Devis() {
                                  dans la liste de l'article (l'usage suit, en info-bulle). */
                               const appliquerConso = (conso: number | undefined, usage?: string) => {
                                 const surface = l.surfaceM2 || surfaceGlobaleM2;
-                                const quantite = prod && consoPourSurface(prod, conso) != null ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
+                                const quantite = prod && surface > 0 && consoPourSurface(prod, conso) != null ? calcQuantiteSurface(prod, surface, conso, l.unite) : l.quantite;
                                 const client = clients.find(c => c.id === clientId);
                                 const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                 setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, consoUsage: usage || undefined, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
@@ -3333,7 +3344,7 @@ export default function Devis() {
                                 description: <Input data-voice="ligne-desc" data-ligne-id={l.id} value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                   const surface = parseFloat(e.target.value) || 0;
-                                  const quantite = prod && consoPourSurface(prod, l.consommation) != null ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
+                                  const quantite = prod && surface > 0 && consoPourSurface(prod, l.consommation) != null ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;
                                   const client = clients.find(c => c.id === clientId);
                                   const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                   setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, surfaceM2: surface, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
