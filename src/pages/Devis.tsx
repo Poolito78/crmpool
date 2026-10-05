@@ -381,6 +381,8 @@ export default function Devis() {
   /* Numéro du dernier changement de niveau demandé — voir `appliquerNiveauTarif`. */
   const appelNiveauRef = useRef(0);
   const [systeme, setSysteme] = useState('');
+  /** Teinte en cours de modification dans l'info-ligne : `${ligneId}:${clé de variante}`. */
+  const [teinteEdit, setTeinteEdit] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
   const [conditions, setConditions] = useState('Paiement à 45 jours fin de mois à compter de la date de facturation.');
   const [moContent, setMoContent] = useState('');
@@ -3255,9 +3257,21 @@ export default function Devis() {
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
                     const hasAutoCalc = !!(surfaceVal > 0 && consoPourSurface(prod, l.consommation) != null);
                     // Teinte choisie en toutes lettres (« RAL 7042 Gris signalisation A »), lue sur la ligne elle-même
-                    const teintesLigne = Object.values(l.variantesChoisies || {})
-                      .map(v => ({ texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
-                      .filter((t): t is { texte: string; hex: string | undefined } => !!t.texte);
+                    const teintesLigne = Object.entries(l.variantesChoisies || {})
+                      .map(([cle, v]) => ({ cle, texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
+                      .filter((t): t is { cle: string; texte: string; hex: string | undefined } => !!t.texte);
+                    /* Change la teinte d'une ligne en tapant un RAL (« 7042 » ou « RAL 7042 »). L'option du même RAL
+                       de l'article est préférée (elle porte son éventuel écart de prix) ; sinon le libellé « RAL nnnn ». */
+                    const changerTeinte = (cle: string, saisie: string) => {
+                      const num = saisie.match(/\d{4}/)?.[0];
+                      if (!num) { toast.error('Saisissez un RAL à 4 chiffres (ex. 7042).'); return; }
+                      if (!libelleTeinte(`RAL ${num}`)) { toast.error(`RAL ${num} : teinte inconnue.`); return; }
+                      const option = prod?.variantes?.flatMap(d => d.options).find(o => new RegExp(`RAL\\s*${num}\\b`, 'i').test(o.label));
+                      const valeur = option?.label ?? `RAL ${num}`;
+                      setLignes(prev => prev.map(li => li.id === l.id
+                        ? { ...li, variantesChoisies: { ...(li.variantesChoisies || {}), [cle]: valeur } } : li));
+                      setTeinteEdit(null);
+                    };
 
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
                     const variantEls = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
@@ -3504,11 +3518,19 @@ export default function Devis() {
                             {/* Infos marges, stock Odoo, teinte */}
                             {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
-                                {teintesLigne.map((t, k) => (
-                                  <span key={`teinte-${k}`} className="inline-flex items-center gap-1 font-medium text-foreground">
+                                {teintesLigne.map((t, k) => teinteEdit === `${l.id}:${t.cle}` ? (
+                                  <input key={`teinte-${k}`} autoFocus type="text" inputMode="numeric" placeholder="RAL (ex. 7042)"
+                                    className="h-6 w-32 rounded border border-input bg-background px-1.5 text-xs text-foreground"
+                                    onKeyDown={e => { if (e.key === 'Enter') changerTeinte(t.cle, e.currentTarget.value); else if (e.key === 'Escape') setTeinteEdit(null); }}
+                                    onBlur={e => { if (e.currentTarget.value.trim()) changerTeinte(t.cle, e.currentTarget.value); else setTeinteEdit(null); }} />
+                                ) : (
+                                  <button key={`teinte-${k}`} type="button" onClick={() => setTeinteEdit(`${l.id}:${t.cle}`)}
+                                    title="Cliquer pour changer le RAL"
+                                    className="inline-flex items-center gap-1 font-medium text-foreground hover:underline cursor-pointer">
                                     {t.hex && <span className="inline-block w-3 h-3 rounded-sm border border-black/20" style={{ backgroundColor: t.hex }} />}
                                     {t.texte}
-                                  </span>
+                                    <Pencil className="w-3 h-3 opacity-50" />
+                                  </button>
                                 ))}
                                 {/* Stock Odoo : jamais deviné. Sans lecture, on le dit. */}
                                 {prod && (prod.stockOdoo == null ? (
