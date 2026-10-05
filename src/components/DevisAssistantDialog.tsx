@@ -24,6 +24,7 @@ import VoiceButton from '@/components/ui/VoiceButton';
 import { supabase } from '@/integrations/supabase/client';
 import type { Produit, LigneDevis } from '@/lib/store';
 import { generateId } from '@/lib/store';
+import { blocsAssistant, segmentsGras } from '@/lib/texteAssistant';
 
 // Tableau de référence : pourcentage (en poids) de catalyst C2 et grammes pour 10 kg de résine,
 // selon la température. Injecté dans le contexte IA pour le calcul du catalyst nécessaire au devis.
@@ -130,6 +131,24 @@ function parseSuggestedLignes(text: string): { clean: string; lignes: SuggestedL
   } catch {
     return { clean, lignes: null };
   }
+}
+
+/** Réponse de l'IA mise en forme : titres, puces, gras ; le LaTeX est rendu en texte. */
+function TexteAssistant({ texte }: { texte: string }) {
+  const gras = (t: string) => segmentsGras(t).map((s, i) => s.gras ? <strong key={i}>{s.texte}</strong> : <span key={i}>{s.texte}</span>);
+  return (
+    <div className="space-y-1">
+      {blocsAssistant(texte).map((b, i) => {
+        switch (b.type) {
+          case 'vide': return <div key={i} className="h-1" />;
+          case 'separateur': return <hr key={i} className="border-border/60 my-1" />;
+          case 'titre': return <div key={i} className="font-semibold pt-1">{gras(b.texte)}</div>;
+          case 'puce': return <div key={i} className="flex gap-1.5 pl-2"><span aria-hidden>•</span><span className="min-w-0">{gras(b.texte)}</span></div>;
+          default: return <div key={i}>{gras(b.texte)}</div>;
+        }
+      })}
+    </div>
+  );
 }
 
 export default function DevisAssistantDialog({ open, onOpenChange, devisContext, produits = [], onInsertLignes }: Props) {
@@ -353,12 +372,12 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
             <div key={i} className={`flex gap-2 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {m.role === 'assistant' && <Bot className="w-5 h-5 text-primary shrink-0 mt-0.5" />}
               <div className="flex flex-col gap-1.5 max-w-[85%]">
-                <div className={`rounded-lg px-3 py-2 text-sm whitespace-pre-wrap break-words ${
+                <div className={`rounded-lg px-3 py-2 text-sm break-words ${m.role === 'user' ? 'whitespace-pre-wrap ' : ''}${
                   m.role === 'user'
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-foreground'
                 }`}>
-                  {m.content}
+                  {m.role === 'assistant' ? <TexteAssistant texte={m.content} /> : m.content}
                 </div>
                 {m.origine && (
                   <span className="text-[10px] text-muted-foreground/60 px-1">{m.origine}</span>

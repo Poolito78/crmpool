@@ -88,7 +88,7 @@ Le catalogue contient un champ "cat" qui est la catégorie exacte du produit (ex
 - Si un produit n'a pas de catégorie correspondante, ne pas l'inclure dans les calculs de cette catégorie
 - Pour les calculs financiers (totaux, pourcentages), n'utiliser que les lignes du devis dont le produit appartient à la catégorie demandée
 
-Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes).`;
+Réponds en français, de façon concise et directement utile. Tu peux utiliser du markdown léger (gras, listes). N'écris JAMAIS de LaTeX ni de formule entre $ : l'écran n'affiche que du texte. Écris les calculs en clair (« 0,5 kg/m² × 3 % = 0,015 kg/m² »).`;
 
 type Message = { role: string; content: string };
 type Essai = { modele: string; status: number; message: string; ms: number };
