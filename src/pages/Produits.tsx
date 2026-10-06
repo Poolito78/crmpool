@@ -11,6 +11,7 @@ import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
 } from '@/lib/categorieDocuments';
+import { niveauGamme } from '@/lib/remiseGammes';
 import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
@@ -80,6 +81,11 @@ const ChampRecherche = memo(function ChampRecherche(
 
 /** Date et heure d'une mise à jour de tarif. Le jour seul ne suffit pas :
  *  un prix corrigé deux fois dans la journée mérite qu'on les distingue. */
+/** Le prix au kg n'a de sens que pour les produits de marquage ISOMARK et ISOFLOOR (pas les panneaux ISOSIGN ni le plastique STI), et s'ils ont un poids. */
+function prixAuKgPermis(p: Produit): p is Produit & { poids: number } {
+  return !!p.poids && p.poids > 0 && niveauGamme(p.categorie, p.catalogue) !== null;
+}
+
 function dateHeure(iso?: string): string {
   if (!iso) return '';
   const d = new Date(iso);
@@ -1628,9 +1634,9 @@ export default function Produits() {
                     case 'description':  return <td className="px-2 py-2.5 font-medium max-w-[260px] truncate" title={`${p.reference} — ${designationProduit(p)}`}>{designationProduit(p)}</td>;
                     case 'categorie':    return <td className="px-2 py-2.5 text-muted-foreground max-w-[110px] truncate" title={p.categorie || ''}>{p.categorie || '—'}</td>;
                     case 'fournisseur':  return <td className="px-2 py-2.5 text-muted-foreground max-w-[130px] truncate" title={prioFournObj?.societe || prioFournObj?.nom || ''}>{prioFournObj?.societe || prioFournObj?.nom || '—'}{pfs.length > 1 && <span className="ml-1 text-xs text-muted-foreground/60">+{pfs.length - 1}</span>}</td>;
-                    case 'prixAchat':    return <td className="px-2 py-2.5 text-right">{formatMontant(p.prixAchat)}{canAchat && p.poids && p.poids > 0 && p.prixAchat > 0 ? <span className="block text-xs text-muted-foreground font-normal" title="Prix d'achat au kg">{formatMontant(p.prixAchat / p.poids)}/kg</span> : null}</td>;
+                    case 'prixAchat':    return <td className="px-2 py-2.5 text-right">{formatMontant(p.prixAchat)}{canAchat && prixAuKgPermis(p) && p.prixAchat > 0 ? <span className="block text-xs text-muted-foreground font-normal" title="Prix d'achat au kg">{formatMontant(p.prixAchat / p.poids)}/kg</span> : null}</td>;
                     case 'coefficient':  return <td className="px-2 py-2.5 text-right font-mono">{p.coefficient.toFixed(2)}</td>;
-                    case 'prixRevendeur':return <td className="px-2 py-2.5 text-right font-semibold">{formatMontant(p.prixRevendeur)}{p.poids && p.poids > 0 && p.prixRevendeur > 0 ? <span className="block text-xs text-muted-foreground font-normal" title="Prix revendeur au kg">{formatMontant(p.prixRevendeur / p.poids)}/kg</span> : null}{canAchat && <span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span>}</td>;
+                    case 'prixRevendeur':return <td className="px-2 py-2.5 text-right font-semibold">{formatMontant(p.prixRevendeur)}{prixAuKgPermis(p) && p.prixRevendeur > 0 ? <span className="block text-xs text-muted-foreground font-normal" title="Prix revendeur au kg">{formatMontant(p.prixRevendeur / p.poids)}/kg</span> : null}{canAchat && <span className="block text-xs text-muted-foreground">{formatMontant(calcMargeBrute(p.prixRevendeur, p.prixAchat))} ({calcTauxMarque(p.prixRevendeur, p.prixAchat).toFixed(0)}%)</span>}</td>;
                     case 'prixHT':       return <td className="px-2 py-2.5 text-right text-muted-foreground">{formatMontant(p.prixHT)}{canAchat && <span className="block text-xs">{formatMontant(calcMargeBrute(p.prixHT, p.prixAchat))} ({calcTauxMarque(p.prixHT, p.prixAchat).toFixed(0)}%)</span>}</td>;
                     case 'poids':        return <td className="px-2 py-2.5 text-right">{p.poids ? `${p.poids} kg` : '—'}</td>;
                     case 'consommation': return <td className="px-2 py-2.5 text-right">{p.consommation ? `${p.consommation}` : '—'}</td>;
