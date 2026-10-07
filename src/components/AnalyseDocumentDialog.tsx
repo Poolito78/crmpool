@@ -258,6 +258,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      partira au devis comme ligne libre : référence et désignation dans le
      libellé, prix du bordereau client. */
   const [choixOdoo, setChoixOdoo] = useState<Record<number, TrouvailleOdoo>>({});
+  /** Articles Odoo retenus EN PLUS du choix principal d'une demande (« panneaux K8 + kit flash ») :
+      chacun part au devis en ligne propre, à la quantité de la demande. */
+  const [choixOdooPlus, setChoixOdooPlus] = useState<Record<number, TrouvailleOdoo[]>>({});
   /* Lignes dont l'utilisateur a RETIRÉ la proposition Odoo retenue d'office.
      Sans cette mémoire, l'effet de sélection automatique la remettrait au
      rechargement suivant et le retrait paraîtrait « revenir en arrière ». */
@@ -1318,7 +1321,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setRegroupementPlan(regroupement);
     setClassePlan(classe);
     setMatsNeufsPlan(matsNeufs);
-    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
+    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
     setResult(prev => prev ? { ...prev, lignes: documentDuPlan(planKadri.ensembles, lignes).lignes } : prev);
@@ -1340,7 +1343,7 @@ const [contratOdoo, setContratOdoo] = useState<
        client et le contact du document précédent resteraient en place. */
     setCreerDevisClientId(''); setCreerCCClientId('');
     setContactsOdoo([]); setContactRetenu('');
-    setChoixProduit({}); setChoixOdoo({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
+    setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set()); setDcClientId(''); setDcExclues({}); setDcPrix({});
     odooDOfficeRef.current = new Set();
     setQuantiteManuelle({}); setPrixManuel({});
     setVarianteSysteme({}); setSurfaceSysteme({}); setOptionsSysteme({}); setVarianteDocument('');
@@ -4014,7 +4017,19 @@ const [contratOdoo, setContratOdoo] = useState<
           tva: l.tva ?? 20,
           remise: 0,
           note: noteDuPlan(i),
-        }, ...lignesOptionsEnsemble(i, l)];
+        }, ...lignesOptionsEnsemble(i, l),
+        /* Articles Odoo retenus en plus : une ligne chacun, même quantité, prix du bordereau. */
+        ...(choixOdooPlus[i] || []).filter(t => t.reference !== odoo.reference).map(t => ({
+          id: generateId(),
+          produitId: enregistrerArticleOdoo(t) || undefined,
+          referenceOdoo: t.reference,
+          description: t.designation || t.reference,
+          quantite: quantiteDe(cle, l.quantite),
+          unite: t.unite || 'u',
+          prixUnitaireHT: t.contrat ?? 0,
+          tva: l.tva ?? 20,
+          remise: 0,
+        }))];
       }
       const p = produitDeLigne(i);
       /* AUCUN ARTICLE RETENU, MAIS UN PANNEAU DE POLICE CHIFFRÉ À LA GRILLE.
@@ -6384,9 +6399,25 @@ const [contratOdoo, setContratOdoo] = useState<
                                         </p>
                                         {props.slice(0, 5).map(t => {
                                           const actif = choixOdoo[i]?.reference === t.reference;
+                                          const aussi = (choixOdooPlus[i] || []).some(x => x.reference === t.reference);
                                           return (
+                                            <div key={t.reference} className="flex items-baseline gap-1">
+                                            {/* « + » : retient cet article EN PLUS du choix principal (kit flash avec ses panneaux). */}
                                             <button
-                                              key={t.reference}
+                                              type="button"
+                                              disabled={actif || !choixOdoo[i]}
+                                              onClick={() => setChoixOdooPlus(prev => {
+                                                const liste = prev[i] || [];
+                                                const suite = aussi ? liste.filter(x => x.reference !== t.reference) : [...liste, t];
+                                                const n = { ...prev };
+                                                if (suite.length) n[i] = suite; else delete n[i];
+                                                return n;
+                                              })}
+                                              className={`shrink-0 w-5 h-5 rounded border text-[11px] leading-none ${
+                                                aussi ? 'bg-primary text-primary-foreground border-primary' : 'border-input text-muted-foreground hover:bg-primary/10'} disabled:opacity-30 disabled:cursor-not-allowed`}
+                                              title={actif ? 'Article déjà retenu' : !choixOdoo[i] ? 'Retenez d’abord un article principal' : aussi ? 'Retirer des articles ajoutés' : 'Ajouter aussi cet article au devis (même quantité)'}
+                                            >{aussi ? '✓' : '+'}</button>
+                                            <button
                                               type="button"
                                               onClick={() => {
                                                 const retire = choixOdoo[i]?.reference === t.reference;
@@ -6438,6 +6469,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                                   : <span className="text-warning">hors barème</span>}
                                               </span>
                                             </button>
+                                            </div>
                                           );
                                         })}
                                         {(() => {
