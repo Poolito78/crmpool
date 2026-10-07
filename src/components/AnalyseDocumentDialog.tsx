@@ -1,3 +1,4 @@
+import { prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -1248,9 +1249,8 @@ const [contratOdoo, setContratOdoo] = useState<
       : dedoublonne([...enLice(parPersonne), ...rapprochementTexte.candidats]).slice(0, 5));
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
-      const nextNum = String(devis.length + 1).padStart(3, '0');
       setCreerDevisClientId(prev => garder(prev, foundClient?.id));
-      setCreerDevisNumero(result.numeroDocument || `DEV-${year}-${nextNum}`);
+      setCreerDevisNumero(result.numeroDocument || prochainNumeroDevis(devis, Number(year)));
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
       setCreerDevisRefAffaire(result.referencePartenaire || '');

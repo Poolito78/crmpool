@@ -1,3 +1,4 @@
+import { prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
@@ -977,7 +978,7 @@ export default function Devis() {
   }
 
   async function duplicate(d: DevisType) {
-    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const numero = prochainNumeroDevis(devis);
     const newId = generateId();
     const newDevis: DevisType = {
       ...d,
@@ -995,7 +996,7 @@ export default function Devis() {
 
   // Duplique un modèle « système » puis le remplit avec les infos dictées (client, chantier, surface…)
   async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: { client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[] }) {
-    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const numero = prochainNumeroDevis(devis);
     const newId = generateId();
     const surf = opts.surf;
     // Lignes du modèle (nouveaux ids) + lignes dictées, quantités/prix recalculés selon la surface
@@ -1624,7 +1625,7 @@ export default function Devis() {
         logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
-      const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+      const numero = prochainNumeroDevis(devis);
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,

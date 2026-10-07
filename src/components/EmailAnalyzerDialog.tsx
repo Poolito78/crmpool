@@ -1,3 +1,4 @@
+import { prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -395,7 +396,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       return;
     }
 
-    const numero = `DEV-${new Date().getFullYear()}-${String(devis.length + 1).padStart(3, '0')}`;
+    const numero = prochainNumeroDevis(devis);
     const newDevis: DevisType = {
       id: generateId(),
       numero,
