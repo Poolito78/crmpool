@@ -1,3 +1,4 @@
+import { prochainNumero } from '@/lib/numeroDevis';
 import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -91,9 +92,7 @@ export default function FacturesClient() {
 
   function nextNumero(proforma: boolean) {
     const year = new Date().getFullYear();
-    const prefix = proforma ? `PRO-${year}` : `FAC-${year}`;
-    const n = facturesClient.filter(f => f.numero.startsWith(prefix)).length + 1;
-    return `${prefix}-${String(n).padStart(3, '0')}`;
+    return prochainNumero(facturesClient, proforma ? `PRO-${year}` : `FAC-${year}`);
   }
 
   function resetForm(proforma = false) {
@@ -189,8 +188,7 @@ export default function FacturesClient() {
   function confirmConvert() {
     if (!convertTarget) return;
     const year = new Date().getFullYear();
-    const n = facturesClient.filter(f => f.numero.startsWith(`FAC-${year}`) && !f.estProforma).length + 1;
-    const newNumero = `FAC-${year}-${String(n).padStart(3, '0')}`;
+    const newNumero = prochainNumero(facturesClient.filter(f => !f.estProforma), `FAC-${year}`);
     updateFacturesClient(prev => prev.map(f => f.id === convertTarget.id
       ? { ...f, estProforma: false, numero: newNumero, statut: 'brouillon' as StatutFactureClient }
       : f));

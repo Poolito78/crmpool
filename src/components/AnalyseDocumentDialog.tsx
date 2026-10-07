@@ -1,4 +1,4 @@
-import { prochainNumeroDevis } from '@/lib/numeroDevis';
+import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -213,7 +213,7 @@ interface PartenaireOdoo {
 
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
-    commandesFournisseur, fournisseurs, produits, produitsCharges, clients, devis,
+    commandesFournisseur, commandesClient, fournisseurs, produits, produitsCharges, clients, devis,
     produitFournisseurs,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
     updateProduits, updateProduitFournisseurs, creerProduits,
@@ -946,7 +946,6 @@ const [contratOdoo, setContratOdoo] = useState<
   useEffect(() => {
     if (!result || matchedCF || !isFournisseurDoc(result.typeDocument)) return;
     const year = new Date().getFullYear();
-    const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
     // Même précaution que côté client : une raison sociale vide ne doit pas
     // se retrouver rapprochée de n'importe quel document.
     const assezLongF = (v?: string) => !!v && v.trim().length >= 4;
@@ -956,7 +955,7 @@ const [contratOdoo, setContratOdoo] = useState<
           (assezLongF(f.societe) && result.nomPartenaire!.toLowerCase().includes(f.societe!.toLowerCase())))
       : undefined;
     setCreerCFFournisseurId(foundFourn?.id ?? '');
-    setCreerCFNumero(result.numeroDocument || `CF-${year}-${nextNum}`);
+    setCreerCFNumero(result.numeroDocument || prochainNumero(commandesFournisseur, `CF-${year}`));
     setCreerCFDateReception(result.dateDocument || today());
     setCreerCFDateLivraison(result.dateLivraisonPrevue || '');
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
@@ -1260,9 +1259,8 @@ const [contratOdoo, setContratOdoo] = useState<
       setCreerDevisChantier(chantierDansTexte(texte) || '');
       setCreerDevisNotes(result.notes || '');
     } else {
-      const nextNum = String(commandesFournisseur.length + 1).padStart(3, '0');
       setCreerCCClientId(prev => garder(prev, foundClient?.id));
-      setCreerCCNumero(result.numeroDocument || `CC-${year}-${nextNum}`);
+      setCreerCCNumero(result.numeroDocument || prochainNumero(commandesClient, `CC-${year}`));
       setCreerCCDate(result.dateDocument || today());
       setCreerCCDateLivraison(result.dateLivraisonPrevue || '');
       setCreerCCNotes(result.notes || result.referencePartenaire || '');

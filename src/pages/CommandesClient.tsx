@@ -1,3 +1,4 @@
+import { prochainNumero } from '@/lib/numeroDevis';
 import { useState, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -110,7 +111,7 @@ export default function CommandesClient() {
   function resetForm() {
     setClientId('');
     setDevisId('');
-    setNumero(`CMD-${String(commandesClient.length + 1).padStart(4, '0')}`);
+    setNumero(prochainNumero(commandesClient, `CMD-${new Date().getFullYear()}`, 4));
     setDateCreation(new Date().toISOString().split('T')[0]);
     setStatut('a_traiter');
     setReferenceAffaire('');
@@ -281,7 +282,6 @@ export default function CommandesClient() {
     // Créer une FactureClient liée
     const year = new Date().getFullYear();
     const today = new Date().toISOString().split('T')[0];
-    const nFac = facturesClient.filter(f => f.numero.startsWith(`FAC-${year}`)).length + 1;
     const lignesFacturees = factureCommande.lignes.filter(l => factureLignesSelectees.includes(l.id));
     const total = calculerTotalDevis(lignesFacturees, factureCommande.fraisPortHT, 20);
 
@@ -293,7 +293,7 @@ export default function CommandesClient() {
 
     const newFacture: FactureClient = {
       id: generateId(),
-      numero: `FAC-${year}-${String(nFac).padStart(3, '0')}`,
+      numero: prochainNumero(facturesClient.filter(f => !f.estProforma), `FAC-${year}`),
       clientId: factureCommande.clientId,
       commandeClientId: factureCommande.id,
       devisId: factureCommande.devisId,

@@ -1,4 +1,4 @@
-import { prochainNumeroDevis } from '@/lib/numeroDevis';
+import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
@@ -922,8 +922,7 @@ export default function Devis() {
   function createProforma(d: DevisType) {
     const year = new Date().getFullYear();
     const prefix = `PRO-${year}`;
-    const n = facturesClient.filter(f => f.numero.startsWith(prefix)).length + 1;
-    const numero = `${prefix}-${String(n).padStart(3, '0')}`;
+    const numero = prochainNumero(facturesClient, prefix);
     const client = clients.find(c => c.id === d.clientId);
     const total = calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20);
     const proforma: FactureClient = {
@@ -1928,7 +1927,7 @@ export default function Devis() {
       const dejaExistante = commandesClient.some(c => c.devisId === id);
       if (!dejaExistante) {
         const total = calculerTotalDevis(devisData.lignes, devisData.fraisPortHT, devisData.fraisPortTVA);
-        const newNumero = `CMD-${new Date().getFullYear()}-${String(commandesClient.length + 1).padStart(4, '0')}`;
+        const newNumero = prochainNumero(commandesClient, `CMD-${new Date().getFullYear()}`, 4);
         const newCmd: CommandeClient = {
           id: generateId(),
           clientId: devisData.clientId,

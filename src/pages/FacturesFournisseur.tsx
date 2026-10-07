@@ -1,3 +1,4 @@
+import { prochainNumero } from '@/lib/numeroDevis';
 import { useState, useEffect, useMemo, Fragment } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -87,8 +88,7 @@ export default function FacturesFournisseur() {
 
   function nextNumero() {
     const year = new Date().getFullYear();
-    const n = facturesFournisseur.filter(f => f.numero.startsWith(`FACF-${year}`)).length + 1;
-    return `FACF-${year}-${String(n).padStart(3, '0')}`;
+    return prochainNumero(facturesFournisseur, `FACF-${year}`);
   }
 
   function resetForm() {
