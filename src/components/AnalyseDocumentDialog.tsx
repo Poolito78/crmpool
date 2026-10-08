@@ -4131,7 +4131,7 @@ const [contratOdoo, setContratOdoo] = useState<
           description: t.designation || t.reference,
           quantite: quantiteDe(cle, l.quantite),
           unite: t.unite || 'u',
-          prixUnitaireHT: t.contrat ?? 0,
+          prixUnitaireHT: prixOdoo(t).retenu,
           tva: l.tva ?? 20,
           remise: 0,
         }))];
