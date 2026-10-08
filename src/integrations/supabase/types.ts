@@ -1318,6 +1318,7 @@ export type Database = {
           id: string
           nom: string
           notes: string | null
+          paliers_port_poids: Json | null
           societe: string
           telephone: string
           telephone_mobile: string | null
@@ -1338,6 +1339,7 @@ export type Database = {
           id?: string
           nom: string
           notes?: string | null
+          paliers_port_poids?: Json | null
           societe?: string
           telephone?: string
           telephone_mobile?: string | null
@@ -1358,6 +1360,7 @@ export type Database = {
           id?: string
           nom?: string
           notes?: string | null
+          paliers_port_poids?: Json | null
           societe?: string
           telephone?: string
           telephone_mobile?: string | null
