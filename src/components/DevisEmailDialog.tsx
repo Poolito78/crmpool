@@ -347,12 +347,21 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     // Toujours mettre à jour la date d'envoi à aujourd'hui à chaque ouverture (renvoi inclus)
     setDateEnvoi(new Date().toISOString().split('T')[0]);
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
-    setTo(client?.email || '');
+    /* LE DESTINATAIRE EST LE CONTACT DU DEVIS, pas le contact principal de la
+       fiche : changer le contact sur le devis doit changer l'adresse ET le
+       prénom du « Bonjour ». Sans adresse propre, on retombe sur la fiche. */
+    const contactDevis = devis.contactId
+      ? (client?.contacts || []).find(ct => ct.id === devis.contactId)
+      : undefined;
+    const nomDestinataire = contactDevis
+      ? [contactDevis.prenom, contactDevis.nom].filter(Boolean).join(' ') || client?.nom
+      : client?.nom;
+    setTo(contactDevis?.email?.trim() || client?.email || '');
     setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}${devis.chantier?.trim() ? ` — ${devis.chantier.trim()}` : ''}`);
 
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(
-`Bonjour${client?.nom ? ` ${client.nom}` : ''},
+`Bonjour${nomDestinataire ? ` ${nomDestinataire}` : ''},
 
 Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.${devis.chantier?.trim() ? `\nChantier : ${devis.chantier.trim()}` : ''}
 Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
