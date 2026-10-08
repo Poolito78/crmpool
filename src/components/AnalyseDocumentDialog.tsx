@@ -1774,6 +1774,22 @@ const [contratOdoo, setContratOdoo] = useState<
         }
         return f.coutTransport === portRetenu ? f : { ...f, coutTransport: portRetenu };
       }));
+      /* Les liens article-fournisseur de cette commande portent un port par
+         montant (« ≥ 0 € → 0 » veut dire franco) : tant que leur premier
+         palier est à 0 €, le port annoncé sur l'article est « Gratuit ». On y
+         inscrit le port lu, jusqu'au franco de la fiche s'il y en a un. Un
+         palier déjà renseigné n'est jamais écrasé. */
+      const ids = new Set(cibles.map(c => c.produitId));
+      updateProduitFournisseurs(prev => prev.map(pf => {
+        if (pf.fournisseurId !== creerCFFournisseurId || !ids.has(pf.produitId)) return pf;
+        const paliers = pf.paliersPort ?? [];
+        const premier = paliers.find(x => x.montantMin === 0);
+        if (premier && premier.coutTransport > 0) return pf;
+        const franco = fourn.francoPort > 0 ? [{ montantMin: fourn.francoPort, coutTransport: 0 }] : [];
+        const autres = paliers.filter(x => x.montantMin > 0 && x.montantMin !== fourn.francoPort);
+        return { ...pf, paliersPort: [{ montantMin: 0, coutTransport: portRetenu }, ...autres, ...franco]
+          .sort((a, b) => a.montantMin - b.montantMin) };
+      }));
     }
     toast.success(`Commande ${creerCFNumero} créée et réceptionnée`);
     onOpenChange(false);
