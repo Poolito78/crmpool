@@ -14,6 +14,7 @@ import {
 import { niveauGamme } from '@/lib/remiseGammes';
 import { designationProduit, generateId, formatMontant, formatDate, calculerTotalLigne, calculerFournisseurPrioritaire, getPrixPourQuantite, useEntrepots, type Produit, type ComposantProduit, type LigneKit, type PrixPalier, type ConsoUsage, type VarianteDimension, type VarianteOption, type AchatDate, type FicheTechnique } from '@/lib/store';
 import { supabase } from '@/integrations/supabase/client';
+import { inscrireDansLaListeNoire, retirerDeLaListeNoire } from '@/lib/produitsSupprimes';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
 import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
@@ -932,7 +933,19 @@ export default function Produits() {
     setDeleteConfirmOpen(true);
   }
 
+  /* La liste noire : lue AVANT l'effacement, la page peut venir du serveur et
+     l'article n'être pas en mémoire. Une lecture Odoo ne le recréera plus. */
+  async function noterSupprimes(ids: string[]) {
+    if (!ids.length) return;
+    const { data } = await supabase.from('produits')
+      .select('reference, reference_odoo, description').in('id', ids);
+    await inscrireDansLaListeNoire((data || []).map((r: any) => ({
+      reference: r.reference, referenceOdoo: r.reference_odoo, description: r.description,
+    })));
+  }
+
   function executeDelete() {
+    void noterSupprimes(deleteTarget ? [deleteTarget] : [...selected]);
     if (deleteTarget) {
       // Supprimer un seul produit
       updateProduits(prev => prev.filter(p => p.id !== deleteTarget));
@@ -1046,6 +1059,8 @@ export default function Produits() {
 
   function save(andReturnToDevis = false) {
     if (!form.description.trim() || !form.reference.trim()) { toast.error('Référence et description requis'); return; }
+    /* Recréer à la main un article supprimé le sort de la liste noire. */
+    if (!editing) void retirerDeLaListeNoire(form);
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
     // Recalcule les composants en % avant sauvegarde
     const composantsRecalc = composantsValides.map(c => {

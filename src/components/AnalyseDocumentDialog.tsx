@@ -86,6 +86,7 @@ import {
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { chargerListeNoire } from '@/lib/produitsSupprimes';
 import { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 /**
@@ -3275,12 +3276,19 @@ const [contratOdoo, setContratOdoo] = useState<
         })();
         if (caduque()) return;
         cleOdooRef.current = cle;
-        setTrouvaillesOdoo((data?.trouvailles || {}) as Record<string, TrouvailleOdoo[]>);
+        /* Les articles supprimés du catalogue ne reviennent pas par Odoo. */
+        const noire = await chargerListeNoire();
+        const brutes = (data?.trouvailles || {}) as Record<string, TrouvailleOdoo[]>;
+        const trouvailles: Record<string, TrouvailleOdoo[]> = {};
+        for (const [k, v] of Object.entries(brutes)) {
+          trouvailles[k] = (v || []).filter(t => !noire.has(String(t.reference || '').trim().toUpperCase()));
+        }
+        setTrouvaillesOdoo(trouvailles);
         /* Les fiches lues par référence exacte, gardées entières : le panneau
            Odoo doit pouvoir les proposer comme n'importe quelle trouvaille. */
         const fiches: Record<string, TrouvailleOdoo> = {};
         for (const [ref, v] of Object.entries((data?.prix || {}) as Record<string, any>)) {
-          if (!v) continue;
+          if (!v || noire.has(ref.trim().toUpperCase())) continue;
           fiches[ref] = {
             reference: ref,
             designation: v.designation || ref,
