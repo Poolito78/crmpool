@@ -402,6 +402,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [creerCFDateLivraison, setCreerCFDateLivraison] = useState('');
   const [creerCFNotes, setCreerCFNotes] = useState('');
   const [creerCFMemoPort, setCreerCFMemoPort] = useState(true);
+  const [creerCFMajPrix, setCreerCFMajPrix] = useState(true);
 
   /* ── état commande client ── */
   const [showCreerCC, setShowCreerCC] = useState(false);
@@ -1716,7 +1717,7 @@ const [contratOdoo, setContratOdoo] = useState<
       if (p && l.prixUnitaireHT != null) {
         cibles.push({
           produitId: p.id, prix: l.prixUnitaireHT, reference: (l.reference || '').trim(),
-          versLien: true, versArticle: false,
+          versLien: true, versArticle: creerCFMajPrix,
           designation: l.description, quantite: l.quantite, unite: l.unite,
         });
       }
@@ -1735,12 +1736,22 @@ const [contratOdoo, setContratOdoo] = useState<
 
     /* Mémoire : la référence du fournisseur et son prix se rattachent à
        l'article choisi (fiche fournisseur) — la prochaine commande le
-       retrouvera sans rapprochement. La fiche article n'est pas touchée. */
+       retrouvera sans rapprochement. */
     if (cibles.length) {
+      const horodate = new Date().toISOString();
       updateProduitFournisseurs(prev => appliquerPrix({
         cibles, fournisseurId: creerCFFournisseurId, liens: prev,
-        produits: [], horodate: new Date().toISOString(), nouvelId: generateId,
+        produits: [], horodate, nouvelId: generateId,
       }).liens);
+      /* La fiche article : le prix réellement payé, converti au conditionnement
+         de la fiche (un prix au kg n'est pas celui du fût). Datée pour que la
+         synchronisation Odoo ne la défasse pas. */
+      if (creerCFMajPrix) {
+        updateProduits(prev => appliquerPrix({
+          cibles, fournisseurId: creerCFFournisseurId, liens: [],
+          produits: prev, horodate, nouvelId: generateId,
+        }).produits);
+      }
     }
     /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
        franco n'est jamais deviné : il reste celui de la fiche. */
@@ -4920,6 +4931,11 @@ const [contratOdoo, setContratOdoo] = useState<
                             );
                           })}
                         </div>
+
+                        <label className="flex items-center gap-2 text-[11px]">
+                          <Checkbox checked={creerCFMajPrix} onCheckedChange={v => setCreerCFMajPrix(!!v)} />
+                          Mettre à jour le prix d'achat de la fiche article avec le prix du document
+                        </label>
 
                         {/* Port : lu sur le document, comparé à la fiche fournisseur */}
                         {lignesPortCF.length > 0 && (() => {
