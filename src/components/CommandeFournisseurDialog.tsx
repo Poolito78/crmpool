@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ShoppingCart, Printer, AlertTriangle, Save, ExternalLink, Warehouse, PackageCheck, RotateCcw } from 'lucide-react';
-import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId } from '@/lib/store';
+import { type Devis, type Produit, type Fournisseur, type ProduitFournisseur, type CommandeFournisseur, calculerFournisseurPrioritaire, formatMontant, formatDate, generateId, portFournisseur } from '@/lib/store';
 import { toast } from 'sonner';
 import { logHistorique } from '@/lib/historique';
 
@@ -23,6 +23,23 @@ interface Props {
   produitFournisseurs: ProduitFournisseur[];
   onSaveCommandes?: (commandes: CommandeFournisseur[]) => void;
   onPriseStock?: (items: { produitId: string; quantite: number }[]) => void;
+}
+
+/* Des paliers de poids sur la fiche commandent le port ; sinon, règle
+   historique franco / coût fixe. */
+function transportDe(
+  fournisseur: Fournisseur,
+  lignes: { produit: Produit; quantite: number }[],
+  totalAchat: number,
+): number {
+  const parPoids = fournisseur.paliersPortPoids?.length
+    ? portFournisseur(
+        fournisseur,
+        lignes.reduce((acc, l) => acc + (l.produit.poids || 0) * l.quantite, 0),
+        totalAchat)
+    : null;
+  if (parPoids) return parPoids.montant;
+  return totalAchat >= fournisseur.francoPort ? 0 : fournisseur.coutTransport;
 }
 
 export default function CommandeFournisseurDialog({ open, onOpenChange, devis, produits, fournisseurs, produitFournisseurs, onSaveCommandes, onPriseStock }: Props) {
@@ -140,8 +157,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
       if (lignesPourCommande.length === 0) continue; // All taken from stock, skip CF
 
       const totalAchat = lignesPourCommande.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
-      const francoAtteint = totalAchat >= fournisseur.francoPort;
-      const transport = francoAtteint ? 0 : fournisseur.coutTransport;
+      const transport = transportDe(fournisseur, lignesPourCommande, totalAchat);
       commandes.push({
         id: generateId(),
         devisId: devis.id,
@@ -264,7 +280,7 @@ export default function CommandeFournisseurDialog({ open, onOpenChange, devis, p
               const lignesActives = lignes.filter(l => !priseStockIds.has(l.produit.id));
               const totalAchat = lignesActives.reduce((acc, l) => acc + l.produit.prixAchat * l.quantite, 0);
               const francoAtteint = totalAchat >= fournisseur.francoPort;
-              const transport = francoAtteint ? 0 : fournisseur.coutTransport;
+              const transport = transportDe(fournisseur, lignesActives, totalAchat);
               const totalCommande = totalAchat + transport;
               const allOnStock = lignesActives.length === 0 && lignes.length > 0;
 
