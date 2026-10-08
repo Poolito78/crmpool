@@ -366,16 +366,25 @@ export function rapprocherSysteme(
   texte: string,
   systemes: Systeme[],
 ): RapprochementSysteme | null {
+  const [meilleurNom] = nomsCandidats(texte, systemes);
+  if (!meilleurNom) return null;
+  return rapprochementDuNom(meilleurNom, normaliser(texte), systemes);
+}
+
+/**
+ * TOUS les systèmes que la demande peut désigner, le plus précis d'abord.
+ *
+ * `rapprocherSysteme` n'en retient qu'un ; quand plusieurs répondent, l'écran
+ * doit le dire et laisser choisir — « Peran STB » et « Peran STB Compact »
+ * répondent tous deux à « peran stb compact », et rien ne dit lequel est voulu.
+ */
+export function nomsCandidats(texte: string, systemes: Systeme[]): string[] {
   const demande = normaliser(texte);
-  if (!demande || !systemes.length) return null;
+  if (!demande || !systemes.length) return [];
 
   const motsDemande = new Set(motsSignificatifs(demande).map(radical));
-  if (!motsDemande.size) return null;
+  if (!motsDemande.size) return [];
 
-  /* Un nom entièrement contenu dans la demande. On garde le plus long : le
-     nombre de mots reconnus départage, et à égalité la longueur du nom. */
-  let meilleurNom = '';
-  let meilleurPoids = 0;
   const noms = new Set(systemes.map(s => s.nom));
 
   /* Les mots de la demande, nombres compris : « 107 » et « 319 » distinguent
@@ -384,6 +393,7 @@ export function rapprocherSysteme(
   const depuisDevis = new Set(systemes.filter(s => s.depuisDevis).map(s => s.nom));
   const base = new Set(systemes.filter(s => !s.depuisDevis).map(s => s.nom));
 
+  const trouves: { nom: string; poids: number }[] = [];
   for (const nom of noms) {
     const modele = depuisDevis.has(nom) && !base.has(nom);
     /* Le nom d'un modèle de devis garde ses nombres entiers (107, 319) : sans
@@ -399,12 +409,10 @@ export function rapprocherSysteme(
     if (mn.length === 1 && mn[0].length < 5) continue;
     if (!mn.every(m => (modele ? motsBruts : motsDemande).has(m))) continue;
 
-    const poids = mn.length * 1000 + nom.length;
-    if (poids > meilleurPoids) { meilleurPoids = poids; meilleurNom = nom; }
+    /* Le nombre de mots reconnus départage, et à égalité la longueur du nom. */
+    trouves.push({ nom, poids: mn.length * 1000 + nom.length });
   }
-
-  if (!meilleurNom) return null;
-  return rapprochementDuNom(meilleurNom, demande, systemes);
+  return trouves.sort((x, y) => y.poids - x.poids).map(t => t.nom);
 }
 
 /**

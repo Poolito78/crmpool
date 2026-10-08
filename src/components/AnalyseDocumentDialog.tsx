@@ -54,7 +54,7 @@ import { ressembleASysteme } from '@/lib/fichesSysteme';
 import SystemeIntrouvable from '@/components/SystemeIntrouvable';
 import { systemesDeDevis } from '@/lib/systemesDevis';
 import {
-  rapprocherSysteme, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
+  rapprocherSysteme, nomsCandidats, systemeImpose, composantDemande, precisionDemande, surfaceDeDemande, zoneDeDemande,
   lineaireDeDemande, surfaceDepuisLineaire,
   type RapprochementSysteme, type ZoneDemande,
 } from '@/lib/rapprochementSysteme';
@@ -5809,6 +5809,41 @@ const [contratOdoo, setContratOdoo] = useState<
                                       elle l'avait nommé. Discret tant qu'on n'en
                                       veut pas : trente panneaux de police n'ont
                                       pas à porter trente sélecteurs ouverts. */}
+                                  {/* PLUSIEURS SYSTÈMES RÉPONDENT : ON LAISSE CHOISIR.
+                                      Le plus précis est retenu d'office, mais
+                                      « Peran STB » et « Peran STB Compact »
+                                      répondent tous deux à la même demande ;
+                                      rien ne dit lequel est voulu. Les noms
+                                      sont proposés, un clic tranche. */}
+                                  {(() => {
+                                    const cands = nomsCandidats(texteDemande(l, i), systemes);
+                                    if (cands.length < 2) return null;
+                                    const actuel = systemeManuel[i] ?? sysRap?.nom ?? cands[0];
+                                    return (
+                                      <div className="rounded border border-warning/40 bg-warning/5 px-2 py-1.5 space-y-1">
+                                        <p className="text-[11px] font-medium">
+                                          {cands.length} systèmes possibles pour cette ligne — lequel ?
+                                        </p>
+                                        <div className="flex flex-wrap gap-1">
+                                          {cands.map(n => (
+                                            <button
+                                              key={n}
+                                              type="button"
+                                              onClick={() => {
+                                                setSystemeManuel(pr => ({ ...pr, [i]: n }));
+                                                setVarianteSysteme(pr => { const m = { ...pr }; delete m[i]; return m; });
+                                              }}
+                                              className={`rounded-full border px-2 py-0.5 text-[11px] ${
+                                                n === actuel
+                                                  ? 'bg-primary text-primary-foreground border-primary'
+                                                  : 'border-input hover:bg-primary/10'}`}
+                                            >{n}</button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
                                   {nomsSystemes.length > 0 && (sysRap || systemeManuel[i] !== undefined ? (
                                     <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                                       <span className="shrink-0">Chiffrer en système :</span>
