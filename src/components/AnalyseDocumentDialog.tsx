@@ -1689,7 +1689,9 @@ const [contratOdoo, setContratOdoo] = useState<
   };
 
   const lignesPortCF = (result?.lignes ?? []).map((l, i) => ({ l, i })).filter(({ l }) => estLignePort(l));
-  const poidsCF = (result?.lignes ?? []).reduce((s, l, i) => {
+  /* Fonction, pas valeur : `rapprochements` est déclaré plus bas, l'appeler au
+     rendu ici lèverait une ReferenceError dès l'arrivée du résultat. */
+  const poidsCF = () => (result?.lignes ?? []).reduce((s, l, i) => {
     if (estLignePort(l)) return s;
     const p = produitDeLigneCF(i);
     return s + (p?.poids ? p.poids * l.quantite : 0);
@@ -1743,7 +1745,7 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
        franco n'est jamais deviné : il reste celui de la fiche. */
     if (creerCFMemoPort && fraisTransport > 0 && fourn) {
-      const poidsMin = Math.floor(poidsCF);
+      const poidsMin = Math.floor(poidsCF());
       updateFournisseurs(prev => prev.map(f => {
         if (f.id !== fourn.id) return f;
         if (poidsMin > 0) {
@@ -4923,7 +4925,7 @@ const [contratOdoo, setContratOdoo] = useState<
                         {lignesPortCF.length > 0 && (() => {
                           const f = fournisseurs.find(x => x.id === creerCFFournisseurId);
                           const euro = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
-                          const poids = poidsCF;
+                          const poids = poidsCF();
                           const attendu = f ? portFournisseur(f, poids, result.totalHT ?? 0) : null;
                           return (
                             <div className="rounded-lg border border-border bg-background/60 p-2 space-y-1">
