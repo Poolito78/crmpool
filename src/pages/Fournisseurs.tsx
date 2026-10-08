@@ -115,7 +115,7 @@ export default function Fournisseurs() {
   }
   function openEdit(f: Fournisseur) {
     setEditing(f);
-    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, delaiReglement: f.delaiReglement || '45j FDM', estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
+    setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], delaiReglement: f.delaiReglement || '45j FDM', estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
     setDialogOpen(true);
   }
 
@@ -398,6 +398,26 @@ export default function Fournisseurs() {
                     <Label className="text-xs">Coût transport (€)</Label>
                     <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs">Port par tranche de poids (le palier atteint remplace le coût fixe ; franco prioritaire)</Label>
+                  {(form.paliersPortPoids ?? []).map((p, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground shrink-0">dès</span>
+                      <Input type="number" step="1" className="h-8 w-24" value={p.poidsMin}
+                        onChange={e => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).map((x, j) => j === i ? { ...x, poidsMin: parseFloat(e.target.value) || 0 } : x) }))} />
+                      <span className="text-xs text-muted-foreground shrink-0">kg →</span>
+                      <Input type="number" step="0.01" className="h-8 w-24" value={p.coutTransport}
+                        onChange={e => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).map((x, j) => j === i ? { ...x, coutTransport: parseFloat(e.target.value) || 0 } : x) }))} />
+                      <span className="text-xs text-muted-foreground shrink-0">€</span>
+                      <Button type="button" variant="ghost" size="sm" className="h-8 px-2"
+                        onClick={() => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).filter((_, j) => j !== i) }))}>
+                        <Trash2 className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  ))}
+                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
+                    onClick={() => setForm(prev => ({ ...prev, paliersPortPoids: [...(prev.paliersPortPoids ?? []), { poidsMin: 0, coutTransport: 0 }] }))}>
+                    <Plus className="w-3.5 h-3.5 mr-1" />Ajouter un palier</Button>
                 </div>
               </div>
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">

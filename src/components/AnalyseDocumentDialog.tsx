@@ -82,7 +82,7 @@ import { useCRM } from '@/lib/StoreContext';
 import {
   type Client, type Fournisseur, type CommandeFournisseur, type LigneReception, type CommandeClient, type Devis, type LigneDevis,
   type Produit,
-  designationProduit, generateId, calculerDateEcheance, formatDateISO, formatMontant,
+  designationProduit, generateId, calculerDateEcheance, portFournisseur, formatDateISO, formatMontant,
 } from '@/lib/store';
 import ReceptionCommandeDialog from '@/components/ReceptionCommandeDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -1689,6 +1689,11 @@ const [contratOdoo, setContratOdoo] = useState<
   };
 
   const lignesPortCF = (result?.lignes ?? []).map((l, i) => ({ l, i })).filter(({ l }) => estLignePort(l));
+  const poidsCF = (result?.lignes ?? []).reduce((s, l, i) => {
+    if (estLignePort(l)) return s;
+    const p = produitDeLigneCF(i);
+    return s + (p?.poids ? p.poids * l.quantite : 0);
+  }, 0);
   const fraisPortCF = lignesPortCF.reduce(
     (s, { l }) => s + (l.prixUnitaireHT ?? 0) * (l.quantite || 1), 0);
 
@@ -1737,9 +1742,17 @@ const [contratOdoo, setContratOdoo] = useState<
     }
     /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
        franco n'est jamais deviné : il reste celui de la fiche. */
-    if (creerCFMemoPort && fraisTransport > 0 && fourn && fourn.coutTransport !== fraisTransport) {
-      updateFournisseurs(prev => prev.map(f =>
-        f.id === fourn.id ? { ...f, coutTransport: fraisTransport } : f));
+    if (creerCFMemoPort && fraisTransport > 0 && fourn) {
+      const poidsMin = Math.floor(poidsCF);
+      updateFournisseurs(prev => prev.map(f => {
+        if (f.id !== fourn.id) return f;
+        if (poidsMin > 0) {
+          const autres = (f.paliersPortPoids ?? []).filter(p => p.poidsMin !== poidsMin);
+          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: fraisTransport }]
+            .sort((a, b) => a.poidsMin - b.poidsMin) };
+        }
+        return f.coutTransport === fraisTransport ? f : { ...f, coutTransport: fraisTransport };
+      }));
     }
     toast.success(`Commande ${creerCFNumero} créée et réceptionnée`);
     onOpenChange(false);
@@ -4905,11 +4918,8 @@ const [contratOdoo, setContratOdoo] = useState<
                         {lignesPortCF.length > 0 && (() => {
                           const f = fournisseurs.find(x => x.id === creerCFFournisseurId);
                           const euro = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
-                          const poids = result.lignes.reduce((s, l, i) => {
-                            if (estLignePort(l)) return s;
-                            const p = produitDeLigneCF(i);
-                            return s + (p?.poids ? p.poids * l.quantite : 0);
-                          }, 0);
+                          const poids = poidsCF;
+                          const attendu = f ? portFournisseur(f, poids, result.totalHT ?? 0) : null;
                           return (
                             <div className="rounded-lg border border-border bg-background/60 p-2 space-y-1">
                               <p className="text-xs font-medium">Frais de transport lus : {euro(fraisPortCF)}{poids > 0 ? ` · ${poids.toLocaleString('fr-FR')} kg` : ''}</p>
@@ -4918,10 +4928,19 @@ const [contratOdoo, setContratOdoo] = useState<
                                   ? `Fiche ${f.societe || f.nom} : port ${f.coutTransport ? euro(f.coutTransport) : 'non renseigné'}, franco ${f.francoPort ? euro(f.francoPort) : 'non renseigné'}.`
                                   : 'Choisissez le fournisseur pour comparer à sa fiche.'}
                               </p>
-                              {f && f.coutTransport !== fraisPortCF && (
+                              {f && (
+                                <p className="text-[11px]">
+                                  {attendu
+                                    ? `D'après la fiche (${attendu.source === 'franco' ? 'franco atteint' : attendu.source === 'palier' ? 'palier de poids' : 'coût fixe'}) : ${euro(attendu.montant)}${Math.abs(attendu.montant - fraisPortCF) > 0.005 ? ' — écart avec le document' : ' — conforme'}.`
+                                    : 'La fiche ne permet pas de prévoir ce port.'}
+                                </p>
+                              )}
+                              {f && (!attendu || Math.abs(attendu.montant - fraisPortCF) > 0.005) && (
                                 <label className="flex items-center gap-2 text-[11px]">
                                   <Checkbox checked={creerCFMemoPort} onCheckedChange={v => setCreerCFMemoPort(!!v)} />
-                                  Retenir {euro(fraisPortCF)} comme port habituel de ce fournisseur
+                                  {Math.floor(poids) > 0
+                                    ? `Retenir ${euro(fraisPortCF)} dès ${Math.floor(poids).toLocaleString('fr-FR')} kg (palier de la fiche)`
+                                    : `Retenir ${euro(fraisPortCF)} comme port habituel (poids inconnu)`}
                                 </label>
                               )}
                             </div>

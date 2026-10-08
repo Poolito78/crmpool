@@ -71,6 +71,29 @@ export interface Client {
   capitalSocial?: string;
 }
 
+export interface PalierPortPoids {
+  poidsMin: number;      // kg à partir desquels ce tarif s'applique
+  coutTransport: number; // € HT
+}
+
+/**
+ * Port d'une commande fournisseur d'après sa fiche : 0 au-delà du franco,
+ * sinon le palier de poids atteint, sinon le coût de transport fixe.
+ * `null` = la fiche ne permet pas de le dire (rien n'est deviné).
+ */
+export function portFournisseur(
+  f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
+  poidsKg: number,
+  montantHT: number,
+): { montant: number; source: 'franco' | 'palier' | 'fixe' } | null {
+  if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
+  const paliers = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
+  const p = poidsKg > 0 ? paliers.find(x => poidsKg >= x.poidsMin) : undefined;
+  if (p) return { montant: p.coutTransport, source: 'palier' };
+  if (f.coutTransport > 0) return { montant: f.coutTransport, source: 'fixe' };
+  return null;
+}
+
 export interface Fournisseur {
   id: string;
   nom: string;
@@ -84,6 +107,8 @@ export interface Fournisseur {
   notes?: string;
   francoPort: number;
   coutTransport: number;
+  /** Port par tranche de poids : le palier le plus haut dont `poidsMin` est atteint s'applique. */
+  paliersPortPoids?: PalierPortPoids[];
   delaiReglement: string;
   dateCreation: string;
   estStockiste?: boolean;
@@ -720,6 +745,8 @@ function dbToFournisseur(r: any): Fournisseur {
     notes: r.notes || undefined,
     francoPort: Number(r.franco_port) || 0,
     coutTransport: Number(r.cout_transport) || 0,
+    paliersPortPoids: Array.isArray(r.paliers_port_poids) && r.paliers_port_poids.length
+      ? r.paliers_port_poids : undefined,
     delaiReglement: normalizeDelaiReglement(r.delai_reglement ? String(r.delai_reglement) : '45J FDM'),
     dateCreation: r.date_creation?.split('T')[0] || '',
     estStockiste: r.est_stockiste ?? false,
@@ -742,6 +769,7 @@ function fournisseurToDb(f: Fournisseur, userId: string) {
     notes: f.notes || null,
     franco_port: f.francoPort,
     cout_transport: f.coutTransport,
+    ...(f.paliersPortPoids !== undefined ? { paliers_port_poids: f.paliersPortPoids } : {}),
     delai_reglement: f.delaiReglement,
     date_creation: f.dateCreation,
     ...(f.estStockiste !== undefined ? { est_stockiste: f.estStockiste } : {}),
