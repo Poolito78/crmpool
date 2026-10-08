@@ -4491,7 +4491,12 @@ const [contratOdoo, setContratOdoo] = useState<
           className="sm:max-w-[96vw] xl:max-w-7xl sm:max-h-[90vh] overflow-y-auto overflow-x-hidden flex flex-col p-4 sm:p-5 [&>button]:z-20"
           onInteractOutside={(e) => {
             const cible = e.target as HTMLElement | null;
-            if (cible?.closest?.('[data-sonner-toaster]') || result) e.preventDefault();
+            /* Pendant l'analyse, ou dès qu'un document / un texte est posé,
+               un clic ou un changement de focus à l'extérieur (notification,
+               sélecteur de fichier, fenêtre qui reprend le focus) fermait le
+               dialogue et `reset()` jetait l'analyse en cours. */
+            if (cible?.closest?.('[data-sonner-toaster]') || result || loading
+              || fichier || texte.trim()) e.preventDefault();
           }}
         >
           <DialogHeader className="shrink-0">
