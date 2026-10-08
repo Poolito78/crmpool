@@ -403,6 +403,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [creerCFNotes, setCreerCFNotes] = useState('');
   const [creerCFMemoPort, setCreerCFMemoPort] = useState(true);
   const [creerCFMajPrix, setCreerCFMajPrix] = useState(true);
+  /** Palier à retenir, modifiable ; vide = valeur lue sur le document. */
+  const [creerCFPalierPoids, setCreerCFPalierPoids] = useState('');
+  const [creerCFPalierCout, setCreerCFPalierCout] = useState('');
 
   /* ── état commande client ── */
   const [showCreerCC, setShowCreerCC] = useState(false);
@@ -961,6 +964,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setCreerCFDateReception(result.dateDocument || today());
     setCreerCFDateLivraison(result.dateLivraisonPrevue || '');
     setCreerCFNotes(result.referencePartenaire ? `Réf. fournisseur : ${result.referencePartenaire}` : '');
+    setCreerCFPalierPoids(''); setCreerCFPalierCout('');
   }, [result, matchedCF]);
 
   /* ── pré-remplissage devis fournisseur ──────────────────────────────────
@@ -1755,16 +1759,20 @@ const [contratOdoo, setContratOdoo] = useState<
     }
     /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
        franco n'est jamais deviné : il reste celui de la fiche. */
-    if (creerCFMemoPort && fraisTransport > 0 && fourn) {
-      const poidsMin = Math.floor(poidsCF());
+    const portRetenu = creerCFPalierCout.trim() !== ''
+      ? (parseFloat(creerCFPalierCout.replace(',', '.')) || 0) : fraisTransport;
+    if (creerCFMemoPort && portRetenu > 0 && fourn) {
+      const poidsMin = creerCFPalierPoids.trim() !== ''
+        ? Math.max(0, Math.floor(parseFloat(creerCFPalierPoids.replace(',', '.')) || 0))
+        : Math.floor(poidsCF());
       updateFournisseurs(prev => prev.map(f => {
         if (f.id !== fourn.id) return f;
         if (poidsMin > 0) {
           const autres = (f.paliersPortPoids ?? []).filter(p => p.poidsMin !== poidsMin);
-          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: fraisTransport }]
+          return { ...f, paliersPortPoids: [...autres, { poidsMin, coutTransport: portRetenu }]
             .sort((a, b) => a.poidsMin - b.poidsMin) };
         }
-        return f.coutTransport === fraisTransport ? f : { ...f, coutTransport: fraisTransport };
+        return f.coutTransport === portRetenu ? f : { ...f, coutTransport: portRetenu };
       }));
     }
     toast.success(`Commande ${creerCFNumero} créée et réceptionnée`);
@@ -4959,12 +4967,18 @@ const [contratOdoo, setContratOdoo] = useState<
                                 </p>
                               )}
                               {f && (!attendu || Math.abs(attendu.montant - fraisPortCF) > 0.005) && (
-                                <label className="flex items-center gap-2 text-[11px]">
+                                <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
                                   <Checkbox checked={creerCFMemoPort} onCheckedChange={v => setCreerCFMemoPort(!!v)} />
-                                  {Math.floor(poids) > 0
-                                    ? `Retenir ${euro(fraisPortCF)} dès ${Math.floor(poids).toLocaleString('fr-FR')} kg (palier de la fiche)`
-                                    : `Retenir ${euro(fraisPortCF)} comme port habituel (poids inconnu)`}
-                                </label>
+                                  <span>Retenir</span>
+                                  <Input className="h-7 w-20 text-xs text-right" inputMode="decimal"
+                                    value={creerCFPalierCout !== '' ? creerCFPalierCout : String(fraisPortCF)}
+                                    onChange={e => setCreerCFPalierCout(e.target.value)} />
+                                  <span>€ dès</span>
+                                  <Input className="h-7 w-20 text-xs text-right" inputMode="decimal"
+                                    value={creerCFPalierPoids !== '' ? creerCFPalierPoids : String(Math.floor(poids))}
+                                    onChange={e => setCreerCFPalierPoids(e.target.value)} />
+                                  <span>kg (palier de la fiche{Math.floor(poids) > 0 || creerCFPalierPoids !== '' ? '' : ' — 0 kg = coût fixe'})</span>
+                                </div>
                               )}
                             </div>
                           );
