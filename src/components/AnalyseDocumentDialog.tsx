@@ -401,6 +401,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [creerCFDateReception, setCreerCFDateReception] = useState('');
   const [creerCFDateLivraison, setCreerCFDateLivraison] = useState('');
   const [creerCFNotes, setCreerCFNotes] = useState('');
+  const [creerCFMemoPort, setCreerCFMemoPort] = useState(true);
 
   /* ── état commande client ── */
   const [showCreerCC, setShowCreerCC] = useState(false);
@@ -1663,6 +1664,34 @@ const [contratOdoo, setContratOdoo] = useState<
     onOpenChange(false);
   }
 
+  /* ── commande fournisseur reçue : rapprochement des lignes et port ──────
+     Une ligne « FREIGHT FRAIS DE TRANSPORT » n'est pas un article : elle
+     devient les frais de transport de la commande. Les autres lignes se
+     rattachent à un article du CRM — d'abord par la référence que CE
+     fournisseur a déjà vue (fiche fournisseur), sinon par le rapprochement du
+     texte, sinon au choix de l'utilisateur. */
+  const estLignePort = (l: { description?: string; reference?: string }) =>
+    /\b(freight|frais\s+(de\s+)?(transport|port|livraison|exp[ée]dition))\b|^\s*(transport|port|carriage)\s*$/i
+      .test(`${l.description || ''}`);
+
+  const produitDeLigneCF = (i: number) => {
+    const choisi = choixProduit[i];
+    if (choisi) return produitParId(produits, choisi);
+    const ref = (result?.lignes?.[i]?.reference || '').trim().toUpperCase();
+    if (ref && creerCFFournisseurId) {
+      const lien = produitFournisseurs.find(pf =>
+        pf.fournisseurId === creerCFFournisseurId &&
+        (pf.referenceFournisseur || '').trim().toUpperCase() === ref);
+      const p = lien ? produitParId(produits, lien.produitId) : undefined;
+      if (p) return p;
+    }
+    return rapprochements.get(i)?.meilleur;
+  };
+
+  const lignesPortCF = (result?.lignes ?? []).map((l, i) => ({ l, i })).filter(({ l }) => estLignePort(l));
+  const fraisPortCF = lignesPortCF.reduce(
+    (s, { l }) => s + (l.prixUnitaireHT ?? 0) * (l.quantite || 1), 0);
+
   /* ── créer nouvelle commande fournisseur reçue ── */
   function handleCreerCF() {
     if (!creerCFFournisseurId) { toast.error('Veuillez sélectionner un fournisseur'); return; }
@@ -1670,20 +1699,48 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!creerCFDateReception) { toast.error('Veuillez saisir la date de réception'); return; }
     const fourn = fournisseurs.find(f => f.id === creerCFFournisseurId);
     const dateEch = formatDateISO(calculerDateEcheance(creerCFDateReception, fourn?.delaiReglement || '45j FDM'));
-    const lignes = (result?.lignes ?? []).map(l => {
-      const p = produits.find(p => p.reference?.toLowerCase() === l.reference?.toLowerCase());
+    const cibles: CibleEcriture[] = [];
+    const lignes = (result?.lignes ?? []).flatMap((l, i) => {
+      if (estLignePort(l)) return [];
+      const p = produitDeLigneCF(i);
       const id = p?.id ?? generateId();
-      return { produitId: id, description: l.description || '', reference: l.reference || '', quantite: l.quantite, prixAchat: p?.prixAchat ?? l.prixUnitaireHT ?? 0, total: (p?.prixAchat ?? l.prixUnitaireHT ?? 0) * l.quantite };
+      // Le prix du document est celui qu'on paie : il passe avant la fiche.
+      const prix = l.prixUnitaireHT ?? p?.prixAchat ?? 0;
+      if (p && l.prixUnitaireHT != null) {
+        cibles.push({
+          produitId: p.id, prix: l.prixUnitaireHT, reference: (l.reference || '').trim(),
+          versLien: true, versArticle: false,
+          designation: l.description, quantite: l.quantite, unite: l.unite,
+        });
+      }
+      return [{ produitId: id, description: l.description || '', reference: l.reference || '', quantite: l.quantite, prixAchat: prix, total: prix * l.quantite }];
     });
-    const totalHT = result?.totalHT ?? lignes.reduce((s, l) => s + l.total, 0);
+    const fraisTransport = fraisPortCF;
+    const totalHT = result?.totalHT ?? lignes.reduce((s, l) => s + l.total, 0) + fraisTransport;
     const nouvelleCommande: CommandeFournisseur = {
       id: generateId(), fournisseurId: creerCFFournisseurId, numero: creerCFNumero.trim(),
-      dateCreation: creerCFDateReception, statut: 'recue', lignes, totalHT, fraisTransport: 0, totalTTC: result?.totalTTC ?? totalHT,
+      dateCreation: creerCFDateReception, statut: 'recue', lignes, totalHT, fraisTransport, totalTTC: result?.totalTTC ?? totalHT,
       notes: creerCFNotes || undefined, dateReception: creerCFDateReception,
       dateLivraisonClientPrevue: creerCFDateLivraison || undefined, dateEcheance: dateEch,
       lignesRecues: lignes.map(l => ({ produitId: l.produitId, description: l.description, reference: l.reference, quantiteCommandee: l.quantite, quantiteRecue: l.quantite })),
     };
     updateCommandesFournisseur(prev => [nouvelleCommande, ...prev]);
+
+    /* Mémoire : la référence du fournisseur et son prix se rattachent à
+       l'article choisi (fiche fournisseur) — la prochaine commande le
+       retrouvera sans rapprochement. La fiche article n'est pas touchée. */
+    if (cibles.length) {
+      updateProduitFournisseurs(prev => appliquerPrix({
+        cibles, fournisseurId: creerCFFournisseurId, liens: prev,
+        produits: [], horodate: new Date().toISOString(), nouvelId: generateId,
+      }).liens);
+    }
+    /* Le port lu devient le port habituel du fournisseur, sauf refus. Le
+       franco n'est jamais deviné : il reste celui de la fiche. */
+    if (creerCFMemoPort && fraisTransport > 0 && fourn && fourn.coutTransport !== fraisTransport) {
+      updateFournisseurs(prev => prev.map(f =>
+        f.id === fourn.id ? { ...f, coutTransport: fraisTransport } : f));
+    }
     toast.success(`Commande ${creerCFNumero} créée et réceptionnée`);
     onOpenChange(false);
   }
@@ -4817,6 +4874,59 @@ const [contratOdoo, setContratOdoo] = useState<
                           <div className="space-y-1"><Label className="text-xs">Livraison client</Label><Input className="h-8 text-xs" type="date" value={creerCFDateLivraison} onChange={e => setCreerCFDateLivraison(e.target.value)} /></div>
                         </div>
                         <div className="space-y-1"><Label className="text-xs">Notes</Label><Input className="h-8 text-xs" value={creerCFNotes} onChange={e => setCreerCFNotes(e.target.value)} /></div>
+
+                        {/* Rapprochement des lignes avec le catalogue */}
+                        <div className="space-y-2 pt-1">
+                          <p className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">Articles du CRM</p>
+                          {result.lignes.map((l, i) => {
+                            if (estLignePort(l)) return null;
+                            const article = produitDeLigneCF(i);
+                            return (
+                              <div key={i} className="space-y-1">
+                                <p className="text-xs truncate" title={l.description}>
+                                  {l.reference ? <span className="font-mono text-muted-foreground mr-1.5">{l.reference}</span> : null}
+                                  {l.description} <span className="text-muted-foreground">× {l.quantite}</span>
+                                </p>
+                                <ProduitCombobox
+                                  produits={produits}
+                                  suggestions={candidatsPour(i)}
+                                  value={article?.id ?? ''}
+                                  onSelect={(id) => setChoixProduit(prev => ({ ...prev, [i]: id }))}
+                                />
+                                {!article && (
+                                  <p className="text-[10px] text-amber-700">Aucun article rapproché — à choisir.</p>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Port : lu sur le document, comparé à la fiche fournisseur */}
+                        {lignesPortCF.length > 0 && (() => {
+                          const f = fournisseurs.find(x => x.id === creerCFFournisseurId);
+                          const euro = (n: number) => n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR' });
+                          const poids = result.lignes.reduce((s, l, i) => {
+                            if (estLignePort(l)) return s;
+                            const p = produitDeLigneCF(i);
+                            return s + (p?.poids ? p.poids * l.quantite : 0);
+                          }, 0);
+                          return (
+                            <div className="rounded-lg border border-border bg-background/60 p-2 space-y-1">
+                              <p className="text-xs font-medium">Frais de transport lus : {euro(fraisPortCF)}{poids > 0 ? ` · ${poids.toLocaleString('fr-FR')} kg` : ''}</p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {f
+                                  ? `Fiche ${f.societe || f.nom} : port ${f.coutTransport ? euro(f.coutTransport) : 'non renseigné'}, franco ${f.francoPort ? euro(f.francoPort) : 'non renseigné'}.`
+                                  : 'Choisissez le fournisseur pour comparer à sa fiche.'}
+                              </p>
+                              {f && f.coutTransport !== fraisPortCF && (
+                                <label className="flex items-center gap-2 text-[11px]">
+                                  <Checkbox checked={creerCFMemoPort} onCheckedChange={v => setCreerCFMemoPort(!!v)} />
+                                  Retenir {euro(fraisPortCF)} comme port habituel de ce fournisseur
+                                </label>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     )}
                     <Button onClick={() => showCreerCF ? handleCreerCF() : setShowCreerCF(true)} className="w-full" size="sm">
