@@ -13,9 +13,8 @@ import type { TypeDocument } from './analyseDocument';
  * (`{user_id}/{fournisseur_id}/{horodatage}-{nom}`), 25 Mo par fichier. Le
  * forfait Supabase est le gratuit (1 Go) : le plafond par fichier protège le
  * quota, et la suppression d'une ligne supprime aussi le fichier.
- *
- * La table et le bucket viennent de la migration 20261009100000 ; tant que
- * `types.ts` n'est pas régénéré, l'accès passe par un client non typé.
+
+ * La table et le bucket viennent de la migration 20261009100000.
  */
 
 export type GenreDocFournisseur = 'devis' | 'commande' | 'bon_livraison' | 'facture' | 'autre';
@@ -65,8 +64,7 @@ export function formatTaille(octets: number): string {
 }
 
 const BUCKET = 'ged-fournisseurs';
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const table = () => (supabase as any).from('documents_fournisseur');
+const table = () => supabase.from('documents_fournisseur');
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function depuisLigne(r: any): DocumentFournisseur {

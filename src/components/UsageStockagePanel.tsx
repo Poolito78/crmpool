@@ -44,11 +44,10 @@ export default function UsageStockagePanel() {
 
   const charger = useCallback(async () => {
     setChargement(true);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { data, error } = await (supabase as any).rpc('usage_stockage');
+    const { data, error } = await supabase.rpc('usage_stockage');
     setChargement(false);
     if (error) { setErreur(error.message); return; }
-    setErreur(''); setUsage(data as Usage);
+    setErreur(''); setUsage(data as unknown as Usage);
   }, []);
   useEffect(() => { void charger(); }, [charger]);
 

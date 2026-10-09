@@ -1041,6 +1041,54 @@ export type Database = {
         }
         Relationships: []
       }
+      documents_fournisseur: {
+        Row: {
+          created_at: string
+          date_document: string | null
+          fichier_mime: string | null
+          fichier_nom: string
+          fichier_path: string
+          fichier_taille: number | null
+          fournisseur_id: string
+          genre: string
+          id: string
+          libelle: string | null
+          montant_ht: number | null
+          numero: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date_document?: string | null
+          fichier_mime?: string | null
+          fichier_nom: string
+          fichier_path: string
+          fichier_taille?: number | null
+          fournisseur_id: string
+          genre: string
+          id?: string
+          libelle?: string | null
+          montant_ht?: number | null
+          numero?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date_document?: string | null
+          fichier_mime?: string | null
+          fichier_nom?: string
+          fichier_path?: string
+          fichier_taille?: number | null
+          fournisseur_id?: string
+          genre?: string
+          id?: string
+          libelle?: string | null
+          montant_ht?: number | null
+          numero?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       entrepots: {
         Row: {
           adresse: string | null
@@ -2321,6 +2369,7 @@ export type Database = {
       recalculer_modeles: { Args: { cles: string[] }; Returns: number }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      usage_stockage: { Args: never; Returns: Json }
     }
     Enums: {
       [_ in never]: never
