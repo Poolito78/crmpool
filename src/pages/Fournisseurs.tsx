@@ -1,7 +1,7 @@
 import { useState, useRef, useMemo } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerDateEcheance, type Fournisseur } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload, Download, Mail } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, Download, Mail, FolderOpen } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import DocumentsFournisseurDialog from '@/components/DocumentsFournisseurDialog';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
@@ -46,6 +47,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
+  const [docsFournisseur, setDocsFournisseur] = useState<Fournisseur | null>(null);
 
   // Encours : utilise dateEcheance stockée si disponible, sinon recalcule depuis dateReception
   const encoursDuParFournisseur = useMemo(() => {
@@ -314,6 +316,7 @@ export default function Fournisseurs() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
+                      <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="p-1.5 rounded-md hover:bg-muted" title="Documents"><FolderOpen className="w-4 h-4" /></button>
                       <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                       <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -332,6 +335,7 @@ export default function Fournisseurs() {
             <div className="flex justify-between items-start">
               <div><p className="font-medium">{f.societe}</p><p className="text-sm text-muted-foreground">{f.nom}</p></div>
               <div className="flex gap-1">
+                <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="p-1.5 rounded-md hover:bg-muted" title="Documents"><FolderOpen className="w-4 h-4" /></button>
                 <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                 <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
@@ -342,6 +346,8 @@ export default function Fournisseurs() {
           </div>
         ))}
       </div>
+
+      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onOpenChange={o => { if (!o) setDocsFournisseur(null); }} />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>

@@ -19,6 +19,7 @@ import {
   type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
+import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignature, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
@@ -228,6 +229,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* ── état analyse ── */
   const [texte, setTexte] = useState('');
   const [fichier, setFichier] = useState<File | null>(null);
+  /* Pièces telles que déposées (PDF, .eml, .msg, Excel) : ce sont elles que la
+     mini-GED range, pas le texte extrait. */
+  const [fichiersOrigine, setFichiersOrigine] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<DocumentAnalysis | null>(null);
   const navigate = useNavigate();
@@ -1478,6 +1482,7 @@ const [contratOdoo, setContratOdoo] = useState<
       ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
        'application/vnd.ms-excel', 'text/csv', 'application/vnd.oasis.opendocument.spreadsheet'].includes(f.type);
 
+    setFichiersOrigine(prev => [...prev, ...files.filter(f => !prev.some(p => p.name === f.name && p.size === f.size))]);
     const pdfFiles  = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     const emlFiles  = files.filter(f => f.name.toLowerCase().endsWith('.eml') || f.type === 'message/rfc822');
     const msgFiles  = files.filter(f => f.name.toLowerCase().endsWith('.msg'));
@@ -1620,7 +1625,7 @@ const [contratOdoo, setContratOdoo] = useState<
   const handleDragLeave = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); }, []);
 
   function reset() {
-    setTexte(''); setFichier(null); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
+    setTexte(''); setFichier(null); setFichiersOrigine([]); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
     setExtractingContact(false); setContactToSave(null);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
@@ -4737,6 +4742,14 @@ const [contratOdoo, setContratOdoo] = useState<
                   ><Eye className="w-3.5 h-3.5" /> Voir le document pour vérifier</button>
                 )}
                 {panneauApercu}
+
+                {/* ── Mini-GED : ranger les pièces chez le fournisseur ── */}
+                <ClasserDocumentFournisseur
+                  fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
+                  result={result}
+                  fournisseurs={fournisseurs}
+                  fournisseurIdConnu={matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId || undefined}
+                />
 
                 {/* ── Bandeaux match / no-match ── */}
                 {matchedCF && (
