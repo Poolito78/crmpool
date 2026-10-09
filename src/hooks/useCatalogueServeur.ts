@@ -217,17 +217,32 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
       let lus = 0;
       let suite = false;
       try {
-        let q = construire('*');
         const colTri = o.triCol ? COLONNES_BASE[o.triCol] : null;
-        // « id » en second critère : sans lui, deux articles de même prix
-        // pourraient changer de place d'une page à l'autre.
-        q = colTri
-          ? q.order(colTri, { ascending: o.triSens === 'asc' }).order('id')
-          : q.order('reference').order('id');
-
-        /* Une ligne de plus que la page : elle dit s'il y a une suite, même
-           quand le compte n'arrive pas. */
-        const { data, error } = await q.range(debut, debut + o.parPage);
+        /* ⚠️ UN TIMEOUT PASSAGER NE DOIT PAS VIDER LA PAGE.
+           Au démarrage, l'application relit tout le catalogue en tâche de fond ;
+           la page, lue en même temps, tombait parfois sur « canceling statement
+           due to statement timeout » alors que la même requête passe en
+           quelques millisecondes une seconde plus tard. On la relance donc
+           jusqu'à trois fois, en attendant que la base respire. */
+        const lirePage = () => {
+          let q = construire('*');
+          // « id » en second critère : sans lui, deux articles de même prix
+          // pourraient changer de place d'une page à l'autre.
+          q = colTri
+            ? q.order(colTri, { ascending: o.triSens === 'asc' }).order('id')
+            : q.order('reference').order('id');
+          /* Une ligne de plus que la page : elle dit s'il y a une suite, même
+             quand le compte n'arrive pas. */
+          return q.range(debut, debut + o.parPage);
+        };
+        let reponse = await lirePage();
+        for (let essai = 1; reponse.error && essai <= 3 && !annule; essai++) {
+          console.warn(`[catalogue] lecture de la page impossible (essai ${essai}) :`, reponse.error.message);
+          await new Promise(r => setTimeout(r, 700 * essai));
+          if (annule) return;
+          reponse = await lirePage();
+        }
+        const { data, error } = reponse;
         if (annule) return;
         if (error) throw error;
         const rangs = (data || []) as unknown as Parameters<typeof dbToProduitPublic>[0][];
