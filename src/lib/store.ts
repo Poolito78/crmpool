@@ -145,6 +145,12 @@ export interface ComposantProduit {
    * reste donc HORS du prix d'achat unitaire de l'article (`calcPrixAchatCompose`).
    */
   forfaitCommande?: boolean;
+  /**
+   * Coût d'achat saisi À LA MAIN pour ce composant (€, total de la ligne). Il
+   * remplace le calcul prix × quantité — 0 compris : un composant offert ou
+   * déjà compté ailleurs ne doit rien coûter.
+   */
+  prixAchatManuel?: number;
   poidsKg?: number;           // si défini : mode poids — quantite = poidsKg / produit.poids (ou = poidsKg si unite kg)
 }
 
@@ -2483,6 +2489,7 @@ export function consoPourSurface(
 export function forfaitAchatCommande(p: Pick<Produit, 'composants'>, parId: (id: string) => Produit | undefined): number {
   return (p.composants || []).reduce((s, c) => {
     if (!c.forfaitCommande) return s;
+    if (c.prixAchatManuel != null) return s + c.prixAchatManuel;
     const cp = parId(c.produitId);
     return s + (cp ? cp.prixAchat * c.quantite : 0);
   }, 0);
