@@ -4,6 +4,7 @@ import { LayoutDashboard, Eye, EyeOff, RotateCcw, Warehouse, Plus, Edit2, Trash2
 import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import ClientsImportExport from '@/components/ClientsImportExport';
 import AdminAccessPanel from '@/components/AdminAccessPanel';
+import UsageStockagePanel from '@/components/UsageStockagePanel';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -188,6 +189,7 @@ export default function Parametres() {
           {isAdmin && <TabsTrigger value="clients">Clients</TabsTrigger>}
           {isAdmin && <TabsTrigger value="veille">Veille Concurrence</TabsTrigger>}
           {isAdmin && <TabsTrigger value="administration">Administration</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="stockage">Quotas</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="general" className="space-y-6 mt-4">
@@ -458,6 +460,13 @@ export default function Parametres() {
           {isAdmin ? (
             <AdminAccessPanel />
           ) : (
+            <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
+              Accès réservé aux administrateurs.
+            </div>
+          )}
+        </TabsContent>
+        <TabsContent value="stockage" className="space-y-4 mt-4">
+          {isAdmin ? <UsageStockagePanel /> : (
             <div className="bg-card rounded-xl border border-border p-5 text-sm text-muted-foreground">
               Accès réservé aux administrateurs.
             </div>
