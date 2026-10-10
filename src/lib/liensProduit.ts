@@ -163,6 +163,12 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  * Texte du lien d'une fiche. Le libellé saisi gagne ; la mention du type
  * (fournisseur / ISOFLOOR) le précède quand elle existe, ou le remplace.
  */
+/** L'inverse : le texte saisi, débarrassé de la mention qu'on lui a vu précéder. */
+export function sansMention(label: string, type?: TypeFiche): string {
+  const prefixe = type ? `${mentionTexte(type)} — ` : '';
+  return prefixe && label.startsWith(prefixe) ? label.slice(prefixe.length) : label;
+}
+
 export function avecMention(label: string, type?: TypeFiche): string {
   return type ? `${mentionTexte(type)} — ${label}` : label;
 }

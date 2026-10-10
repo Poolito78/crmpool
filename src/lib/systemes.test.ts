@@ -254,6 +254,14 @@ describe('fiches des systèmes', () => {
     expect(liens[0].label).toBe('Fiche système — Flowfast 319 Route');
   });
 
+  it("le système objet du devis est proposé même si aucun article n'en est un composant référencé", () => {
+    const orphelin: Systeme = { ...FLOWFAST, ficheUrl: 'https://ex/fs.pdf', composants: [] };
+    expect(liensFichesSystemes([orphelin], [{ id: 'p9' }])).toEqual([]);
+    const liens = liensFichesSystemes([orphelin], [{ id: 'p9' }], ['Flowfast 319 Route']);
+    expect(liens).toHaveLength(1);
+    expect(liens[0].url).toBe('https://ex/fs.pdf');
+  });
+
   it("un système sans adresse de fiche n'est pas proposé", () => {
     expect(liensFichesSystemes([FLOWFAST], [{ id: 'p1' }])).toEqual([]);
   });

@@ -10,8 +10,8 @@ import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import MentionFiche from '@/components/MentionFiche';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
-import { useSystemes } from '@/lib/systemes';
-import { LIBELLE_TYPE_FICHE, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
+import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme } from '@/lib/systemes';
+import { LIBELLE_TYPE_FICHE, sansMention, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
@@ -3734,10 +3734,13 @@ export default function Produits() {
                   const principale = principaleDe(editing.id);
                   /* On part du formulaire, pas de l'article enregistré : un
                      libellé qu'on vient de taper doit se voir tout de suite. */
-                  const liens = liensDuProduit(
-                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel, ficheType: form.ficheType, fichesSupplementaires: form.fichesSupplementaires },
-                    { imageUrl: principale?.url, imageLibelle: principale?.libelle },
-                  );
+                  const liens = [
+                    ...liensDuProduit(
+                      { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel, ficheType: form.ficheType, fichesSupplementaires: form.fichesSupplementaires },
+                      { imageUrl: principale?.url, imageLibelle: principale?.libelle },
+                    ),
+                    ...liensFichesSystemes(systemes, [{ id: editing.id }]),
+                  ];
                   return (
                     <div className="rounded-lg border bg-muted/20 p-2.5 space-y-1.5">
                       <div className="flex items-center justify-between gap-2">
@@ -3782,10 +3785,21 @@ export default function Produits() {
                                     const rang = l.rang ?? 0;
                                     setForm(prev => {
                                       const liste = fichesDuProduit(prev);
-                                      liste[rang] = { ...liste[rang], label: v };
+                                      // La mention précède le texte à l'écran : on ne la stocke pas dans le texte.
+                                      liste[rang] = { ...liste[rang], label: sansMention(v, liste[rang].type) };
                                       return ecrireFiches(prev, liste);
                                     });
                                     toast.success("Libellé de la fiche technique modifié — pensez à enregistrer l'article.");
+                                  } else if (l.cible === 'systeme') {
+                                    const sys = systemes.find(x => `sys:${x.id}` === l.id);
+                                    if (sys) {
+                                      const err = await enregistrerFicheSysteme(sys.id, {
+                                        url: sys.ficheUrl, mention: sys.ficheMention,
+                                        label: sansMention(v, sys.ficheMention || 'systeme'),
+                                      });
+                                      if (err) toast.error(err);
+                                      else { toast.success('Libellé de la fiche système modifié.'); void rechargerSystemes(); }
+                                    }
                                   } else if (principale) {
                                     const err = await renommerImage(principale, v);
                                     if (err) toast.error(err);

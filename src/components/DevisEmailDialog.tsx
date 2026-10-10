@@ -446,7 +446,7 @@ Restant à ta disposition pour tout complément d'information.`
         const liens = liensDesProduits(articles, parProduit, undefined, libelleParProduit);
         const liensFamille = liensDocumentsCategorie(articles, (docs ?? []).map(dbToDocumentCategorie));
         const systemes = (sys ?? []).map(dbToSysteme);
-        const liensSysteme = liensFichesSystemes(systemes, articles);
+        const liensSysteme = liensFichesSystemes(systemes, articles, [devis.systeme]);
         setLiensProduit([...liens, ...liensSysteme, ...liensFamille]);
         /* Fiches techniques et photos cochées ; fiche publique du CRM et
            DOCUMENTS DE FAMILLE décochés. Une homologation ne s'invite pas

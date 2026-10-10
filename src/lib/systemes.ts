@@ -566,6 +566,8 @@ export function systemeEstObjet(s: Pick<Systeme, 'nom'>, textes: (string | undef
 export function liensFichesSystemes(
   systemes: Systeme[],
   articles: { id: string }[],
+  /** Textes nommant le système du devis : son système est proposé même si aucun article n'en est un composant référencé. */
+  objets: (string | undefined)[] = [],
 ): LienProduit[] {
   const vus = new Set<string>();
   const out: LienProduit[] = [];
@@ -582,6 +584,18 @@ export function liensFichesSystemes(
         url,
       });
     }
+  }
+  for (const s of systemes) {
+    const url = s.ficheUrl?.trim();
+    if (!url || vus.has(s.id) || !systemeEstObjet(s, objets)) continue;
+    vus.add(s.id);
+    out.push({
+      id: `sys:${s.id}`,
+      produitId: articles[0]?.id ?? '',
+      cible: 'systeme',
+      label: avecMention(s.ficheLabel?.trim() || s.nom, s.ficheMention || 'systeme'),
+      url,
+    });
   }
   return out;
 }
