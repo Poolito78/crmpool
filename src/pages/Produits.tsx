@@ -135,9 +135,10 @@ const COLUMNS = [
   { key: 'stockOdoo',      label: 'Qté dispo Odoo',   align: 'right'  as const },
   { key: 'stockOdooPrevu', label: 'Prévisionnel Odoo', align: 'right'  as const },
   { key: 'disponibleVente', label: 'Dispo vente',      align: 'center' as const },
+  { key: 'documents',      label: 'Documents',        align: 'center' as const },
 ] as const;
 type ColKey = typeof COLUMNS[number]['key'];
-const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj'];
+const DEFAULT_VISIBLE_COLS: ColKey[] = ['reference', 'origine', 'description', 'categorie', 'prixAchat', 'coefficient', 'prixRevendeur', 'prixHT', 'stock', 'stockOdoo', 'stockOdooPrevu', 'qteVendue', 'qteCommandeeF', 'valeurStock', 'prixAchatMaj', 'prixVenteMaj', 'documents'];
 
 const emptyProduit = {
   reference: '', referenceOdoo: '', origine: 'crm' as Origine, description: '', descriptionDetaillee: '', prixAchatMaj: '', prixVenteMaj: '', prixAchat: 0, coefficient: 1.6, prixHT: 0, coeffRevendeur: 1.6, remiseRevendeur: 30, prixRevendeur: 0, tva: 20, unite: 'pièce', poids: 0, consommation: 0, stock: 0, stockMin: 0, fournisseurId: '', categorie: '', ficheUrl: '', ficheLinkLabel: '', paliersPrix: [] as PrixPalier[],
@@ -216,6 +217,11 @@ export default function Produits() {
         if (saved.size > 0 && !localStorage.getItem('produits_col_origine_vue')) {
           saved.add('origine');
           localStorage.setItem('produits_col_origine_vue', '1');
+        }
+        /* Les documents (GED) s'ajoutent une seule fois : les masquer ensuite doit tenir. */
+        if (saved.size > 0 && !localStorage.getItem('produits_col_documents_vue')) {
+          saved.add('documents');
+          localStorage.setItem('produits_col_documents_vue', '1');
         }
         if (saved.size > 0) { saved.add('qteCommandeeF'); saved.add('valeurStock'); saved.add('stockOdoo'); saved.add('stockOdooPrevu'); saved.add('prixAchatMaj'); saved.add('prixVenteMaj'); return saved; } // nouvelles colonnes : visibles chez les utilisateurs existants
       }
@@ -375,6 +381,22 @@ export default function Produits() {
     modifier: modifierDocCategorie, supprimer: supprimerDocCategorie,
     erreur: docsCategorieErreur,
   } = useCategorieDocuments();
+  /* Documents disponibles d'un article = ses fiches techniques + les documents
+     de sa catégorie (hérités des catégories parentes). Le nombre par catégorie
+     se calcule une fois : 22 000 articles ne partagent que quelques dizaines
+     de catégories. */
+  const nbDocuments = useMemo(() => {
+    const parCategorie = new Map<string, number>();
+    return (p: Produit): number => {
+      const cle = p.categorie ?? '';
+      let cat = parCategorie.get(cle);
+      if (cat === undefined) {
+        cat = documentsPourCategorie(docsCategorie, p.categorie).length;
+        parCategorie.set(cle, cat);
+      }
+      return fichesDuProduit(p).filter(f => f.url).length + cat;
+    };
+  }, [docsCategorie]);
   const [docNiveau, setDocNiveau] = useState('');
   const [docGenre, setDocGenre] = useState<GenreDocument>('fiche');
   const [docLibelle, setDocLibelle] = useState('');
@@ -745,6 +767,7 @@ export default function Produits() {
         case 'prixVenteMaj': if (isNonVide ? !p.prixVenteMaj : !formatDate(p.prixVenteMaj || '').includes(v)) return false; break;
         case 'stockOdoo':    if (isNonVide ? !(p.stockOdoo ?? null) : !String(p.stockOdoo ?? '').includes(v)) return false; break;
         case 'stockOdooPrevu': if (isNonVide ? !(p.stockOdooPrevu ?? null) : !String(p.stockOdooPrevu ?? '').includes(v)) return false; break;
+        case 'documents':    if (isNonVide ? nbDocuments(p) === 0 : !String(nbDocuments(p)).includes(v)) return false; break;
         case 'qteVendue':    if (isNonVide ? !(qteVendueParProduit[p.id] > 0) : !String(qteVendueParProduit[p.id] || 0).includes(v)) return false; break;
         case 'qteCommandeeF': if (isNonVide ? !(qteCommandeeFournParProduit[p.id] > 0) : !String(qteCommandeeFournParProduit[p.id] || 0).includes(v)) return false; break;
         case 'valeurStock':  if (isNonVide ? !(valeurStockParProduit[p.id] > 0) : !String(Math.round(valeurStockParProduit[p.id] || 0)).includes(v)) return false; break;
@@ -754,7 +777,7 @@ export default function Produits() {
     }
     return true;
   }), [modeServeur, safeProduits, search, columnFilters, produitFournisseurs, fournisseurs,
-       qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
+       qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit, nbDocuments]);
 
   const sortedFiltered = useMemo(() => {
     if (!sortCol) return filtered;
@@ -777,6 +800,7 @@ export default function Produits() {
         case 'prixVenteMaj':    av = a.prixVenteMaj ? new Date(a.prixVenteMaj).getTime() : 0; bv = b.prixVenteMaj ? new Date(b.prixVenteMaj).getTime() : 0; break;
         case 'stockOdoo':       av = a.stockOdoo ?? -1; bv = b.stockOdoo ?? -1; break;
         case 'stockOdooPrevu':  av = a.stockOdooPrevu ?? -1; bv = b.stockOdooPrevu ?? -1; break;
+        case 'documents':       av = nbDocuments(a); bv = nbDocuments(b); break;
         case 'qteVendue':       av = qteVendueParProduit[a.id] || 0; bv = qteVendueParProduit[b.id] || 0; break;
         case 'qteCommandeeF':   av = qteCommandeeFournParProduit[a.id] || 0; bv = qteCommandeeFournParProduit[b.id] || 0; break;
         case 'valeurStock':     av = valeurStockParProduit[a.id] || 0; bv = valeurStockParProduit[b.id] || 0; break;
@@ -786,7 +810,7 @@ export default function Produits() {
       if (typeof av === 'string') return sortDir === 'asc' ? av.localeCompare(bv as string) : (bv as string).localeCompare(av);
       return sortDir === 'asc' ? av - (bv as number) : (bv as number) - av;
     });
-  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit]);
+  }, [filtered, sortCol, sortDir, fournisseurs, produitFournisseurs, qteVendueParProduit, qteCommandeeFournParProduit, valeurStockParProduit, nbDocuments]);
 
   /* Pagination — même principe qu'Odoo : 50 articles par page.
      Le catalogue compte plus de 22 000 références depuis l'import Odoo ; les
@@ -1714,6 +1738,21 @@ export default function Produits() {
                             </>}
                       </td>
                     );
+                    case 'documents': {
+                      const n = nbDocuments(p);
+                      return (
+                        <td className="px-2 py-2.5 text-center">
+                          {n > 0 ? (
+                            <button
+                              type="button"
+                              title={`${n} document${n > 1 ? 's' : ''} — ouvrir`}
+                              onClick={e => { e.stopPropagation(); openEdit(p); setProduitTab('images'); }}
+                              className="inline-flex min-w-[22px] h-[22px] px-1.5 items-center justify-center rounded-full bg-primary text-primary-foreground text-[11px] font-semibold hover:opacity-80"
+                            >{n}</button>
+                          ) : <span className="text-muted-foreground">—</span>}
+                        </td>
+                      );
+                    }
                     case 'qteVendue':    return <td className="px-2 py-2.5 text-right font-medium">{qteVendueParProduit[p.id] ? <span className="text-primary">{qteVendueParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'qteCommandeeF': return <td className="px-2 py-2.5 text-right font-medium">{qteCommandeeFournParProduit[p.id] ? <span className="text-foreground">{qteCommandeeFournParProduit[p.id]}</span> : <span className="text-muted-foreground">0</span>}</td>;
                     case 'valeurStock':  return <td className="px-2 py-2.5 text-right font-medium">{valeurStockParProduit[p.id] ? <span>{formatMontant(valeurStockParProduit[p.id])} €</span> : <span className="text-muted-foreground">—</span>}</td>;
