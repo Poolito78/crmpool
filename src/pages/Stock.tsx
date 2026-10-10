@@ -1,7 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { formatMontant, calculerFournisseurPrioritaire, useEntrepots, type Entrepot } from '@/lib/store';
+import { formatMontant, calculerFournisseurPrioritaire, portFournisseur, useEntrepots, type Entrepot } from '@/lib/store';
 import { AlertTriangle, CheckCircle, Package, Truck, Download, Star, Warehouse, Plus, Edit2, Trash2, Save, X, Building2, Clock, ChevronUp, ChevronDown, ChevronsUpDown, Search, Filter, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -221,7 +221,8 @@ export default function Stock() {
     if (!fourn) return null;
     const realQte = Math.max(qte, best.conditionnementMin);
     const totalAchat = best.prixAchat * realQte;
-    const transport = totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
+    const transport = portFournisseur(fourn, (p.poids || 0) * realQte, totalAchat)?.montant
+      ?? (totalAchat >= fourn.francoPort ? 0 : fourn.coutTransport);
     return { fourn, prixAchat: best.prixAchat, qte: realQte, totalAchat, transport, coutGlobal: totalAchat + transport, isMulti: pfs.length > 1, nbFournisseurs: pfs.length };
   }
 

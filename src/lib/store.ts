@@ -350,17 +350,22 @@ export function getPfPrixPourQuantite(pf: ProduitFournisseur, qte: number): numb
 }
 
 /** Retourne les frais de port effectifs pour un ProduitFournisseur au montant HT donné.
- *  Si des paliers port sont définis sur le lien, ils priment sur franco/coutTransport du fournisseur. */
+ *  Si des paliers port sont définis sur le lien, ils priment sur la fiche fournisseur.
+ *  Sinon la fiche commande : franco, puis palier de poids (si `poidsKg` est connu),
+ *  puis coût fixe. */
 export function getPfTransportPourMontant(
   pf: ProduitFournisseur,
-  fourn: { francoPort: number; coutTransport: number },
-  montantAchat: number
+  fourn: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
+  montantAchat: number,
+  poidsKg = 0,
 ): number {
   if (pf.paliersPort && pf.paliersPort.length > 0) {
     const sorted = [...pf.paliersPort].sort((a, b) => b.montantMin - a.montantMin);
     const palier = sorted.find(p => montantAchat >= p.montantMin);
     return palier?.coutTransport ?? fourn.coutTransport;
   }
+  const fiche = portFournisseur(fourn, poidsKg, montantAchat);
+  if (fiche) return fiche.montant;
   return montantAchat >= fourn.francoPort ? 0 : fourn.coutTransport;
 }
 

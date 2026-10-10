@@ -7,12 +7,13 @@ import {
 } from '@/lib/store';
 import {
   Plus, Trash2, Star, Truck, Clock, Package,
-  ChevronDown, ChevronUp, TrendingDown, Lock,
+  ChevronDown, ChevronUp, TrendingDown, Lock, FolderOpen,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
+import DocumentsFournisseurDialog from '@/components/DocumentsFournisseurDialog';
 
 interface Props {
   produitId: string;
@@ -22,6 +23,7 @@ interface Props {
 export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }: Props) {
   const { fournisseurs, produits, updateProduits, produitFournisseurs, updateProduitFournisseurs, updateFournisseurs } = useCRM();
   const [adding, setAdding] = useState(false);
+  const [docsFournisseur, setDocsFournisseur] = useState<Fournisseur | null>(null);
   const [form, setForm] = useState({ fournisseurId: '', referenceFournisseur: '', delaiLivraison: 0, conditionnementMin: 1 });
   const [creatingNewFourn, setCreatingNewFourn] = useState(false);
   const [newFournForm, setNewFournForm] = useState({ societe: '', nom: '', email: '', telephone: '' });
@@ -111,12 +113,12 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
     const qte = Math.max(qteCommande, pf.conditionnementMin);
     const prixEffectif = getPfPrixPourQuantite(pf, qte);
     const totalAchat = prixEffectif * qte;
-    const transport = getPfTransportPourMontant(pf, fourn, totalAchat);
+    const transport = getPfTransportPourMontant(pf, fourn, totalAchat, (produit?.poids || 0) * qte);
     return {
       totalAchat, transport,
       coutUnitaire: (totalAchat + transport) / qte,
       qte,
-      francoAtteint: transport === 0,
+      francoAtteint: transport === 0 && fourn.francoPort > 0 && totalAchat >= fourn.francoPort,
       prixEffectif,
       hasPalierPrixActif: prixEffectif !== pf.prixAchat,
     };
@@ -242,7 +244,15 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
                 >
                   <Star className={`w-4 h-4 ${isManualPin ? 'fill-amber-400' : isPrio ? 'fill-primary' : ''}`} />
                 </button>
-                <span className="text-sm font-medium">{fourn?.societe || 'Inconnu'}</span>
+                <button
+                  type="button"
+                  disabled={!fourn}
+                  title="Ouvrir le dossier du fournisseur (documents)"
+                  onClick={() => fourn && setDocsFournisseur(fourn)}
+                  className="inline-flex items-center gap-1 text-sm font-medium hover:text-primary hover:underline"
+                >
+                  <FolderOpen className="w-3.5 h-3.5" />{fourn?.societe || 'Inconnu'}
+                </button>
                 {isManualPin && (
                   <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-0.5">
                     <Lock className="w-2.5 h-2.5" /> Fixé
@@ -358,7 +368,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
                   <p className="text-[10px] text-muted-foreground px-1">
                     Montant commande HT (€) → Frais de port (0 = franco).
                     {fourn && paliersPort.length === 0 && (
-                      <span> Défaut fournisseur : franco à {formatMontant(fourn.francoPort)}, sinon {formatMontant(fourn.coutTransport)}.</span>
+                      <span> Défaut fournisseur : franco à {formatMontant(fourn.francoPort)}, sinon {fourn.paliersPortPoids?.length ? `selon le poids (${fourn.paliersPortPoids.map(x => `dès ${x.poidsMin} kg : ${formatMontant(x.coutTransport)}`).join(' ; ')})` : formatMontant(fourn.coutTransport)}.</span>
                     )}
                   </p>
                   {paliersPort.length > 0 && (
@@ -492,6 +502,7 @@ export default function ProduitFournisseursPanel({ produitId, qteCommande = 1 }:
           </div>
         </div>
       )}
+      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onOpenChange={o => { if (!o) setDocsFournisseur(null); }} />
     </div>
   );
 }
