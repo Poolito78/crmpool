@@ -1,4 +1,5 @@
 import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
+import { valeursVisibles } from '@/lib/variantesCompo';
 import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -315,7 +316,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       if (!dl.produitId || !dl.variantesChoisies) continue;
       const prod = produits.find(p => p.id === dl.produitId);
       if (!prod) continue;
-      for (const label of Object.values(dl.variantesChoisies)) {
+      for (const label of valeursVisibles(dl.variantesChoisies)) {
         const imgUrl = prod.variantes?.flatMap(d => d.options).find(o => o.label === label)?.imageUrl;
         if (imgUrl) urls.add(imgUrl);
       }
@@ -1027,7 +1028,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <span style={{ whiteSpace: 'nowrap' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                            return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
+                            return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
                               const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
                               return rank(a) - rank(b);
                             }).map((label, i) => {
@@ -1255,7 +1256,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           <span style={{ whiteSpace: 'nowrap' }}>{l.description}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-                            return [...new Set(Object.values(l.variantesChoisies))].sort((a, b) => {
+                            return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
                               const rank = (s: string) => getRalStyle(s) ? 2 : /^\d|^TF\d/i.test(s) ? 0 : 1;
                               return rank(a) - rank(b);
                             }).map((label, i) => {

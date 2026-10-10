@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { estTypeFiche, type TypeFiche } from './liensProduit';
+import type { VarianteCompo } from './variantesCompo';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -276,6 +277,9 @@ export interface Produit {
   /** Options proposées (à cocher) quand l'article est saisi dans un devis — contrairement au kit, rien n'est inséré d'office. */
   typeOptions?: boolean;
   lignesOptions?: LigneKit[];
+  /** Variantes composées : combinaisons de produits proposées AVANT les options, tenant sur une ligne (voir `variantesCompo.ts`). */
+  typeVariantesCompo?: boolean;
+  variantesCompo?: VarianteCompo[];
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   ficheType?: TypeFiche;     // type de la première fiche (les suivantes le portent dans leur objet)
@@ -868,6 +872,8 @@ function dbToProduit(r: any): Produit {
     composants: r.composants ? (Array.isArray(r.composants) ? r.composants : JSON.parse(r.composants)) : undefined,
     typeKit: r.type_kit ?? false,
     lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
+    typeVariantesCompo: r.type_variantes_compo ?? false,
+    variantesCompo: r.variantes_compo ? (Array.isArray(r.variantes_compo) ? r.variantes_compo : JSON.parse(r.variantes_compo)) : undefined,
     typeOptions: r.type_options ?? false,
     lignesOptions: r.lignes_options ? (Array.isArray(r.lignes_options) ? r.lignes_options : JSON.parse(r.lignes_options)) : undefined,
     ficheUrl: r.fiche_url || undefined,
@@ -935,6 +941,8 @@ function produitToDb(p: Produit, userId: string) {
     composants: p.composants && p.composants.length > 0 ? p.composants : null,
     type_kit: p.typeKit ?? false,
     lignes_kit: p.lignesKit && p.lignesKit.length > 0 ? p.lignesKit : null,
+    ...(p.typeVariantesCompo !== undefined ? { type_variantes_compo: p.typeVariantesCompo } : {}),
+    ...(p.variantesCompo !== undefined ? { variantes_compo: p.variantesCompo.length > 0 ? p.variantesCompo : null } : {}),
     ...(p.typeOptions !== undefined ? { type_options: p.typeOptions } : {}),
     ...(p.lignesOptions !== undefined ? { lignes_options: p.lignesOptions.length > 0 ? p.lignesOptions : null } : {}),
     fiche_url: p.ficheUrl || null,

@@ -29,6 +29,11 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
+import VarianteCompoDialog from '@/components/VarianteCompoDialog';
+import {
+  CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
+  varianteDeLigne, type VarianteCompo,
+} from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
@@ -689,7 +694,7 @@ export default function Devis() {
     const client = clients.find(c => c.id === d.clientId);
     const q = search.toLowerCase();
     const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
-      || d.lignes.some(l => l.variantesChoisies && Object.values(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
+      || d.lignes.some(l => l.variantesChoisies && valeursVisibles(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
     const cs = parseChoiceFilter(colFiltersD.statut || '');
     // Archivés masqués par défaut sauf si showArchived ou ciblés explicitement (colonne "only" archivé)
@@ -1171,6 +1176,32 @@ export default function Devis() {
   /* Options de l'article saisi : la fenêtre à cocher s'ouvre, les lignes choisies
      sont insérées juste sous la ligne de l'article. */
   const [optionsPour, setOptionsPour] = useState<{ ligneId: string; produit: Produit } | null>(null);
+  const [variantePour, setVariantePour] = useState<{ ligneId: string; produit: Produit } | null>(null);
+
+  /* La variante choisie devient UNE ligne : désignation de l'article + nom de la
+     variante, prix = somme des composants, coût d'achat = celui des composants. */
+  function appliquerVarianteCompo(v: VarianteCompo | null) {
+    const cible = variantePour;
+    setVariantePour(null);
+    if (!cible) return;
+    if (v) {
+      const achat = achatVarianteCompo(v, produits);
+      if (achat === undefined) toast.warning('Coût d\'achat de la variante inconnu : un composant n\'est pas au catalogue — marge à vérifier.');
+      saveSnapshot();
+      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : {
+        ...l,
+        description: designationAvecVariante(designationProduit(cible.produit), v),
+        unite: 'ens.',
+        prixUnitaireHT: prixVarianteCompo(v),
+        prixAchatLigne: achat ?? 0,
+        variantesChoisies: { ...(l.variantesChoisies ?? {}), [CLE_COMPO]: v.id },
+      }));
+    }
+    // Les options viennent après la variante.
+    if (cible.produit.typeOptions && (cible.produit.lignesOptions?.length ?? 0) > 0) {
+      setOptionsPour({ ligneId: cible.ligneId, produit: cible.produit });
+    }
+  }
 
   function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
     if (choisies.length === 0) { setOptionsPour(null); return; }
@@ -1233,7 +1264,7 @@ export default function Devis() {
       // Recalcule le prix si la quantité change et que le produit a des paliers
       if (field === 'quantite' && l.produitId) {
         const p = produitParId(produits, l.produitId);
-        if (p && p.paliersPrix && p.paliersPrix.length > 0) {
+        if (p && p.paliersPrix && p.paliersPrix.length > 0 && !varianteDeLigne(p, l.variantesChoisies)) {
           const client = clients.find(c => c.id === clientId);
           updated.prixUnitaireHT = prixDeBase(p, value as number, client?.estRevendeur);
         }
@@ -1407,6 +1438,9 @@ export default function Devis() {
 
   /** Prix unitaire HT final = palier + diff variantes */
   function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
+    // Une variante composée fixe le prix : somme de ses composants.
+    const compo = varianteDeLigne(produit, variantesChoisies);
+    if (compo) return prixVarianteCompo(compo);
     const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
@@ -1507,8 +1541,9 @@ export default function Devis() {
       if (!estArticle(l)) return l;
       const p = produitParId(produits, l.produitId!);
       if (!p) return l;
-      const base = prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
-      const prixUnitaireHT = Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+      const compo = varianteDeLigne(p, l.variantesChoisies);
+      const base = compo ? 0 : prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
+      const prixUnitaireHT = compo ? prixVarianteCompo(compo) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
       return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
     }));
     if (!opts.silencieux && niveau && auNiveau + horsNiveau > 0) {
@@ -1615,8 +1650,10 @@ export default function Devis() {
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
       const prio = pfs.find(pf => pf.estPrioritaire) || pfs[0];
       if (prio) setSelectedFournisseurPerLigne(prev => ({ ...prev, [ligneId]: prio.fournisseurId }));
-      // Des options sont renseignées sur l'article : on les propose à cocher.
-      if (p.typeOptions && (p.lignesOptions?.length ?? 0) > 0) setOptionsPour({ ligneId, produit: p });
+      /* Les VARIANTES d'abord (une combinaison de produits sur la ligne), puis les
+         options à cocher une fois la variante choisie. */
+      if (p.typeVariantesCompo && (p.variantesCompo?.length ?? 0) > 0) setVariantePour({ ligneId, produit: p });
+      else if (p.typeOptions && (p.lignesOptions?.length ?? 0) > 0) setOptionsPour({ ligneId, produit: p });
     }
   }
 
@@ -3270,7 +3307,7 @@ export default function Devis() {
                     /* Marge et coefficient RÉELS de la ligne : prix net (remise comprise) contre le coût d'achat
                        au palier de la quantité, forfait par commande compris. La remise baisse le prix de vente,
                        jamais le coût d'achat. */
-                    const achatReelLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
+                    const achatReelLigne = (!l.produitId || !!l.variantesChoisies?.[CLE_COMPO]) ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                     const venteReelleLigne = prixNetHT * l.quantite;
                     /* Quantité absente : marge et coeff se lisent sur une unité (indépendants de la quantité). */
                     const sansQte = !!prod && !l.quantite;
@@ -3288,7 +3325,7 @@ export default function Devis() {
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
                     const hasAutoCalc = !!(surfaceVal > 0 && consoPourSurface(prod, l.consommation) != null);
                     // Teinte choisie en toutes lettres (« RAL 7042 Gris signalisation A »), lue sur la ligne elle-même
-                    const teintesLigne = Object.entries(l.variantesChoisies || {})
+                    const teintesLigne = Object.entries(sansClesInternes(l.variantesChoisies))
                       .map(([cle, v]) => ({ cle, texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
                       .filter((t): t is { cle: string; texte: string; hex: string | undefined } => !!t.texte);
                     /* Change la teinte d'une ligne en tapant un RAL (« 7042 » ou « RAL 7042 »). L'option du même RAL
@@ -3315,7 +3352,7 @@ export default function Devis() {
                             setLignes(prev => prev.map(li => {
                               if (li.id !== l.id) return li;
                               const validIds = new Set(prod.variantes!.map(d => d.id));
-                              const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k)));
+                              const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k) || k.startsWith('__')));
                               const variantesChoisies = { ...cleaned, [dim.id]: label };
                               const totalDiff = prod.variantes!.reduce((sum, d) => {
                                 const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
@@ -3347,7 +3384,7 @@ export default function Devis() {
                         <>
                             {/* ── Cellules (contenu réutilisé cartes + tableau) ── */}
                             {(() => {
-                              const achatLigne = !l.produitId ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
+                              const achatLigne = (!l.produitId || !!l.variantesChoisies?.[CLE_COMPO]) ? (l.prixAchatLigne ?? 0) * l.quantite : (prod ? getPrixPourQuantite(prod, l.quantite).prixAchat * l.quantite + forfaitCommandeLigne(l, lignes, id => produitParId(produits, id)) : 0);
                               const margeLigne = t.totalHT - achatLigne;
                               /* Quantité vide ou nulle (ligne chiffrée à la surface, surface pas encore saisie) :
                                  le coefficient se lit alors sur UNE unité — il ne dépend pas de la quantité. */
@@ -4708,6 +4745,8 @@ export default function Devis() {
           />
         </div>
       )}
+
+      <VarianteCompoDialog produit={variantePour?.produit ?? null} onChoix={appliquerVarianteCompo} />
 
       <OptionsArticleDialog
         produit={optionsPour?.produit ?? null}

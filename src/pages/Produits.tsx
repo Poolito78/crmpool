@@ -10,6 +10,8 @@ import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import MentionFiche from '@/components/MentionFiche';
 import OptionsArticleEditor from '@/components/OptionsArticleEditor';
+import VariantesCompoEditor from '@/components/VariantesCompoEditor';
+import type { VarianteCompo } from '@/lib/variantesCompo';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
 import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme } from '@/lib/systemes';
 import { LIBELLE_TYPE_FICHE, sansMention, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
@@ -359,6 +361,8 @@ export default function Produits() {
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [isTypeKit, setIsTypeKit] = useState(false);
   const [lignesKit, setLignesKit] = useState<LigneKit[]>([]);
+  const [isTypeVariantesCompo, setIsTypeVariantesCompo] = useState(false);
+  const [variantesCompo, setVariantesCompo] = useState<VarianteCompo[]>([]);
   const [isTypeOptions, setIsTypeOptions] = useState(false);
   const [lignesOptions, setLignesOptions] = useState<LigneKit[]>([]);
   const [kitDragIdx, setKitDragIdx] = useState<number | null>(null);
@@ -1013,7 +1017,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setIsTypeOptions(false); setLignesOptions([]); setPaliersPrix([]); setAchatsManuel([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setIsTypeOptions(false); setLignesOptions([]); setIsTypeVariantesCompo(false); setVariantesCompo([]); setPaliersPrix([]); setAchatsManuel([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -1061,6 +1065,8 @@ export default function Produits() {
     setComposantOpenIdx(null);
     setIsTypeKit(p.typeKit ?? false);
     setIsTypeOptions(p.typeOptions ?? false);
+    setIsTypeVariantesCompo(p.typeVariantesCompo ?? false);
+    setVariantesCompo(p.variantesCompo ? p.variantesCompo.map(v => ({ ...v, composants: v.composants.map(c => ({ ...c })) })) : []);
     setLignesOptions(p.lignesOptions ? p.lignesOptions.map(o => ({ ...o })) : []);
     setLignesKit(p.lignesKit || []);
     setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
@@ -1134,6 +1140,7 @@ export default function Produits() {
 
     const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
     const lignesOptionsToSave = isTypeOptions && lignesOptions.length > 0 ? lignesOptions : null;
+    const variantesCompoToSave = isTypeVariantesCompo && variantesCompo.length > 0 ? variantesCompo : null;
     const paliersPrixToSave = paliersPrix.length > 0 ? paliersPrix : null;
     const variantesToSave = variantes.length > 0 ? variantes : null;
     const achatsToSave = achatsManuel.filter(a => a.date && a.prix > 0 && a.quantite > 0).map(a => ({ ...a, source: 'manuel' as const }));
@@ -1151,10 +1158,10 @@ export default function Produits() {
        * On laisse donc `dater()` seul juge, en partant du produit tel qu'il
        * est en base plutôt que du formulaire. */
       const { prixAchatMaj: _pam, prixVenteMaj: _pvm, ...formSansDates } = form;
-      const complements = { composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || [], paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
+      const complements = { composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || [], typeVariantesCompo: isTypeVariantesCompo, variantesCompo: variantesCompoToSave || [], paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
       majProduitEdite(p => ({ ...p, ...formSansDates, ...complements }));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, type_variantes_compo: isTypeVariantesCompo, variantes_compo: variantesCompoToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
       });
       updateDevis(prev => prev.map(d => ({
@@ -1193,11 +1200,11 @@ export default function Produits() {
       }, 1200);
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || undefined, typeVariantesCompo: isTypeVariantesCompo, variantesCompo: variantesCompoToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
-      if (composantsToSave || lignesKitToSave || lignesOptionsToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', newId).then(({ error }) => {
+      if (composantsToSave || lignesKitToSave || lignesOptionsToSave || variantesCompoToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, type_variantes_compo: isTypeVariantesCompo, variantes_compo: variantesCompoToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', newId).then(({ error }) => {
           if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats nouveau produit:', error);
         });
       }
@@ -3123,6 +3130,15 @@ export default function Produits() {
               )}
               </div>{/* fin p-3 space-y-3 */}
             </div>
+
+            {/* Variantes composées — proposées AVANT les options, une combinaison de produits sur une ligne */}
+            <VariantesCompoEditor
+              actif={isTypeVariantesCompo}
+              onActif={setIsTypeVariantesCompo}
+              variantes={variantesCompo}
+              onChange={setVariantesCompo}
+              produits={produits}
+            />
 
             {/* Options — produits proposés (à cocher) à la saisie de l'article dans un devis */}
             <OptionsArticleEditor
