@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import type { Produit } from '@/lib/store';
+import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { ajouterFicheAuProduit, deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 
 /**
@@ -23,6 +24,22 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
   const [exclus, setExclus] = useState<Set<number>>(new Set());
   const [envoi, setEnvoi] = useState(false);
   const [fait, setFait] = useState<string | null>(null);
+  const [choisiAMain, setChoisiAMain] = useState(false);
+
+  /* L'article se reconnaît d'après le NOM du premier PDF (« FLOWFAST 107
+     Primer fiche technique.pdf »), comme à la fiche article où il est déjà
+     connu. Retenu d'office seulement quand le rapprochement est SÛR ; sinon
+     les candidats sont proposés et rien n'est présélectionné. */
+  const nomPremier = pdfs[0]?.name ?? '';
+  const reco = useMemo(() => {
+    const texte = nomPremier.replace(/\.pdf$/i, '').replace(/[_\-.]+/g, ' ')
+      .replace(/\b(fiche|technique|ft|fds|tds|datasheet|data|sheet)\b/gi, ' ').trim();
+    return texte ? rapprocherArticle(texte, produits, 8) : null;
+  }, [nomPremier, produits]);
+
+  useEffect(() => {
+    if (!choisiAMain && reco?.confiance === 'sure' && reco.meilleur) setProduitId(reco.meilleur.id);
+  }, [reco, choisiAMain]);
 
   if (pdfs.length === 0) return null;
   const aEnvoyer = pdfs.filter((_, i) => !exclus.has(i));
@@ -67,7 +84,18 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
             </li>
           ))}
         </ul>
-        <ProduitCombobox produits={produits} value={produitId} onSelect={setProduitId} />
+        <ProduitCombobox
+          produits={produits}
+          suggestions={reco?.candidats}
+          value={produitId}
+          onSelect={id => { setChoisiAMain(true); setProduitId(id); }}
+        />
+        {reco?.confiance === 'sure' && reco.meilleur && !choisiAMain && (
+          <p className="text-xs text-muted-foreground">Article reconnu d'après le nom du fichier : {reco.meilleur.reference} — modifiable.</p>
+        )}
+        {reco?.confiance === 'douteux' && !produitId && (
+          <p className="text-xs text-amber-600">Article incertain d'après le nom du fichier — à choisir (candidats proposés).</p>
+        )}
         <Button size="sm" onClick={ajouter} disabled={envoi || !produitId || aEnvoyer.length === 0}>
           {envoi ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <FileText className="w-3.5 h-3.5 mr-1.5" />}
           Ajouter {aEnvoyer.length > 1 ? `${aEnvoyer.length} fiches` : 'la fiche'} à l'article
