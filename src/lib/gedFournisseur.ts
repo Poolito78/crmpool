@@ -188,3 +188,17 @@ export function useNombreDocumentsFournisseur() {
 
   return { nombres, recharger };
 }
+
+/** Tous les documents de tous les fournisseurs, du plus récent au plus ancien. */
+export async function listerDocumentsFournisseur(): Promise<DocumentFournisseur[]> {
+  const { data, error } = await table().select('*').order('created_at', { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(depuisLigne);
+}
+
+/** Récupère le fichier d'un document (pour le recopier ailleurs). */
+export async function telechargerDocumentFournisseur(d: DocumentFournisseur): Promise<File> {
+  const { data, error } = await supabase.storage.from(BUCKET).download(d.fichierPath);
+  if (error || !data) throw new Error(error?.message ?? 'Téléchargement impossible');
+  return new File([data], d.fichierNom, { type: d.fichierMime || 'application/pdf' });
+}

@@ -7,6 +7,7 @@ import {
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
+import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import { LIBELLE_TYPE_FICHE, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
@@ -17,7 +18,7 @@ import { designationProduit, generateId, formatMontant, formatDate, calculerTota
 import { supabase } from '@/integrations/supabase/client';
 import { inscrireDansLaListeNoire, retirerDeLaListeNoire } from '@/lib/produitsSupprimes';
 import { rafraichirStockOdoo } from '@/lib/stockOdoo';
-import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2 } from 'lucide-react';
+import { Plus, RefreshCw, Search, Edit2, Trash2, Upload, ArrowLeft, Filter, X, Download, Layers, Trash, Copy, ChevronUp, ChevronDown, ChevronsUpDown, Columns2, ExternalLink, GripVertical, Warehouse, Truck, Package, Save, FileText, ShoppingCart, Euro, LayoutList, Table2, Check, History, AlertTriangle, Image as ImageIcon, Star, Link2, Loader2, FolderOpen } from 'lucide-react';
 import FilterSuggestInput from '@/components/FilterSuggestInput';
 import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
 import ColResizeHandle from '@/components/ColResizeHandle';
@@ -399,6 +400,7 @@ export default function Produits() {
       return fichesDuProduit(p).filter(f => f.url).length + cat;
     };
   }, [docsCategorie]);
+  const [gedFicheOuvert, setGedFicheOuvert] = useState(false);
   const [docNiveau, setDocNiveau] = useState('');
   const [docGenre, setDocGenre] = useState<GenreDocument>('fiche');
   const [docLibelle, setDocLibelle] = useState('');
@@ -3239,12 +3241,37 @@ export default function Produits() {
                     )}
                   </div>
                 ))}
-                <Button
-                  type="button" size="sm" variant="outline" className="h-7 text-xs"
-                  onClick={() => setForm(p => ecrireFiches(p, [...fichesDuProduit(p), { url: '', label: '' }]))}
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" />Ajouter une fiche technique
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-xs"
+                    onClick={() => setForm(p => ecrireFiches(p, [...fichesDuProduit(p), { url: '', label: '' }]))}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1" />Ajouter une fiche technique
+                  </Button>
+                  <Button
+                    type="button" size="sm" variant="outline" className="h-7 text-xs"
+                    disabled={!editing?.id}
+                    title={editing?.id ? 'Reprendre une fiche déjà rangée dans la GED des fournisseurs' : 'Enregistrez d\'abord l\'article'}
+                    onClick={() => setGedFicheOuvert(true)}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 mr-1" />Choisir dans la GED
+                  </Button>
+                  {editing?.id && (
+                    <ChoisirFicheGed
+                      open={gedFicheOuvert}
+                      onOpenChange={setGedFicheOuvert}
+                      produitId={editing.id}
+                      fournisseurId={form.fournisseurId || undefined}
+                      onChoisie={fiche => {
+                        setForm(p => ecrireFiches(p, [
+                          ...fichesDuProduit(p).filter(x => x.url || x.label),
+                          { ...fiche, type: 'fournisseur' as TypeFiche },
+                        ]));
+                        toast.success('Fiche ajoutée — cliquez sur Modifier pour enregistrer.');
+                      }}
+                    />
+                  )}
+                </div>
               </div>
             );
 
