@@ -401,6 +401,7 @@ export default function Produits() {
     };
   }, [docsCategorie]);
   const [gedFicheOuvert, setGedFicheOuvert] = useState(false);
+  const [docMention, setDocMention] = useState<TypeFiche | undefined>(undefined);
   const [docNiveau, setDocNiveau] = useState('');
   const [docGenre, setDocGenre] = useState<GenreDocument>('fiche');
   const [docLibelle, setDocLibelle] = useState('');
@@ -3334,20 +3335,56 @@ export default function Produits() {
                     {docsApplicables.length > 0 && (
                       <ul className="space-y-1">
                         {docsApplicables.map(d => (
-                          <li key={d.id} className="flex items-center gap-1.5">
-                            <span className="text-[10px] text-muted-foreground w-24 shrink-0">
-                              {LIBELLE_GENRE[d.genre]}
-                            </span>
-                            <Input
-                              className="h-7 text-[11px] flex-1"
-                              defaultValue={d.libelle}
-                              onBlur={async e => {
-                                const v = e.target.value.trim();
-                                if (!v || v === d.libelle) return;
-                                const err = await modifierDocCategorie(d.id, { libelle: v });
-                                if (err) toast.error(err); else toast.success('Libellé modifié.');
-                              }}
-                            />
+                          <li key={d.id} className="space-y-1 pb-2 border-b border-border/60 last:border-0">
+                            <p className="text-[10px] text-muted-foreground">{LIBELLE_GENRE[d.genre]}</p>
+                            <div className="grid grid-cols-1 sm:grid-cols-[1fr_1fr_13rem] gap-2">
+                              <div>
+                                <Label className="text-xs">Texte affiché dans le mail</Label>
+                                <Input
+                                  className="h-9 text-xs"
+                                  defaultValue={d.libelle}
+                                  onBlur={async e => {
+                                    const v = e.target.value.trim();
+                                    if (!v || v === d.libelle) return;
+                                    const err = await modifierDocCategorie(d.id, { libelle: v });
+                                    if (err) toast.error(err); else toast.success('Texte modifié.');
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">URL (lien)</Label>
+                                <Input
+                                  className="h-9 text-xs"
+                                  type="url"
+                                  defaultValue={d.url}
+                                  onBlur={async e => {
+                                    const v = e.target.value.trim();
+                                    if (!v || v === d.url) return;
+                                    const err = await modifierDocCategorie(d.id, { url: v });
+                                    if (err) toast.error(err); else toast.success('Lien modifié.');
+                                  }}
+                                />
+                              </div>
+                              <div>
+                                <Label className="text-xs">Mention</Label>
+                                <Select
+                                  value={d.mention ?? 'aucun'}
+                                  onValueChange={async v => {
+                                    const mention = v === 'aucun' ? undefined : v as TypeFiche;
+                                    const err = await modifierDocCategorie(d.id, { mention });
+                                    if (err) toast.error(err); else toast.success('Mention modifiée.');
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="aucun">Sans mention</SelectItem>
+                                    <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
+                                    <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 justify-end">
                             {/* D'OÙ VIENT CE DOCUMENT : sans cette mention, on
                                 supprimerait depuis un article une ligne posée
                                 trois niveaux plus haut, pour des milliers
@@ -3377,6 +3414,7 @@ export default function Produits() {
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
+                            </div>
                           </li>
                         ))}
                       </ul>
@@ -3436,6 +3474,17 @@ export default function Produits() {
                             />
                           </div>
                         </div>
+                        <div className="w-full sm:w-1/2">
+                          <Label className="text-xs">Mention</Label>
+                          <Select value={docMention ?? 'aucun'} onValueChange={v => setDocMention(v === 'aucun' ? undefined : v as TypeFiche)}>
+                            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aucun">Sans mention</SelectItem>
+                              <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
+                              <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[11px] text-muted-foreground">
                             S'affichera sur les{' '}
@@ -3449,7 +3498,7 @@ export default function Produits() {
                             onClick={async () => {
                               const err = await ajouterDocCategorie({
                                 categorie: niveauRetenu, genre: docGenre,
-                                libelle: docLibelle, url: docUrl,
+                                libelle: docLibelle, url: docUrl, mention: docMention,
                               });
                               if (err) { toast.error(err); return; }
                               setDocLibelle(''); setDocUrl(''); setDocFormOuvert(false);

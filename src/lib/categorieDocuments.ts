@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { LienProduit } from './liensProduit';
+import { avecMention, type LienProduit, type TypeFiche } from './liensProduit';
 
 /**
  * Documents attachés à une CATÉGORIE d'articles.
@@ -43,6 +43,8 @@ export interface DocumentCategorie {
   libelle: string;
   url: string;
   genre: GenreDocument;
+  /** Fiche du fournisseur ou d'ISOFLOOR : la mention précède le libellé dans les mails. */
+  mention?: TypeFiche;
   ordre: number;
   createdAt: string;
 }
@@ -177,7 +179,7 @@ export function liensDocumentsCategorie(
         id: `cat:${d.id}`,
         produitId: a.id,
         cible: 'categorie',
-        label: d.libelle,
+        label: avecMention(d.libelle, d.mention),
         url: d.url,
       });
     }
@@ -198,6 +200,7 @@ export function dbToDocumentCategorie(r: Row): DocumentCategorie {
     libelle: String(r.libelle),
     url: String(r.url),
     genre: (GENRES as string[]).includes(genre) ? (genre as GenreDocument) : 'autre',
+    mention: r.mention === 'fournisseur' || r.mention === 'isofloor' ? r.mention : undefined,
     ordre: Number(r.ordre) || 0,
     createdAt: String(r.created_at),
   };
@@ -236,7 +239,7 @@ export function useCategorieDocuments() {
   useEffect(() => { void recharger(); }, [recharger]);
 
   const ajouter = useCallback(async (
-    doc: { categorie: string; libelle: string; url: string; genre: GenreDocument },
+    doc: { categorie: string; libelle: string; url: string; genre: GenreDocument; mention?: TypeFiche },
   ): Promise<string | null> => {
     const categorie = normaliserCategorie(doc.categorie);
     if (!categorie) return "Cet article n'a pas de catégorie : rangez-le d'abord.";
@@ -246,7 +249,7 @@ export function useCategorieDocuments() {
     if (!url) return "L'adresse du document manque.";
     const { data, error } = await supabase
       .from('categorie_documents')
-      .insert({ categorie, libelle, url, genre: doc.genre } as never)
+      .insert({ categorie, libelle, url, genre: doc.genre, ...(doc.mention ? { mention: doc.mention } : {}) } as never)
       .select().single();
     if (error) return error.message;
     setDocuments(prev => [...prev, dbToDocumentCategorie(data as Row)]);
@@ -254,10 +257,12 @@ export function useCategorieDocuments() {
   }, []);
 
   const modifier = useCallback(async (
-    id: string, champs: Partial<Pick<DocumentCategorie, 'libelle' | 'url' | 'genre' | 'ordre'>>,
+    id: string, champs: Partial<Pick<DocumentCategorie, 'libelle' | 'url' | 'genre' | 'ordre' | 'mention'>>,
   ): Promise<string | null> => {
+    // `mention` absente = retirée : la base reçoit NULL, pas « undefined ».
+    const envoi = 'mention' in champs ? { ...champs, mention: champs.mention ?? null } : champs;
     const { error } = await supabase
-      .from('categorie_documents').update(champs as never).eq('id', id);
+      .from('categorie_documents').update(envoi as never).eq('id', id);
     if (error) return error.message;
     setDocuments(prev => prev.map(d => (d.id === id ? { ...d, ...champs } : d)));
     return null;

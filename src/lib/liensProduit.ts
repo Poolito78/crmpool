@@ -150,6 +150,10 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  * Texte du lien d'une fiche. Le libellé saisi gagne ; la mention du type
  * (fournisseur / ISOFLOOR) le précède quand elle existe, ou le remplace.
  */
+export function avecMention(label: string, type?: TypeFiche): string {
+  return type ? `${LIBELLE_TYPE_FICHE[type]} — ${label}` : label;
+}
+
 function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom: string): string {
   const mention = f.type ? LIBELLE_TYPE_FICHE[f.type] : '';
   const saisi = f.label.trim();

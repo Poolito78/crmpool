@@ -75,6 +75,7 @@ export type Database = {
           genre: string
           id: string
           libelle: string
+          mention: string | null
           ordre: number
           url: string
           user_id: string
@@ -85,6 +86,7 @@ export type Database = {
           genre?: string
           id?: string
           libelle: string
+          mention: string | null
           ordre?: number
           url: string
           user_id?: string
@@ -95,6 +97,7 @@ export type Database = {
           genre?: string
           id?: string
           libelle?: string
+          mention?: string | null
           ordre?: number
           url?: string
           user_id?: string
