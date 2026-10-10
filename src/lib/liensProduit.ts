@@ -29,7 +29,7 @@
  *    C'est le seul lien qui reste juste quand la photo change.
  */
 
-export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie';
+export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie' | 'systeme';
 
 /**
  * D'où vient une fiche technique : du FOURNISSEUR (sa fiche d'origine) ou
@@ -108,6 +108,9 @@ export const LIBELLE_CIBLE: Record<CibleLien, string> = {
      `liensDuProduit` ni `articlesLiesDuDevis` ne le produisent ; il est ajouté
      par l'écran qui connaît les catégories du devis. */
   categorie: 'Document de la famille',
+  /* Cinquième : la fiche d'un SYSTÈME de mise en œuvre dont l'article est un
+     composant (voir `liensFichesSystemes`, `systemes.ts`). */
+  systeme: 'Fiche système',
 };
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { declinerSysteme, kitsPour, chiffrerZones, type Systeme, type SystemeComposant } from './systemes';
+import { declinerSysteme, kitsPour, chiffrerZones, liensFichesSystemes, systemeEstObjet, type Systeme, type SystemeComposant } from './systemes';
 
 function composant(p: Partial<SystemeComposant>): SystemeComposant {
   return {
@@ -238,5 +238,29 @@ describe('composants vendus au m² et tranches de surface', () => {
     expect(p.quantiteKg).toBe(3.3);                  // coût chantier
     expect(p.contenants).toBe(4);                    // quantité du devis
     expect(p.explication).toBe('3.3 m² posés → 4 m² commandés (m² entier)');
+  });
+});
+
+describe('fiches des systèmes', () => {
+  const avecFiche: Systeme = {
+    ...FLOWFAST, ficheUrl: 'https://ex/fs319.pdf', ficheLabel: 'Flowfast 319 Route',
+    composants: [composant({ id: 'r', produitId: 'p1', role: 'base' }), composant({ id: 'c', produitId: 'p2', role: 'charge' })],
+  };
+
+  it('une ligne par système, même si deux articles en sont composants, avec la mention par défaut', () => {
+    const liens = liensFichesSystemes([avecFiche, ALPES], [{ id: 'p1' }, { id: 'p2' }]);
+    expect(liens).toHaveLength(1);
+    expect(liens[0].cible).toBe('systeme');
+    expect(liens[0].label).toBe('Fiche système — Flowfast 319 Route');
+  });
+
+  it("un système sans adresse de fiche n'est pas proposé", () => {
+    expect(liensFichesSystemes([FLOWFAST], [{ id: 'p1' }])).toEqual([]);
+  });
+
+  it("le système est l'objet du devis quand son nom y figure, à la casse et aux accents près", () => {
+    expect(systemeEstObjet(FLOWFAST, ['Système FLOWFAST 319 route'])).toBe(true);
+    expect(systemeEstObjet(FLOWFAST, ['Flowfast 107'])).toBe(false);
+    expect(systemeEstObjet(FLOWFAST, [undefined, ''])).toBe(false);
   });
 });

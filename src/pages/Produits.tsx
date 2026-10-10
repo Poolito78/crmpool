@@ -9,6 +9,8 @@ import {
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import MentionFiche from '@/components/MentionFiche';
+import FichesSystemesArticle from '@/components/FichesSystemesArticle';
+import { useSystemes } from '@/lib/systemes';
 import { LIBELLE_TYPE_FICHE, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
@@ -417,6 +419,7 @@ export default function Produits() {
     };
   }, [docsCategorie]);
   const [gedFicheOuvert, setGedFicheOuvert] = useState(false);
+  const { systemes, recharger: rechargerSystemes } = useSystemes();
   const [docMention, setDocMention] = useState<TypeFiche | undefined>(undefined);
   const [docNiveau, setDocNiveau] = useState('');
   const [docGenre, setDocGenre] = useState<GenreDocument>('fiche');
@@ -3561,6 +3564,7 @@ export default function Produits() {
             return (
               <div className="py-2 space-y-3">
                 {blocFiche}
+                <FichesSystemesArticle produitId={editing.id} systemes={systemes} onChange={() => void rechargerSystemes()} />
                 {blocDocsCategorie}
 
                 {imagesErreur && (

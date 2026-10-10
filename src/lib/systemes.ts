@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Produit } from '@/lib/store';
+import { avecMention, type LienProduit } from '@/lib/liensProduit';
 
 /**
  * Systèmes de mise en œuvre, tels que les décrivent les fiches techniques.
@@ -114,6 +115,12 @@ export interface Systeme {
   description?: string;
   sourceFiche?: string;
   sourceDrive?: string;
+  /** La fiche du système (PDF) que le client reçoit avec le devis. */
+  ficheUrl?: string;
+  /** Texte du lien dans le mail ; à défaut, le nom du système. */
+  ficheLabel?: string;
+  /** Mention qui précède le texte ; à défaut « Fiche système ». */
+  ficheMention?: string;
   /**
    * Surface couverte par un petit mélange — 5 m² pour le Flowfast 319
    * Concrete : 2,5 kg de résine, 1,255 kg de SNL Concrete, 0,2 kg de pigments.
@@ -172,6 +179,9 @@ export function dbToSysteme(r: any): Systeme {
     description: r.description || undefined,
     sourceFiche: r.source_fiche || undefined,
     sourceDrive: r.source_drive || undefined,
+    ficheUrl: r.fiche_url || undefined,
+    ficheLabel: r.fiche_label || undefined,
+    ficheMention: r.fiche_mention || undefined,
     surfaceKitM2: r.surface_kit_m2 != null ? Number(r.surface_kit_m2) : undefined,
     kitSurfaceMaxM2: r.kit_surface_max_m2 != null ? Number(r.kit_surface_max_m2) : undefined,
     actif: r.actif ?? true,
@@ -522,4 +532,68 @@ export function systemesPour(systemes: Systeme[], produit?: Produit | null) {
   if (!produit) return [];
   return systemes.filter(s =>
     s.composants.some(c => c.produitId === produit.id && c.role === 'base'));
+}
+
+/* ── Fiches des systèmes ─────────────────────────────────────────────────── */
+
+/** Les systèmes dont l'article est un composant (quel que soit son rôle). */
+export function systemesDeLArticle(systemes: Systeme[], produitId: string): Systeme[] {
+  return systemes.filter(s => s.composants.some(c => c.produitId === produitId));
+}
+
+const norm = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+
+/**
+ * Le système est-il l'OBJET de ce devis ? Oui quand le système nommé sur le
+ * devis (`devis.systeme`) est le sien — au nom près, l'un pouvant contenir
+ * l'autre (« Flowfast 319 Concrete » / « Système Flowfast 319 Concrete »).
+ * Un nom trop court (< 4 caractères) ne rapproche rien.
+ */
+export function systemeEstObjet(s: Pick<Systeme, 'nom'>, textes: (string | undefined)[]): boolean {
+  const nom = norm(s.nom);
+  if (nom.length < 4) return false;
+  return textes.some(t => {
+    const n = norm(t ?? '');
+    return n.length >= 4 && (n === nom || n.includes(nom) || nom.includes(n));
+  });
+}
+
+/**
+ * Les liens des fiches de systèmes pour les articles d'un devis : une ligne
+ * par système (même si plusieurs articles en sont composants), seulement ceux
+ * dont la fiche a une adresse.
+ */
+export function liensFichesSystemes(
+  systemes: Systeme[],
+  articles: { id: string }[],
+): LienProduit[] {
+  const vus = new Set<string>();
+  const out: LienProduit[] = [];
+  for (const a of articles) {
+    for (const s of systemesDeLArticle(systemes, a.id)) {
+      const url = s.ficheUrl?.trim();
+      if (!url || vus.has(s.id)) continue;
+      vus.add(s.id);
+      out.push({
+        id: `sys:${s.id}`,
+        produitId: a.id,
+        cible: 'systeme',
+        label: avecMention(s.ficheLabel?.trim() || s.nom, s.ficheMention || 'systeme'),
+        url,
+      });
+    }
+  }
+  return out;
+}
+
+/** Enregistre la fiche d'un système. Rend un message d'erreur, ou null. */
+export async function enregistrerFicheSysteme(
+  id: string, fiche: { url?: string; label?: string; mention?: string },
+): Promise<string | null> {
+  const { error } = await supabase.from('systemes').update({
+    fiche_url: fiche.url?.trim() || null,
+    fiche_label: fiche.label?.trim() || null,
+    fiche_mention: fiche.mention?.trim() || null,
+  } as never).eq('id', id);
+  return error ? error.message : null;
 }

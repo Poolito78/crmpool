@@ -10,6 +10,7 @@ import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearSto
 import { supabase } from '@/integrations/supabase/client';
 import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from '@/lib/liensProduit';
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
+import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
@@ -20,6 +21,7 @@ const LIBELLE_PASTILLE: Record<CibleLien, string> = {
   image: 'Photos',
   categorie: 'Documents de la famille',
   page: 'Fiches CRM',
+  systeme: 'Fiches systèmes',
 };
 
 interface PjFichier {
@@ -427,8 +429,9 @@ Restant à ta disposition pour tout complément d'information.`
         .in('produit_id', articles.map(p => p.id))
         .order('ordre', { ascending: true }),
       supabase.from('categorie_documents').select('*').order('categorie').order('ordre'),
+      supabase.from('systemes').select('*, systeme_composants(*)').eq('actif', true),
     ])
-      .then(([{ data }, { data: docs }]) => {
+      .then(([{ data }, { data: docs }, { data: sys }]) => {
         if (annule) return;
         // `ordre = 0` désigne la principale ; le premier arrivé gagne.
         const parProduit: Record<string, string | undefined> = {};
@@ -442,14 +445,27 @@ Restant à ta disposition pour tout complément d'information.`
         }
         const liens = liensDesProduits(articles, parProduit, undefined, libelleParProduit);
         const liensFamille = liensDocumentsCategorie(articles, (docs ?? []).map(dbToDocumentCategorie));
-        setLiensProduit([...liens, ...liensFamille]);
+        const systemes = (sys ?? []).map(dbToSysteme);
+        const liensSysteme = liensFichesSystemes(systemes, articles);
+        setLiensProduit([...liens, ...liensSysteme, ...liensFamille]);
         /* Fiches techniques et photos cochées ; fiche publique du CRM et
            DOCUMENTS DE FAMILLE décochés. Une homologation ne s'invite pas
            d'elle-même dans tous les devis — elle se joint quand elle est
            demandée. */
-        setSelectedLiensIds(new Set(
-          liens.filter(l => l.cible !== 'page' && l.cible !== 'categorie').map(l => l.id),
-        ));
+        /* La fiche d'un SYSTÈME est cochée d'office quand ce système est l'objet
+           du devis (`devis.systeme`), décochée sinon. */
+        const objets = new Set(
+          liensSysteme
+            .filter(l => {
+              const s = systemes.find(x => `sys:${x.id}` === l.id);
+              return !!s && systemeEstObjet(s, [devis.systeme]);
+            })
+            .map(l => l.id),
+        );
+        setSelectedLiensIds(new Set([
+          ...liens.filter(l => l.cible !== 'page' && l.cible !== 'categorie').map(l => l.id),
+          ...objets,
+        ]));
       });
     })();
 
@@ -705,7 +721,7 @@ Restant à ta disposition pour tout complément d'information.`
               {/* Cocher/décocher une destination d'un coup — trois articles font
                   déjà neuf lignes, et on veut rarement les neuf. */}
               <div className="flex items-center gap-1.5 flex-wrap pl-6">
-                {(['fiche', 'image', 'categorie', 'page'] as CibleLien[]).map(cible => {
+                {(['fiche', 'systeme', 'image', 'categorie', 'page'] as CibleLien[]).map(cible => {
                   const total = liensProduit.filter(l => l.cible === cible).length;
                   if (total === 0) return null;
                   const pris = liensChoisis.filter(l => l.cible === cible).length;
@@ -736,6 +752,7 @@ Restant à ta disposition pour tout complément d'information.`
                     {l.cible === 'image' && <ImageIcon className="w-4 h-4 text-blue-500 shrink-0" />}
                     {l.cible === 'page' && <Globe className="w-4 h-4 text-violet-500 shrink-0" />}
                     {l.cible === 'categorie' && <Layers className="w-4 h-4 text-amber-500 shrink-0" />}
+                    {l.cible === 'systeme' && <Layers className="w-4 h-4 text-emerald-600 shrink-0" />}
                     {/* Le libellé est modifiable ici : c'est le seul texte que le
                         client lira, et il n'a pas à être celui du catalogue. */}
                     <Input
