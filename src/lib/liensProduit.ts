@@ -42,9 +42,10 @@ export const LIBELLE_TYPE_FICHE: Record<string, string> = {
   fournisseur: 'Fiche technique fournisseur',
   isofloor: 'Fiche technique ISOFLOOR',
   systeme: 'Fiche système',
+  focus: 'Focus Gamme',
 };
 
-export const TYPES_FICHE: string[] = ['fournisseur', 'isofloor', 'systeme'];
+export const TYPES_FICHE: string[] = ['fournisseur', 'isofloor', 'systeme', 'focus'];
 
 /** Le texte d'une mention : le libellé d'une mention habituelle (par sa clé), sinon le texte libre tel quel. */
 export const mentionTexte = (t?: TypeFiche): string => (t ? (LIBELLE_TYPE_FICHE[t] ?? t) : '');
