@@ -6,6 +6,7 @@ import {
   useProduitImages, occupation, formatOctets, estImageAcceptee,
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
+import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import { liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
@@ -3401,9 +3402,27 @@ export default function Produits() {
             const part = Math.min(100, (place.octets / place.quota) * 100);
 
             const traiter = async (fichiers: File[]) => {
-              const images = fichiers.filter(estImageAcceptee);
-              const rejetes = fichiers.length - images.length;
-              if (rejetes) toast.error(`${rejetes} fichier(s) ignoré(s) : ce ne sont pas des images.`);
+              /* Un PDF est une fiche technique : déposé, il devient le lien de
+                 la fiche (celui des mails et des devis). */
+              const pdfs = fichiers.filter(estFichePdf);
+              const images = fichiers.filter(f => !estFichePdf(f) && estImageAcceptee(f));
+              const rejetes = fichiers.length - images.length - pdfs.length;
+              if (rejetes) toast.error(`${rejetes} fichier(s) ignoré(s) : ni image, ni PDF.`);
+              if (pdfs.length) {
+                setImgEnCours(true);
+                let fichesOk = 0;
+                for (const f of pdfs) {
+                  const res = await deposerFicheTechnique(editing.id!, f);
+                  if ('erreur' in res) { toast.error(res.erreur); continue; }
+                  setForm(p => ecrireFiches(p, [
+                    ...fichesDuProduit(p).filter(x => x.url || x.label),
+                    { url: res.url, label: res.label },
+                  ]));
+                  fichesOk++;
+                }
+                setImgEnCours(false);
+                if (fichesOk) toast.success(`${fichesOk} fiche${fichesOk > 1 ? 's' : ''} technique${fichesOk > 1 ? 's' : ''} ajoutée${fichesOk > 1 ? 's' : ''} — cliquez sur Modifier pour enregistrer.`);
+              }
               if (!images.length) return;
               setImgEnCours(true);
               let ok = 0;
@@ -3449,13 +3468,13 @@ export default function Produits() {
                   ) : (
                     <>
                       <ImageIcon className="w-7 h-7 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm font-medium">Glissez vos images ici</p>
+                      <p className="text-sm font-medium">Glissez vos images ou la fiche technique PDF ici</p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        PNG, JPG ou WebP — réduites à {COTE_MAX} px et converties avant l'envoi.
+                        Images (PNG, JPG, WebP) réduites à {COTE_MAX} px avant l'envoi — un PDF devient la fiche technique de l'article (lien ajouté tout seul).
                       </p>
                       <label className="mt-2 inline-block">
                         <input
-                          type="file" accept="image/*" multiple className="hidden"
+                          type="file" accept="image/*,application/pdf" multiple className="hidden"
                           onChange={e => {
                             void traiter(Array.from(e.target.files || []));
                             e.target.value = '';
