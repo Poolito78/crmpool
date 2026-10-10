@@ -28,6 +28,7 @@ import { noteEnHtml } from '@/lib/noteRiche';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
+import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
@@ -1167,6 +1168,34 @@ export default function Devis() {
     localStorage.setItem('devis_ligne_cols_v3', JSON.stringify([...visibleLigneCols]));
   }, [visibleLigneCols]);
 
+  /* Options de l'article saisi : la fenêtre à cocher s'ouvre, les lignes choisies
+     sont insérées juste sous la ligne de l'article. */
+  const [optionsPour, setOptionsPour] = useState<{ ligneId: string; produit: Produit } | null>(null);
+
+  function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
+    if (choisies.length === 0) { setOptionsPour(null); return; }
+    saveSnapshot();
+    const nouvelles: LigneDevis[] = choisies.map(lk => ({
+      id: generateId(),
+      produitId: lk.produitId || undefined,
+      description: lk.description,
+      quantite: lk.quantite,
+      unite: lk.unite,
+      prixUnitaireHT: lk.prixUnitaireHT,
+      tva: 20,
+      remise: lk.remise,
+      consommation: lk.consommation || undefined,
+      note: lk.note,
+    }));
+    setLignes(prev => {
+      const i = prev.findIndex(l => l.id === ligneId);
+      if (i < 0) return [...prev, ...nouvelles];
+      return [...prev.slice(0, i + 1), ...nouvelles, ...prev.slice(i + 1)];
+    });
+    setOptionsPour(null);
+    toast.success(`${choisies.length} option${choisies.length > 1 ? 's' : ''} ajoutée${choisies.length > 1 ? 's' : ''} au devis.`);
+  }
+
   function insertKit(kitProd: Produit) {
     saveSnapshot();
     const grpId = generateId();
@@ -1586,6 +1615,8 @@ export default function Devis() {
       const pfs = produitFournisseurs.filter(pf => pf.produitId === produitId);
       const prio = pfs.find(pf => pf.estPrioritaire) || pfs[0];
       if (prio) setSelectedFournisseurPerLigne(prev => ({ ...prev, [ligneId]: prio.fournisseurId }));
+      // Des options sont renseignées sur l'article : on les propose à cocher.
+      if (p.typeOptions && (p.lignesOptions?.length ?? 0) > 0) setOptionsPour({ ligneId, produit: p });
     }
   }
 
@@ -4677,6 +4708,12 @@ export default function Devis() {
           />
         </div>
       )}
+
+      <OptionsArticleDialog
+        produit={optionsPour?.produit ?? null}
+        onConfirm={choisies => optionsPour && insererOptions(optionsPour.ligneId, choisies)}
+        onCancel={() => setOptionsPour(null)}
+      />
 
       {/* Email Dialog */}
       <DevisEmailDialog

@@ -9,6 +9,7 @@ import {
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import MentionFiche from '@/components/MentionFiche';
+import OptionsArticleEditor from '@/components/OptionsArticleEditor';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
 import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme } from '@/lib/systemes';
 import { LIBELLE_TYPE_FICHE, sansMention, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
@@ -358,6 +359,8 @@ export default function Produits() {
   const [composantPickerSearch, setComposantPickerSearch] = useState('');
   const [isTypeKit, setIsTypeKit] = useState(false);
   const [lignesKit, setLignesKit] = useState<LigneKit[]>([]);
+  const [isTypeOptions, setIsTypeOptions] = useState(false);
+  const [lignesOptions, setLignesOptions] = useState<LigneKit[]>([]);
   const [kitDragIdx, setKitDragIdx] = useState<number | null>(null);
   const [kitDragOverIdx, setKitDragOverIdx] = useState<number | null>(null);
   const [showPrixPublic, setShowPrixPublic] = useState(false);
@@ -1010,7 +1013,7 @@ export default function Produits() {
     setDeleteTarget(null);
   }
 
-  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setPaliersPrix([]); setAchatsManuel([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
+  function openNew() { setEditing(null); setForm(emptyProduit); setComposants([]); setComposantSearches([]); setComposantOpenIdx(null); setIsTypeKit(false); setLignesKit([]); setIsTypeOptions(false); setLignesOptions([]); setPaliersPrix([]); setAchatsManuel([]); setVariantes([]); setEditingStack([]); setProduitTab('infos'); setEntrepotStockEdit(null); setDialogOpen(true); }
 
   function duplicate(p: Produit) {
     const newId = generateId();
@@ -1057,6 +1060,8 @@ export default function Produits() {
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
     setIsTypeKit(p.typeKit ?? false);
+    setIsTypeOptions(p.typeOptions ?? false);
+    setLignesOptions(p.lignesOptions ? p.lignesOptions.map(o => ({ ...o })) : []);
     setLignesKit(p.lignesKit || []);
     setPaliersPrix(p.paliersPrix ? [...p.paliersPrix].sort((a, b) => a.qteMin - b.qteMin) : []);
     setAchatsManuel(p.achatsHistorique ? [...p.achatsHistorique] : []);
@@ -1128,6 +1133,7 @@ export default function Produits() {
     const composantsToSave = composantsRecalc.length > 0 ? composantsRecalc : null;
 
     const lignesKitToSave = isTypeKit && lignesKit.length > 0 ? lignesKit : null;
+    const lignesOptionsToSave = isTypeOptions && lignesOptions.length > 0 ? lignesOptions : null;
     const paliersPrixToSave = paliersPrix.length > 0 ? paliersPrix : null;
     const variantesToSave = variantes.length > 0 ? variantes : null;
     const achatsToSave = achatsManuel.filter(a => a.date && a.prix > 0 && a.quantite > 0).map(a => ({ ...a, source: 'manuel' as const }));
@@ -1145,10 +1151,10 @@ export default function Produits() {
        * On laisse donc `dater()` seul juge, en partant du produit tel qu'il
        * est en base plutôt que du formulaire. */
       const { prixAchatMaj: _pam, prixVenteMaj: _pvm, ...formSansDates } = form;
-      const complements = { composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
+      const complements = { composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || [], paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined };
       majProduitEdite(p => ({ ...p, ...formSansDates, ...complements }));
       // Écriture directe Supabase pour garantir la persistance
-      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
+      supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
       });
       updateDevis(prev => prev.map(d => ({
@@ -1187,11 +1193,11 @@ export default function Produits() {
       }, 1200);
     } else {
       const newId = generateId();
-      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
+      const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
       updateProduits(prev => [...prev, newProd]);
       // Écriture directe Supabase pour garantir la persistance
-      if (composantsToSave || lignesKitToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
-        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', newId).then(({ error }) => {
+      if (composantsToSave || lignesKitToSave || lignesOptionsToSave || paliersPrixToSave || variantesToSave || achatsToSaveOrNull) {
+        supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', newId).then(({ error }) => {
           if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats nouveau produit:', error);
         });
       }
@@ -3117,6 +3123,15 @@ export default function Produits() {
               )}
               </div>{/* fin p-3 space-y-3 */}
             </div>
+
+            {/* Options — produits proposés (à cocher) à la saisie de l'article dans un devis */}
+            <OptionsArticleEditor
+              actif={isTypeOptions}
+              onActif={setIsTypeOptions}
+              lignes={lignesOptions}
+              onChange={setLignesOptions}
+              produits={produits}
+            />
 
             {/* Notes libres de la fiche : texte, chiffres, ce qu'on veut retenir — internes, jamais imprimées au devis. */}
             <div className="border border-border rounded-lg bg-muted/30 p-3 space-y-1.5">

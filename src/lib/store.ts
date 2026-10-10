@@ -273,6 +273,9 @@ export interface Produit {
   composants?: ComposantProduit[];
   typeKit?: boolean;
   lignesKit?: LigneKit[];
+  /** Options proposées (à cocher) quand l'article est saisi dans un devis — contrairement au kit, rien n'est inséré d'office. */
+  typeOptions?: boolean;
+  lignesOptions?: LigneKit[];
   ficheUrl?: string;
   ficheLinkLabel?: string;   // texte affiché du lien hypertexte dans les mails
   ficheType?: TypeFiche;     // type de la première fiche (les suivantes le portent dans leur objet)
@@ -865,6 +868,8 @@ function dbToProduit(r: any): Produit {
     composants: r.composants ? (Array.isArray(r.composants) ? r.composants : JSON.parse(r.composants)) : undefined,
     typeKit: r.type_kit ?? false,
     lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
+    typeOptions: r.type_options ?? false,
+    lignesOptions: r.lignes_options ? (Array.isArray(r.lignes_options) ? r.lignes_options : JSON.parse(r.lignes_options)) : undefined,
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
     ficheType: estTypeFiche(r.fiche_type) ? r.fiche_type : undefined,
@@ -930,6 +935,8 @@ function produitToDb(p: Produit, userId: string) {
     composants: p.composants && p.composants.length > 0 ? p.composants : null,
     type_kit: p.typeKit ?? false,
     lignes_kit: p.lignesKit && p.lignesKit.length > 0 ? p.lignesKit : null,
+    ...(p.typeOptions !== undefined ? { type_options: p.typeOptions } : {}),
+    ...(p.lignesOptions !== undefined ? { lignes_options: p.lignesOptions.length > 0 ? p.lignesOptions : null } : {}),
     fiche_url: p.ficheUrl || null,
     fiche_link_label: p.ficheLinkLabel || null,
     ...(p.ficheType !== undefined ? { fiche_type: p.ficheType || null } : {}),
