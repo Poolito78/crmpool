@@ -3214,6 +3214,7 @@ export default function Produits() {
                               <SelectItem value="aucun">Sans mention</SelectItem>
                               <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
                               <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                              <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -3380,6 +3381,7 @@ export default function Produits() {
                                     <SelectItem value="aucun">Sans mention</SelectItem>
                                     <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
                                     <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                                    <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
@@ -3482,6 +3484,7 @@ export default function Produits() {
                               <SelectItem value="aucun">Sans mention</SelectItem>
                               <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
                               <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                              <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>

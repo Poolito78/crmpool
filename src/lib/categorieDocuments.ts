@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { avecMention, type LienProduit, type TypeFiche } from './liensProduit';
+import { avecMention, estTypeFiche, type LienProduit, type TypeFiche } from './liensProduit';
 
 /**
  * Documents attachés à une CATÉGORIE d'articles.
@@ -200,7 +200,7 @@ export function dbToDocumentCategorie(r: Row): DocumentCategorie {
     libelle: String(r.libelle),
     url: String(r.url),
     genre: (GENRES as string[]).includes(genre) ? (genre as GenreDocument) : 'autre',
-    mention: r.mention === 'fournisseur' || r.mention === 'isofloor' ? r.mention : undefined,
+    mention: estTypeFiche(r.mention) ? r.mention : undefined,
     ordre: Number(r.ordre) || 0,
     createdAt: String(r.created_at),
   };

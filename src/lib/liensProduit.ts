@@ -36,12 +36,18 @@ export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie';
  * d'ISOFLOOR (notre version, à notre nom). Facultatif : une fiche sans type
  * garde son libellé tel quel.
  */
-export type TypeFiche = 'fournisseur' | 'isofloor';
+export type TypeFiche = 'fournisseur' | 'isofloor' | 'systeme';
 
 export const LIBELLE_TYPE_FICHE: Record<TypeFiche, string> = {
   fournisseur: 'Fiche technique fournisseur',
   isofloor: 'Fiche technique ISOFLOOR',
+  systeme: 'Fiche système',
 };
+
+export const TYPES_FICHE: TypeFiche[] = ['fournisseur', 'isofloor', 'systeme'];
+
+export const estTypeFiche = (v: unknown): v is TypeFiche =>
+  typeof v === 'string' && (TYPES_FICHE as string[]).includes(v);
 
 export interface LienProduit {
   /** `${produitId}:${cible}` — stable, sert de clé de sélection. */

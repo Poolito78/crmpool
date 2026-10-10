@@ -104,6 +104,7 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
           <SelectContent>
             <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
             <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+            <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
           </SelectContent>
         </Select>
         <Button size="sm" onClick={ajouter} disabled={envoi || !produitId || aEnvoyer.length === 0}>

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { TypeFiche } from './liensProduit';
+import { estTypeFiche, type TypeFiche } from './liensProduit';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -867,7 +867,7 @@ function dbToProduit(r: any): Produit {
     lignesKit: r.lignes_kit ? (Array.isArray(r.lignes_kit) ? r.lignes_kit : JSON.parse(r.lignes_kit)) : undefined,
     ficheUrl: r.fiche_url || undefined,
     ficheLinkLabel: r.fiche_link_label || undefined,
-    ficheType: r.fiche_type === 'fournisseur' || r.fiche_type === 'isofloor' ? r.fiche_type : undefined,
+    ficheType: estTypeFiche(r.fiche_type) ? r.fiche_type : undefined,
     fichesSupplementaires: r.fiches_supplementaires ? (Array.isArray(r.fiches_supplementaires) ? r.fiches_supplementaires : JSON.parse(r.fiches_supplementaires)) : undefined,
     catalogue: r.catalogue || undefined,
     referenceOdoo: r.reference_odoo || undefined,
