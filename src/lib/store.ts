@@ -71,9 +71,13 @@ export interface Client {
   capitalSocial?: string;
 }
 
+/** Mode d'expédition d'un palier de port : colis express, messagerie palette, camion complet. */
+export type ModeTransport = 'chronopost' | 'messagerie' | 'affretement';
+
 export interface PalierPortPoids {
   poidsMin: number;      // kg à partir desquels ce tarif s'applique
   coutTransport: number; // € HT
+  mode?: ModeTransport;
 }
 
 /**
@@ -85,11 +89,11 @@ export function portFournisseur(
   f: Pick<Fournisseur, 'francoPort' | 'coutTransport' | 'paliersPortPoids'>,
   poidsKg: number,
   montantHT: number,
-): { montant: number; source: 'franco' | 'palier' | 'fixe' } | null {
+): { montant: number; source: 'franco' | 'palier' | 'fixe'; mode?: ModeTransport } | null {
   if (f.francoPort > 0 && montantHT >= f.francoPort) return { montant: 0, source: 'franco' };
   const paliers = [...(f.paliersPortPoids ?? [])].sort((a, b) => b.poidsMin - a.poidsMin);
   const p = poidsKg > 0 ? paliers.find(x => poidsKg >= x.poidsMin) : undefined;
-  if (p) return { montant: p.coutTransport, source: 'palier' };
+  if (p) return { montant: p.coutTransport, source: 'palier', mode: p.mode };
   if (f.coutTransport > 0) return { montant: f.coutTransport, source: 'fixe' };
   return null;
 }

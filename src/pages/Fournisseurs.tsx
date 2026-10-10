@@ -12,6 +12,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import DocumentsFournisseurDialog, { DocumentsFournisseurPanel } from '@/components/DocumentsFournisseurDialog';
 import { useNombreDocumentsFournisseur } from '@/lib/gedFournisseur';
+import TransportFournisseurPanel from '@/components/TransportFournisseurPanel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
@@ -49,7 +50,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
   const [docsFournisseur, setDocsFournisseur] = useState<Fournisseur | null>(null);
-  const [ongletFiche, setOngletFiche] = useState<'infos' | 'documents'>('infos');
+  const [ongletFiche, setOngletFiche] = useState<'infos' | 'transport' | 'documents'>('infos');
   const { nombres: nombresDocs, recharger: rechargerNombresDocs } = useNombreDocumentsFournisseur();
 
   // Encours : utilise dateEcheance stockée si disponible, sinon recalcule depuis dateReception
@@ -96,7 +97,7 @@ export default function Fournisseurs() {
     return Object.keys(importPreview[0]);
   }, [importPreview]);
 
-  function openNew() { setEditing(null); setForm(emptyFournisseur); setDialogOpen(true); }
+  function openNew() { setEditing(null); setOngletFiche('infos'); setForm(emptyFournisseur); setDialogOpen(true); }
 
   function handleEmailExtracted(contact: ExtractedContact) {
     setEditing(null);
@@ -385,17 +386,23 @@ export default function Fournisseurs() {
           <DialogHeader className="shrink-0">
             <DialogTitle>{editing ? 'Modifier' : 'Nouveau fournisseur'}</DialogTitle>
           </DialogHeader>
-          {editing && (
-            <div className="shrink-0 flex gap-1 border-b border-border">
-              {([['infos', 'Informations'], ['documents', 'Documents']] as const).map(([cle, libelle]) => (
-                <button key={cle} type="button" onClick={() => setOngletFiche(cle)}
-                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-1.5 ${ongletFiche === cle ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
-                  {libelle}
-                  {cle === 'documents' && (nombresDocs[editing.id] ?? 0) > 0 && (
-                    <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-[18px] text-center">{nombresDocs[editing.id]}</span>
-                  )}
-                </button>
-              ))}
+          <div className="shrink-0 flex gap-1 border-b border-border">
+            {([['infos', 'Informations'], ['transport', 'Transport'], ...(editing ? [['documents', 'Documents']] : [])] as [typeof ongletFiche, string][]).map(([cle, libelle]) => (
+              <button key={cle} type="button" onClick={() => setOngletFiche(cle)}
+                className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-1.5 ${ongletFiche === cle ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                {libelle}
+                {cle === 'documents' && editing && (nombresDocs[editing.id] ?? 0) > 0 && (
+                  <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-[18px] text-center">{nombresDocs[editing.id]}</span>
+                )}
+              </button>
+            ))}
+          </div>
+          {ongletFiche === 'transport' && (
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <TransportFournisseurPanel
+                valeur={{ francoPort: form.francoPort, coutTransport: form.coutTransport, paliersPortPoids: form.paliersPortPoids }}
+                onChange={patch => setForm(prev => ({ ...prev, ...patch }))}
+              />
             </div>
           )}
           {editing && ongletFiche === 'documents' && (
@@ -403,7 +410,7 @@ export default function Fournisseurs() {
               <DocumentsFournisseurPanel fournisseurId={editing.id} onChange={() => void rechargerNombresDocs()} />
             </div>
           )}
-          <div className={`flex-1 overflow-y-auto min-h-0 ${editing && ongletFiche === 'documents' ? 'hidden' : ''}`}>
+          <div className={`flex-1 overflow-y-auto min-h-0 ${ongletFiche !== 'infos' ? 'hidden' : ''}`}>
             {!editing && (
               <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground mb-3" onClick={() => setEmailDialogOpen(true)}>
                 <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
@@ -425,39 +432,6 @@ export default function Fournisseurs() {
                   <Input type={f.type || 'text'} value={(form as any)[f.key]} onChange={e => setForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
                 </div>
               ))}
-              <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
-                <p className="text-sm font-semibold text-foreground">Conditions de livraison</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-xs">Franco de port (€)</Label>
-                    <Input type="number" step="0.01" value={form.francoPort} onChange={e => setForm(prev => ({ ...prev, francoPort: parseFloat(e.target.value) || 0 }))} />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Coût transport (€)</Label>
-                    <Input type="number" step="0.01" value={form.coutTransport} onChange={e => setForm(prev => ({ ...prev, coutTransport: parseFloat(e.target.value) || 0 }))} />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs">Port par tranche de poids (le palier atteint remplace le coût fixe ; franco prioritaire)</Label>
-                  {(form.paliersPortPoids ?? []).map((p, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground shrink-0">dès</span>
-                      <Input type="number" step="1" className="h-8 w-24" value={p.poidsMin}
-                        onChange={e => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).map((x, j) => j === i ? { ...x, poidsMin: parseFloat(e.target.value) || 0 } : x) }))} />
-                      <span className="text-xs text-muted-foreground shrink-0">kg →</span>
-                      <Input type="number" step="0.01" className="h-8 w-24" value={p.coutTransport}
-                        onChange={e => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).map((x, j) => j === i ? { ...x, coutTransport: parseFloat(e.target.value) || 0 } : x) }))} />
-                      <span className="text-xs text-muted-foreground shrink-0">€</span>
-                      <Button type="button" variant="ghost" size="sm" className="h-8 px-2"
-                        onClick={() => setForm(prev => ({ ...prev, paliersPortPoids: (prev.paliersPortPoids ?? []).filter((_, j) => j !== i) }))}>
-                        <Trash2 className="w-3.5 h-3.5" /></Button>
-                    </div>
-                  ))}
-                  <Button type="button" variant="outline" size="sm" className="h-7 text-xs"
-                    onClick={() => setForm(prev => ({ ...prev, paliersPortPoids: [...(prev.paliersPortPoids ?? []), { poidsMin: 0, coutTransport: 0 }] }))}>
-                    <Plus className="w-3.5 h-3.5 mr-1" />Ajouter un palier</Button>
-                </div>
-              </div>
               <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
                 <p className="text-sm font-semibold text-foreground">Conditions de paiement</p>
                 <div>
@@ -504,7 +478,7 @@ export default function Fournisseurs() {
               </div>
             </div>
           </div>
-          <div className={`sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2 ${editing && ongletFiche === 'documents' ? 'hidden' : ''}`}>
+          <div className={`sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2 ${ongletFiche === 'documents' ? 'hidden' : ''}`}>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
           </div>

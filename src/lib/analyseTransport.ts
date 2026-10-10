@@ -36,7 +36,7 @@ Extrait les informations de transport. Réponds UNIQUEMENT avec un objet JSON va
 Les montants doivent être des nombres (ex: 87.50 et non "87,50 €").
 Ne génère aucun texte en dehors du JSON.`;
 
-async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
+export async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
   const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
   const pages: string[] = [];
   for (let i = 1; i <= Math.min(pdf.numPages, 5); i++) {
@@ -55,7 +55,7 @@ async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
  * elle ramène les deux d'un coup et JSON.parse échoue. On compte donc les
  * accolades en ignorant celles situées dans une chaîne.
  */
-function extraireObjetJSON(texte: string): string {
+export function extraireObjetJSON(texte: string): string {
   const debut = texte.indexOf('{');
   if (debut === -1) throw new Error('Pas de JSON dans la réponse');
 
