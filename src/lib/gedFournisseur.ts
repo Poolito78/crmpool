@@ -167,3 +167,20 @@ export function useDocumentsFournisseur(fournisseurId: string | undefined) {
 
   return { documents, chargement, erreur, recharger };
 }
+
+/** Nombre de documents rangés par fournisseur (pastille de la liste). */
+export function useNombreDocumentsFournisseur() {
+  const [nombres, setNombres] = useState<Record<string, number>>({});
+
+  const recharger = useCallback(async () => {
+    const { data, error } = await table().select('fournisseur_id');
+    if (error || !data) return;
+    const n: Record<string, number> = {};
+    for (const r of data) n[r.fournisseur_id] = (n[r.fournisseur_id] ?? 0) + 1;
+    setNombres(n);
+  }, []);
+
+  useEffect(() => { void recharger(); }, [recharger]);
+
+  return { nombres, recharger };
+}

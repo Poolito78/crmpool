@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import DocumentsFournisseurDialog from '@/components/DocumentsFournisseurDialog';
+import { useNombreDocumentsFournisseur } from '@/lib/gedFournisseur';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
@@ -48,6 +49,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
   const [docsFournisseur, setDocsFournisseur] = useState<Fournisseur | null>(null);
+  const { nombres: nombresDocs, recharger: rechargerNombresDocs } = useNombreDocumentsFournisseur();
 
   // Encours : utilise dateEcheance stockée si disponible, sinon recalcule depuis dateReception
   const encoursDuParFournisseur = useMemo(() => {
@@ -316,7 +318,12 @@ export default function Fournisseurs() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
-                      <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="p-1.5 rounded-md hover:bg-muted" title="Documents"><FolderOpen className="w-4 h-4" /></button>
+                      <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="relative p-1.5 rounded-md hover:bg-muted" title="Documents">
+                        <FolderOpen className="w-4 h-4" />
+                        {(nombresDocs[f.id] ?? 0) > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-semibold leading-[14px] text-center">{nombresDocs[f.id]}</span>
+                        )}
+                      </button>
                       <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                       <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
                     </div>
@@ -335,7 +342,12 @@ export default function Fournisseurs() {
             <div className="flex justify-between items-start">
               <div><p className="font-medium">{f.societe}</p><p className="text-sm text-muted-foreground">{f.nom}</p></div>
               <div className="flex gap-1">
-                <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="p-1.5 rounded-md hover:bg-muted" title="Documents"><FolderOpen className="w-4 h-4" /></button>
+                <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="relative p-1.5 rounded-md hover:bg-muted" title="Documents">
+                        <FolderOpen className="w-4 h-4" />
+                        {(nombresDocs[f.id] ?? 0) > 0 && (
+                          <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 rounded-full bg-primary text-primary-foreground text-[9px] font-semibold leading-[14px] text-center">{nombresDocs[f.id]}</span>
+                        )}
+                      </button>
                 <button onClick={() => openEdit(f)} className="p-1.5 rounded-md hover:bg-muted"><Edit2 className="w-4 h-4" /></button>
                 <button onClick={e => { e.stopPropagation(); confirmRemove(f.id); }} className="p-1.5 rounded-md hover:bg-destructive/10 text-destructive"><Trash2 className="w-4 h-4" /></button>
               </div>
@@ -347,7 +359,7 @@ export default function Fournisseurs() {
         ))}
       </div>
 
-      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onOpenChange={o => { if (!o) setDocsFournisseur(null); }} />
+      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onOpenChange={o => { if (!o) { setDocsFournisseur(null); void rechargerNombresDocs(); } }} />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
