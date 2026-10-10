@@ -3,6 +3,8 @@ import { FileText, Loader2, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LIBELLE_TYPE_FICHE, type TypeFiche } from '@/lib/liensProduit';
 import type { Produit } from '@/lib/store';
 import { rapprocherArticle } from '@/lib/rapprochementArticle';
 import { ajouterFicheAuProduit, deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
@@ -25,6 +27,7 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
   const [envoi, setEnvoi] = useState(false);
   const [fait, setFait] = useState<string | null>(null);
   const [choisiAMain, setChoisiAMain] = useState(false);
+  const [type, setType] = useState<TypeFiche>('fournisseur');
 
   /* L'article se reconnaît d'après le NOM du premier PDF (« FLOWFAST 107
      Primer fiche technique.pdf »), comme à la fiche article où il est déjà
@@ -52,7 +55,7 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
     for (const f of aEnvoyer) {
       const res = await deposerFicheTechnique(produit.id, f);
       if ('erreur' in res) { toast.error(res.erreur); continue; }
-      updateProduits(prev => prev.map(p => p.id === produit.id ? ajouterFicheAuProduit(p, res) : p));
+      updateProduits(prev => prev.map(p => p.id === produit.id ? ajouterFicheAuProduit(p, { ...res, type }) : p));
       ok++;
     }
     setEnvoi(false);
@@ -96,6 +99,13 @@ export default function FicheTechniqueArticle({ fichiers, produits, updateProdui
         {reco?.confiance === 'douteux' && !produitId && (
           <p className="text-xs text-amber-600">Article incertain d'après le nom du fichier — à choisir (candidats proposés).</p>
         )}
+        <Select value={type} onValueChange={v => setType(v as TypeFiche)}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
+            <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+          </SelectContent>
+        </Select>
         <Button size="sm" onClick={ajouter} disabled={envoi || !produitId || aEnvoyer.length === 0}>
           {envoi ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <FileText className="w-3.5 h-3.5 mr-1.5" />}
           Ajouter {aEnvoyer.length > 1 ? `${aEnvoyer.length} fiches` : 'la fiche'} à l'article

@@ -31,6 +31,18 @@
 
 export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie';
 
+/**
+ * D'où vient une fiche technique : du FOURNISSEUR (sa fiche d'origine) ou
+ * d'ISOFLOOR (notre version, à notre nom). Facultatif : une fiche sans type
+ * garde son libellé tel quel.
+ */
+export type TypeFiche = 'fournisseur' | 'isofloor';
+
+export const LIBELLE_TYPE_FICHE: Record<TypeFiche, string> = {
+  fournisseur: 'Fiche technique fournisseur',
+  isofloor: 'Fiche technique ISOFLOOR',
+};
+
 export interface LienProduit {
   /** `${produitId}:${cible}` — stable, sert de clé de sélection. */
   id: string;
@@ -50,11 +62,12 @@ export interface ProduitLiable {
   description: string;
   ficheUrl?: string;
   ficheLinkLabel?: string;
-  fichesSupplementaires?: { url: string; label?: string }[];
+  ficheType?: TypeFiche;
+  fichesSupplementaires?: { url: string; label?: string; type?: TypeFiche }[];
 }
 
 /** Ce qui porte des fiches : l'article, ou le formulaire de la fiche article. */
-export type FichesLiables = Pick<ProduitLiable, 'ficheUrl' | 'ficheLinkLabel' | 'fichesSupplementaires'>;
+export type FichesLiables = Pick<ProduitLiable, 'ficheUrl' | 'ficheLinkLabel' | 'ficheType' | 'fichesSupplementaires'>;
 
 /**
  * Toutes les fiches techniques de l'article, la première en tête.
@@ -63,10 +76,10 @@ export type FichesLiables = Pick<ProduitLiable, 'ficheUrl' | 'ficheLinkLabel' | 
  * de sa ligne dans la fiche article, sinon renommer la troisième modifierait
  * la deuxième dès que la première n'a pas d'adresse.
  */
-export function fichesDuProduit(p: FichesLiables): { url: string; label: string }[] {
+export function fichesDuProduit(p: FichesLiables): { url: string; label: string; type?: TypeFiche }[] {
   return [
-    { url: p.ficheUrl ?? '', label: p.ficheLinkLabel ?? '' },
-    ...(p.fichesSupplementaires ?? []).map(f => ({ url: f.url ?? '', label: f.label ?? '' })),
+    { url: p.ficheUrl ?? '', label: p.ficheLinkLabel ?? '', ...(p.ficheType ? { type: p.ficheType } : {}) },
+    ...(p.fichesSupplementaires ?? []).map(f => ({ url: f.url ?? '', label: f.label ?? '', ...(f.type ? { type: f.type } : {}) })),
   ];
 }
 
@@ -133,6 +146,17 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  * la page du CRM en dernier. Un lien dont l'URL manque n'est pas proposé —
  * mieux vaut trois lignes justes qu'une quatrième qui mène à une erreur.
  */
+/**
+ * Texte du lien d'une fiche. Le libellé saisi gagne ; la mention du type
+ * (fournisseur / ISOFLOOR) le précède quand elle existe, ou le remplace.
+ */
+function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom: string): string {
+  const mention = f.type ? LIBELLE_TYPE_FICHE[f.type] : '';
+  const saisi = f.label.trim();
+  if (saisi) return mention ? `${mention} — ${saisi}` : saisi;
+  return `${mention || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`} — ${nom}`;
+}
+
 export function liensDuProduit(
   p: ProduitLiable,
   opts?: { imageUrl?: string; imageLibelle?: string; origine?: string },
@@ -151,8 +175,7 @@ export function liensDuProduit(
       /* Le libellé saisi sur l'article gagne : il a été écrit pour être lu.
          À défaut, les suivantes portent leur numéro — deux liens au même
          texte ne se distinguent pas dans un mail. */
-      label: f.label.trim()
-        || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''} — ${nom}`,
+      label: libelleFiche(f, rang, nom),
       url,
       rang,
     });

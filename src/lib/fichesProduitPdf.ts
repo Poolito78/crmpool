@@ -1,5 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
-import { fichesDuProduit } from './liensProduit';
+import { fichesDuProduit, type TypeFiche } from './liensProduit';
 import type { Produit } from './store';
 
 /**
@@ -44,7 +44,7 @@ export async function deposerFicheTechnique(
  * `fichesSupplementaires`. Une fiche déjà liée (même adresse) n'est pas
  * doublée, et les fiches vides sont écartées.
  */
-export function ajouterFicheAuProduit(p: Produit, fiche: { url: string; label: string }): Produit {
+export function ajouterFicheAuProduit(p: Produit, fiche: { url: string; label: string; type?: TypeFiche }): Produit {
   const liste = fichesDuProduit(p).filter(x => x.url || x.label);
   if (liste.some(x => x.url === fiche.url)) return p;
   const toutes = [...liste, fiche];
@@ -52,6 +52,7 @@ export function ajouterFicheAuProduit(p: Produit, fiche: { url: string; label: s
     ...p,
     ficheUrl: toutes[0].url,
     ficheLinkLabel: toutes[0].label,
+    ficheType: toutes[0].type,
     fichesSupplementaires: toutes.length > 1 ? toutes.slice(1) : p.fichesSupplementaires,
   };
 }

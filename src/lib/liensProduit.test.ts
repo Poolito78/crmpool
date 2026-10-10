@@ -51,6 +51,18 @@ describe('liens proposés', () => {
     expect(fiche.label).toBe('Fiche Flowfresh MF');
   });
 
+  it('fait précéder le libellé de la mention fournisseur / ISOFLOOR', () => {
+    const liens = liensDuProduit(
+      produit({
+        id: 'p1', ficheUrl: 'https://ex/fournisseur.pdf', ficheLinkLabel: 'FP_Flowfast_107.pdf', ficheType: 'fournisseur',
+        fichesSupplementaires: [{ url: 'https://ex/iso.pdf', type: 'isofloor' }],
+      }),
+      { origine: ORIGINE },
+    ).filter(l => l.cible === 'fiche');
+    expect(liens[0].label).toBe('Fiche technique fournisseur — FP_Flowfast_107.pdf');
+    expect(liens[1].label).toBe('Fiche technique ISOFLOOR — Article de démonstration');
+  });
+
   it('construit un libellé porteur de la désignation à défaut', () => {
     const [fiche] = liensDuProduit(
       produit({ id: 'p1', ficheUrl: 'https://exemple/fp.pdf' }),

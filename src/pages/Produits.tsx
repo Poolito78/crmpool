@@ -7,7 +7,7 @@ import {
   COTE_MAX, type ImageProduit,
 } from '@/lib/produitImages';
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
-import { liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
+import { LIBELLE_TYPE_FICHE, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
   LIBELLE_GENRE, GENRES, type GenreDocument,
@@ -150,13 +150,14 @@ const emptyProduit = {
   consommations: undefined as ConsoUsage[] | undefined,
   surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
+  ficheType: undefined as TypeFiche | undefined,
 };
 
 /* LES FICHES TECHNIQUES SE SAISISSENT EN UNE LISTE, mais la première reste
    dans `ficheUrl` / `ficheLinkLabel` — ce que lisent déjà la fiche publique,
    les mails et le devis. Supprimer la première fait donc remonter la
    suivante à sa place. */
-type FormFiches = { ficheUrl: string; ficheLinkLabel: string; fichesSupplementaires?: FicheTechnique[] };
+type FormFiches = { ficheUrl: string; ficheLinkLabel: string; ficheType?: TypeFiche; fichesSupplementaires?: FicheTechnique[] };
 
 function ecrireFiches<F extends FormFiches>(f: F, liste: FicheTechnique[]): F {
   const suivantes = liste.slice(1);
@@ -164,6 +165,7 @@ function ecrireFiches<F extends FormFiches>(f: F, liste: FicheTechnique[]): F {
     ...f,
     ficheUrl: liste[0]?.url ?? '',
     ficheLinkLabel: liste[0]?.label ?? '',
+    ficheType: liste[0]?.type,
     /* Un article qui n'a jamais eu de fiche supplémentaire n'en reçoit pas
        une liste vide : la colonne ne part en base que si on l'a touchée. */
     fichesSupplementaires: suivantes.length || f.fichesSupplementaires !== undefined ? suivantes : undefined,
@@ -1028,7 +1030,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -3201,6 +3203,17 @@ export default function Produits() {
                             placeholder="https://..."
                           />
                         </div>
+                        <div className="w-52 shrink-0">
+                          <Label className="text-xs">Mention</Label>
+                          <Select value={f.type ?? 'aucun'} onValueChange={v => majFiche(i, { type: v === 'aucun' ? undefined : v as TypeFiche })}>
+                            <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="aucun">Sans mention</SelectItem>
+                              <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
+                              <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
                         {f.url && (
                           <a href={f.url} target="_blank" rel="noopener noreferrer"
                             className="p-2 rounded-md border border-border hover:bg-muted text-primary shrink-0 mb-0.5"
@@ -3646,7 +3659,7 @@ export default function Produits() {
                   /* On part du formulaire, pas de l'article enregistré : un
                      libellé qu'on vient de taper doit se voir tout de suite. */
                   const liens = liensDuProduit(
-                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel, fichesSupplementaires: form.fichesSupplementaires },
+                    { ...editing, ficheUrl: form.ficheUrl, ficheLinkLabel: form.ficheLinkLabel, ficheType: form.ficheType, fichesSupplementaires: form.fichesSupplementaires },
                     { imageUrl: principale?.url, imageLibelle: principale?.libelle },
                   );
                   return (

@@ -1719,6 +1719,7 @@ export type Database = {
           est_modele: boolean
           fiche_link_label: string | null
           fiche_url: string | null
+          fiche_type: string | null
           fiches_supplementaires: Json | null
           fournisseur_id: string | null
           id: string
@@ -1769,6 +1770,7 @@ export type Database = {
           est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
+          fiche_type?: string | null
           fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string
@@ -1819,6 +1821,7 @@ export type Database = {
           est_modele?: boolean
           fiche_link_label?: string | null
           fiche_url?: string | null
+          fiche_type?: string | null
           fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string

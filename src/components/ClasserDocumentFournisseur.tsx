@@ -31,7 +31,7 @@ export default function ClasserDocumentFournisseur({ fichiers, result, fournisse
     [fournisseurIdConnu, result.nomPartenaire, fournisseurs],
   );
   const [fournisseurId, setFournisseurId] = useState(propose);
-  const [genre, setGenre] = useState<GenreDocFournisseur>(genreDepuisType(result.typeDocument));
+  const [genre, setGenre] = useState<GenreDocFournisseur>(genreDepuisType(result.typeDocument, fichiers[0]?.name));
   const [numero, setNumero] = useState(result.numeroDocument ?? '');
   const [exclus, setExclus] = useState<Set<number>>(new Set());
   const [envoi, setEnvoi] = useState(false);
@@ -39,7 +39,7 @@ export default function ClasserDocumentFournisseur({ fichiers, result, fournisse
 
   // Une nouvelle analyse (ou un type corrigé) repart des propositions.
   useEffect(() => { setFournisseurId(propose); }, [propose]);
-  useEffect(() => { setGenre(genreDepuisType(result.typeDocument)); }, [result.typeDocument]);
+  useEffect(() => { setGenre(genreDepuisType(result.typeDocument, fichiers[0]?.name)); }, [result.typeDocument, fichiers]);
   useEffect(() => { setNumero(result.numeroDocument ?? ''); }, [result.numeroDocument]);
   useEffect(() => { setClasses(null); setExclus(new Set()); }, [fichiers]);
 

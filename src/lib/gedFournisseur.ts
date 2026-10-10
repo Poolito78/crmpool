@@ -17,16 +17,17 @@ import type { TypeDocument } from './analyseDocument';
  * La table et le bucket viennent de la migration 20261009100000.
  */
 
-export type GenreDocFournisseur = 'devis' | 'commande' | 'bon_livraison' | 'facture' | 'autre';
+export type GenreDocFournisseur = 'devis' | 'commande' | 'bon_livraison' | 'facture' | 'fiche_produit' | 'autre';
 
 export const GENRES_DOC_FOURNISSEUR: GenreDocFournisseur[] =
-  ['devis', 'commande', 'bon_livraison', 'facture', 'autre'];
+  ['devis', 'commande', 'bon_livraison', 'facture', 'fiche_produit', 'autre'];
 
 export const LIBELLE_GENRE_FOURNISSEUR: Record<GenreDocFournisseur, string> = {
   devis: 'Devis',
   commande: 'Commande',
   bon_livraison: 'Bon de livraison',
   facture: 'Facture',
+  fiche_produit: 'Fiche produit',
   autre: 'Autre',
 };
 
@@ -47,14 +48,17 @@ export interface DocumentFournisseur {
 
 export const TAILLE_MAX_GED = 25 * 1024 * 1024;
 
-/** Genre proposé d'après le type que l'analyse a reconnu. */
-export function genreDepuisType(t?: TypeDocument): GenreDocFournisseur {
+/** Un nom de fichier qui annonce une fiche technique (FP_Flowfast_215_fr.pdf, fiche-technique…). */
+export const NOM_FICHE_PRODUIT = /(^|[\s_.-])(fp|ft|fds|tds|fiche|datasheet)([\s_.-]|$)/i;
+
+/** Genre proposé d'après le type que l'analyse a reconnu (et le nom du fichier si le type ne dit rien). */
+export function genreDepuisType(t?: TypeDocument, nomFichier = ''): GenreDocFournisseur {
   switch (t) {
     case 'devis_fournisseur': return 'devis';
     case 'commande_fournisseur': return 'commande';
     case 'bon_livraison': return 'bon_livraison';
     case 'facture_fournisseur': return 'facture';
-    default: return 'autre';
+    default: return NOM_FICHE_PRODUIT.test(nomFichier) ? 'fiche_produit' : 'autre';
   }
 }
 
