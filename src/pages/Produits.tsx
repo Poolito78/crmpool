@@ -3262,6 +3262,7 @@ export default function Produits() {
                       onOpenChange={setGedFicheOuvert}
                       produitId={editing.id}
                       fournisseurId={form.fournisseurId || undefined}
+                      indice={(form.description || '').split(/\s+/).slice(0, 2).join(' ')}
                       onChoisie={fiche => {
                         setForm(p => ecrireFiches(p, [
                           ...fichesDuProduit(p).filter(x => x.url || x.label),
