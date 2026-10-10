@@ -36,18 +36,21 @@ export type CibleLien = 'fiche' | 'image' | 'page' | 'categorie';
  * d'ISOFLOOR (notre version, à notre nom). Facultatif : une fiche sans type
  * garde son libellé tel quel.
  */
-export type TypeFiche = 'fournisseur' | 'isofloor' | 'systeme';
+export type TypeFiche = string;
 
-export const LIBELLE_TYPE_FICHE: Record<TypeFiche, string> = {
+export const LIBELLE_TYPE_FICHE: Record<string, string> = {
   fournisseur: 'Fiche technique fournisseur',
   isofloor: 'Fiche technique ISOFLOOR',
   systeme: 'Fiche système',
 };
 
-export const TYPES_FICHE: TypeFiche[] = ['fournisseur', 'isofloor', 'systeme'];
+export const TYPES_FICHE: string[] = ['fournisseur', 'isofloor', 'systeme'];
+
+/** Le texte d'une mention : le libellé d'une mention habituelle (par sa clé), sinon le texte libre tel quel. */
+export const mentionTexte = (t?: TypeFiche): string => (t ? (LIBELLE_TYPE_FICHE[t] ?? t) : '');
 
 export const estTypeFiche = (v: unknown): v is TypeFiche =>
-  typeof v === 'string' && (TYPES_FICHE as string[]).includes(v);
+  typeof v === 'string' && v.trim().length > 0;
 
 export interface LienProduit {
   /** `${produitId}:${cible}` — stable, sert de clé de sélection. */
@@ -157,11 +160,11 @@ export function urlFichePublique(produitId: string, origine?: string): string {
  * (fournisseur / ISOFLOOR) le précède quand elle existe, ou le remplace.
  */
 export function avecMention(label: string, type?: TypeFiche): string {
-  return type ? `${LIBELLE_TYPE_FICHE[type]} — ${label}` : label;
+  return type ? `${mentionTexte(type)} — ${label}` : label;
 }
 
 function libelleFiche(f: { label: string; type?: TypeFiche }, rang: number, nom: string): string {
-  const mention = f.type ? LIBELLE_TYPE_FICHE[f.type] : '';
+  const mention = mentionTexte(f.type);
   const saisi = f.label.trim();
   if (saisi) return mention ? `${mention} — ${saisi}` : saisi;
   return `${mention || `${LIBELLE_CIBLE.fiche}${rang > 0 ? ` ${rang + 1}` : ''}`} — ${nom}`;

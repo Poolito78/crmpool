@@ -8,6 +8,7 @@ import {
 } from '@/lib/produitImages';
 import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
+import MentionFiche from '@/components/MentionFiche';
 import { LIBELLE_TYPE_FICHE, type TypeFiche, liensDuProduit, copierLiens, fichesDuProduit, aUneFiche, LIBELLE_CIBLE } from '@/lib/liensProduit';
 import {
   useCategorieDocuments, documentsPourCategorie, chaineCategories, articlesConcernes,
@@ -389,15 +390,30 @@ export default function Produits() {
      se calcule une fois : 22 000 articles ne partagent que quelques dizaines
      de catégories. */
   const nbDocuments = useMemo(() => {
-    const parCategorie = new Map<string, number>();
+    /* Un même document n'est compté qu'une fois : la fiche d'un article et le
+       document de sa catégorie sont souvent le même PDF sous deux liens
+       (« Focus Gamme FLOWFAST.pdf » / « FOCUS GAMME FLOWFAST »), reconnus à
+       leur adresse OU à leur libellé réduit aux lettres et chiffres. */
+    const cleLibelle = (t: string) => 't:' + t.toLowerCase().replace(/\.pdf$/i, '').replace(/[^a-z0-9]+/g, '');
+    const parCategorie = new Map<string, { url: string; libelle: string }[]>();
     return (p: Produit): number => {
       const cle = p.categorie ?? '';
       let cat = parCategorie.get(cle);
       if (cat === undefined) {
-        cat = documentsPourCategorie(docsCategorie, p.categorie).length;
+        cat = documentsPourCategorie(docsCategorie, p.categorie).map(d => ({ url: d.url, libelle: d.libelle }));
         parCategorie.set(cle, cat);
       }
-      return fichesDuProduit(p).filter(f => f.url).length + cat;
+      const vus = new Set<string>();
+      let n = 0;
+      const compter = (url: string, libelle: string) => {
+        const cles = [url.trim(), libelle.trim() ? cleLibelle(libelle) : ''].filter(Boolean);
+        if (cles.some(k => vus.has(k))) return;
+        cles.forEach(k => vus.add(k));
+        n++;
+      };
+      for (const f of fichesDuProduit(p)) if (f.url.trim()) compter(f.url, f.label);
+      for (const d of cat) compter(d.url, d.libelle);
+      return n;
     };
   }, [docsCategorie]);
   const [gedFicheOuvert, setGedFicheOuvert] = useState(false);
@@ -3208,15 +3224,7 @@ export default function Produits() {
                         </div>
                         <div className="w-52 shrink-0">
                           <Label className="text-xs">Mention</Label>
-                          <Select value={f.type ?? 'aucun'} onValueChange={v => majFiche(i, { type: v === 'aucun' ? undefined : v as TypeFiche })}>
-                            <SelectTrigger className="h-10 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="aucun">Sans mention</SelectItem>
-                              <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
-                              <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
-                              <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <MentionFiche className="h-10 text-xs" live value={f.type} onCommit={v => majFiche(i, { type: v })} />
                         </div>
                         {f.url && (
                           <a href={f.url} target="_blank" rel="noopener noreferrer"
@@ -3368,22 +3376,14 @@ export default function Produits() {
                               </div>
                               <div>
                                 <Label className="text-xs">Mention</Label>
-                                <Select
-                                  value={d.mention ?? 'aucun'}
-                                  onValueChange={async v => {
-                                    const mention = v === 'aucun' ? undefined : v as TypeFiche;
+                                <MentionFiche
+                                  className="h-9 text-xs"
+                                  value={d.mention}
+                                  onCommit={async mention => {
                                     const err = await modifierDocCategorie(d.id, { mention });
                                     if (err) toast.error(err); else toast.success('Mention modifiée.');
                                   }}
-                                >
-                                  <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="aucun">Sans mention</SelectItem>
-                                    <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
-                                    <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
-                                    <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
-                                  </SelectContent>
-                                </Select>
+                                />
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 justify-end">
@@ -3478,15 +3478,7 @@ export default function Produits() {
                         </div>
                         <div className="w-full sm:w-1/2">
                           <Label className="text-xs">Mention</Label>
-                          <Select value={docMention ?? 'aucun'} onValueChange={v => setDocMention(v === 'aucun' ? undefined : v as TypeFiche)}>
-                            <SelectTrigger className="h-9 text-xs"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="aucun">Sans mention</SelectItem>
-                              <SelectItem value="fournisseur">{LIBELLE_TYPE_FICHE.fournisseur}</SelectItem>
-                              <SelectItem value="isofloor">{LIBELLE_TYPE_FICHE.isofloor}</SelectItem>
-                              <SelectItem value="systeme">{LIBELLE_TYPE_FICHE.systeme}</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <MentionFiche className="h-9 text-xs" live value={docMention} onCommit={setDocMention} />
                         </div>
                         <div className="flex items-center justify-between gap-2">
                           <p className="text-[11px] text-muted-foreground">
