@@ -29,7 +29,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
-import VarianteCompoDialog, { type ChoixVariante } from '@/components/VarianteCompoDialog';
+import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
@@ -1180,35 +1180,22 @@ export default function Devis() {
 
   /* La variante choisie devient UNE ligne : désignation de l'article + nom de la
      variante, prix = somme des composants, coût d'achat = celui des composants. */
-  function appliquerVarianteCompo(choix: ChoixVariante) {
+  function appliquerVarianteCompo(v: VarianteCompo | null) {
     const cible = variantePour;
     setVariantePour(null);
     if (!cible) return;
-    const v: VarianteCompo | undefined = choix.mode === 'seul' ? undefined : choix.variante;
     if (v) {
       const achat = achatVarianteCompo(v, produits);
       if (achat === undefined) toast.warning('Coût d\'achat de la variante inconnu : un composant n\'est pas au catalogue — marge à vérifier.');
       saveSnapshot();
-      const champsVariante = (l: LigneDevis) => ({
+      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : {
+        ...l,
         description: designationAvecVariante(designationProduit(cible.produit), v),
         unite: 'ens.',
         prixUnitaireHT: prixVarianteCompo(v),
         prixAchatLigne: achat ?? 0,
         variantesChoisies: { ...(l.variantesChoisies ?? {}), [CLE_COMPO]: v.id },
-      });
-      if (choix.mode === 'variante') {
-        // La variante REMPLACE l'article sur la ligne.
-        setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : { ...l, ...champsVariante(l) }));
-      } else {
-        // ARTICLE + VARIANTE : la ligne de l'article reste, la variante s'ajoute dessous.
-        setLignes(prev => {
-          const i = prev.findIndex(l => l.id === cible.ligneId);
-          if (i < 0) return prev;
-          const base = prev[i];
-          const ligneVariante: LigneDevis = { ...base, id: generateId(), quantite: 1, remise: 0, consommation: undefined, surfaceM2: undefined, qteMode: undefined, ...champsVariante(base) };
-          return [...prev.slice(0, i + 1), ligneVariante, ...prev.slice(i + 1)];
-        });
-      }
+      }));
     }
     // Les options viennent après la variante.
     if (cible.produit.typeOptions && (cible.produit.lignesOptions?.length ?? 0) > 0) {
