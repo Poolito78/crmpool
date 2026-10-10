@@ -20,6 +20,7 @@ import {
 } from '@/lib/planDirectionnel';
 import PlanDirectionnelEncart from '@/components/PlanDirectionnelEncart';
 import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur';
+import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignature, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
@@ -4669,6 +4670,12 @@ const [contratOdoo, setContratOdoo] = useState<
 
               {/* Aperçu avant analyse (pendant la correction, il est affiché plus bas) */}
               {!result && panneauApercu}
+
+              <FicheTechniqueArticle
+                fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
+                produits={produits}
+                updateProduits={updateProduits}
+              />
 
               <Button onClick={handleAnalyse} disabled={loading || (!fichier && !texte.trim())} className="w-full">
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyse en cours…</> : <><ScanText className="w-4 h-4 mr-2" />Analyser</>}

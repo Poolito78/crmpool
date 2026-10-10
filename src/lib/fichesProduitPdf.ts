@@ -1,4 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
+import { fichesDuProduit } from './liensProduit';
+import type { Produit } from './store';
 
 /**
  * Fiche technique PDF déposée sur un article : le fichier part dans le seau
@@ -34,4 +36,22 @@ export async function deposerFicheTechnique(
   if (error) return { erreur: `Envoi impossible : ${error.message}` };
   const { data } = supabase.storage.from(SEAU_FICHES).getPublicUrl(chemin);
   return { url: data.publicUrl, label: file.name };
+}
+
+/**
+ * Ajoute une fiche à un article : la première reste dans `ficheUrl` /
+ * `ficheLinkLabel` (celle des mails et des devis), les suivantes dans
+ * `fichesSupplementaires`. Une fiche déjà liée (même adresse) n'est pas
+ * doublée, et les fiches vides sont écartées.
+ */
+export function ajouterFicheAuProduit(p: Produit, fiche: { url: string; label: string }): Produit {
+  const liste = fichesDuProduit(p).filter(x => x.url || x.label);
+  if (liste.some(x => x.url === fiche.url)) return p;
+  const toutes = [...liste, fiche];
+  return {
+    ...p,
+    ficheUrl: toutes[0].url,
+    ficheLinkLabel: toutes[0].label,
+    fichesSupplementaires: toutes.length > 1 ? toutes.slice(1) : p.fichesSupplementaires,
+  };
 }
