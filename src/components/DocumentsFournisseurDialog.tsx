@@ -12,13 +12,14 @@ import {
 } from '@/lib/gedFournisseur';
 
 /** Les documents rangés sur la fiche d'un fournisseur (mini-GED). */
-interface Props {
-  fournisseur: Fournisseur | null;
-  onOpenChange: (open: boolean) => void;
+interface PanelProps {
+  fournisseurId: string;
+  /** Appelé après un ajout ou une suppression (pastille de nombre à rafraîchir). */
+  onChange?: () => void;
 }
 
-export default function DocumentsFournisseurDialog({ fournisseur, onOpenChange }: Props) {
-  const { documents, chargement, erreur, recharger } = useDocumentsFournisseur(fournisseur?.id);
+export function DocumentsFournisseurPanel({ fournisseurId, onChange }: PanelProps) {
+  const { documents, chargement, erreur, recharger } = useDocumentsFournisseur(fournisseurId);
   const [filtre, setFiltre] = useState<GenreDocFournisseur | 'tous'>('tous');
   const [genreAjout, setGenreAjout] = useState<GenreDocFournisseur>('autre');
   const [envoi, setEnvoi] = useState(false);
@@ -27,14 +28,15 @@ export default function DocumentsFournisseurDialog({ fournisseur, onOpenChange }
   const visibles = filtre === 'tous' ? documents : documents.filter(d => d.genre === filtre);
 
   async function ajouter(files: File[]) {
-    if (!fournisseur || files.length === 0) return;
+    if (files.length === 0) return;
     setEnvoi(true);
     for (const f of files) {
-      try { await ajouterDocumentFournisseur(f, { fournisseurId: fournisseur.id, genre: genreAjout }); }
+      try { await ajouterDocumentFournisseur(f, { fournisseurId, genre: genreAjout }); }
       catch (err) { toast.error(err instanceof Error ? err.message : `Échec : ${f.name}`); }
     }
     setEnvoi(false);
     await recharger();
+    onChange?.();
   }
 
   async function ouvrir(d: DocumentFournisseur) {
@@ -44,17 +46,12 @@ export default function DocumentsFournisseurDialog({ fournisseur, onOpenChange }
 
   async function supprimer(d: DocumentFournisseur) {
     if (!window.confirm(`Supprimer « ${d.fichierNom} » ? Le fichier sera effacé.`)) return;
-    try { await supprimerDocumentFournisseur(d); await recharger(); }
+    try { await supprimerDocumentFournisseur(d); await recharger(); onChange?.(); }
     catch (err) { toast.error(err instanceof Error ? err.message : 'Suppression impossible'); }
   }
 
   return (
-    <Dialog open={!!fournisseur} onOpenChange={onOpenChange}>
-      <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[90vh] flex flex-col">
-        <DialogHeader className="shrink-0">
-          <DialogTitle>Documents — {fournisseur?.societe || fournisseur?.nom}</DialogTitle>
-        </DialogHeader>
-
+    <div className="flex flex-col gap-3 min-h-0">
         <div
           className="shrink-0 rounded-lg border border-dashed border-border p-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
           onDragOver={e => e.preventDefault()}
@@ -109,6 +106,24 @@ export default function DocumentsFournisseurDialog({ fournisseur, onOpenChange }
             </div>
           ))}
         </div>
+    </div>
+  );
+}
+
+interface Props {
+  fournisseur: Fournisseur | null;
+  onOpenChange: (open: boolean) => void;
+  onChange?: () => void;
+}
+
+export default function DocumentsFournisseurDialog({ fournisseur, onOpenChange, onChange }: Props) {
+  return (
+    <Dialog open={!!fournisseur} onOpenChange={onOpenChange}>
+      <DialogContent mobileFullscreen className="sm:max-w-2xl sm:max-h-[90vh] flex flex-col">
+        <DialogHeader className="shrink-0">
+          <DialogTitle>Documents — {fournisseur?.societe || fournisseur?.nom}</DialogTitle>
+        </DialogHeader>
+        {fournisseur && <DocumentsFournisseurPanel fournisseurId={fournisseur.id} onChange={onChange} />}
       </DialogContent>
     </Dialog>
   );

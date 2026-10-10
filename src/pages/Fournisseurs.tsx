@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import DocumentsFournisseurDialog from '@/components/DocumentsFournisseurDialog';
+import DocumentsFournisseurDialog, { DocumentsFournisseurPanel } from '@/components/DocumentsFournisseurDialog';
 import { useNombreDocumentsFournisseur } from '@/lib/gedFournisseur';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
 
@@ -49,6 +49,7 @@ function autoDetectMapping(excelCols: string[]): Record<string, string> {
 export default function Fournisseurs() {
   const { fournisseurs, updateFournisseurs, commandesFournisseur } = useCRM();
   const [docsFournisseur, setDocsFournisseur] = useState<Fournisseur | null>(null);
+  const [ongletFiche, setOngletFiche] = useState<'infos' | 'documents'>('infos');
   const { nombres: nombresDocs, recharger: rechargerNombresDocs } = useNombreDocumentsFournisseur();
 
   // Encours : utilise dateEcheance stockée si disponible, sinon recalcule depuis dateReception
@@ -119,6 +120,7 @@ export default function Fournisseurs() {
   }
   function openEdit(f: Fournisseur) {
     setEditing(f);
+    setOngletFiche('infos');
     setForm({ nom: f.nom, email: f.email, telephone: f.telephone, telephoneMobile: f.telephoneMobile || '', adresse: f.adresse, ville: f.ville, codePostal: f.codePostal, societe: f.societe, notes: f.notes || '', francoPort: f.francoPort ?? 0, coutTransport: f.coutTransport ?? 0, paliersPortPoids: f.paliersPortPoids ?? [], delaiReglement: f.delaiReglement || '45j FDM', estStockiste: f.estStockiste ?? false, delaiExpedition: f.delaiExpedition ?? 0 });
     setDialogOpen(true);
   }
@@ -359,7 +361,7 @@ export default function Fournisseurs() {
         ))}
       </div>
 
-      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onOpenChange={o => { if (!o) { setDocsFournisseur(null); void rechargerNombresDocs(); } }} />
+      <DocumentsFournisseurDialog fournisseur={docsFournisseur} onChange={() => void rechargerNombresDocs()} onOpenChange={o => { if (!o) { setDocsFournisseur(null); void rechargerNombresDocs(); } }} />
 
       <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
         <AlertDialogContent>
@@ -383,7 +385,25 @@ export default function Fournisseurs() {
           <DialogHeader className="shrink-0">
             <DialogTitle>{editing ? 'Modifier' : 'Nouveau fournisseur'}</DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-y-auto min-h-0">
+          {editing && (
+            <div className="shrink-0 flex gap-1 border-b border-border">
+              {([['infos', 'Informations'], ['documents', 'Documents']] as const).map(([cle, libelle]) => (
+                <button key={cle} type="button" onClick={() => setOngletFiche(cle)}
+                  className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px flex items-center gap-1.5 ${ongletFiche === cle ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+                  {libelle}
+                  {cle === 'documents' && (nombresDocs[editing.id] ?? 0) > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1.5 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold leading-[18px] text-center">{nombresDocs[editing.id]}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+          {editing && ongletFiche === 'documents' && (
+            <div className="flex-1 overflow-y-auto min-h-0 pt-3">
+              <DocumentsFournisseurPanel fournisseurId={editing.id} onChange={() => void rechargerNombresDocs()} />
+            </div>
+          )}
+          <div className={`flex-1 overflow-y-auto min-h-0 ${editing && ongletFiche === 'documents' ? 'hidden' : ''}`}>
             {!editing && (
               <Button variant="outline" className="w-full border-dashed text-muted-foreground hover:text-foreground mb-3" onClick={() => setEmailDialogOpen(true)}>
                 <Mail className="w-4 h-4 mr-2" /> Remplir depuis un email
@@ -484,7 +504,7 @@ export default function Fournisseurs() {
               </div>
             </div>
           </div>
-          <div className="sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2">
+          <div className={`sticky bottom-0 bg-background border-t border-border pt-3 pb-1 mt-2 shrink-0 flex justify-end gap-2 ${editing && ongletFiche === 'documents' ? 'hidden' : ''}`}>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Annuler</Button>
             <Button onClick={save}>{editing ? 'Modifier' : 'Ajouter'}</Button>
           </div>
