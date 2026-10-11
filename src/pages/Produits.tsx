@@ -10,6 +10,8 @@ import { deposerFicheTechnique, estFichePdf } from '@/lib/fichesProduitPdf';
 import ChoisirFicheGed from '@/components/ChoisirFicheGed';
 import MentionFiche from '@/components/MentionFiche';
 import OptionsArticleEditor from '@/components/OptionsArticleEditor';
+import BoutonsOrdre from '@/components/BoutonsOrdre';
+import { deplacer } from '@/lib/ordre';
 import VariantesCompoEditor from '@/components/VariantesCompoEditor';
 import type { VarianteCompo } from '@/lib/variantesCompo';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
@@ -2444,6 +2446,7 @@ export default function Produits() {
                   {variantes.map((dim, dIdx) => (
                     <div key={dim.id} className="border border-border/60 rounded p-2 space-y-2">
                       <div className="flex items-center gap-2">
+                        <BoutonsOrdre index={dIdx} total={variantes.length} onMove={d => setVariantes(prev => deplacer(prev, dIdx, d))} />
                         <Input
                           value={dim.nom}
                           onChange={e => setVariantes(prev => prev.map((d, i) => i === dIdx ? { ...d, nom: e.target.value } : d))}
@@ -2462,6 +2465,7 @@ export default function Produits() {
                       <div className="space-y-1">
                         {dim.options.map((opt, oIdx) => (
                           <div key={opt.id} className="flex items-center gap-1.5">
+                            <BoutonsOrdre index={oIdx} total={dim.options.length} onMove={d => setVariantes(prev => prev.map((x, i) => i === dIdx ? { ...x, options: deplacer(x.options, oIdx, d) } : x))} />
                             {/* Swatch couleur cliquable (RAL auto-détecté si pas de couleur manuelle) */}
                             <div className="relative shrink-0" title="Couleur du swatch">
                               <div

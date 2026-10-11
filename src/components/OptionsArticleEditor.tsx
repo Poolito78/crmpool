@@ -1,6 +1,8 @@
 import { Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import BoutonsOrdre from '@/components/BoutonsOrdre';
+import { deplacer } from '@/lib/ordre';
 import { designationProduit, type LigneKit, type Produit } from '@/lib/store';
 
 /**
@@ -50,6 +52,7 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
         )}
         {actif && lignes.map((lk, idx) => (
           <div key={idx} className="flex flex-wrap gap-1.5 items-end rounded-lg p-1">
+            <span className="mb-0.5"><BoutonsOrdre index={idx} total={lignes.length} onMove={d => onChange(prev => deplacer(prev, idx, d))} /></span>
             <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
               <span className="text-xs text-muted-foreground">Produit</span>
               <ProduitCombobox

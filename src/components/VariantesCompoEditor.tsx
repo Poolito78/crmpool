@@ -1,6 +1,8 @@
 import { Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import BoutonsOrdre from '@/components/BoutonsOrdre';
+import { deplacer } from '@/lib/ordre';
 import { designationProduit, formatMontant, generateId, type LigneKit, type Produit } from '@/lib/store';
 import { prixVarianteCompo, type VarianteCompo } from '@/lib/variantesCompo';
 
@@ -54,9 +56,10 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
         {actif && variantes.length === 0 && (
           <p className="text-xs text-muted-foreground">Aucune variante — l'article se saisit tel quel.</p>
         )}
-        {actif && variantes.map(v => (
+        {actif && variantes.map((v, vIdx) => (
           <div key={v.id} className="rounded-lg border border-border bg-background/60 p-2 space-y-2">
             <div className="flex items-end gap-2">
+              <span className="mb-1"><BoutonsOrdre index={vIdx} total={variantes.length} onMove={d => onChange(prev => deplacer(prev, vIdx, d))} /></span>
               <div className="flex flex-col gap-0.5 flex-1">
                 <span className="text-xs text-muted-foreground">Nom de la variante (complète la désignation de l'article)</span>
                 <Input value={v.nom} onChange={e => majVariante(v.id, { nom: e.target.value })} placeholder="Ex : avec primaire et finition" className="h-8 text-xs" />
@@ -71,6 +74,7 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
 
             {v.composants.map((c, idx) => (
               <div key={idx} className="flex flex-wrap gap-1.5 items-end">
+                <span className="mb-0.5"><BoutonsOrdre index={idx} total={v.composants.length} onMove={d => majVariante(v.id, { composants: deplacer(v.composants, idx, d) })} /></span>
                 <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
                   <span className="text-xs text-muted-foreground">Produit</span>
                   <ProduitCombobox
