@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 // ─── CA Odoo par marque — lecture du jeu publié par le poste du bureau ────────
@@ -341,7 +341,41 @@ export function useCaOdoo() {
     return () => { annule = true; };
   }, []);
 
-  return { data, loading, autorise: !!data };
+  /** Relit le jeu publié (après une actualisation) et remplace la lecture partagée. */
+  const recharger = useCallback(async () => {
+    lecturePartagee = chargerJeu();
+    const jeu = await lecturePartagee;
+    setData(jeu);
+    return jeu;
+  }, []);
+
+  return { data, loading, autorise: !!data, recharger };
+}
+
+/**
+ * Relance l'extraction Odoo côté serveur (fonction `ca-refresh`, le SEUL
+ * calcul — voir son en-tête), comme le bouton « Actualiser » du tableau de bord
+ * « Détail par client ». La fonction réécrit `ca_dashboard_data` ; à l'appelant
+ * de relire ensuite (`recharger`).
+ *
+ * Deux clics à moins de 30 s : la fonction ne rejoue pas l'extraction et
+ * répond `ignore` — rien d'anormal, les données sont déjà fraîches.
+ */
+export async function actualiserCaOdoo(): Promise<{ ignore: boolean; dureeMs?: number }> {
+  const { data, error } = await supabase.functions.invoke('ca-refresh', { body: {} });
+  if (error) {
+    // Réponse non 2xx : le message utile est dans le corps (`erreur`).
+    let message = error.message;
+    const ctx = (error as { context?: Response }).context;
+    if (ctx && typeof ctx.json === 'function') {
+      const corps = await ctx.json().catch(() => null) as { erreur?: string } | null;
+      if (corps?.erreur) message = corps.erreur;
+    }
+    throw new Error(message);
+  }
+  const rep = (data ?? {}) as { ignore?: boolean; duree_ms?: number; erreur?: string };
+  if (rep.erreur) throw new Error(rep.erreur);
+  return { ignore: !!rep.ignore, dureeMs: rep.duree_ms };
 }
 
 export const CA_ODOO_URL = 'https://poolito78.github.io/ca-mouhot/';

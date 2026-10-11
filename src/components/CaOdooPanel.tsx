@@ -1,8 +1,10 @@
-import { useState } from 'react';
-import { TrendingUp, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
 import { formatMontant } from '@/lib/store';
 import {
-  useCaOdoo, CA_ODOO_URL,
+  useCaOdoo, actualiserCaOdoo, CA_ODOO_URL,
   type CaMarque, type CaMois, type CaMois2025, type CaMoisEnCours, type CaFlooringQuartz, type CaFqMois,
 } from '@/lib/caOdoo';
 
@@ -532,8 +534,34 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
 }
 
 export default function CaOdooPanel() {
-  const { data, loading, autorise } = useCaOdoo();
+  const { data, loading, autorise, recharger } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
+  const [actualisation, setActualisation] = useState(false);
+  const [secondes, setSecondes] = useState(0);
+
+  // Chrono pendant l'extraction : elle prend plusieurs dizaines de secondes,
+  // un bouton figé sans signe de vie passe pour une panne.
+  useEffect(() => {
+    if (!actualisation) { setSecondes(0); return; }
+    const debut = Date.now();
+    const t = setInterval(() => setSecondes(Math.round((Date.now() - debut) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [actualisation]);
+
+  async function actualiser() {
+    setActualisation(true);
+    try {
+      const rep = await actualiserCaOdoo();
+      await recharger();
+      toast.success(rep.ignore
+        ? 'Données déjà actualisées il y a quelques secondes.'
+        : `CA Odoo actualisé${rep.dureeMs ? ` en ${Math.round(rep.dureeMs / 1000)} s` : ''}.`);
+    } catch (e) {
+      toast.error(`Actualisation impossible : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setActualisation(false);
+    }
+  }
 
   if (loading || !autorise || !data) return null;
 
@@ -550,15 +578,30 @@ export default function CaOdooPanel() {
             {periode} · 2026 vs 2025 à date · {data.nbClients} clients · source Odoo, avoirs déduits
           </p>
         </div>
-        <a
-          href={CA_ODOO_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors shrink-0"
-        >
-          <ExternalLink className="w-3.5 h-3.5" /> Détail par client
-        </a>
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
+          {/* Même action que le bouton « Actualiser » du tableau « Détail par
+              client » : relit Odoo côté serveur (ca-refresh), puis relit le
+              jeu publié — sans quitter le CRM. */}
+          <Button variant="outline" size="sm" onClick={actualiser} disabled={actualisation}>
+            {actualisation
+              ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Actualisation… {secondes > 0 && `${secondes} s`}</>
+              : <><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Actualiser</>}
+          </Button>
+          <a
+            href={CA_ODOO_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ExternalLink className="w-3.5 h-3.5" /> Détail par client
+          </a>
+        </div>
       </div>
+      {data.publieLe && (
+        <p className="text-xs text-muted-foreground -mt-2">
+          Dernière actualisation : {new Date(data.publieLe).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' })}
+        </p>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-lg border border-border p-3">
@@ -660,7 +703,7 @@ export default function CaOdooPanel() {
             </p>
             <p>
               <b className="text-foreground">Actualisation.</b> Les chiffres proviennent de la dernière
-              actualisation (bouton « Actualiser » du tableau de bord « Détail par client »)
+              actualisation (bouton « Actualiser » ci-dessus, ou celui du tableau de bord « Détail par client »)
               {data.publieLe ? ` — publiée le ${new Date(data.publieLe).toLocaleString('fr-FR')}` : ''}.
               Ils ne se rafraîchissent pas tout seuls.
             </p>
