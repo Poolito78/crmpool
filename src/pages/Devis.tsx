@@ -3620,7 +3620,9 @@ export default function Devis() {
                                 /* Champ riche : le gras d'un nom de variante y reste visible, et
                                    sélectionner du texte permet d'en mettre (bouton G). Odoo, lui,
                                    reçoit le texte sans balises (`noteEnTexte`, odooSync). */
-                                description: <NoteEditable uneLigne value={l.description} onChange={v => updateLigne(l.id, 'description', v)}
+                                /* Entrée = retour à la ligne : on coupe une désignation longue où l'on
+                                   veut, l'aperçu et le PDF le respectent (et Odoo aussi). */
+                                description: <NoteEditable value={l.description} onChange={v => updateLigne(l.id, 'description', v)}
                                   donnees={{ voice: 'ligne-desc', 'ligne-id': l.id }} title={noteEnTexte(l.description)}
                                   className="text-sm text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />,
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {

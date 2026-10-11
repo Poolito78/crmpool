@@ -1,4 +1,4 @@
-import { useState, useRef, Fragment, useEffect, useCallback } from 'react';
+import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
 import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
@@ -16,6 +16,11 @@ import { articlesLiesDuDevis } from '@/lib/liensProduit';
 import { useProduitImages } from '@/lib/produitImages';
 import NoteRiche from '@/components/NoteRiche';
 import { noteEnTexte } from '@/lib/noteRiche';
+
+/** Désignation d'une ligne : revient à la ligne pour que le tableau tienne dans la page (voir l'usage). */
+const DESIGNATION_QUI_SE_COUPE: CSSProperties = {
+  whiteSpace: 'pre-line', overflowWrap: 'anywhere', minWidth: 0, flex: '0 1 auto',
+};
 
 // ─── Couleurs RAL Classic — conservé pour compatibilité (utilise ralColors.ts) ─
 const RAL_COLORS: Record<string, { hex: string; dark: boolean; white?: boolean }> = {
@@ -1025,8 +1030,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <td className="py-1.5 px-2 font-medium align-middle">
                         {/* Description + badge(s) sur la même ligne flex */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          {/* Le gras posé dans un nom de variante (balises `**`, noteRiche) se rend ici et au PDF. */}
-                          <span style={{ whiteSpace: 'nowrap' }}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
+                          {/* Le gras posé dans un nom de variante (balises `**`, noteRiche) se rend ici et au PDF.
+                              ⚠️ La désignation REVIENT À LA LIGNE (`pre-line` : à la largeur de la colonne, et aux
+                              retours saisis). En `nowrap`, une désignation longue élargissait le tableau au-delà
+                              de la page et le devis ne tenait plus en pleine page. */}
+                          <span style={DESIGNATION_QUI_SE_COUPE}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
@@ -1254,7 +1262,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       )}
                       <tr className="border-b border-border">
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
-                          <span style={{ whiteSpace: 'nowrap' }}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
+                          <span style={DESIGNATION_QUI_SE_COUPE}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
