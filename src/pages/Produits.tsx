@@ -1096,7 +1096,7 @@ export default function Produits() {
     if (!editing) return;
     // Sauvegarde immédiate avant navigation
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-    /* Le kit, les options et les variantes composées en cours de saisie partent
+    /* Le kit, les options, les variantes (composées ou RAL…) et les paliers de prix en cours de saisie partent
        avec : sans cela, ouvrir un article lié les effaçait de la fiche. */
     majProduitEdite(p => ({
       ...p, ...form,
@@ -1104,6 +1104,8 @@ export default function Produits() {
       typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined,
       typeOptions: isTypeOptions, lignesOptions: isTypeOptions && lignesOptions.length > 0 ? lignesOptions : [],
       typeVariantesCompo: isTypeVariantesCompo, variantesCompo: isTypeVariantesCompo && variantesCompo.length > 0 ? variantesCompo : [],
+      paliersPrix: paliersPrix.length > 0 ? paliersPrix : undefined,
+      variantes: variantes.length > 0 ? variantes : undefined,
     }));
     setEditingStack(prev => [...prev, editing]);
     openEdit(compProd);
