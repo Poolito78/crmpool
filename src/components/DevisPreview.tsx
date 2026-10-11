@@ -762,11 +762,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 );
               })()}
 
-              {/* Ligne 3 : réf affaire + système (gauche) */}
-              {(devis.referenceAffaire || devis.systeme || (devis.surfaceGlobaleM2 || 0) > 0) && (
+              {/* Ligne 3 : réf affaire, chantier, système (gauche) */}
+              {(devis.referenceAffaire || devis.chantier || devis.systeme || (devis.surfaceGlobaleM2 || 0) > 0) && (
                 <div className="space-y-0.5 mb-4 text-sm">
                   {devis.referenceAffaire && (
                     <div><span className="text-muted-foreground whitespace-nowrap mr-1">Réf. affaire :</span><span className="font-medium">{devis.referenceAffaire}</span></div>
+                  )}
+                  {/* Le chantier (champ « Chantier » du devis, case Chantier d'Odoo) : il manquait au devis imprimé. */}
+                  {devis.chantier && (
+                    <div><span className="text-muted-foreground whitespace-nowrap mr-1">Chantier :</span><span className="font-medium">{devis.chantier}</span></div>
                   )}
                   {devis.systeme && (
                     <div>
