@@ -24,7 +24,7 @@ import { noteEnTexte } from '@/lib/noteRiche';
  * retouché à la main laisserait sinon un détail qui ne tombe pas juste — on
  * imprime alors les seules quantités.
  */
-function lignesDetail(l: Devis['lignes'][number]): { designation: string; quantite: string; unite: string; prixUnitaire: number | null; total: number | null }[] {
+function lignesDetail(l: Devis['lignes'][number]): { designation: string; quantite: string; unite: string; prixUnitaire: number | null; total: number | null; teinte?: string }[] {
   // `detailImprime` n'existe que si le détail doit s'imprimer (dépliée ou composition modifiée, œil ouvert).
   if (l.detailMasque || !l.detailImprime?.length) return [];
   const somme = l.detailImprime.reduce((s, d) => s + d.quantite * d.prixUnitaire, 0);
@@ -35,6 +35,7 @@ function lignesDetail(l: Devis['lignes'][number]): { designation: string; quanti
     const q = d.quantite * (l.quantite || 0);
     return {
       designation: d.designation,
+      teinte: d.teinte,
       quantite: String(Math.round(q * 1000) / 1000).replace('.', ','),
       unite: d.unite,
       prixUnitaire: juste ? Math.round(d.prixUnitaire * remise * 100) / 100 : null,
@@ -121,6 +122,20 @@ function getRalStyle(text: string): { backgroundColor: string; color: string; bo
     ...(info.white ? { border: '1px solid #ccc' } : {}),
   };
 }
+
+/** Pastille RAL (couleur réelle) — celle des lignes, reprise pour les sous-lignes d'un détail. */
+function PastilleRal({ texte }: { texte: string }) {
+  const rs = getRalStyle(texte);
+  if (!rs) return <span style={{ marginLeft: '6px', fontSize: '0.7rem', color: '#555', fontStyle: 'normal' }}>{texte}</span>;
+  return (
+    <span style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 'bold', fontStyle: 'normal', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', height: '20px', lineHeight: '20px', ...(rs.border ? { border: rs.border } : {}) }}>
+      {rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}
+    </span>
+  );
+}
+
+/** Une sous-ligne du détail porte son propre RAL : celui de la ligne principale lui cède la place. */
+const ralSurDetail = (l: Devis['lignes'][number]) => lignesDetail(l).some(d => !!d.teinte && !!getRalStyle(d.teinte));
 
 interface Props {
   devis: Devis;
@@ -1072,6 +1087,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               return rank(a) - rank(b);
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
+                              // Le RAL est porté par les sous-lignes du détail : il ne se répète pas ici.
+                              if (rs && ralSurDetail(l)) return null;
                               if (rs) return (
                                 <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', letterSpacing: '0.04em', whiteSpace: 'nowrap', flexShrink: 0, height: '26px', lineHeight: '26px', display: 'inline-block', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                               );
@@ -1187,7 +1204,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     {/* Variante composée DÉPLIÉE : ses composants (quantité en unités, prix, total). */}
                     {lignesDetail(l).map((d, k) => (
                       <tr key={`${l.id}-detail-${k}`} className="border-b border-border/30 text-muted-foreground text-xs">
-                        <td className="py-1 px-2 pl-8 italic">↳ {d.designation}</td>
+                        <td className="py-1 px-2 pl-8 italic">↳ {d.designation}{d.teinte && <PastilleRal texte={d.teinte} />}</td>
                         <td colSpan={3} />
                         <td className="py-1 px-1 text-right font-semibold text-primary">{d.quantite} <span className="font-normal">{d.unite}</span></td>
                         <td />
@@ -1312,6 +1329,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               return rank(a) - rank(b);
                             }).map((label, i) => {
                               const rs = getRalStyle(label);
+                              // Le RAL est porté par les sous-lignes du détail : il ne se répète pas ici.
+                              if (rs && ralSurDetail(l)) return null;
                               if (rs) return (
                                 <span key={i} style={{ backgroundColor: rs.backgroundColor, color: rs.color, padding: '0 8px', borderRadius: '4px', fontSize: '0.7rem', fontWeight: 'bold', marginLeft: '6px', display: 'inline-block', verticalAlign: 'middle', letterSpacing: '0.04em', height: '26px', lineHeight: '26px', ...(rs.border ? { border: rs.border } : {}) }}>{rs.quartz ? `${rs.quartz} · RAL ${rs.ralNum}` : `RAL ${rs.ralNum}`}</span>
                               );
@@ -1388,7 +1407,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       {/* Variante composée DÉPLIÉE : ses composants, comme saisis un par un. */}
                       {lignesDetail(l).map((d, k) => (
                         <tr key={`${l.id}-detail-${k}`} className="bg-muted/20 text-muted-foreground text-xs">
-                          <td className={`py-1 italic ${myGrpS ? 'pl-10' : 'pl-6'}`}>↳ {d.designation}</td>
+                          <td className={`py-1 italic ${myGrpS ? 'pl-10' : 'pl-6'}`}>↳ {d.designation}{d.teinte && <PastilleRal texte={d.teinte} />}</td>
                           <td className="py-1 text-right">{d.quantite}</td>
                           <td className="py-1 text-center">{d.unite}</td>
                           {showRemise && <td />}

@@ -1160,21 +1160,22 @@ export default function Devis() {
         return reste;
       }
       const visibles = composantsVisibles(v, resoudre, trouver, l.variantesChoisies);
-      const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map((d, i) => ({
-        /* La teinte du composant (la sienne, sinon celle de la ligne) suit sa désignation :
-           deux pigments de RAL différents se lisent sur le devis. */
-        designation: [
-          d.produit ? designationProduit(d.produit) : (d.composant.description || 'Composant'),
-          (d.composant as { teinte?: string }).teinte
-            || (d.produit?.variantes ?? []).map(dim => l.variantesChoisies?.[dim.id]).find(Boolean),
-        ].filter(Boolean).join(' — '),
+      const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map((d, i) => {
+        /* La teinte du composant (la sienne, sinon celle de la ligne) part À PART : l'aperçu
+           l'imprime en pastille sur la sous-ligne — deux pigments, deux RAL, chacun à sa place. */
+        const teinte = (d.composant as { teinte?: string }).teinte
+          || (d.produit?.variantes ?? []).map(dim => l.variantesChoisies?.[dim.id]).find(Boolean);
+        return {
+        designation: d.produit ? designationProduit(d.produit) : (d.composant.description || 'Composant'),
+        ...(teinte ? { teinte } : {}),
         quantite: Math.round(d.quantite * 1e6) / 1e6,
         unite: d.composant.unite || d.produit?.unite || '',
         prixUnitaire: Math.round(d.prixUnitaire * d.facteurRemise * 1e4) / 1e4,
         // Gardé dans la copie (il compte dans le prix, donc dans le contrôle), mais non imprimé.
         // Par défaut, seuls les composants modifiés s'impriment (composantsVisibles).
         ...(!visibles[i] ? { masque: true } : {}),
-      }));
+        };
+      });
       if (JSON.stringify(imprime) === JSON.stringify(l.detailImprime)) return l;
       change = true;
       return { ...l, detailImprime: imprime };

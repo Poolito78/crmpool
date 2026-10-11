@@ -577,7 +577,8 @@ export interface LigneDevis {
    * la ligne (prix retouché à la main), les composants s'impriment sans prix.
    */
   /** `masque` : composant compté dans le prix mais non imprimé (son œil est fermé). */
-  detailImprime?: { designation: string; quantite: number; unite: string; prixUnitaire: number; masque?: boolean }[];
+  /** `teinte` : le RAL du composant, imprimé en pastille sur SA sous-ligne (et retiré de la ligne principale). */
+  detailImprime?: { designation: string; quantite: number; unite: string; prixUnitaire: number; masque?: boolean; teinte?: string }[];
   /**
    * L'œil du détail : le détail imprimé est MASQUÉ sur le devis et le PDF.
    * Sans lui, le détail s'imprime dès que la ligne est dépliée — et TOUJOURS
