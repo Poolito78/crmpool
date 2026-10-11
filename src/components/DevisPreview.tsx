@@ -17,6 +17,30 @@ import { useProduitImages } from '@/lib/produitImages';
 import NoteRiche from '@/components/NoteRiche';
 import { noteEnTexte } from '@/lib/noteRiche';
 
+/**
+ * Les sous-lignes d'une variante composée dépliée (`detailCompo`), d'après le
+ * détail chiffré par l'éditeur (`detailImprime`). Les prix ne s'impriment que
+ * s'ils font le prix de la ligne, remise de ligne comprise : un prix de ligne
+ * retouché à la main laisserait sinon un détail qui ne tombe pas juste — on
+ * imprime alors les seules quantités.
+ */
+function lignesDetail(l: Devis['lignes'][number]): { designation: string; quantite: string; unite: string; prixUnitaire: number | null; total: number | null }[] {
+  if (!l.detailCompo || !l.detailImprime?.length) return [];
+  const somme = l.detailImprime.reduce((s, d) => s + d.quantite * d.prixUnitaire, 0);
+  const juste = Math.abs(somme - l.prixUnitaireHT) <= 0.02;
+  const remise = 1 - (l.remise || 0) / 100;
+  return l.detailImprime.map(d => {
+    const q = d.quantite * (l.quantite || 0);
+    return {
+      designation: d.designation,
+      quantite: String(Math.round(q * 1000) / 1000).replace('.', ','),
+      unite: d.unite,
+      prixUnitaire: juste ? Math.round(d.prixUnitaire * remise * 100) / 100 : null,
+      total: juste ? Math.round(q * d.prixUnitaire * remise * 100) / 100 : null,
+    };
+  });
+}
+
 /** Désignation d'une ligne : revient à la ligne pour que le tableau tienne dans la page (voir l'usage). */
 const DESIGNATION_QUI_SE_COUPE: CSSProperties = {
   whiteSpace: 'pre-line', overflowWrap: 'anywhere', minWidth: 0, flex: '0 1 auto',
@@ -1154,6 +1178,18 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         </tr>
                       ) : null
                     )}
+                    {/* Variante composée DÉPLIÉE : ses composants (quantité en unités, prix, total). */}
+                    {lignesDetail(l).map((d, k) => (
+                      <tr key={`${l.id}-detail-${k}`} className="border-b border-border/30 text-muted-foreground text-xs">
+                        <td className="py-1 px-2 pl-8 italic">↳ {d.designation}</td>
+                        <td colSpan={3} />
+                        <td className="py-1 px-1 text-right font-semibold text-primary">{d.quantite} <span className="font-normal">{d.unite}</span></td>
+                        <td />
+                        <td className="py-1 px-1 text-right">{d.prixUnitaire != null ? formatMontant(d.prixUnitaire) : ''}</td>
+                        <td />
+                        <td className="py-1 px-1 text-right">{d.total != null ? formatMontant(d.total) : ''}</td>
+                      </tr>
+                    ))}
                     {/* Images dans tr séparé pleine largeur — data URLs 48×38px html2canvas-safe */}
                     {(dataUrlImages[l.id] || []).filter(Boolean).length > 0 && (
                       <tr className="border-b border-border/60">
@@ -1343,6 +1379,18 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           </tr>
                         );
                       })}
+                      {/* Variante composée DÉPLIÉE : ses composants, comme saisis un par un. */}
+                      {lignesDetail(l).map((d, k) => (
+                        <tr key={`${l.id}-detail-${k}`} className="bg-muted/20 text-muted-foreground text-xs">
+                          <td className={`py-1 italic ${myGrpS ? 'pl-10' : 'pl-6'}`}>↳ {d.designation}</td>
+                          <td className="py-1 text-right">{d.quantite}</td>
+                          <td className="py-1 text-center">{d.unite}</td>
+                          {showRemise && <td />}
+                          {showRemise && <td />}
+                          <td className="py-1 text-right">{d.prixUnitaire != null ? formatMontant(d.prixUnitaire) : ''}</td>
+                          <td className="py-1 text-right">{d.total != null ? formatMontant(d.total) : ''}</td>
+                        </tr>
+                      ))}
                     </Fragment>
                   );
                 });

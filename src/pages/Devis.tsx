@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
+import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -30,6 +30,7 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
+import DetailCompoLigne from '@/components/DetailCompoLigne';
 import { InputNombre } from '@/components/InputNombre';
 import {
   calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE,
@@ -39,7 +40,7 @@ import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
-  cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues,
+  cleSousCompo, sousVariantesRetenues, prixLigneCompo, detailCompo, prixForces, avecPrixForce, PREFIXE_PRIX,
   dimensionsDesComposants, type DimensionDeComposant,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -1114,6 +1115,37 @@ export default function Devis() {
     if (change) setLignes(suivantes);
   }, [lignes, produits]);
 
+  /* LE DÉTAIL IMPRIMÉ d'une ligne dépliée (`detailImprime`) suit la ligne : il
+     est chiffré ici, avec le tarif du devis, parce que l'aperçu et le PDF —
+     ouverts aussi depuis le CRM — ne le connaissent pas. Repliée, la ligne le
+     perd. Comparé en texte : il n'est réécrit que s'il a changé. */
+  useEffect(() => {
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    const resoudre = resoudrePrixComposant(estRev);
+    const trouver = (id: string) => produitParId(produits, id);
+    let change = false;
+    const suivantes = lignes.map(l => {
+      const p = l.detailCompo && l.produitId ? trouver(l.produitId) : undefined;
+      const v = p ? varianteDeLigne(p, l.variantesChoisies) : undefined;
+      if (!v) {
+        if (!l.detailImprime) return l;
+        change = true;
+        const { detailImprime: _d, ...reste } = l;
+        return reste;
+      }
+      const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map(d => ({
+        designation: d.produit ? designationProduit(d.produit) : (d.composant.description || 'Composant'),
+        quantite: Math.round(d.quantite * 1e6) / 1e6,
+        unite: d.composant.unite || d.produit?.unite || '',
+        prixUnitaire: Math.round(d.prixUnitaire * d.facteurRemise * 1e4) / 1e4,
+      }));
+      if (JSON.stringify(imprime) === JSON.stringify(l.detailImprime)) return l;
+      change = true;
+      return { ...l, detailImprime: imprime };
+    });
+    if (change) setLignes(suivantes);
+  }, [lignes, produits, clients, clientId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function addLigne() {
     saveSnapshot();
     const id = generateId();
@@ -1301,8 +1333,7 @@ export default function Devis() {
       description: designationAvecVariante(designationProduit(racine), v,
         sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom }))),
       unite: 'ens.',
-      prixUnitaireHT: prixVarianteCompo(v, resoudreAvecSousVariantes(
-        resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur), trouver, l.variantesChoisies)),
+      prixUnitaireHT: prixLigneCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur), trouver, l.variantesChoisies),
       prixAchatLigne: achatVarianteCompo(v, produits, l.variantesChoisies) ?? 0,
     };
   }
@@ -1335,7 +1366,8 @@ export default function Devis() {
          proposées : celles que la ligne n'a pas encore reprennent leur première
          option, et la variante composée s'ajoute sans rien retirer. Les
          sous-variantes d'un choix précédent, elles, tombent. */
-      const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) => !k.startsWith(`${CLE_COMPO}/`)));
+      // Les prix forcés du détail suivent la composition : une autre variante les efface.
+      const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) => !k.startsWith(`${CLE_COMPO}/`) && !k.startsWith(PREFIXE_PRIX)));
       const vc: Record<string, string> = {
         ...Object.fromEntries(
           (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
@@ -1660,8 +1692,8 @@ export default function Devis() {
   function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
     // Une variante composée fixe le prix : somme de ses composants.
     const compo = varianteDeLigne(produit, variantesChoisies);
-    if (compo) return prixVarianteCompo(compo, resoudreAvecSousVariantes(
-      resoudrePrixComposant(isRevendeur, niveau), id => produitParId(produits, id), variantesChoisies));
+    // Sous-variantes ET prix forcés dans le détail (`__prix/…` de variantesChoisies).
+    if (compo) return prixLigneCompo(compo, resoudrePrixComposant(isRevendeur, niveau), id => produitParId(produits, id), variantesChoisies);
     const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
@@ -1764,9 +1796,9 @@ export default function Devis() {
       if (!p) return l;
       const compo = varianteDeLigne(p, l.variantesChoisies);
       const base = compo ? 0 : prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
-      const prixUnitaireHT = compo ? prixVarianteCompo(compo, resoudreAvecSousVariantes(
+      const prixUnitaireHT = compo ? prixLigneCompo(compo,
         c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, estRevendeur, niveau, grille, grilleR4) : undefined; },
-        id => produitParId(produits, id), l.variantesChoisies)) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+        id => produitParId(produits, id), l.variantesChoisies) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
       return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
     }));
     if (!opts.silencieux && niveau && auNiveau + horsNiveau > 0) {
@@ -3593,6 +3625,8 @@ export default function Devis() {
 
                     /* Ligne de CATALYSEUR : la température du chantier commande la quantité
                        (catalyseur.ts). Changer la température repasse la quantité en automatique. */
+                    // Variante composée de la ligne : son détail se déplie (DetailCompoLigne).
+                    const compoLigne = prod ? varianteDeLigne(prod, l.variantesChoisies) : undefined;
                     const estCata = estCatalyseur(prod);
                     // Température saisie (libre) → ligne du tableau la plus prudente (18 °C → 15 °C).
                     const tempSaisie = l.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
@@ -3872,9 +3906,37 @@ export default function Devis() {
                                 </div>
                               )}
                             </div>
+                            {/* Détail de la variante composée, déplié */}
+                            {compoLigne && l.detailCompo && prod && (
+                              <DetailCompoLigne
+                                variante={compoLigne}
+                                quantiteLigne={l.quantite}
+                                variantesChoisies={l.variantesChoisies}
+                                resoudre={resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur)}
+                                trouver={id => produitParId(produits, id)}
+                                canAchat={canAchat}
+                                onChange={vc => {
+                                  const client = clients.find(c => c.id === clientId);
+                                  // Un seul calcul : celui de toutes les relectures de prix (getPrixLigne).
+                                  setLignes(prev => prev.map(li => li.id === l.id
+                                    ? { ...li, variantesChoisies: vc, prixUnitaireHT: getPrixLigne(prod, li.quantite, vc, client?.estRevendeur) } : li));
+                                }}
+                              />
+                            )}
                             {/* Infos marges, stock Odoo, teinte */}
                             {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
+                                {compoLigne && (
+                                  <button type="button" onClick={() => updateLigne(l.id, 'detailCompo', l.detailCompo ? undefined : true)}
+                                    className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
+                                    title={l.detailCompo
+                                      ? 'Replier : le devis montre l\'ensemble sur une seule ligne'
+                                      : 'Déplier : chaque composant avec son prix de vente, son poids, son prix d\'achat — et le devis le détaille aussi'}>
+                                    {l.detailCompo ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+                                    Détail ({compoLigne.composants.length})
+                                    {Object.keys(prixForces(l.variantesChoisies)).length > 0 && <span className="text-orange-500 font-normal">· prix forcés</span>}
+                                  </button>
+                                )}
                                 {teintesLigne.map((t, k) => teinteEdit === `${l.id}:${t.cle}` ? (
                                   <input key={`teinte-${k}`} autoFocus type="text" inputMode="numeric" placeholder="RAL (ex. 7042)"
                                     className="h-6 w-32 rounded border border-input bg-background px-1.5 text-xs text-foreground"

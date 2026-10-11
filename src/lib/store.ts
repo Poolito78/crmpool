@@ -563,6 +563,20 @@ export interface LigneDevis {
   temperatureCatalyse?: number;
   /** Quantité de catalyseur saisie à la main : le calcul automatique ne la réécrit plus. */
   catalyseManuelle?: boolean;
+  /**
+   * Ligne à variante composée DÉPLIÉE : l'éditeur montre ses composants un par
+   * un, et le devis (aperçu, PDF) les détaille sous la ligne. Repliée (absent),
+   * elle reste une seule ligne. Les prix forcés du détail vivent dans
+   * `variantesChoisies` (`__prix/…`, voir variantesCompo.ts).
+   */
+  detailCompo?: boolean;
+  /**
+   * Le détail dépliée tel que l'éditeur l'a chiffré (tarif du client et du
+   * niveau), POUR UNE unité de la ligne. L'aperçu et le PDF l'impriment tel
+   * quel : ils ne connaissent pas le tarif. Si la somme ne fait plus le prix de
+   * la ligne (prix retouché à la main), les composants s'impriment sans prix.
+   */
+  detailImprime?: { designation: string; quantite: number; unite: string; prixUnitaire: number }[];
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

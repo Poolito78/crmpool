@@ -111,6 +111,105 @@ export function sousVariantesRetenues<P extends AvecVariantes>(
 }
 
 /**
+ * LE DÉTAIL D'UNE LIGNE À VARIANTE COMPOSÉE, mis à plat.
+ *
+ * Une ligne « KIT FLOWFAST 319 ROAD » se lit, dépliée, comme si l'on avait
+ * saisi ses articles un par un : 319 Unpigmented, SNLR, pigment — sous-variantes
+ * dépliées à leur place, quantités multipliées. Chaque composant porte son prix
+ * de vente, son poids, son prix d'achat ; le prix de vente se force à la main
+ * (`LigneDevis.prixComposants`, clé = `cle` ci-dessous) et le prix de la ligne
+ * est alors la somme du détail — un seul calcul, `prixDetailCompo`, pour
+ * l'affichage ET le prix de la ligne.
+ *
+ * La CLÉ suit le chemin dans la composition (`<variante>:<rang>/<sous-variante>:<rang>`) :
+ * deux fois le même article dans une variante restent deux composants.
+ */
+export interface ComposantDetaille<P> {
+  cle: string;
+  composant: LigneKit;
+  produit?: P;
+  /** Quantité pour UNE unité de la ligne (sous-variantes multipliées). */
+  quantite: number;
+  /** Remise(s) du chemin, en facteur (0,9 pour 10 %). */
+  facteurRemise: number;
+  /** Prix de vente unitaire retenu (forcé à la main s'il l'est). */
+  prixUnitaire: number;
+  /** Prix de vente calculé, sans le forçage — pour le montrer et y revenir. */
+  prixCalcule: number;
+  force: boolean;
+  /** Niveau dans la composition (0 = composant direct). */
+  profondeur: number;
+}
+
+export function detailCompo<P extends AvecVariantes>(
+  v: VarianteCompo,
+  resoudre: ResoudrePrix,
+  trouver: (id: string) => P | undefined,
+  variantesChoisies?: Record<string, string>,
+  forces?: Record<string, number>,
+  base = '',
+  facteur = 1,
+  facteurRemise = 1,
+  profondeur = 0,
+): ComposantDetaille<P>[] {
+  if (profondeur >= PROFONDEUR_MAX) return [];
+  return v.composants.flatMap((c, i) => {
+    const cle = `${base}${v.id}:${i}`;
+    const q = (c.quantite || 0) * facteur;
+    const fr = facteurRemise * (1 - (c.remise || 0) / 100);
+    const sous = !c.prixFige ? sousVarianteDe(c, trouver, variantesChoisies) : undefined;
+    if (sous) return detailCompo(sous.variante, resoudre, trouver, variantesChoisies, forces, `${cle}/`, q, fr, profondeur + 1);
+    const prixCalcule = prixComposant(c, resoudre);
+    const force = forces?.[cle];
+    return [{
+      cle, composant: c, produit: c.produitId ? trouver(c.produitId) : undefined,
+      quantite: q, facteurRemise: fr,
+      prixUnitaire: force != null ? force : prixCalcule, prixCalcule, force: force != null, profondeur,
+    }];
+  });
+}
+
+/**
+ * Les prix forcés vivent dans `variantesChoisies`, sous `__prix/<clé>` : comme
+ * la variante elle-même, ils suivent la ligne dans TOUTES les relectures de
+ * prix (`getPrixLigne`, changement de client ou de niveau) sans qu'on ait à les
+ * passer à part. Clé interne (`__`) : jamais affichée.
+ */
+export const PREFIXE_PRIX = '__prix/';
+
+export function prixForces(vc?: Record<string, string>): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(vc ?? {})) {
+    if (!k.startsWith(PREFIXE_PRIX)) continue;
+    const n = Number(v);
+    if (Number.isFinite(n)) out[k.slice(PREFIXE_PRIX.length)] = n;
+  }
+  return out;
+}
+
+/** `variantesChoisies` avec le prix d'un composant forcé (`null` : il reprend son prix calculé). */
+export function avecPrixForce(vc: Record<string, string> | undefined, cle: string, prix: number | null): Record<string, string> {
+  const out = { ...(vc ?? {}) };
+  if (prix == null) delete out[PREFIXE_PRIX + cle]; else out[PREFIXE_PRIX + cle] = String(prix);
+  return out;
+}
+
+/** Prix d'UNE unité de la ligne : somme du détail (prix forcés compris). Égal à `prixVarianteCompo` sans forçage. */
+export function prixDetailCompo(detail: ComposantDetaille<unknown>[]): number {
+  return arrondi(detail.reduce((s, d) => s + d.quantite * d.prixUnitaire * d.facteurRemise, 0));
+}
+
+/** LE prix d'une ligne à variante composée : sous-variantes et prix forcés compris. */
+export function prixLigneCompo(
+  v: VarianteCompo,
+  resoudre: ResoudrePrix,
+  trouver: (id: string) => AvecVariantes | undefined,
+  variantesChoisies?: Record<string, string>,
+): number {
+  return prixDetailCompo(detailCompo(v, resoudre, trouver, variantesChoisies, prixForces(variantesChoisies)));
+}
+
+/**
  * LES TEINTES DES COMPOSANTS. Le pigment d'un kit (PIGMENTKG, PIGMENT02) porte
  * la dimension « Teinte » et ses 220 RAL ; l'article de la ligne (319R, SNLR+P)
  * n'en porte aucune. Sans cela la ligne partait sans teinte, et aucun

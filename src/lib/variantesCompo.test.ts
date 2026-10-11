@@ -3,6 +3,7 @@ import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixComposant, prixVarianteCompo, valeursVisibles,
   varianteDeLigne, type VarianteCompo,
   cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues, dimensionsDesComposants,
+  detailCompo, prixDetailCompo, prixLigneCompo, prixForces, avecPrixForce,
 } from './variantesCompo';
 
 const ligne = (p: object) => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0, ...p });
@@ -122,6 +123,21 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
     expect(g).toHaveLength(1);
     expect(g[0].nom).toBe('Teinte');
     expect(g[0].dimensions.map(d => d.id).sort()).toEqual(['d02', 'dkg']);
+  });
+
+  it('le détail mis à plat redonne le prix de la cascade, et un prix forcé le change', () => {
+    const vc = { [CLE_COMPO]: 'k', [cleSousCompo('snlr')]: 's1' };
+    const d = detailCompo(KIT, prixArticle, trouver, vc);
+    // 319 + base + pigment (SNLR déplié à sa place), quantités multipliées.
+    expect(d.map(x => [x.composant.produitId, x.quantite])).toEqual([['319', 1], ['base', 2], ['pig', 2]]);
+    expect(prixDetailCompo(d)).toBe(170);
+    expect(prixLigneCompo(KIT, prixArticle, trouver, vc)).toBe(170);
+    // Pigment forcé à 8 € au lieu de 5 : 100 + 2×30 + 2×8 = 176.
+    const vc2 = avecPrixForce(vc, d[2].cle, 8);
+    expect(prixForces(vc2)).toEqual({ [d[2].cle]: 8 });
+    expect(prixLigneCompo(KIT, prixArticle, trouver, vc2)).toBe(176);
+    expect(valeursVisibles(vc2)).toEqual([]);                     // clé interne
+    expect(prixLigneCompo(KIT, prixArticle, trouver, avecPrixForce(vc2, d[2].cle, null))).toBe(170);
   });
 
   it('une boucle de fiches ne fige pas le calcul', () => {
