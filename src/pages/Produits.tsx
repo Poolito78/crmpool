@@ -2695,6 +2695,13 @@ export default function Produits() {
                   return (
                     <div key={comp.produitId || `new-${idx}`} className="space-y-1">
                       <div className="flex flex-wrap sm:flex-nowrap items-start gap-2">
+                        <span className="mt-1">
+                          <BoutonsOrdre index={idx} total={composants.length} onMove={d => {
+                            setComposants(deplacer(composants, idx, d));
+                            setComposantSearches(deplacer(composants.map((_, i) => composantSearches[i] ?? ''), idx, d));
+                            setComposantOpenIdx(null);
+                          }} />
+                        </span>
                         {/* Combobox produit */}
                         <div className="flex-1 min-w-0 relative">
                           <Input
