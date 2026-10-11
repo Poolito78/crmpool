@@ -9,6 +9,8 @@ interface Props {
   value: string;
   onChange: (label: string) => void;
   className?: string;
+  /** Texte affiché tant que `value` ne désigne aucune option. Sans lui, la première option s'affiche. */
+  vide?: string;
 }
 
 function SwatchPreview({ opt, size = 'sm' }: { opt: VarianteOption; size?: 'sm' | 'lg' }) {
@@ -67,7 +69,7 @@ function RalBadge({ label, selected }: { label: string; selected?: boolean }) {
   );
 }
 
-export default function VarianteSelect({ dimension, value, onChange, className }: Props) {
+export default function VarianteSelect({ dimension, value, onChange, className, vide }: Props) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState<VarianteOption | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
@@ -80,7 +82,9 @@ export default function VarianteSelect({ dimension, value, onChange, className }
   const elements = useRef<Record<string, HTMLElement | null>>({});
   const minuteur = useRef<ReturnType<typeof setTimeout>>();
 
-  const selectedOpt = dimension.options.find(o => o.label === value) ?? dimension.options[0];
+  /* Avec `vide`, rien de choisi ne s'affiche pas comme la première option : une teinte
+     présentée sans avoir été choisie passerait pour un choix. */
+  const selectedOpt = dimension.options.find(o => o.label === value) ?? (vide ? undefined : dimension.options[0]);
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
   const hasRal = !hasVisuals && dimension.options.some(o => getRalInfo(o.label));
   // RAL détecté depuis le label (prioritaire sur imageUrl qui peut être cassée)
@@ -152,7 +156,7 @@ export default function VarianteSelect({ dimension, value, onChange, className }
             ? (selectedRal.quartz
                 ? `${selectedRal.quartz} · RAL ${selectedRal.num}`
                 : `RAL ${selectedRal.num}`)
-            : selectedOpt?.label ?? '—'}
+            : selectedOpt?.label ?? vide ?? '—'}
           {!selectedRal && selectedOpt?.prixDiff ? ` (${selectedOpt.prixDiff > 0 ? '+' : ''}${selectedOpt.prixDiff}€)` : ''}
         </span>
         <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" />

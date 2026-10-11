@@ -29,11 +29,13 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
+import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
   cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues,
+  dimensionsDesComposants, type DimensionDeComposant,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
@@ -1208,6 +1210,11 @@ export default function Devis() {
   /** Composants à variantes encore à demander pour la ligne en cours, et ceux déjà demandés (anti-boucle). */
   const fileSousVariantes = useRef<Produit[]>([]);
   const sousDeplies = useRef(new Set<string>());
+  /** `variantesChoisies` de la ligne en cours de saisie, tel que la dernière fenêtre l'a laissé. */
+  const vcEnCours = useRef<Record<string, string> | null>(null);
+  const [teintesPour, setTeintesPour] = useState<{
+    ligneId: string; racine: Produit; groupes: DimensionDeComposant<Produit>[]; valeurs: Record<string, string>;
+  } | null>(null);
 
   /* OPTIONS EN CHAÎNE. Une option insérée peut être elle-même un article à
      variantes composées ou à options (le catalyseur propose son durcisseur) :
@@ -1283,55 +1290,74 @@ export default function Devis() {
          « Article seul » retire un choix antérieur — le composant reprend le
          prix de son article. */
       const cle = cleSousCompo(cible.produit.id);
-      setLignes(prev => prev.map(l => {
-        if (l.id !== cible.ligneId) return l;
-        const vc = { ...(l.variantesChoisies ?? {}) };
-        if (v) vc[cle] = v.id; else delete vc[cle];
-        return ligneAvecCompo({ ...l, variantesChoisies: vc }, racine);
-      }));
+      /* Le choix est calculé ICI, sur la ligne telle qu'affichée : la suite (teintes
+         des composants) doit le connaître sans attendre le rendu suivant. */
+      const vc = { ...(vcEnCours.current ?? lignes.find(l => l.id === cible.ligneId)?.variantesChoisies ?? {}) };
+      if (v) vc[cle] = v.id; else delete vc[cle];
+      vcEnCours.current = vc;
+      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : ligneAvecCompo({ ...l, variantesChoisies: vc }, racine)));
       // Ses propres composants à variantes passent en tête : en profondeur d'abord.
       if (v) fileSousVariantes.current = [...composantsADeplier(v), ...fileSousVariantes.current];
     } else if (v) {
       saveSnapshot();
       fileSousVariantes.current = [];
       sousDeplies.current = new Set([racine.id]);
-      setLignes(prev => prev.map(l => {
-        if (l.id !== cible.ligneId) return l;
-        /* Les dimensions de variantes de l'article (RAL, granulométrie…) restent
-           proposées : celles que la ligne n'a pas encore reprennent leur première
-           option, et la variante composée s'ajoute sans rien retirer. Les
-           sous-variantes d'un choix précédent, elles, tombent. */
-        const anciennes = Object.fromEntries(Object.entries(l.variantesChoisies ?? {})
-          .filter(([k]) => !k.startsWith(`${CLE_COMPO}/`)));
-        return ligneAvecCompo({
-          ...l,
-          variantesChoisies: {
-            ...Object.fromEntries(
-              (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
-                .filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id])
-                .map(d => [d.id, d.options[0].label]),
-            ),
-            ...anciennes,
-            [CLE_COMPO]: v.id,
-          },
-        }, racine);
-      }));
+      const avant = lignes.find(l => l.id === cible.ligneId)?.variantesChoisies ?? {};
+      /* Les dimensions de variantes de l'article (RAL, granulométrie…) restent
+         proposées : celles que la ligne n'a pas encore reprennent leur première
+         option, et la variante composée s'ajoute sans rien retirer. Les
+         sous-variantes d'un choix précédent, elles, tombent. */
+      const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) => !k.startsWith(`${CLE_COMPO}/`)));
+      const vc: Record<string, string> = {
+        ...Object.fromEntries(
+          (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
+            .filter(d => d.options.length > 0 && !avant[d.id])
+            .map(d => [d.id, d.options[0].label]),
+        ),
+        ...anciennes,
+        [CLE_COMPO]: v.id,
+      };
+      vcEnCours.current = vc;
+      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : ligneAvecCompo({ ...l, variantesChoisies: vc }, racine)));
       fileSousVariantes.current = composantsADeplier(v);
       if (!fileSousVariantes.current.length && achatVarianteCompo(v, produits) === undefined) {
         toast.warning('Coût d\'achat de la variante inconnu : un composant n\'est pas au catalogue — marge à vérifier.');
       }
+    } else {
+      vcEnCours.current = null;
     }
 
     // Le composant suivant à déplier, s'il en reste : SNLR après 319R.
     const suivant = fileSousVariantes.current.shift();
     if (suivant) { setVariantePour({ ligneId: cible.ligneId, produit: suivant, racine }); return; }
 
-    // Les options viennent après la variante (et ses sous-variantes).
-    if (racine.typeOptions && (racine.lignesOptions?.length ?? 0) > 0) {
-      setOptionsPour({ ligneId: cible.ligneId, produit: racine });
-    } else {
-      choixSuivant();
+    /* LA TEINTE DES COMPOSANTS AVANT LES OPTIONS : le pigment du kit porte les
+       220 RAL, l'article de la ligne aucun (voir `dimensionsDesComposants`). */
+    const vc = vcEnCours.current;
+    const retenue = vc ? varianteDeLigne(racine, vc) : undefined;
+    if (vc && retenue) {
+      const groupes = dimensionsDesComposants(retenue, id => produitParId(produits, id), vc);
+      if (groupes.length) { setTeintesPour({ ligneId: cible.ligneId, racine, groupes, valeurs: vc }); return; }
     }
+    ouvrirOptionsDe(cible.ligneId, racine);
+  }
+
+  /** Les options de l'article de la ligne, sinon la suite de la chaîne. */
+  function ouvrirOptionsDe(ligneId: string, racine: Produit) {
+    if (racine.typeOptions && (racine.lignesOptions?.length ?? 0) > 0) setOptionsPour({ ligneId, produit: racine });
+    else choixSuivant();
+  }
+
+  /** Teintes des composants choisies (ou « Plus tard » : `null`) → puis les options. */
+  function appliquerTeintes(choix: Record<string, string> | null) {
+    const cible = teintesPour;
+    setTeintesPour(null);
+    if (!cible) return;
+    if (choix && Object.keys(choix).length) {
+      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l
+        : { ...l, variantesChoisies: { ...(l.variantesChoisies ?? {}), ...choix } }));
+    }
+    ouvrirOptionsDe(cible.ligneId, cible.racine);
   }
 
   function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
@@ -3547,7 +3573,14 @@ export default function Devis() {
                           onChange={label => {
                             setLignes(prev => prev.map(li => {
                               if (li.id !== l.id) return li;
-                              const validIds = new Set(prod.variantes!.map(d => d.id));
+                              /* Les teintes des COMPOSANTS (pigment d'un kit) sont gardées : elles
+                                 ne sont pas des dimensions de l'article, mais de sa variante composée. */
+                              const compo = varianteDeLigne(prod, li.variantesChoisies);
+                              const validIds = new Set([
+                                ...prod.variantes!.map(d => d.id),
+                                ...(compo ? dimensionsDesComposants(compo, id => produitParId(produits, id), li.variantesChoisies)
+                                  .flatMap(g => g.dimensions.map(d => d.id)) : []),
+                              ]);
                               const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k) || k.startsWith('__')));
                               const variantesChoisies = { ...cleaned, [dim.id]: label };
                               const client = clients.find(c => c.id === clientId);
@@ -4946,6 +4979,15 @@ export default function Devis() {
           />
         </div>
       )}
+
+      <TeintesCompoDialog
+        ouvert={!!teintesPour}
+        article={teintesPour ? designationProduit(teintesPour.racine) : ''}
+        groupes={teintesPour?.groupes ?? []}
+        valeurs={teintesPour?.valeurs ?? {}}
+        onValider={appliquerTeintes}
+        onPlusTard={() => appliquerTeintes(null)}
+      />
 
       <VarianteCompoDialog produit={variantePour?.produit ?? null} onChoix={appliquerVarianteCompo}
         dans={variantePour?.racine ? designationProduit(variantePour.racine) : undefined}

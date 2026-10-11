@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixComposant, prixVarianteCompo, valeursVisibles,
   varianteDeLigne, type VarianteCompo,
-  cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues,
+  cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues, dimensionsDesComposants,
 } from './variantesCompo';
 
 const ligne = (p: object) => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0, ...p });
@@ -89,6 +89,30 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
 
   it('la clé de cascade reste interne', () => {
     expect(valeursVisibles({ [cleSousCompo('snlr')]: 's1', dim: 'RAL 1015' })).toEqual(['RAL 1015']);
+  });
+
+  it('la teinte du pigment est demandée, une fois par nom, même dans une sous-variante', () => {
+    const teinte = (id: string) => ({ id, nom: 'Teinte', options: [{ id: `${id}-1`, label: 'RAL 1015' }, { id: `${id}-2`, label: 'RAL 7040' }] });
+    const SNLRP: VarianteCompo = { id: 'sp', nom: '2 kits', composants: [
+      ligne({ produitId: 'snlr11', quantite: 2 }), ligne({ produitId: 'pigkg', quantite: 2 }),
+    ] };
+    const R: VarianteCompo = { id: 'r', nom: 'kit', composants: [
+      ligne({ produitId: 'ff319', quantite: 1 }), ligne({ produitId: 'snlrp', quantite: 1 }), ligne({ produitId: 'pig02', quantite: 1 }),
+    ] };
+    const cat = [
+      { id: 'ff319', prixAchat: 1 }, { id: 'snlr11', prixAchat: 1 },
+      { id: 'snlrp', prixAchat: 1, variantesCompo: [SNLRP] },
+      { id: 'pigkg', prixAchat: 1, variantes: [teinte('dkg')] },
+      { id: 'pig02', prixAchat: 1, variantes: [teinte('d02')] },
+    ];
+    const t = (id: string) => cat.find(p => p.id === id);
+    // SNLR+P non déplié : seul le pigment direct (PIGMENT02) est vu.
+    expect(dimensionsDesComposants(R, t, { [CLE_COMPO]: 'r' }).flatMap(g => g.dimensions.map(d => d.id))).toEqual(['d02']);
+    // Déplié : les deux pigments, regroupés sous « Teinte ».
+    const g = dimensionsDesComposants(R, t, { [CLE_COMPO]: 'r', [cleSousCompo('snlrp')]: 'sp' });
+    expect(g).toHaveLength(1);
+    expect(g[0].nom).toBe('Teinte');
+    expect(g[0].dimensions.map(d => d.id).sort()).toEqual(['d02', 'dkg']);
   });
 
   it('une boucle de fiches ne fige pas le calcul', () => {

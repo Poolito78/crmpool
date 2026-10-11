@@ -111,6 +111,55 @@ export function sousVariantesRetenues<P extends AvecVariantes>(
 }
 
 /**
+ * LES TEINTES DES COMPOSANTS. Le pigment d'un kit (PIGMENTKG, PIGMENT02) porte
+ * la dimension « Teinte » et ses 220 RAL ; l'article de la ligne (319R, SNLR+P)
+ * n'en porte aucune. Sans cela la ligne partait sans teinte, et aucun
+ * sélecteur ne s'affichait. Les dimensions des composants sont donc demandées
+ * après la variante, AVANT les options, et se rangent dans `variantesChoisies`
+ * sous l'identifiant de la dimension du composant.
+ *
+ * Regroupées par NOM de dimension : deux pigments dans un même kit prennent la
+ * même teinte, demandée une fois.
+ */
+type AvecDimensions = AvecVariantes & Pick<Produit, 'variantes'>;
+
+export interface DimensionDeComposant<P> {
+  /** Nom commun (« Teinte ») — la question posée une fois. */
+  nom: string;
+  /** Dimensions des composants qui portent ce nom (chacune reçoit le choix). */
+  dimensions: NonNullable<Produit['variantes']>;
+  /** Les articles qui les portent (pour l'affichage). */
+  produits: P[];
+}
+
+export function dimensionsDesComposants<P extends AvecDimensions>(
+  v: VarianteCompo,
+  trouver: (id: string) => P | undefined,
+  variantesChoisies?: Record<string, string>,
+): DimensionDeComposant<P>[] {
+  const variantes = [v, ...sousVariantesRetenues(v, trouver, variantesChoisies).map(s => s.variante)];
+  const parNom = new Map<string, DimensionDeComposant<P>>();
+  const vues = new Set<string>();
+  for (const vr of variantes) {
+    for (const c of vr.composants) {
+      // Un composant déplié en sous-variante est représenté par SES composants.
+      if (sousVarianteDe(c, trouver, variantesChoisies)) continue;
+      const p = c.produitId ? trouver(c.produitId) : undefined;
+      for (const d of p?.variantes ?? []) {
+        if (!d.options.length || vues.has(d.id)) continue;
+        vues.add(d.id);
+        const cle = (d.nom || 'Variante').trim().toLowerCase();
+        const g = parNom.get(cle) ?? { nom: d.nom || 'Variante', dimensions: [], produits: [] };
+        g.dimensions.push(d);
+        if (!g.produits.includes(p!)) g.produits.push(p!);
+        parNom.set(cle, g);
+      }
+    }
+  }
+  return [...parNom.values()];
+}
+
+/**
  * Coût d'achat d'un ensemble, ou `undefined` : on ne le calcule que si CHAQUE
  * composant est un article du catalogue AVEC un prix d'achat renseigné — un coût partiel annoncerait une
  * marge fausse, et on n'invente pas une donnée métier. Un composant à
