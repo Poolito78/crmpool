@@ -2087,13 +2087,34 @@ export default function Produits() {
                 ['tags', 'Tags'], ['tarif', 'Tarif'], ['paliers', 'Prix par palier'], ['variantes', 'Variantes (RAL…)'],
                 ['compose', 'Produit composé'], ['kit', 'Kit'], ['variantesCompo', 'Variantes composées'],
                 ['options', 'Options'], ['notes', 'Notes'],
-              ] as const).map(([id, libelle]) => (
-                <button
-                  key={id} type="button" onClick={() => basculerSection(id)}
-                  title={sectionsMasquees.has(id) ? 'Afficher cette section' : 'Masquer cette section'}
-                  className={`px-2.5 py-0.5 rounded-full border transition-colors ${sectionsMasquees.has(id) ? 'border-dashed text-muted-foreground line-through hover:text-foreground' : 'bg-primary/10 border-primary/40 text-primary'}`}
-                >{libelle}</button>
-              ))}
+              ] as const).map(([id, libelle]) => {
+                /* Ce que la section contient, quand elle contient quelque chose :
+                   en pastille, et en détail dans l'infobulle. */
+                const pl = (n: number, un: string, plusieurs = `${un}s`) => `${n} ${n > 1 ? plusieurs : un}`;
+                const nbOptionsDim = variantes.reduce((t, d) => t + d.options.length, 0);
+                const contenu: Record<string, { n: number; detail: string }> = {
+                  paliers: { n: paliersPrix.length, detail: pl(paliersPrix.length, 'palier') },
+                  variantes: { n: variantes.length, detail: `${pl(variantes.length, 'dimension')} · ${pl(nbOptionsDim, 'option')}` },
+                  compose: { n: composants.length, detail: pl(composants.length, 'composant') },
+                  kit: { n: isTypeKit ? lignesKit.length : 0, detail: pl(lignesKit.length, 'ligne') },
+                  variantesCompo: { n: isTypeVariantesCompo ? variantesCompo.length : 0, detail: pl(variantesCompo.length, 'variante') },
+                  options: { n: isTypeOptions ? lignesOptions.length : 0, detail: pl(lignesOptions.length, 'option') },
+                  notes: { n: form.notes?.trim() ? 1 : 0, detail: 'notes renseignées' },
+                };
+                const c = contenu[id];
+                const masquee = sectionsMasquees.has(id);
+                return (
+                  <button
+                    key={id} type="button" onClick={() => basculerSection(id)}
+                    title={`${masquee ? 'Afficher' : 'Masquer'} cette section${c && c.n > 0 ? ` — ${c.detail}` : ''}`}
+                    className={`px-2.5 py-0.5 rounded-full border transition-colors ${masquee ? 'border-dashed text-muted-foreground hover:text-foreground' : 'bg-primary/10 border-primary/40 text-primary'}`}
+                  >
+                    <span className={masquee ? 'line-through' : ''}>{libelle}</span>
+                    {c && c.n > 0 && id !== 'notes' && <span className="ml-1 font-semibold">{c.n}</span>}
+                    {c && c.n > 0 && id === 'notes' && <span className="ml-1">•</span>}
+                  </button>
+                );
+              })}
               {sectionsMasquees.size > 0 && (
                 <button type="button" className="underline text-muted-foreground hover:text-foreground"
                   onClick={() => { setSectionsMasquees(new Set()); try { localStorage.removeItem('produits_sections_masquees'); } catch { /* idem */ } }}>
