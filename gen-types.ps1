@@ -16,7 +16,10 @@ if (-not $env:SUPABASE_ACCESS_TOKEN) {
 }
 
 Write-Host "Generation des types depuis le projet $projectRef ..." -ForegroundColor Cyan
-$types = npx supabase gen types typescript --project-id $projectRef
+# --yes : sans lui, npx demande « Ok to proceed? (y) » pour installer le
+# paquet ; la question est capturée dans $types (donc invisible, le script
+# semble figé) puis écrite en tête de types.ts, qui ne compile plus.
+$types = npx --yes supabase gen types typescript --project-id $projectRef
 
 if ($LASTEXITCODE -ne 0 -or -not $types) {
     Write-Host "Echec de la generation (voir le message ci-dessus)." -ForegroundColor Red

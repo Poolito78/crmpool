@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       ca_dashboard_data: {
@@ -86,7 +111,7 @@ export type Database = {
           genre?: string
           id?: string
           libelle: string
-          mention: string | null
+          mention?: string | null
           ordre?: number
           url: string
           user_id?: string
@@ -723,7 +748,6 @@ export type Database = {
           date_validite: string | null
           frais_port_auto: boolean | null
           frais_port_ht: number | null
-
           frais_port_libelle: string | null
           frais_port_tva: number | null
           id: string
@@ -759,7 +783,6 @@ export type Database = {
           date_validite?: string | null
           frais_port_auto?: boolean | null
           frais_port_ht?: number | null
-
           frais_port_libelle?: string | null
           frais_port_tva?: number | null
           id?: string
@@ -795,7 +818,6 @@ export type Database = {
           date_validite?: string | null
           frais_port_auto?: boolean | null
           frais_port_ht?: number | null
-
           frais_port_libelle?: string | null
           frais_port_tva?: number | null
           id?: string
@@ -1706,13 +1728,16 @@ export type Database = {
       produits: {
         Row: {
           achats_historique: Json | null
+          adr: boolean | null
           catalogue: string | null
           categorie: string | null
           code_tarif: string | null
           coeff_revendeur: number
           coefficient: number
           composants: Json | null
+          conso_unite: string | null
           consommation: number | null
+          consommations: Json | null
           created_at: string
           date_creation: string
           description: string
@@ -1721,14 +1746,16 @@ export type Database = {
           disponible_vente: boolean
           est_modele: boolean
           fiche_link_label: string | null
-          fiche_url: string | null
           fiche_type: string | null
+          fiche_url: string | null
           fiches_supplementaires: Json | null
           fournisseur_id: string | null
           id: string
           lignes_kit: Json | null
+          lignes_options: Json | null
           modele_cle: string | null
           nb_variantes: number
+          notes: string | null
           origine: string | null
           paliers_prix: Json | null
           poids: number | null
@@ -1749,21 +1776,29 @@ export type Database = {
           stock_odoo: number | null
           stock_odoo_maj: string | null
           stock_odoo_prevu: number | null
+          surface_unite_m2: number | null
           tva: number
           type_kit: boolean | null
+          type_options: boolean | null
+          type_variantes_compo: boolean | null
           unite: string
+          updated_at: string
           user_id: string
           variantes: Json | null
+          variantes_compo: Json | null
         }
         Insert: {
           achats_historique?: Json | null
+          adr?: boolean | null
           catalogue?: string | null
           categorie?: string | null
           code_tarif?: string | null
           coeff_revendeur?: number
           coefficient?: number
           composants?: Json | null
+          conso_unite?: string | null
           consommation?: number | null
+          consommations?: Json | null
           created_at?: string
           date_creation?: string
           description?: string
@@ -1772,14 +1807,16 @@ export type Database = {
           disponible_vente?: boolean
           est_modele?: boolean
           fiche_link_label?: string | null
-          fiche_url?: string | null
           fiche_type?: string | null
+          fiche_url?: string | null
           fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
+          lignes_options?: Json | null
           modele_cle?: string | null
           nb_variantes?: number
+          notes?: string | null
           origine?: string | null
           paliers_prix?: Json | null
           poids?: number | null
@@ -1800,21 +1837,29 @@ export type Database = {
           stock_odoo?: number | null
           stock_odoo_maj?: string | null
           stock_odoo_prevu?: number | null
+          surface_unite_m2?: number | null
           tva?: number
           type_kit?: boolean | null
+          type_options?: boolean | null
+          type_variantes_compo?: boolean | null
           unite?: string
+          updated_at?: string
           user_id: string
           variantes?: Json | null
+          variantes_compo?: Json | null
         }
         Update: {
           achats_historique?: Json | null
+          adr?: boolean | null
           catalogue?: string | null
           categorie?: string | null
           code_tarif?: string | null
           coeff_revendeur?: number
           coefficient?: number
           composants?: Json | null
+          conso_unite?: string | null
           consommation?: number | null
+          consommations?: Json | null
           created_at?: string
           date_creation?: string
           description?: string
@@ -1823,14 +1868,16 @@ export type Database = {
           disponible_vente?: boolean
           est_modele?: boolean
           fiche_link_label?: string | null
-          fiche_url?: string | null
           fiche_type?: string | null
+          fiche_url?: string | null
           fiches_supplementaires?: Json | null
           fournisseur_id?: string | null
           id?: string
           lignes_kit?: Json | null
+          lignes_options?: Json | null
           modele_cle?: string | null
           nb_variantes?: number
+          notes?: string | null
           origine?: string | null
           paliers_prix?: Json | null
           poids?: number | null
@@ -1851,11 +1898,16 @@ export type Database = {
           stock_odoo?: number | null
           stock_odoo_maj?: string | null
           stock_odoo_prevu?: number | null
+          surface_unite_m2?: number | null
           tva?: number
           type_kit?: boolean | null
+          type_options?: boolean | null
+          type_variantes_compo?: boolean | null
           unite?: string
+          updated_at?: string
           user_id?: string
           variantes?: Json | null
+          variantes_compo?: Json | null
         }
         Relationships: [
           {
@@ -1866,6 +1918,21 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      produits_effaces: {
+        Row: {
+          efface_le: string
+          id: string
+        }
+        Insert: {
+          efface_le?: string
+          id: string
+        }
+        Update: {
+          efface_le?: string
+          id?: string
+        }
+        Relationships: []
       }
       produits_modeles_retires: {
         Row: {
@@ -2062,6 +2129,30 @@ export type Database = {
         }
         Relationships: []
       }
+      produits_supprimes: {
+        Row: {
+          description: string | null
+          reference: string
+          reference_odoo: string | null
+          supprime_le: string
+          user_id: string | null
+        }
+        Insert: {
+          description?: string | null
+          reference: string
+          reference_odoo?: string | null
+          supprime_le?: string
+          user_id?: string | null
+        }
+        Update: {
+          description?: string | null
+          reference?: string
+          reference_odoo?: string | null
+          supprime_le?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       regles_accompagnement: {
         Row: {
           actif: boolean
@@ -2180,9 +2271,9 @@ export type Database = {
           produit_id: string | null
           ratio_base: number | null
           role: string
-          systeme_id: string
           surface_max_m2: number | null
           surface_min_m2: number | null
+          systeme_id: string
           unite: string | null
         }
         Insert: {
@@ -2201,9 +2292,9 @@ export type Database = {
           produit_id?: string | null
           ratio_base?: number | null
           role?: string
-          systeme_id: string
           surface_max_m2?: number | null
           surface_min_m2?: number | null
+          systeme_id: string
           unite?: string | null
         }
         Update: {
@@ -2222,9 +2313,9 @@ export type Database = {
           produit_id?: string | null
           ratio_base?: number | null
           role?: string
-          systeme_id?: string
           surface_max_m2?: number | null
           surface_min_m2?: number | null
+          systeme_id?: string
           unite?: string | null
         }
         Relationships: [
@@ -2250,6 +2341,9 @@ export type Database = {
           created_at: string
           description: string | null
           famille: string | null
+          fiche_label: string | null
+          fiche_mention: string | null
+          fiche_url: string | null
           id: string
           kit_surface_max_m2: number | null
           nom: string
@@ -2267,6 +2361,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           famille?: string | null
+          fiche_label?: string | null
+          fiche_mention?: string | null
+          fiche_url?: string | null
           id?: string
           kit_surface_max_m2?: number | null
           nom: string
@@ -2284,6 +2381,9 @@ export type Database = {
           created_at?: string
           description?: string | null
           famille?: string | null
+          fiche_label?: string | null
+          fiche_mention?: string | null
+          fiche_url?: string | null
           id?: string
           kit_surface_max_m2?: number | null
           nom?: string
@@ -2367,6 +2467,10 @@ export type Database = {
     }
     Functions: {
       fiche_publique: { Args: { p_id: string }; Returns: Json }
+      fiches_de_produit: {
+        Args: { p: Database["public"]["Tables"]["produits"]["Row"] }
+        Returns: Json
+      }
       get_my_veille_role: { Args: never; Returns: string }
       lancer_stock_odoo: { Args: never; Returns: undefined }
       lancer_synchro_grilles: { Args: never; Returns: undefined }
@@ -2504,6 +2608,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },
