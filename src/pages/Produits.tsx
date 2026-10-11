@@ -426,6 +426,19 @@ export default function Produits() {
     };
   }, [docsCategorie]);
   const [gedFicheOuvert, setGedFicheOuvert] = useState(false);
+  /* Sections de la fiche article qu'on peut masquer (Tarif, Prix par palier,
+     Variantes…) : le choix est mémorisé par navigateur. */
+  const [sectionsMasquees, setSectionsMasquees] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('produits_sections_masquees') || '[]') as string[]); }
+    catch { return new Set<string>(); }
+  });
+  const basculerSection = (id: string) => setSectionsMasquees(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    try { localStorage.setItem('produits_sections_masquees', JSON.stringify([...next])); } catch { /* sans stockage : valable pour la session */ }
+    return next;
+  });
+  const cache = (id: string) => (sectionsMasquees.has(id) ? 'hidden' : '');
   const { systemes, recharger: rechargerSystemes } = useSystemes();
   const [docMention, setDocMention] = useState<TypeFiche | undefined>(undefined);
   const [docNiveau, setDocNiveau] = useState('');
@@ -2068,7 +2081,28 @@ export default function Produits() {
                 qu'on cherche à décrire l'article — mais les deux champs vont
                 en sens inverse : la description détaillée SORT dans le devis,
                 un tag n'en sort jamais. Voir `produitTags.ts`. */}
-            <TagsArticle produitId={editing?.id} />
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="text-muted-foreground">Sections :</span>
+              {([
+                ['tags', 'Tags'], ['tarif', 'Tarif'], ['paliers', 'Prix par palier'], ['variantes', 'Variantes (RAL…)'],
+                ['compose', 'Produit composé'], ['kit', 'Kit'], ['variantesCompo', 'Variantes composées'],
+                ['options', 'Options'], ['notes', 'Notes'],
+              ] as const).map(([id, libelle]) => (
+                <button
+                  key={id} type="button" onClick={() => basculerSection(id)}
+                  title={sectionsMasquees.has(id) ? 'Afficher cette section' : 'Masquer cette section'}
+                  className={`px-2.5 py-0.5 rounded-full border transition-colors ${sectionsMasquees.has(id) ? 'border-dashed text-muted-foreground line-through hover:text-foreground' : 'bg-primary/10 border-primary/40 text-primary'}`}
+                >{libelle}</button>
+              ))}
+              {sectionsMasquees.size > 0 && (
+                <button type="button" className="underline text-muted-foreground hover:text-foreground"
+                  onClick={() => { setSectionsMasquees(new Set()); try { localStorage.removeItem('produits_sections_masquees'); } catch { /* idem */ } }}>
+                  tout afficher
+                </button>
+              )}
+            </div>
+
+            <div className={cache('tags')}><TagsArticle produitId={editing?.id} /></div>
 
             {/* Tarif — section spéciale pour les produits surcharge énergie */}
             {form.categorie === 'surcharge' && (
@@ -2096,7 +2130,7 @@ export default function Produits() {
             )}
 
             {/* Tarif — revendeur par défaut, public en option */}
-            {form.categorie !== 'surcharge' && <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+            {form.categorie !== 'surcharge' && <div className={`border border-border rounded-lg p-3 space-y-3 bg-muted/30 ${cache('tarif')}`}>
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-semibold text-foreground">Tarif</p>
@@ -2230,7 +2264,7 @@ export default function Produits() {
             }, 0);
             const forfaitUnitaire = (qteMin: number) => (forfaitCde > 0 && qteMin > 0 ? forfaitCde / qteMin : 0);
             return (
-            <div className="border border-border rounded-md p-3 space-y-2">
+            <div className={`border border-border rounded-md p-3 space-y-2 ${cache('paliers')}`}>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground">Prix par palier (quantité / poids)</p>
                 <Button
@@ -2369,7 +2403,7 @@ export default function Produits() {
             })()}
 
             {/* ─── Variantes produit ─── */}
-            <div className="border border-border rounded-md p-3 space-y-2">
+            <div className={`border border-border rounded-md p-3 space-y-2 ${cache('variantes')}`}>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-foreground">Variantes (ex : RAL, granulométrie)</p>
                 <Button
@@ -2564,7 +2598,7 @@ export default function Produits() {
             </div>
 
             {/* Composition */}
-            <div className="border border-border rounded-lg p-3 space-y-3 bg-muted/30">
+            <div className={`border border-border rounded-lg p-3 space-y-3 bg-muted/30 ${cache('compose')}`}>
               <div className="flex items-center justify-between">
                 <p className="text-sm font-semibold flex items-center gap-2"><Layers className="w-4 h-4" /> Produit composé</p>
                 <button
@@ -2966,7 +3000,7 @@ export default function Produits() {
             </div>
 
             {/* Kit — groupe de lignes type */}
-            <div className="border border-border rounded-lg bg-muted/30">
+            <div className={`border border-border rounded-lg bg-muted/30 ${cache('kit')}`}>
               <div className="flex items-center justify-between px-3 py-2 border-b border-border/60">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
@@ -3132,25 +3166,29 @@ export default function Produits() {
             </div>
 
             {/* Variantes composées — proposées AVANT les options, une combinaison de produits sur une ligne */}
-            <VariantesCompoEditor
-              actif={isTypeVariantesCompo}
-              onActif={setIsTypeVariantesCompo}
-              variantes={variantesCompo}
-              onChange={setVariantesCompo}
-              produits={produits}
-            />
+            <div className={cache('variantesCompo')}>
+              <VariantesCompoEditor
+                actif={isTypeVariantesCompo}
+                onActif={setIsTypeVariantesCompo}
+                variantes={variantesCompo}
+                onChange={setVariantesCompo}
+                produits={produits}
+              />
+            </div>
 
             {/* Options — produits proposés (à cocher) à la saisie de l'article dans un devis */}
-            <OptionsArticleEditor
-              actif={isTypeOptions}
-              onActif={setIsTypeOptions}
-              lignes={lignesOptions}
-              onChange={setLignesOptions}
-              produits={produits}
-            />
+            <div className={cache('options')}>
+              <OptionsArticleEditor
+                actif={isTypeOptions}
+                onActif={setIsTypeOptions}
+                lignes={lignesOptions}
+                onChange={setLignesOptions}
+                produits={produits}
+              />
+            </div>
 
             {/* Notes libres de la fiche : texte, chiffres, ce qu'on veut retenir — internes, jamais imprimées au devis. */}
-            <div className="border border-border rounded-lg bg-muted/30 p-3 space-y-1.5">
+            <div className={`border border-border rounded-lg bg-muted/30 p-3 space-y-1.5 ${cache('notes')}`}>
               <Label className="text-sm font-semibold">Notes</Label>
               <textarea
                 value={form.notes ?? ''}
