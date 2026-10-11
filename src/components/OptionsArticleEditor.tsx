@@ -1,5 +1,6 @@
 import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { InputNombre } from '@/components/InputNombre';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
@@ -87,8 +88,9 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
             </div>
             <div className="flex flex-col gap-0.5 w-14">
               <span className="text-xs text-muted-foreground">Qté</span>
-              <Input type="number" min={0.01} step={0.01} value={lk.quantite}
-                onChange={e => maj(idx, { quantite: parseFloat(e.target.value) || 1 })} className="text-xs h-7" />
+              {/* InputNombre : un champ vidé ne retombe plus à 1 — on peut effacer puis retaper. */}
+              <InputNombre decimales={3} value={lk.quantite}
+                onChange={n => maj(idx, { quantite: n })} className="text-xs h-7" />
             </div>
             <div className="flex flex-col gap-0.5 w-16">
               <span className="text-xs text-muted-foreground">Unité</span>
@@ -106,13 +108,13 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
             </div>
             <div className="flex flex-col gap-0.5 w-20">
               <span className="text-xs text-muted-foreground">Prix HT</span>
-              <Input type="number" min={0} step={0.01} value={lk.prixUnitaireHT}
-                onChange={e => maj(idx, { prixUnitaireHT: parseFloat(e.target.value) || 0 })} className="text-xs h-7" />
+              <InputNombre decimales={2} value={lk.prixUnitaireHT}
+                onChange={n => maj(idx, { prixUnitaireHT: n })} className="text-xs h-7" />
             </div>
             <div className="flex flex-col gap-0.5 w-14">
               <span className="text-xs text-muted-foreground">Rem%</span>
-              <Input type="number" min={0} max={100} step={1} value={lk.remise}
-                onChange={e => maj(idx, { remise: parseFloat(e.target.value) || 0 })} className="text-xs h-7" />
+              <InputNombre decimales={2} value={lk.remise}
+                onChange={n => maj(idx, { remise: n })} className="text-xs h-7" />
             </div>
             <button
               type="button"

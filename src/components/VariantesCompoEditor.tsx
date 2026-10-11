@@ -1,5 +1,6 @@
 import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { InputNombre } from '@/components/InputNombre';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
@@ -111,8 +112,9 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                 </div>
                 <div className="flex flex-col gap-0.5 w-14">
                   <span className="text-xs text-muted-foreground">Qté</span>
-                  <Input type="number" min={0.01} step={0.01} value={c.quantite}
-                    onChange={e => majComposant(v.id, idx, { quantite: parseFloat(e.target.value) || 1 })} className="text-xs h-7" />
+                  {/* InputNombre : un champ vidé ne retombe plus à 1 — on peut effacer puis retaper. */}
+                  <InputNombre decimales={3} value={c.quantite}
+                    onChange={n => majComposant(v.id, idx, { quantite: n })} className="text-xs h-7" />
                 </div>
                 <div className="flex flex-col gap-0.5 w-16">
                   <span className="text-xs text-muted-foreground">Unité</span>
@@ -132,18 +134,18 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                       >{c.prixFige ? 'manuel' : 'auto'}</button>
                     )}
                   </span>
-                  <Input
-                    type="number" min={0} step={0.01}
+                  <InputNombre
+                    decimales={2}
                     value={c.produitId && !c.prixFige ? prixComposant(c, resoudre) : c.prixUnitaireHT}
                     readOnly={!!c.produitId && !c.prixFige}
-                    onChange={e => majComposant(v.id, idx, { prixUnitaireHT: parseFloat(e.target.value) || 0 })}
+                    onChange={n => majComposant(v.id, idx, { prixUnitaireHT: n })}
                     className={`text-xs h-7 ${c.produitId && !c.prixFige ? 'bg-muted/50 text-muted-foreground' : ''}`}
                   />
                 </div>
                 <div className="flex flex-col gap-0.5 w-14">
                   <span className="text-xs text-muted-foreground">Rem%</span>
-                  <Input type="number" min={0} max={100} step={1} value={c.remise}
-                    onChange={e => majComposant(v.id, idx, { remise: parseFloat(e.target.value) || 0 })} className="text-xs h-7" />
+                  <InputNombre decimales={2} value={c.remise}
+                    onChange={n => majComposant(v.id, idx, { remise: n })} className="text-xs h-7" />
                 </div>
                 <button
                   type="button" title="Retirer ce composant"

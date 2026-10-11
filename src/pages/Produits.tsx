@@ -3165,10 +3165,11 @@ export default function Produits() {
                         {/* Qté */}
                         <div className="flex flex-col gap-0.5 w-14">
                           <span className="text-xs text-muted-foreground">Qté</span>
-                          <Input
-                            type="number" min={0.01} step={0.01}
+                          {/* InputNombre : un champ vidé ne retombe plus à 1 — on peut effacer puis retaper. */}
+                          <InputNombre
+                            decimales={3}
                             value={lk.quantite}
-                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, quantite: parseFloat(e.target.value) || 1 }))}
+                            onChange={n => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, quantite: n }))}
                             className="text-xs h-7"
                           />
                         </div>
@@ -3195,20 +3196,20 @@ export default function Produits() {
                         {/* Prix HT */}
                         <div className="flex flex-col gap-0.5 w-20">
                           <span className="text-xs text-muted-foreground">Prix HT</span>
-                          <Input
-                            type="number" min={0} step={0.01}
+                          <InputNombre
+                            decimales={2}
                             value={lk.prixUnitaireHT}
-                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, prixUnitaireHT: parseFloat(e.target.value) || 0 }))}
+                            onChange={n => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, prixUnitaireHT: n }))}
                             className="text-xs h-7"
                           />
                         </div>
                         {/* Remise */}
                         <div className="flex flex-col gap-0.5 w-14">
                           <span className="text-xs text-muted-foreground">Rem%</span>
-                          <Input
-                            type="number" min={0} max={100} step={1}
+                          <InputNombre
+                            decimales={2}
                             value={lk.remise}
-                            onChange={e => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, remise: parseFloat(e.target.value) || 0 }))}
+                            onChange={n => setLignesKit(prev => prev.map((l, i) => i !== idx ? l : { ...l, remise: n }))}
                             className="text-xs h-7"
                           />
                         </div>
