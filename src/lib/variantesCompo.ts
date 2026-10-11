@@ -48,15 +48,92 @@ export function prixVarianteCompo(v: VarianteCompo, resoudre?: ResoudrePrix): nu
 }
 
 /**
+ * VARIANTES EN CASCADE. Un composant peut être lui-même un article à variantes
+ * composées : SNLR dans une variante de 319R. Son choix est demandé à la suite,
+ * et vit sur la MÊME ligne, sous `__compo/<id de l'article composant>` (valeur
+ * = identifiant de la sous-variante). Le composant vaut alors le prix de sa
+ * sous-variante, et l'intitulé de la ligne l'annonce.
+ *
+ * Indexé par ARTICLE et non par position : le même article choisi deux fois
+ * dans une ligne prend la même sous-variante, et la clé survit à un
+ * réordonnancement des composants. La profondeur est bornée (`PROFONDEUR_MAX`)
+ * : une boucle de fiches (A dans B dans A) ne doit pas figer le devis.
+ */
+export const cleSousCompo = (produitId: string) => `${CLE_COMPO}/${produitId}`;
+const PROFONDEUR_MAX = 5;
+
+type AvecVariantes = Pick<Produit, 'id' | 'variantesCompo'>;
+
+/** La sous-variante choisie pour l'article d'un composant, s'il en a une. */
+export function sousVarianteDe<P extends AvecVariantes>(
+  c: LigneKit,
+  trouver: (id: string) => P | undefined,
+  variantesChoisies?: Record<string, string>,
+): { produit: P; variante: VarianteCompo } | undefined {
+  if (!c.produitId) return undefined;
+  const id = variantesChoisies?.[cleSousCompo(c.produitId)];
+  if (!id) return undefined;
+  const produit = trouver(c.produitId);
+  const variante = produit?.variantesCompo?.find(v => v.id === id);
+  return produit && variante ? { produit, variante } : undefined;
+}
+
+/**
+ * Le `resoudre` d'une ligne : un composant à sous-variante choisie vaut le prix
+ * de celle-ci (récursivement), les autres le prix de leur article. Un prix
+ * saisi à la main (`prixFige`) reste prioritaire, comme partout.
+ */
+export function resoudreAvecSousVariantes(
+  resoudre: ResoudrePrix,
+  trouver: (id: string) => AvecVariantes | undefined,
+  variantesChoisies?: Record<string, string>,
+  profondeur = 0,
+): ResoudrePrix {
+  return c => {
+    const sous = !c.prixFige && profondeur < PROFONDEUR_MAX ? sousVarianteDe(c, trouver, variantesChoisies) : undefined;
+    if (sous) return prixVarianteCompo(sous.variante, resoudreAvecSousVariantes(resoudre, trouver, variantesChoisies, profondeur + 1));
+    return resoudre(c);
+  };
+}
+
+/** Les sous-variantes retenues dans une variante, en profondeur, dans l'ordre des composants. */
+export function sousVariantesRetenues<P extends AvecVariantes>(
+  v: VarianteCompo,
+  trouver: (id: string) => P | undefined,
+  variantesChoisies?: Record<string, string>,
+  profondeur = 0,
+): { produit: P; variante: VarianteCompo }[] {
+  if (profondeur >= PROFONDEUR_MAX) return [];
+  return v.composants.flatMap(c => {
+    const sous = sousVarianteDe(c, trouver, variantesChoisies);
+    return sous ? [sous, ...sousVariantesRetenues(sous.variante, trouver, variantesChoisies, profondeur + 1)] : [];
+  });
+}
+
+/**
  * Coût d'achat d'un ensemble, ou `undefined` : on ne le calcule que si CHAQUE
  * composant est un article du catalogue AVEC un prix d'achat renseigné — un coût partiel annoncerait une
- * marge fausse, et on n'invente pas une donnée métier.
+ * marge fausse, et on n'invente pas une donnée métier. Un composant à
+ * sous-variante choisie coûte ce que coûte sa sous-variante.
  */
-export function achatVarianteCompo(v: VarianteCompo, produits: Pick<Produit, 'id' | 'prixAchat'>[]): number | undefined {
+export function achatVarianteCompo(
+  v: VarianteCompo,
+  produits: (Pick<Produit, 'id' | 'prixAchat'> & Partial<Pick<Produit, 'variantesCompo'>>)[],
+  variantesChoisies?: Record<string, string>,
+  profondeur = 0,
+): number | undefined {
   if (v.composants.length === 0) return undefined;
+  const trouver = (id: string) => produits.find(x => x.id === id);
   let total = 0;
   for (const c of v.composants) {
-    const p = c.produitId ? produits.find(x => x.id === c.produitId) : undefined;
+    const sous = profondeur < PROFONDEUR_MAX ? sousVarianteDe(c, trouver, variantesChoisies) : undefined;
+    if (sous) {
+      const achat = achatVarianteCompo(sous.variante, produits, variantesChoisies, profondeur + 1);
+      if (achat === undefined) return undefined;
+      total += (c.quantite || 0) * achat;
+      continue;
+    }
+    const p = c.produitId ? trouver(c.produitId) : undefined;
     // Le prix d'achat de l'article doit être RENSEIGNÉ : à 0, on ne sait pas, on ne compte pas 0.
     if (!p || !(p.prixAchat > 0)) return undefined;
     total += (c.quantite || 0) * p.prixAchat;
@@ -74,8 +151,14 @@ export function varianteDeLigne(
 }
 
 /** « Désignation de l'article — nom de la variante ». */
-export function designationAvecVariante(designationBase: string, v: Pick<VarianteCompo, 'nom'>): string {
-  return `${designationBase} — ${v.nom}`;
+export function designationAvecVariante(
+  designationBase: string,
+  v: Pick<VarianteCompo, 'nom'>,
+  /** Sous-variantes retenues : « désignation de l'article composant » + nom de sa variante. */
+  sous: { article: string; nom: string }[] = [],
+): string {
+  const suite = sous.length ? ` (${sous.map(s => `${s.article} : ${s.nom}`).join(' ; ')})` : '';
+  return `${designationBase} — ${v.nom}${suite}`;
 }
 
 /** Les valeurs d'un `variantesChoisies` destinées à l'affichage (clés internes écartées). */

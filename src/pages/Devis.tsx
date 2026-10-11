@@ -33,6 +33,7 @@ import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
+  cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
@@ -1200,7 +1201,13 @@ export default function Devis() {
   /* Options de l'article saisi : la fenêtre à cocher s'ouvre, les lignes choisies
      sont insérées juste sous la ligne de l'article. */
   const [optionsPour, setOptionsPour] = useState<{ ligneId: string; produit: Produit } | null>(null);
-  const [variantePour, setVariantePour] = useState<{ ligneId: string; produit: Produit } | null>(null);
+  /* `racine` renseignée = choix EN CASCADE : `produit` est un composant (SNLR)
+     de la variante retenue sur l'article `racine` (319R), et son choix se range
+     sur la ligne de la racine (voir `cleSousCompo`). */
+  const [variantePour, setVariantePour] = useState<{ ligneId: string; produit: Produit; racine?: Produit } | null>(null);
+  /** Composants à variantes encore à demander pour la ligne en cours, et ceux déjà demandés (anti-boucle). */
+  const fileSousVariantes = useRef<Produit[]>([]);
+  const sousDeplies = useRef(new Set<string>());
 
   /* OPTIONS EN CHAÎNE. Une option insérée peut être elle-même un article à
      variantes composées ou à options (le catalyseur propose son durcisseur) :
@@ -1235,37 +1242,93 @@ export default function Devis() {
 
   /* La variante choisie devient UNE ligne : désignation de l'article + nom de la
      variante, prix = somme des composants, coût d'achat = celui des composants. */
+  /** Les composants d'une variante qui sont eux-mêmes des articles à variantes composées, pas encore demandés. */
+  function composantsADeplier(v: VarianteCompo): Produit[] {
+    const out: Produit[] = [];
+    for (const c of v.composants) {
+      const p = c.produitId ? produitParId(produits, c.produitId) : undefined;
+      if (!p || sousDeplies.current.has(p.id)) continue;
+      if (!p.typeVariantesCompo || !(p.variantesCompo?.length)) continue;
+      sousDeplies.current.add(p.id);
+      out.push(p);
+    }
+    return out;
+  }
+
+  /** Prix, coût d'achat et intitulé d'une ligne à variante composée, sous-variantes comprises. */
+  function ligneAvecCompo(l: LigneDevis, racine: Produit): LigneDevis {
+    const v = varianteDeLigne(racine, l.variantesChoisies);
+    if (!v) return l;
+    const trouver = (id: string) => produitParId(produits, id);
+    const sous = sousVariantesRetenues(v, trouver, l.variantesChoisies);
+    return {
+      ...l,
+      description: designationAvecVariante(designationProduit(racine), v,
+        sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom }))),
+      unite: 'ens.',
+      prixUnitaireHT: prixVarianteCompo(v, resoudreAvecSousVariantes(
+        resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur), trouver, l.variantesChoisies)),
+      prixAchatLigne: achatVarianteCompo(v, produits, l.variantesChoisies) ?? 0,
+    };
+  }
+
   function appliquerVarianteCompo(v: VarianteCompo | null) {
     const cible = variantePour;
     setVariantePour(null);
     if (!cible) return;
-    if (v) {
-      const achat = achatVarianteCompo(v, produits);
-      if (achat === undefined) toast.warning('Coût d\'achat de la variante inconnu : un composant n\'est pas au catalogue — marge à vérifier.');
+    const racine = cible.racine ?? cible.produit;
+
+    if (cible.racine) {
+      /* Sous-variante d'un composant : elle se range sur la ligne de la racine.
+         « Article seul » retire un choix antérieur — le composant reprend le
+         prix de son article. */
+      const cle = cleSousCompo(cible.produit.id);
+      setLignes(prev => prev.map(l => {
+        if (l.id !== cible.ligneId) return l;
+        const vc = { ...(l.variantesChoisies ?? {}) };
+        if (v) vc[cle] = v.id; else delete vc[cle];
+        return ligneAvecCompo({ ...l, variantesChoisies: vc }, racine);
+      }));
+      // Ses propres composants à variantes passent en tête : en profondeur d'abord.
+      if (v) fileSousVariantes.current = [...composantsADeplier(v), ...fileSousVariantes.current];
+    } else if (v) {
       saveSnapshot();
-      setLignes(prev => prev.map(l => l.id !== cible.ligneId ? l : {
-        ...l,
-        description: designationAvecVariante(designationProduit(cible.produit), v),
-        unite: 'ens.',
-        prixUnitaireHT: prixVarianteCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur)),
-        prixAchatLigne: achat ?? 0,
+      fileSousVariantes.current = [];
+      sousDeplies.current = new Set([racine.id]);
+      setLignes(prev => prev.map(l => {
+        if (l.id !== cible.ligneId) return l;
         /* Les dimensions de variantes de l'article (RAL, granulométrie…) restent
            proposées : celles que la ligne n'a pas encore reprennent leur première
-           option, et la variante composée s'ajoute sans rien retirer. */
-        variantesChoisies: {
-          ...Object.fromEntries(
-            (produitParId(produits, cible.produit.id)?.variantes ?? cible.produit.variantes ?? [])
-              .filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id])
-              .map(d => [d.id, d.options[0].label]),
-          ),
-          ...(l.variantesChoisies ?? {}),
-          [CLE_COMPO]: v.id,
-        },
+           option, et la variante composée s'ajoute sans rien retirer. Les
+           sous-variantes d'un choix précédent, elles, tombent. */
+        const anciennes = Object.fromEntries(Object.entries(l.variantesChoisies ?? {})
+          .filter(([k]) => !k.startsWith(`${CLE_COMPO}/`)));
+        return ligneAvecCompo({
+          ...l,
+          variantesChoisies: {
+            ...Object.fromEntries(
+              (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
+                .filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id])
+                .map(d => [d.id, d.options[0].label]),
+            ),
+            ...anciennes,
+            [CLE_COMPO]: v.id,
+          },
+        }, racine);
       }));
+      fileSousVariantes.current = composantsADeplier(v);
+      if (!fileSousVariantes.current.length && achatVarianteCompo(v, produits) === undefined) {
+        toast.warning('Coût d\'achat de la variante inconnu : un composant n\'est pas au catalogue — marge à vérifier.');
+      }
     }
-    // Les options viennent après la variante.
-    if (cible.produit.typeOptions && (cible.produit.lignesOptions?.length ?? 0) > 0) {
-      setOptionsPour({ ligneId: cible.ligneId, produit: cible.produit });
+
+    // Le composant suivant à déplier, s'il en reste : SNLR après 319R.
+    const suivant = fileSousVariantes.current.shift();
+    if (suivant) { setVariantePour({ ligneId: cible.ligneId, produit: suivant, racine }); return; }
+
+    // Les options viennent après la variante (et ses sous-variantes).
+    if (racine.typeOptions && (racine.lignesOptions?.length ?? 0) > 0) {
+      setOptionsPour({ ligneId: cible.ligneId, produit: racine });
     } else {
       choixSuivant();
     }
@@ -1543,7 +1606,8 @@ export default function Devis() {
   function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
     // Une variante composée fixe le prix : somme de ses composants.
     const compo = varianteDeLigne(produit, variantesChoisies);
-    if (compo) return prixVarianteCompo(compo, resoudrePrixComposant(isRevendeur, niveau));
+    if (compo) return prixVarianteCompo(compo, resoudreAvecSousVariantes(
+      resoudrePrixComposant(isRevendeur, niveau), id => produitParId(produits, id), variantesChoisies));
     const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
@@ -1646,7 +1710,9 @@ export default function Devis() {
       if (!p) return l;
       const compo = varianteDeLigne(p, l.variantesChoisies);
       const base = compo ? 0 : prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
-      const prixUnitaireHT = compo ? prixVarianteCompo(compo, c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, estRevendeur, niveau, grille, grilleR4) : undefined; }) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+      const prixUnitaireHT = compo ? prixVarianteCompo(compo, resoudreAvecSousVariantes(
+        c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, estRevendeur, niveau, grille, grilleR4) : undefined; },
+        id => produitParId(produits, id), l.variantesChoisies)) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
       return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
     }));
     if (!opts.silencieux && niveau && auNiveau + horsNiveau > 0) {
@@ -4875,6 +4941,7 @@ export default function Devis() {
       )}
 
       <VarianteCompoDialog produit={variantePour?.produit ?? null} onChoix={appliquerVarianteCompo}
+        dans={variantePour?.racine ? designationProduit(variantePour.racine) : undefined}
         prixDe={v => prixVarianteCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur))} />
 
       <OptionsArticleDialog

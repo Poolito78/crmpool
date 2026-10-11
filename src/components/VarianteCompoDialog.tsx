@@ -13,9 +13,11 @@ interface Props {
   onChoix: (variante: VarianteCompo | null) => void;
   /** Prix HT courant d'une variante, au tarif du devis. */
   prixDe?: (v: VarianteCompo) => number;
+  /** Choix en cascade : l'article dont `produit` est un composant (« dans 319R »). */
+  dans?: string;
 }
 
-export default function VarianteCompoDialog({ produit, onChoix, prixDe }: Props) {
+export default function VarianteCompoDialog({ produit, onChoix, prixDe, dans }: Props) {
   const variantes = produit?.variantesCompo ?? [];
   const [choisie, setChoisie] = useState<string>('');
   useEffect(() => { setChoisie(''); }, [produit?.id]);
@@ -25,6 +27,7 @@ export default function VarianteCompoDialog({ produit, onChoix, prixDe }: Props)
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Variantes — {produit ? designationProduit(produit) : ''}</DialogTitle>
+          {dans && <p className="text-xs text-muted-foreground">Composant de {dans} : la variante retenue entre dans son prix et son intitulé.</p>}
         </DialogHeader>
         <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
           <label className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:bg-muted/50">
