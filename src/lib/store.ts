@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { estTypeFiche, type TypeFiche } from './liensProduit';
 import type { VarianteCompo } from './variantesCompo';
+import { cederLaMain } from './prioriteLecture';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -1587,6 +1588,8 @@ async function lireTout(
   const CONCURRENCE = 4;
   const plages = bornes.slice(0, -1).map((b, i) => [b, bornes[i + 1]] as const);
   for (let i = 0; i < plages.length; i += CONCURRENCE) {
+    // Une recherche en cours passe avant : voir prioriteLecture.ts.
+    await cederLaMain();
     const lots = await Promise.all(plages.slice(i, i + CONCURRENCE).map(([b, h]) => lirePlage(b, h)));
     for (const lot of lots) {
       for (const ligne of lot) {
@@ -1787,12 +1790,27 @@ export function useStore() {
     // ── Synchro temps réel (Supabase Realtime) ───────────────────────────────
     // Re-charge la table concernée à chaque INSERT/UPDATE/DELETE (debounce léger)
     // → les modifs faites sur un autre appareil/onglet apparaissent sans rafraîchir.
+    const relectureProduits = { enCours: false, encore: false };
     const refetchers: Record<string, () => Promise<void>> = {
       clients: async () => { const { data } = await supabase.from('clients').select('*'); if (data) setClients(data.map(dbToClient)); },
       fournisseurs: async () => { const { data } = await supabase.from('fournisseurs').select('*'); if (data) setFournisseurs(data.map(dbToFournisseur)); },
       // select('*') seul s'arrête à 1 000 lignes : un simple changement de
       // produit aurait amputé le catalogue de 21 000 articles.
-      produits: async () => { const data = await lireTout('produits'); setProduits(data.map(dbToProduit)); },   // repli : imports en masse
+      /* Une seule relecture complète à la fois : pendant une synchro Odoo, les
+         rafales se succèdent et chacune relançait 23 tranches par-dessus la
+         précédente — c'est ce qui saturait la base. Une rafale arrivée en
+         cours de route en demande UNE de plus, pas une par message. */
+      produits: async () => {
+        if (relectureProduits.enCours) { relectureProduits.encore = true; return; }
+        relectureProduits.enCours = true;
+        try {
+          do {
+            relectureProduits.encore = false;
+            const data = await lireTout('produits');
+            setProduits(data.map(dbToProduit));
+          } while (relectureProduits.encore);
+        } finally { relectureProduits.enCours = false; }
+      },   // repli : imports en masse
       devis: async () => { const { data } = await supabase.from('devis').select('*'); if (data) setDevis(data.map(dbToDevis)); },
       produit_fournisseurs: async () => { const { data } = await supabase.from('produit_fournisseurs').select('*'); if (data) setProduitFournisseurs(data.map(dbToProduitFournisseur)); },
       commandes_fournisseur: async () => { const { data } = await supabase.from('commandes_fournisseur').select('*'); if (data) setCommandesFournisseur(data.map(dbToCommandeFournisseur)); },

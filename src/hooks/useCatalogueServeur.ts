@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { dbToProduitPublic, type Produit } from '@/lib/store';
+import { lectureInteractive } from '@/lib/prioriteLecture';
 
 /**
  * Lecture du catalogue à la demande, comme le fait Odoo.
@@ -211,6 +212,10 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
     const cleRequete = JSON.stringify([rechercheDifferee, filtresDifferes, o.seulementModeles,
       o.modeleCle, o.version]);
 
+    /* La relecture de fond du catalogue s'efface pendant que cette page se lit :
+       voir prioriteLecture.ts. Libéré dès que la page est là — le compte, lui,
+       peut attendre. */
+    const finInteractive = lectureInteractive();
     (async () => {
       setChargement(true);
       setErreur(null);
@@ -259,6 +264,7 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
         if (!annule) setErreur((e as Error).message);
         return;
       } finally {
+        finInteractive();
         if (!annule) setChargement(false);
       }
 
@@ -277,7 +283,7 @@ export function useCatalogueServeur(o: OptionsCatalogue) {
       setTotalEstime(true);
     })();
 
-    return () => { annule = true; };
+    return () => { annule = true; finInteractive(); };
   }, [o.actif, o.page, o.parPage, rechercheDifferee, o.triCol, o.triSens, filtresDifferes,
       o.seulementModeles, o.modeleCle, o.version]);
 
