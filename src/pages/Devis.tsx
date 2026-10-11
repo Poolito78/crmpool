@@ -3611,7 +3611,7 @@ export default function Devis() {
                                       <ProduitCombobox produits={produits} value={l.produitId || ''} onSelect={(produitId) => { produitId ? selectProduit(l.id, produitId) : updateLigne(l.id, 'produitId', undefined); setNewLigneId(null); }} autoFocus={l.id === newLigneId} />
                                     </div>
                                     {l.produitId && (
-                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; const p2 = produitParId(produits, l.produitId); navigate(`/produits?search=${encodeURIComponent(p2?.reference || '')}&returnDevis=${devisId || ''}`); }}>
+                                      <Button variant="ghost" size="icon" className="h-8 w-7 shrink-0" title="Voir la fiche produit" onClick={() => { const savedId = save(true); const devisId = savedId || editingId; /* La FICHE s'ouvre directement (`highlight`), pas la liste filtrée sur la référence. */ navigate(`/produits?highlight=${l.produitId}&returnDevis=${devisId || ''}`); }}>
                                         <ExternalLink className="w-3 h-3" />
                                       </Button>
                                     )}
@@ -4224,7 +4224,7 @@ export default function Devis() {
                                   <button
                                     type="button"
                                     title="Voir la fiche produit"
-                                    onClick={() => { const savedId = save(true); navigate(`/produits?search=${encodeURIComponent(prod.reference || '')}&highlight=${prod.id}&returnDevis=${savedId || editingId || ''}`); }}
+                                    onClick={() => { const savedId = save(true); navigate(`/produits?highlight=${prod.id}&returnDevis=${savedId || editingId || ''}`); }}
                                     className="shrink-0 text-muted-foreground hover:text-primary transition-colors"
                                   >
                                     <ExternalLink className="w-3 h-3" />
