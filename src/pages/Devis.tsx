@@ -1194,7 +1194,18 @@ export default function Devis() {
         unite: 'ens.',
         prixUnitaireHT: prixVarianteCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur)),
         prixAchatLigne: achat ?? 0,
-        variantesChoisies: { ...(l.variantesChoisies ?? {}), [CLE_COMPO]: v.id },
+        /* Les dimensions de variantes de l'article (RAL, granulométrie…) restent
+           proposées : celles que la ligne n'a pas encore reprennent leur première
+           option, et la variante composée s'ajoute sans rien retirer. */
+        variantesChoisies: {
+          ...Object.fromEntries(
+            (produitParId(produits, cible.produit.id)?.variantes ?? cible.produit.variantes ?? [])
+              .filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id])
+              .map(d => [d.id, d.options[0].label]),
+          ),
+          ...(l.variantesChoisies ?? {}),
+          [CLE_COMPO]: v.id,
+        },
       }));
     }
     // Les options viennent après la variante.
