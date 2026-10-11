@@ -1672,9 +1672,29 @@ export default function Devis() {
     toast.success(`${preset.label} : ${lignesMoquette.length} ligne(s) Flowbind / marbre recalculée(s)`);
   }
 
+  /* LE CHOIX DE TEINTE DOIT ÊTRE INSTANTANÉ. Un article dont les variantes (RAL…) manquent
+     en mémoire — modifié en base pendant que la page était ouverte — les reçoit par le canal
+     temps réel, parfois bien plus tard. On les lit donc en base à la saisie : le sélecteur
+     et la teinte par défaut apparaissent tout de suite. */
+  async function rafraichirVariantes(produitId: string, ligneId: string) {
+    const { data } = await supabase.from('produits').select('variantes').eq('id', produitId).maybeSingle();
+    const dims = (data as unknown as { variantes?: unknown } | null)?.variantes;
+    if (!Array.isArray(dims) || dims.length === 0) return;
+    const variantes = dims as NonNullable<Produit['variantes']>;
+    updateProduits(prev => prev.map(x => (x.id === produitId ? { ...x, variantes } : x)));
+    setLignes(prev => prev.map(l => l.id !== ligneId ? l : {
+      ...l,
+      variantesChoisies: {
+        ...Object.fromEntries(variantes.filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id]).map(d => [d.id, d.options[0].label])),
+        ...(l.variantesChoisies ?? {}),
+      },
+    }));
+  }
+
   function selectProduit(ligneId: string, produitId: string) {
     const p = produitParId(produits, produitId);
     if (!p) return;
+    if (!p.variantes?.length) void rafraichirVariantes(produitId, ligneId);
     apprendreTagDeLaSaisie(ligneId, p);
     // Si c'est un kit : supprimer la ligne vide et insérer le groupe
     if (p.typeKit) {
