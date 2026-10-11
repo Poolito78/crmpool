@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { TrendingUp, ExternalLink, ChevronDown, ChevronRight } from 'lucide-react';
 import { formatMontant } from '@/lib/store';
-import { useCaOdoo, CA_ODOO_URL, type CaMarque, type CaMois, type CaMois2025, type CaMoisEnCours } from '@/lib/caOdoo';
+import {
+  useCaOdoo, CA_ODOO_URL,
+  type CaMarque, type CaMois, type CaMois2025, type CaMoisEnCours, type CaFlooringQuartz, type CaFqMois,
+} from '@/lib/caOdoo';
 
 // ─── Tuile « CA Odoo » du tableau de bord ────────────────────────────────────
 //
@@ -382,6 +385,152 @@ function MoisEnCours({ mec }: { mec: CaMoisEnCours }) {
   );
 }
 
+/**
+ * Récap Flooring & Quartz, TOUS commerciaux : ISOFLOOR et quartz & granit
+ * facturés chaque mois, la part de François MOUHOT, et ce qui reste — le CA
+ * hors FM, national hors IDF Nord.
+ *
+ * ⚠️ Le périmètre est celui du favori Odoo, relu par `ca-refresh` : si le
+ * favori manque ou ne se lit pas, on affiche l'erreur, aucun chiffre.
+ * Les colonnes « dont » du hors FM sont DÉJÀ COMPRISES dans le hors FM.
+ */
+function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
+  if (!fq) {
+    return (
+      <section className="space-y-2 border-t border-border pt-4">
+        <h3 className="text-sm font-semibold">Flooring & Quartz — tous commerciaux</h3>
+        <p className="text-sm text-muted-foreground">
+          Le récap apparaîtra après la prochaine actualisation des données.
+        </p>
+      </section>
+    );
+  }
+  if ('erreur' in fq) {
+    return (
+      <section className="space-y-2 border-t border-border pt-4">
+        <h3 className="text-sm font-semibold">Flooring & Quartz — tous commerciaux</h3>
+        <p className="text-sm text-destructive">Récap indisponible : {fq.erreur}</p>
+      </section>
+    );
+  }
+
+  const somme = (k: keyof CaFqMois) => fq.mois.reduce((a, m) => a + m[k], 0);
+  const cumul = {
+    isofloor: somme('isofloor'), quartz: somme('quartz'), total: somme('total'), fm: somme('fm'),
+    hors_fm: somme('hors_fm'), hors_fm_isofloor: somme('hors_fm_isofloor'), hors_fm_quartz: somme('hors_fm_quartz'),
+  };
+  const dernierMois = fq.mois[fq.mois.length - 1]?.mois;
+  const jour = Number(fq.cutoff.slice(8, 10));
+  const td = 'py-2 px-3 text-right tabular-nums';
+  const dont = `${td} text-xs italic text-muted-foreground`;
+
+  return (
+    <section className="space-y-3 border-t border-border pt-4">
+      <h3 className="text-sm font-semibold">
+        Flooring & Quartz {fq.annee} — tous commerciaux, puis hors F. MOUHOT{' '}
+        <span className="font-normal text-muted-foreground text-xs">
+          — national hors IDF Nord, du 01/01 au {formatJour(fq.cutoff)}
+        </span>
+      </h3>
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground text-left">
+              <th className="py-2 pr-3 font-medium">Mois</th>
+              <th className="py-2 px-3 font-medium text-right">ISOFLOOR</th>
+              <th className="py-2 px-3 font-medium text-right">Quartz & granit</th>
+              <th className="py-2 px-3 font-medium text-right">Total global</th>
+              <th className="py-2 px-3 font-medium text-right">− F. MOUHOT</th>
+              <th className="py-2 px-3 font-medium text-right">= Hors FM</th>
+              <th className="py-2 px-3 font-medium text-right text-xs italic">dont ISOFLOOR</th>
+              <th className="py-2 pl-3 font-medium text-right text-xs italic">dont quartz</th>
+            </tr>
+          </thead>
+          <tbody>
+            {fq.mois.map(m => (
+              <tr key={m.mois} className="border-b border-border/50">
+                <td className="py-2 pr-3 font-medium whitespace-nowrap">
+                  {NOM_MOIS[m.mois - 1] ?? m.mois}
+                  {m.mois === dernierMois && jour && (
+                    <span className="text-xs text-muted-foreground font-normal"> (au {jour})</span>
+                  )}
+                </td>
+                <td className={td}>{formatMontant(m.isofloor)}</td>
+                <td className={td}>{formatMontant(m.quartz)}</td>
+                <td className={`${td} font-medium`}>{formatMontant(m.total)}</td>
+                <td className={`${td} text-muted-foreground`}>{formatMontant(m.fm)}</td>
+                <td className={`${td} font-semibold text-primary`}>{formatMontant(m.hors_fm)}</td>
+                <td className={dont}>{formatMontant(m.hors_fm_isofloor)}</td>
+                <td className={`${dont} !pl-3 !pr-0`}>{formatMontant(m.hors_fm_quartz)}</td>
+              </tr>
+            ))}
+            <tr className="font-semibold">
+              <td className="py-2 pr-3">Cumul</td>
+              <td className={td}>{formatMontant(cumul.isofloor)}</td>
+              <td className={td}>{formatMontant(cumul.quartz)}</td>
+              <td className={td}>{formatMontant(cumul.total)}</td>
+              <td className={td}>{formatMontant(cumul.fm)}</td>
+              <td className={`${td} text-primary`}>{formatMontant(cumul.hors_fm)}</td>
+              <td className={`${td} text-xs italic`}>{formatMontant(cumul.hors_fm_isofloor)}</td>
+              <td className="py-2 pl-3 text-right tabular-nums text-xs italic">{formatMontant(cumul.hors_fm_quartz)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer font-medium py-1">Par commercial ({fq.commerciaux.length})</summary>
+        <div className="overflow-x-auto mt-1">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground text-left">
+                <th className="py-1.5 pr-2 font-medium">Commercial</th>
+                {fq.mois.map(m => (
+                  <th key={m.mois} className="py-1.5 px-2 font-medium text-right">{NOM_MOIS[m.mois - 1]?.slice(0, 4)}.</th>
+                ))}
+                <th className="py-1.5 pl-2 font-medium text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fq.commerciaux.map(c => (
+                <tr key={c.id ?? 'aucun'} className={`border-b border-border/50 ${c.fm ? 'text-muted-foreground' : ''}`}>
+                  <td className="py-1 pr-2 whitespace-nowrap">{c.nom}{c.fm && ' (déduit)'}</td>
+                  {c.mois.map((v, i) => (
+                    <td key={i} className="py-1 px-2 text-right tabular-nums">{v ? formatMontant(v) : ''}</td>
+                  ))}
+                  <td className="py-1 pl-2 text-right tabular-nums font-medium">{formatMontant(c.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </details>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer font-medium py-1">Catégories Odoo comprises ({fq.categories.length})</summary>
+        <ul className="mt-1 space-y-0.5">
+          {fq.categories.map(c => (
+            <li key={c.nom} className="flex justify-between gap-3 border-b border-border/50 py-0.5">
+              <span>{c.nom} <span className="text-muted-foreground">→ {c.isofloor ? 'ISOFLOOR' : 'quartz & granit'}</span></span>
+              <span className="tabular-nums">{formatMontant(c.total)}</span>
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Périmètre = favori Odoo <b className="text-foreground">« {fq.favori} »</b>
+        {fq.favori_proprietaire ? ` (${fq.favori_proprietaire})` : ''}, relu à chaque actualisation ;
+        montants « Total HT » de l'analyse des factures, avoirs déduits, {fq.nb_lignes} lignes.
+        ISOFLOOR = catégories « ISOMARK / FLOORING », le reste du favori est compté en quartz & granit.{' '}
+        <b className="text-foreground">Hors FM</b> = total de tous les commerciaux − factures de
+        François MOUHOT : le national hors IDF Nord. Les colonnes en italique sont déjà comprises dans
+        le hors FM.
+      </p>
+    </section>
+  );
+}
+
 export default function CaOdooPanel() {
   const { data, loading, autorise } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
@@ -466,6 +615,8 @@ export default function CaOdooPanel() {
         <DetailMensuel mois={data.mois} mois2025={data.mois2025} cutoff={data.cutoff} />
         {data.moisEnCours && <MoisEnCours mec={data.moisEnCours} />}
       </section>
+
+      <RecapFlooringQuartz fq={data.flooringQuartz} />
 
       {/* Méthode repliée par défaut : elle est longue, et on ne la relit pas
           tous les jours — mais elle doit rester à un clic, sans quoi les

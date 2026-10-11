@@ -570,6 +570,210 @@ async function estimerFinDeMois(ctx: CtxOdoo, today: string, mtd26: Mois, journa
   };
 }
 
+// ─────────────────────── 1ter. Flooring & Quartz, tous commerciaux confondus
+
+/**
+ * Le favori Odoo dont on reprend le périmètre, à l'identique (vue « Analyse
+ * des factures », Tableaux de bord). Il réunit la résine FLOORING et les quartz
+ * et granits — que le catalogue Odoo range en « ISOMARK / H2 », mêlés aux
+ * bandes podotactiles « BAO GRANITE » : aucune règle de catégorie ne les
+ * départage proprement.
+ */
+const FAVORI_FLOORING_QUARTZ = "Analyse des factures Flooring&Quartz";
+
+/**
+ * Lit un domaine tel que `ir.filters` le stocke : repr Python (tuples, True,
+ * guillemets simples) ou JSON. Tout identifiant calculé (`context_today`,
+ * `uid`, `relativedelta`…) arrête la lecture : on ne réinterprète pas un
+ * domaine dynamique, on le signale.
+ */
+function lireDomaine(texte: string): unknown[] {
+  const s = texte;
+  let i = 0;
+  const blanc = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+  const illisible = () => new Error(`domaine du favori illisible près de « ${s.slice(i, i + 25)} »`);
+  const valeur = (): unknown => {
+    blanc();
+    const c = s[i];
+    if (c === "[" || c === "(") {
+      const fin = c === "[" ? "]" : ")";
+      i++;
+      const out: unknown[] = [];
+      for (;;) {
+        blanc();
+        if (s[i] === fin) { i++; return out; }
+        out.push(valeur());
+        blanc();
+        if (s[i] === ",") { i++; continue; }
+        if (s[i] === fin) { i++; return out; }
+        throw illisible();
+      }
+    }
+    if (c === "'" || c === '"') {
+      i++;
+      let out = "";
+      while (i < s.length && s[i] !== c) {
+        if (s[i] === "\\") i++;
+        out += s[i++];
+      }
+      if (i >= s.length) throw illisible();
+      i++;
+      return out;
+    }
+    const nb = /^-?\d+(\.\d+)?/.exec(s.slice(i));
+    if (nb) { i += nb[0].length; return Number(nb[0]); }
+    const id = /^[A-Za-z_][\w.]*/.exec(s.slice(i));
+    if (id) {
+      i += id[0].length;
+      if (id[0] === "True" || id[0] === "true") return true;
+      if (id[0] === "False" || id[0] === "false") return false;
+      if (id[0] === "None" || id[0] === "null") return null;
+      throw new Error(`le favori calcule « ${id[0]} » (date relative, utilisateur…) : domaine non repris`);
+    }
+    throw illisible();
+  };
+  const v = valeur();
+  blanc();
+  if (i < s.length || !Array.isArray(v)) throw illisible();
+  return v;
+}
+
+/**
+ * CA Flooring & Quartz de TOUS les commerciaux, mois par mois, puis ce qui
+ * reste une fois la part de François MOUHOT retirée : le CA « hors FM »,
+ * c'est-à-dire le national hors IDF Nord.
+ *
+ * ⚠️ LE PÉRIMÈTRE EST CELUI DU FAVORI ODOO, relu à chaque actualisation dans
+ * `ir.filters` — pas une liste de catégories écrite ici. Les quartz et granits
+ * sont dans « ISOMARK / H2 » avec les BAO GRANITE : une règle de notre cru
+ * tomberait à côté sans que rien ne le montre. Favori introuvable ou domaine
+ * dynamique → erreur affichée, aucun chiffre de repli.
+ *
+ * Même modèle (`account.invoice.report`) et même mesure (« Total HT », avoirs
+ * déjà en négatif) que le tableau croisé d'Odoo : les montants doivent y
+ * retomber au centime. ISOFLOOR = catégorie « ISOMARK / FLOORING… », le reste
+ * du favori est rangé en quartz & granit ; les catégories rencontrées sont
+ * publiées pour qu'on puisse le vérifier.
+ */
+async function extraireFlooringQuartz(ctx: Pick<CtxOdoo, "odoo" | "categName">, today: string, journal: string[]) {
+  const { odoo, categName } = ctx;
+  const annee = today.slice(0, 4);
+  const moisCourant = Number(today.slice(5, 7));
+
+  const favoris = await odoo.kw("ir.filters", "search_read", [[
+    ["model_id", "=", "account.invoice.report"],
+    ["name", "ilike", "Flooring&Quartz"],
+  ]], { fields: ["id", "name", "domain", "user_id"] }) as
+    { id: number; name: string; domain: string; user_id: [number, string] | false }[];
+  const favori = favoris.find((f) => f.name.trim() === FAVORI_FLOORING_QUARTZ) ?? favoris[0];
+  if (!favori) {
+    throw new Error(
+      `favori « ${FAVORI_FLOORING_QUARTZ} » introuvable dans Odoo (Analyse des factures) — ` +
+        "il doit appartenir au compte de l'API ou être partagé.",
+    );
+  }
+  const domaineFavori = lireDomaine(favori.domain || "[]");
+
+  // La mesure « Total HT » du tableau croisé, retrouvée par son libellé.
+  const champs = await odoo.kw("account.invoice.report", "fields_get", [], { attributes: ["string", "type"] }) as
+    Record<string, { string: string; type: string }>;
+  const mesure = Object.entries(champs).find(([, c]) =>
+    c.string?.trim().toLowerCase() === "total ht" && (c.type === "monetary" || c.type === "float")
+  )?.[0] ?? "price_subtotal";
+  if (!(mesure in champs)) throw new Error("mesure « Total HT » introuvable sur l'analyse des factures.");
+
+  // Deux domaines bien formés mis bout à bout se combinent en ET.
+  const domaine = [
+    ["invoice_date", ">=", `${annee}-01-01`],
+    ["invoice_date", "<=", today],
+    ...domaineFavori,
+  ];
+
+  type LigneRapport = {
+    invoice_date: string | false;
+    invoice_user_id: [number, string] | false;
+    product_categ_id: [number, string] | false;
+  } & Record<string, unknown>;
+  const total = await odoo.kw("account.invoice.report", "search_count", [domaine]) as number;
+  const lignes: LigneRapport[] = [];
+  const LOT = 2000;
+  for (let offset = 0; offset < total; offset += LOT) {
+    const chunk = await odoo.kw("account.invoice.report", "search_read", [domaine], {
+      fields: [mesure, "invoice_date", "invoice_user_id", "product_categ_id"],
+      limit: LOT, offset, order: "id asc",
+    }) as LigneRapport[];
+    lignes.push(...chunk);
+  }
+  journal.push(`Flooring & Quartz : ${lignes.length} lignes (favori « ${favori.name} », mesure ${mesure})`);
+
+  type MoisFq = { isofloor: number; quartz: number; fm_isofloor: number; fm_quartz: number };
+  const parMois: MoisFq[] = Array.from({ length: moisCourant }, () => ({ isofloor: 0, quartz: 0, fm_isofloor: 0, fm_quartz: 0 }));
+  const commerciaux = new Map<string, { id: number | null; nom: string; mois: number[] }>();
+  const categories = new Map<string, number>();
+
+  for (const l of lignes) {
+    if (!l.invoice_date) continue;
+    const m = Number(String(l.invoice_date).slice(5, 7));
+    if (m < 1 || m > moisCourant) continue;
+    const montant = typeof l[mesure] === "number" ? (l[mesure] as number) : 0;
+    const cid = l.product_categ_id ? l.product_categ_id[0] : null;
+    const nomCateg = (cid !== null ? categName.get(cid) : null) ??
+      (l.product_categ_id ? l.product_categ_id[1] : "Sans catégorie");
+    const isofloor = nomCateg.toUpperCase().startsWith("ISOMARK / FLOORING");
+    const fm = !!l.invoice_user_id && l.invoice_user_id[0] === SALESPERSON_ID;
+
+    const b = parMois[m - 1];
+    if (isofloor) { b.isofloor += montant; if (fm) b.fm_isofloor += montant; }
+    else { b.quartz += montant; if (fm) b.fm_quartz += montant; }
+
+    const cle = l.invoice_user_id ? String(l.invoice_user_id[0]) : "aucun";
+    if (!commerciaux.has(cle)) {
+      commerciaux.set(cle, {
+        id: l.invoice_user_id ? l.invoice_user_id[0] : null,
+        nom: l.invoice_user_id ? l.invoice_user_id[1] : "Sans commercial",
+        mois: Array(moisCourant).fill(0),
+      });
+    }
+    commerciaux.get(cle)!.mois[m - 1] += montant;
+    categories.set(nomCateg, (categories.get(nomCateg) ?? 0) + montant);
+  }
+
+  return {
+    annee: Number(annee),
+    cutoff: today,
+    favori: favori.name,
+    favori_proprietaire: favori.user_id ? favori.user_id[1] : null,
+    mesure,
+    domaine: favori.domain,
+    nb_lignes: lignes.length,
+    mois: parMois.map((b, i) => {
+      const total = b.isofloor + b.quartz;
+      const fm = b.fm_isofloor + b.fm_quartz;
+      return {
+        mois: i + 1,
+        isofloor: r2(b.isofloor),
+        quartz: r2(b.quartz),
+        total: r2(total),
+        fm_isofloor: r2(b.fm_isofloor),
+        fm_quartz: r2(b.fm_quartz),
+        fm: r2(fm),
+        hors_fm_isofloor: r2(b.isofloor - b.fm_isofloor),
+        hors_fm_quartz: r2(b.quartz - b.fm_quartz),
+        hors_fm: r2(total - fm),
+      };
+    }),
+    commerciaux: [...commerciaux.values()]
+      .map((c) => ({
+        id: c.id, nom: c.nom, fm: c.id === SALESPERSON_ID,
+        mois: c.mois.map(r2), total: r2(c.mois.reduce((a, v) => a + v, 0)),
+      }))
+      .sort((a, b) => a.nom.localeCompare(b.nom, "fr")),
+    categories: [...categories.entries()]
+      .map(([nom, total]) => ({ nom, total: r2(total), isofloor: nom.toUpperCase().startsWith("ISOMARK / FLOORING") }))
+      .sort((a, b) => b.total - a.total),
+  };
+}
+
 // ──────────────────────────────────── 2. correction STI 2025 (figée) + totaux
 
 async function appliquerCorrectionSti(rows: Row[], journal: string[]) {
@@ -792,6 +996,15 @@ Deno.serve(async (req: Request) => {
       estimation = { erreur: e instanceof Error ? e.message : String(e) };
       journal.push(`Estimation de fin de mois impossible : ${estimation.erreur}`);
     }
+    // Flooring & Quartz tous commerciaux : même règle que l'estimation, un
+    // échec ne fait jamais tomber l'actualisation — l'écran montre l'erreur.
+    let flooringQuartz: Record<string, unknown>;
+    try {
+      flooringQuartz = await extraireFlooringQuartz({ odoo, categName }, cutoff2026, journal);
+    } catch (e) {
+      flooringQuartz = { erreur: e instanceof Error ? e.message : String(e) };
+      journal.push(`Flooring & Quartz impossible : ${flooringQuartz.erreur}`);
+    }
     const moisEnCours = {
       mois: moisCourant,
       jour: Number(cutoff2026.slice(8, 10)),
@@ -852,6 +1065,8 @@ Deno.serve(async (req: Request) => {
       monthly,
       monthly_2025: Array.from({ length: 12 }, (_, i) => mois2025Reel(i + 1)),
       mois_en_cours: moisEnCours,
+      // Flooring & Quartz, tous commerciaux, et hors FM (national hors IDF Nord).
+      flooring_quartz: flooringQuartz,
       projection_method:
         "Par client : CA 2026 à date + MAX(CA 2025 année pleine − CA 2025 à date, 0) × (1 + taux de " +
         "croissance appliqué au reste à courir). Ce taux combine (i) l'évolution propre du client à date " +

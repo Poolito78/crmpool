@@ -102,6 +102,38 @@ export type CaMoisEnCours = {
   estimation: CaEstimationMois;
 };
 
+/**
+ * Un mois du récap Flooring & Quartz, TOUS commerciaux (fonction `ca-refresh`,
+ * `extraireFlooringQuartz`). `hors_fm` = total − part de François MOUHOT : le
+ * national hors IDF Nord. ISOFLOOR + quartz = total, de même pour chaque part.
+ */
+export type CaFqMois = {
+  mois: number;
+  isofloor: number; quartz: number; total: number;
+  fm_isofloor: number; fm_quartz: number; fm: number;
+  hors_fm_isofloor: number; hors_fm_quartz: number; hors_fm: number;
+};
+
+/**
+ * Récap Flooring & Quartz. Le périmètre est celui du favori Odoo « Analyse des
+ * factures Flooring&Quartz », relu à chaque actualisation : `erreur` quand il
+ * est introuvable ou illisible — jamais de chiffre de repli.
+ */
+export type CaFlooringQuartz =
+  | { erreur: string }
+  | {
+      annee: number;
+      cutoff: string;
+      favori: string;
+      favori_proprietaire: string | null;
+      mesure: string;
+      domaine: string;
+      nb_lignes: number;
+      mois: CaFqMois[];
+      commerciaux: { id: number | null; nom: string; fm: boolean; mois: number[]; total: number }[];
+      categories: { nom: string; total: number; isofloor: boolean }[];
+    };
+
 type CaSummary = {
   cutoff_2026?: string;
   generated_at_odoo?: string;
@@ -113,6 +145,7 @@ type CaSummary = {
   monthly?: CaMois[];
   monthly_2025?: CaMois2025[];
   mois_en_cours?: CaMoisEnCours;
+  flooring_quartz?: CaFlooringQuartz;
 };
 
 type CaPayload = { summary: CaSummary; rows: CaRow[] };
@@ -151,6 +184,8 @@ export type CaOdooData = {
   mois2025: CaMois2025[];
   /** Mois en cours (comparaison N-1 + estimation). Absent avant la première actualisation qui le produit. */
   moisEnCours: CaMoisEnCours | null;
+  /** Flooring & Quartz tous commerciaux. Absent avant la première actualisation qui le produit. */
+  flooringQuartz: CaFlooringQuartz | null;
 };
 
 const n = (v: number | undefined | null) => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -250,6 +285,7 @@ function construire(payload: CaPayload): CaOdooData {
     mois: Array.isArray(s.monthly) ? s.monthly : [],
     mois2025: Array.isArray(s.monthly_2025) ? s.monthly_2025 : [],
     moisEnCours: s.mois_en_cours && s.mois_en_cours.mtd26 ? s.mois_en_cours : null,
+    flooringQuartz: s.flooring_quartz ?? null,
   };
 }
 
