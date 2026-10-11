@@ -1202,6 +1202,37 @@ export default function Devis() {
   const [optionsPour, setOptionsPour] = useState<{ ligneId: string; produit: Produit } | null>(null);
   const [variantePour, setVariantePour] = useState<{ ligneId: string; produit: Produit } | null>(null);
 
+  /* OPTIONS EN CHAÎNE. Une option insérée peut être elle-même un article à
+     variantes composées ou à options (le catalyseur propose son durcisseur) :
+     sa fenêtre s'ouvre à son tour, une à la fois, en profondeur d'abord — les
+     options d'une option se rangent juste sous elle. `dejaProposes` coupe les
+     boucles (A propose B qui propose A) : un article n'est proposé qu'une fois
+     par saisie. */
+  const fileOptions = useRef<{ ligneId: string; produit: Produit }[]>([]);
+  const dejaProposes = useRef(new Set<string>());
+  function ouvrirChoix(ligneId: string, produit: Produit): boolean {
+    if (produit.typeVariantesCompo && (produit.variantesCompo?.length ?? 0) > 0) { setVariantePour({ ligneId, produit }); return true; }
+    if (produit.typeOptions && (produit.lignesOptions?.length ?? 0) > 0) { setOptionsPour({ ligneId, produit }); return true; }
+    return false;
+  }
+  /** Ouvre la fenêtre du prochain article de la chaîne, s'il en reste. */
+  function choixSuivant() {
+    while (fileOptions.current.length) {
+      const { ligneId, produit } = fileOptions.current.shift()!;
+      if (ouvrirChoix(ligneId, produit)) return;
+    }
+  }
+  /** Début d'une saisie : la chaîne repart de cet article. */
+  function demarrerChoix(ligneId: string, produit: Produit) {
+    fileOptions.current = [];
+    dejaProposes.current = new Set([produit.id]);
+    ouvrirChoix(ligneId, produit);
+  }
+  function fermerOptions() {
+    setOptionsPour(null);
+    choixSuivant();
+  }
+
   /* La variante choisie devient UNE ligne : désignation de l'article + nom de la
      variante, prix = somme des composants, coût d'achat = celui des composants. */
   function appliquerVarianteCompo(v: VarianteCompo | null) {
@@ -1235,11 +1266,13 @@ export default function Devis() {
     // Les options viennent après la variante.
     if (cible.produit.typeOptions && (cible.produit.lignesOptions?.length ?? 0) > 0) {
       setOptionsPour({ ligneId: cible.ligneId, produit: cible.produit });
+    } else {
+      choixSuivant();
     }
   }
 
   function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
-    if (choisies.length === 0) { setOptionsPour(null); return; }
+    if (choisies.length === 0) { fermerOptions(); return; }
     saveSnapshot();
     /* Deux façons de prendre une option :
        - LIGNE EN PLUS : une ligne chiffrée sous l'article ;
@@ -1266,7 +1299,21 @@ export default function Devis() {
       if (i < 0) return [...complete, ...nouvelles];
       return [...complete.slice(0, i + 1), ...nouvelles, ...complete.slice(i + 1)];
     });
-    setOptionsPour(null);
+    /* Les options insérées qui proposent à leur tour quelque chose passent EN
+       TÊTE de la file : leurs propres options se rangent sous elles avant de
+       passer à l'option suivante. Une option incluse à la ligne n'a pas de
+       ligne à elle : elle n'enchaîne pas. */
+    const aSuivre = nouvelles.flatMap(l => {
+      const p = l.produitId ? produitParId(produits, l.produitId) : undefined;
+      if (!p || dejaProposes.current.has(p.id)) return [];
+      const propose = (p.typeVariantesCompo && (p.variantesCompo?.length ?? 0) > 0)
+        || (p.typeOptions && (p.lignesOptions?.length ?? 0) > 0);
+      if (!propose) return [];
+      dejaProposes.current.add(p.id);
+      return [{ ligneId: l.id, produit: p }];
+    });
+    fileOptions.current = [...aSuivre, ...fileOptions.current];
+    fermerOptions();
     const morceaux = [
       enPlus.length > 0 ? `${enPlus.length} ligne${enPlus.length > 1 ? 's' : ''} chiffrée${enPlus.length > 1 ? 's' : ''}` : '',
       incluses.length > 0 ? `${incluses.length} incluse${incluses.length > 1 ? 's' : ''} à la ligne` : '',
@@ -1728,8 +1775,7 @@ export default function Devis() {
       if (prio) setSelectedFournisseurPerLigne(prev => ({ ...prev, [ligneId]: prio.fournisseurId }));
       /* Les VARIANTES d'abord (une combinaison de produits sur la ligne), puis les
          options à cocher une fois la variante choisie. */
-      if (p.typeVariantesCompo && (p.variantesCompo?.length ?? 0) > 0) setVariantePour({ ligneId, produit: p });
-      else if (p.typeOptions && (p.lignesOptions?.length ?? 0) > 0) setOptionsPour({ ligneId, produit: p });
+      demarrerChoix(ligneId, p);
     }
   }
 
@@ -4834,7 +4880,7 @@ export default function Devis() {
       <OptionsArticleDialog
         produit={optionsPour?.produit ?? null}
         onConfirm={choisies => optionsPour && insererOptions(optionsPour.ligneId, choisies)}
-        onCancel={() => setOptionsPour(null)}
+        onCancel={fermerOptions}
       />
 
       {/* Email Dialog */}
