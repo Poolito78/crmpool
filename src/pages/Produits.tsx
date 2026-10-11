@@ -1090,6 +1090,28 @@ export default function Produits() {
     setProduitTab('infos');
     setEntrepotStockEdit(null);
     setDialogOpen(true);
+
+    /* LES COLONNES LOURDES SE RELISENT EN BASE À L'OUVERTURE. L'article en mémoire peut
+       en manquer (message temps réel incomplet, page restée ouverte pendant une
+       modification faite ailleurs) : enregistrer depuis ce formulaire effaçait alors,
+       en base, les 220 teintes RAL ou les variantes composées. Ce qui est lu ici est
+       ce qui sera réécrit à l'enregistrement. */
+    const lire = (v: unknown): any[] => (Array.isArray(v) ? v : typeof v === 'string' && v ? JSON.parse(v) : []);
+    void supabase.from('produits')
+      .select('variantes, paliers_prix, lignes_kit, lignes_options, variantes_compo, type_kit, type_options, type_variantes_compo')
+      .eq('id', p.id).maybeSingle()
+      .then(({ data }) => {
+        const d = data as unknown as Record<string, unknown> | null;
+        if (!d || editingRef.current?.id !== p.id) return;
+        setVariantes(lire(d.variantes));
+        setPaliersPrix(lire(d.paliers_prix).sort((x, y) => x.qteMin - y.qteMin));
+        setLignesKit(lire(d.lignes_kit));
+        setLignesOptions(lire(d.lignes_options));
+        setVariantesCompo(lire(d.variantes_compo));
+        setIsTypeKit(!!d.type_kit);
+        setIsTypeOptions(!!d.type_options);
+        setIsTypeVariantesCompo(!!d.type_variantes_compo);
+      });
   }
 
   function openComposant(compProd: import('@/lib/store').Produit) {
