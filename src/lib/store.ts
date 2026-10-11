@@ -4,6 +4,9 @@ import { toast } from 'sonner';
 import { estTypeFiche, type TypeFiche } from './liensProduit';
 import type { VarianteCompo } from './variantesCompo';
 import { cederLaMain } from './prioriteLecture';
+import {
+  lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
+} from './cacheCatalogue';
 
 export type TypeAdresse = 'livraison' | 'facturation';
 
@@ -1472,6 +1475,9 @@ export function diffArrays<T extends { id: string }>(prev: T[], next: T[]) {
  */
 const TRANCHE = 1000;
 
+/** Résultats de `lireTout` auxquels il manque des plages : jamais mis en cache. */
+const lecturesIncompletes = new WeakSet<any[]>();
+
 async function lireTout(
   table: string,
   /**
@@ -1605,6 +1611,7 @@ async function lireTout(
 
   /* On ne DÉDUIT plus ce qui manque d'un total qui pourrait être faux : on
      compte ce qu'on a réellement abandonné après ses deux tentatives. */
+  if (abandons) lecturesIncompletes.add(tout);
   if (abandons && rattrapage) {
     /* ⚠️ **ON NE DEMANDE PLUS DE RECHARGER.** Recharger relit les 22 700
        articles, sur une base qui vient justement de refuser d'en servir 700 :
@@ -1716,6 +1723,8 @@ export function useStore() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) return;
       userIdRef.current = session.user.id;
+      // Lu pendant que les autres tables arrivent.
+      const cacheP = lireCacheCatalogue();
 
       const [cRes, fRes, dRes, pfRes, cfRes, ccRes, fcRes, ffRes] = await Promise.all([
         lireTout('clients'),
@@ -1757,13 +1766,10 @@ export function useStore() {
       supabase.from('produits').select('id', { count: 'estimated', head: true })
         .then(({ count }) => { if (typeof count === 'number') setNbProduits(count); });
 
-      // Le catalogue continue d'arriver en arrière-plan.
-      /* Les articles arrivés après coup — plages reprises, ou articles
-         cités par un devis — s'ajoutent sans rien réécrire en base. */
-      lireTout('produits', lignes => ajouterProduitsLus(lignes)).then(async pRes => {
-        /* Convertir 22 508 lignes d'un seul élan bloque le fil d'exécution
-           une bonne fraction de seconde. On le fait par paquets, en rendant
-           la main entre chacun. */
+      /* Convertir 22 508 lignes d'un seul élan bloque le fil d'exécution
+         une bonne fraction de seconde. On le fait par paquets, en rendant
+         la main entre chacun. */
+      const poserCatalogue = async (pRes: any[]) => {
         const sortie: Produit[] = [];
         for (let i = 0; i < pRes.length; i += 2000) {
           for (const r of pRes.slice(i, i + 2000)) sortie.push(dbToProduit(r));
@@ -1784,8 +1790,40 @@ export function useStore() {
            de sens que le temps du chargement. */
         setNbProduits(sortie.length);
         setProduitsCharges(true);
-      });
+      };
+
+      /* LE CATALOGUE VIENT DU NAVIGATEUR, PUIS DE CE QUI A CHANGÉ.
+         Voir cacheCatalogue.ts : relire 22 700 articles à chaque démarrage
+         coûtait 23 tranches sur une base au CPU bridé. Le cache s'affiche
+         d'abord, la base ne fournit ensuite que la différence. */
+      const cache = await cacheP;
+      if (cache) {
+        await poserCatalogue(cache.lignes);
+        const delta = await lireDeltaCatalogue(cache.curseur);
+        if (delta) {
+          curseurCatalogue = delta.curseur;
+          if (delta.modifies.length || delta.supprimes.length) {
+            const lignes = appliquerDelta(cache.lignes, delta);
+            await poserCatalogue(lignes);
+            void ecrireCacheCatalogue(lignes, delta.curseur);
+          }
+          return;
+        }
+        // La différence est illisible : on retombe sur la relecture complète.
+      }
+
+      // Le catalogue continue d'arriver en arrière-plan.
+      /* Les articles arrivés après coup — plages reprises, ou articles
+         cités par un devis — s'ajoutent sans rien réécrire en base. */
+      const pRes = await lireTout('produits', lignes => ajouterProduitsLus(lignes));
+      await poserCatalogue(pRes);
+      curseurCatalogue = curseurDe(pRes);
+      // Une lecture amputée de plages ne doit pas devenir le cache de demain.
+      if (!lecturesIncompletes.has(pRes)) void ecrireCacheCatalogue(pRes, curseurCatalogue);
     }
+
+    /** Plus récente `updated_at` vue : les rafales temps réel relisent à partir d'ici. */
+    let curseurCatalogue: string | null = null;
 
     // ── Synchro temps réel (Supabase Realtime) ───────────────────────────────
     // Re-charge la table concernée à chaque INSERT/UPDATE/DELETE (debounce léger)
@@ -1806,8 +1844,32 @@ export function useStore() {
         try {
           do {
             relectureProduits.encore = false;
+            /* Par différence dès qu'on a un curseur : une rafale de la synchro
+               Odoo ne touche que les articles qu'elle écrit, pas les 22 700. */
+            const delta = curseurCatalogue ? await lireDeltaCatalogue(curseurCatalogue) : null;
+            if (delta) {
+              curseurCatalogue = delta.curseur;
+              if (!delta.modifies.length && !delta.supprimes.length) continue;
+              const supprimes = new Set(delta.supprimes);
+              const modifies = new Map(delta.modifies.map(r => [r.id as string, dbToProduit(r)]));
+              setProduits(prev => {
+                const connus = new Set(prev.map(p => p.id));
+                const n = prev
+                  .filter(p => !supprimes.has(p.id) || modifies.has(p.id))
+                  .map(p => modifies.get(p.id) ?? p);
+                for (const [id, p] of modifies) if (!connus.has(id)) n.push(p);
+                return n;
+              });
+              // Le cache suit, sans retenir le fil : il servira au prochain démarrage.
+              void lireCacheCatalogue().then(c => {
+                if (c) return ecrireCacheCatalogue(appliquerDelta(c.lignes, delta), delta.curseur);
+              });
+              continue;
+            }
             const data = await lireTout('produits');
             setProduits(data.map(dbToProduit));
+            curseurCatalogue = curseurDe(data);
+            if (!lecturesIncompletes.has(data)) void ecrireCacheCatalogue(data, curseurCatalogue);
           } while (relectureProduits.encore);
         } finally { relectureProduits.enCours = false; }
       },   // repli : imports en masse
