@@ -157,6 +157,8 @@ export const CLE_COMPOSANTS = '__composants';
 export interface ComposantLigne extends LigneKit {
   /** Teinte propre à ce composant (« RAL 1015… ») ; sans elle, celle de la ligne. */
   teinte?: string;
+  /** L'œil du composant : compté dans le prix, mais absent du devis imprimé et du PDF. */
+  masque?: boolean;
 }
 
 export function composantsPersonnalises(vc?: Record<string, string>): ComposantLigne[] | null {

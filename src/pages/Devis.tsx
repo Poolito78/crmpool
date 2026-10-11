@@ -1170,6 +1170,8 @@ export default function Devis() {
         quantite: Math.round(d.quantite * 1e6) / 1e6,
         unite: d.composant.unite || d.produit?.unite || '',
         prixUnitaire: Math.round(d.prixUnitaire * d.facteurRemise * 1e4) / 1e4,
+        // Gardé dans la copie (il compte dans le prix, donc dans le contrôle), mais non imprimé.
+        ...((d.composant as { masque?: boolean }).masque ? { masque: true } : {}),
       }));
       if (JSON.stringify(imprime) === JSON.stringify(l.detailImprime)) return l;
       change = true;

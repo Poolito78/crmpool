@@ -1,4 +1,4 @@
-import { Copy, RotateCcw, Trash2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, RotateCcw, Trash2 } from 'lucide-react';
 import { InputNombre } from '@/components/InputNombre';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import VarianteSelect from '@/components/VarianteSelect';
@@ -75,7 +75,7 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
             {canAchat && <th className="text-right font-medium px-2 py-1 w-20">PU achat</th>}
             {canAchat && <th className="text-right font-medium px-2 py-1 w-20">Coeff</th>}
             <th className="text-right font-medium px-2 py-1 w-24">Total HT</th>
-            <th className="w-12" />
+            <th className="w-16" />
           </tr>
         </thead>
         <tbody>
@@ -86,8 +86,9 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
             const coeff = achat ? d.prixUnitaire * d.facteurRemise / achat : null;
             const dims = (d.produit?.variantes ?? []).filter(x => x.options.length > 0);
             const teinteRow = (d.composant as ComposantLigne).teinte;
+            const masque = !!(d.composant as ComposantLigne).masque;
             return (
-              <tr key={d.cle} className="border-b border-border/50 last:border-0 align-top">
+              <tr key={d.cle} className={`border-b border-border/50 last:border-0 align-top ${masque ? 'opacity-50' : ''}`}>
                 <td className="px-2 py-1" style={{ paddingLeft: 8 + d.profondeur * 14 }}>
                   <div className="flex flex-wrap items-center gap-1.5">
                     <div className="w-56 shrink-0">
@@ -152,6 +153,13 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
                 <td className="px-2 py-1 text-right tabular-nums font-medium">{formatMontant(qte * d.prixUnitaire * d.facteurRemise)}</td>
                 <td className="px-1 py-1">
                   <div className="flex items-center justify-end gap-1">
+                    {/* L'œil du composant : il reste dans le prix, mais sort du devis imprimé et du PDF. */}
+                    <button type="button"
+                      title={masque ? 'Masqué sur le devis et le PDF (compté dans le prix) — cliquer pour l\'afficher' : 'Visible sur le devis et le PDF — cliquer pour le masquer'}
+                      onClick={() => majRow(i, { masque: masque ? undefined : true })}
+                      className={masque ? 'text-muted-foreground/60 hover:text-foreground' : 'text-primary hover:text-primary/80'}>
+                      {masque ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    </button>
                     <button type="button" title="Dupliquer ce composant (par exemple pour un second RAL ou un autre SNLR)"
                       onClick={() => modifier(rows => [...rows.slice(0, i + 1), { ...rows[i] }, ...rows.slice(i + 1)])}
                       className="text-muted-foreground hover:text-foreground"><Copy className="w-3.5 h-3.5" /></button>

@@ -30,7 +30,8 @@ function lignesDetail(l: Devis['lignes'][number]): { designation: string; quanti
   const somme = l.detailImprime.reduce((s, d) => s + d.quantite * d.prixUnitaire, 0);
   const juste = Math.abs(somme - l.prixUnitaireHT) <= 0.02;
   const remise = 1 - (l.remise || 0) / 100;
-  return l.detailImprime.map(d => {
+  // Le contrôle porte sur TOUS les composants ; seuls ceux dont l'œil est ouvert s'impriment.
+  return l.detailImprime.filter(d => !d.masque).map(d => {
     const q = d.quantite * (l.quantite || 0);
     return {
       designation: d.designation,
