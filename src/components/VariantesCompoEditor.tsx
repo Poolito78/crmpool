@@ -27,6 +27,8 @@ const composantVide = (): LigneKit => ({ description: '', quantite: 1, unite: 'p
 export default function VariantesCompoEditor({ actif, onActif, variantes, onChange, produits, onOpen }: Props) {
   /* Prix courant de l'article du composant (tarif public de sa fiche). */
   const resoudre: ResoudrePrix = c => produits.find(p => p.id === c.produitId)?.prixHT;
+  /* Au devis d'un client REVENDEUR, c'est le prix revendeur de l'article qui s'applique : on le montre à côté. */
+  const resoudreRevendeur: ResoudrePrix = c => produits.find(p => p.id === c.produitId)?.prixRevendeur;
   const majVariante = (id: string, patch: Partial<VarianteCompo>) =>
     onChange(prev => prev.map(v => (v.id === id ? { ...v, ...patch } : v)));
   const majComposant = (id: string, idx: number, patch: Partial<LigneKit>) =>
@@ -68,7 +70,7 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                 <span className="text-xs text-muted-foreground">Nom de la variante (complète la désignation de l'article)</span>
                 <Input value={v.nom} onChange={e => majVariante(v.id, { nom: e.target.value })} placeholder="Ex : avec primaire et finition" className="h-8 text-xs" />
               </div>
-              <span className="text-xs text-muted-foreground pb-2">Total : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudre))} HT</strong></span>
+              <span className="text-xs text-muted-foreground pb-2">Public : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudre))}</strong> · Revendeur : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudreRevendeur))}</strong> HT</span>
               <button
                 type="button" title="Supprimer cette variante"
                 onClick={() => onChange(prev => prev.filter(x => x.id !== v.id))}

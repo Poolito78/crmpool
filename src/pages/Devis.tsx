@@ -2777,7 +2777,15 @@ export default function Devis() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
               <div>
                 <div className="flex items-center justify-between">
-                  <Label>Client *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label>Client *</Label>
+                    {clients.find(c => c.id === clientId)?.estRevendeur && (
+                      <span
+                        className="text-[10px] font-semibold uppercase tracking-wide rounded-full bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300 px-2 py-0.5"
+                        title="Client revendeur / distributeur : les articles sont tarifés au prix revendeur"
+                      >Revendeur</span>
+                    )}
+                  </div>
                   {clientId && (
                     <button
                       type="button"
