@@ -72,6 +72,13 @@ export default function VarianteSelect({ dimension, value, onChange, className }
   const [hovered, setHovered] = useState<VarianteOption | null>(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const ref = useRef<HTMLDivElement>(null);
+  /* SAISIE AU CLAVIER : menu ouvert, taper les premiers chiffres d'un RAL (« 10 », « 1023 »)
+     y amène l'ascenseur et le met en évidence ; Entrée le choisit, Retour arrière corrige. */
+  const [saisie, setSaisie] = useState('');
+  const [surligne, setSurligne] = useState<string | null>(null);
+  const conteneur = useRef<HTMLDivElement>(null);
+  const elements = useRef<Record<string, HTMLElement | null>>({});
+  const minuteur = useRef<ReturnType<typeof setTimeout>>();
 
   const selectedOpt = dimension.options.find(o => o.label === value) ?? dimension.options[0];
   const hasVisuals = dimension.options.some(o => o.couleur || o.imageUrl);
@@ -87,6 +94,44 @@ export default function VarianteSelect({ dimension, value, onChange, className }
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
+
+  useEffect(() => {
+    if (!open) { setSaisie(''); setSurligne(null); return; }
+    const trouver = (texte: string) => {
+      const q = texte.toLowerCase();
+      return dimension.options.find(o => {
+        const num = getRalInfo(o.label)?.num;
+        return (num && num.startsWith(q)) || o.label.toLowerCase().replace(/^ral\s*/, '').startsWith(q);
+      });
+    };
+    const aller = (opt: VarianteOption) => {
+      setSurligne(opt.id);
+      const el = elements.current[opt.id];
+      const cont = conteneur.current;
+      if (el && cont) cont.scrollTop += el.getBoundingClientRect().top - cont.getBoundingClientRect().top - 4;
+    };
+    function touche(e: KeyboardEvent) {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === 'Escape') { setOpen(false); return; }
+      if (e.key === 'Enter') {
+        const opt = dimension.options.find(o => o.id === surligne);
+        if (opt) { e.preventDefault(); onChange(opt.label); setOpen(false); }
+        return;
+      }
+      let suivant: string | null = null;
+      if (e.key === 'Backspace') suivant = saisie.slice(0, -1);
+      else if (e.key.length === 1 && /[0-9a-zA-Z]/.test(e.key)) suivant = saisie + e.key;
+      if (suivant === null) return;
+      e.preventDefault();
+      setSaisie(suivant);
+      clearTimeout(minuteur.current);
+      minuteur.current = setTimeout(() => setSaisie(''), 1500);
+      const opt = suivant ? trouver(suivant) : undefined;
+      if (opt) aller(opt);
+    }
+    document.addEventListener('keydown', touche);
+    return () => { document.removeEventListener('keydown', touche); clearTimeout(minuteur.current); };
+  }, [open, saisie, surligne, dimension.options, onChange]);
 
   return (
     <div ref={ref} className={cn('relative', className)}>
@@ -117,15 +162,21 @@ export default function VarianteSelect({ dimension, value, onChange, className }
       {open && (
         <div className="absolute z-50 mt-1 bg-background border rounded-lg shadow-xl overflow-hidden"
           style={{ minWidth: '200px', maxWidth: '340px', left: 0 }}>
+          {saisie && (
+            <div className="px-3 py-1 text-xs border-b bg-muted/50 text-muted-foreground">
+              Recherche : <span className="font-semibold text-foreground">{saisie}</span>
+            </div>
+          )}
           {hasVisuals ? (
             // Grille de swatches visuels
             /* Dix lignes au plus (~76 px chacune), puis un ascenseur : 220 teintes ne
                doivent pas faire déborder le menu hors de l'écran. */
-            <div className="p-2 grid gap-1 overflow-y-auto"
+            <div ref={conteneur} className="p-2 grid gap-1 overflow-y-auto"
               style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', maxHeight: 'min(760px, 70vh)' }}>
               {dimension.options.map(opt => (
                 <button
                   key={opt.id}
+                  ref={el => { elements.current[opt.id] = el; }}
                   type="button"
                   onClick={() => { onChange(opt.label); setOpen(false); setHovered(null); }}
                   onMouseEnter={e => {
@@ -136,7 +187,8 @@ export default function VarianteSelect({ dimension, value, onChange, className }
                   onMouseLeave={() => setHovered(null)}
                   className={cn(
                     'flex flex-col items-center gap-0.5 rounded p-1 text-center hover:bg-accent transition-colors',
-                    opt.label === value && 'ring-2 ring-primary bg-accent/60'
+                    opt.label === value && 'ring-2 ring-primary bg-accent/60',
+                    surligne === opt.id && 'ring-2 ring-amber-500 bg-amber-100/60 dark:bg-amber-900/30'
                   )}
                   title={opt.label}
                 >
@@ -180,18 +232,20 @@ export default function VarianteSelect({ dimension, value, onChange, className }
             </div>
           ) : hasRal ? (
             // Liste avec badges RAL colorés
-            <div className="py-1 max-h-72 overflow-y-auto">
+            <div ref={conteneur} className="py-1 max-h-72 overflow-y-auto">
               {dimension.options.map(opt => {
                 const ral = getRalInfo(opt.label);
                 const isSelected = opt.label === value;
                 return (
                   <button
                     key={opt.id}
+                    ref={el => { elements.current[opt.id] = el; }}
                     type="button"
                     onClick={() => { onChange(opt.label); setOpen(false); }}
                     className={cn(
                       'w-full flex items-center gap-2 px-3 py-1.5 text-sm text-left transition-colors',
-                      isSelected ? 'bg-accent/60 font-medium' : 'hover:bg-accent/40'
+                      isSelected ? 'bg-accent/60 font-medium' : 'hover:bg-accent/40',
+                      surligne === opt.id && 'ring-2 ring-inset ring-amber-500 bg-amber-100/60 dark:bg-amber-900/30'
                     )}
                   >
                     {/* Swatch couleur RAL */}
