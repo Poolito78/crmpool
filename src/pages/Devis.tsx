@@ -4073,6 +4073,23 @@ export default function Devis() {
                                       {repartCata?.sansContenance.length ? (
                                         <span className="text-amber-600">Contenance illisible, non répartie : {repartCata.sansContenance.join(', ')}</span>
                                       ) : null}
+                                      {/* Le calcul RÉSINE PAR RÉSINE, en clair : kg de résine × % de sa fiche.
+                                          Regroupé par famille et dosage — deux seaux de 319 font une ligne. */}
+                                      {calcCata.resines.length > 0 && (
+                                        <span className="basis-full flex flex-wrap gap-x-4 gap-y-0.5 pl-1">
+                                          {Object.values(calcCata.resines.reduce<Record<string, { famille: typeof calcCata.resines[number]['famille']; pct: number; point: number; kg: number }>>((acc, r) => {
+                                            const k = `${r.famille}|${r.pct}`;
+                                            acc[k] = acc[k] ? { ...acc[k], kg: acc[k].kg + r.kg } : { famille: r.famille, pct: r.pct, point: r.point, kg: r.kg };
+                                            return acc;
+                                          }, {})).map(g => (
+                                            <span key={`${g.famille}-${g.pct}`} className="tabular-nums">
+                                              {LIBELLE_FAMILLE[g.famille]} : {String(Math.round(g.kg * 100) / 100).replace('.', ',')} kg × {String(g.pct).replace('.', ',')} %
+                                              {' '}= <span className="text-foreground font-medium">{String(Math.round(g.kg * g.pct) / 100).replace('.', ',')} kg</span>
+                                              {g.famille !== '405' && g.point !== tempSaisie && <span className="text-muted-foreground/70"> (fiche à {g.point} °C)</span>}
+                                            </span>
+                                          ))}
+                                        </span>
+                                      )}
                                       {calcCata.aVerifier.length > 0 && (
                                         <span className="text-amber-600" title={calcCata.aVerifier.join('\n')}>
                                           À vérifier, non compté : {calcCata.aVerifier.join(', ')}
