@@ -4,6 +4,7 @@ import {
   varianteDeLigne, type VarianteCompo,
   cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues, dimensionsDesComposants,
   detailCompo, prixDetailCompo, prixLigneCompo, prixForces, avecPrixForce,
+  aPlat, avecComposants, composantsPersonnalises,
 } from './variantesCompo';
 
 const ligne = (p: object) => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0, ...p });
@@ -138,6 +139,24 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
     expect(prixLigneCompo(KIT, prixArticle, trouver, vc2)).toBe(176);
     expect(valeursVisibles(vc2)).toEqual([]);                     // clé interne
     expect(prixLigneCompo(KIT, prixArticle, trouver, avecPrixForce(vc2, d[2].cle, null))).toBe(170);
+  });
+
+  it('la composition propre à la ligne : quantité retouchée, composant dupliqué (deux RAL)', () => {
+    const vc = { [CLE_COMPO]: 'k', [cleSousCompo('snlr')]: 's1' };
+    const plat = aPlat(KIT, prixArticle, trouver, vc);
+    expect(plat.map(c => c.produitId)).toEqual(['319', 'base', 'pig']);
+    // Le pigment dupliqué en deux teintes, 1 de chaque au lieu de 2 du même.
+    const perso = [plat[0], plat[1], { ...plat[2], quantite: 1, teinte: 'RAL 1015' }, { ...plat[2], quantite: 1, teinte: 'RAL 7040' }];
+    const vc2 = avecComposants(vc, perso);
+    expect(composantsPersonnalises(vc2)).toHaveLength(4);
+    expect(prixLigneCompo(KIT, prixArticle, trouver, vc2)).toBe(170);   // 100 + 2×30 + 1×5 + 1×5
+    expect(achatVarianteCompo(KIT, produits, vc2)).toBe(100);           // 60 + 2×18 + 2×2
+    expect(valeursVisibles(vc2)).toEqual([]);
+    // Quantité de SNL retouchée à 3 : 100 + 3×30 + 5 + 5 = 200.
+    expect(prixLigneCompo(KIT, prixArticle, trouver, avecComposants(vc, perso.map((c, i) => (i === 1 ? { ...c, quantite: 3 } : c))))).toBe(200);
+    // Rétablir : la variante reprend.
+    expect(prixLigneCompo(KIT, prixArticle, trouver, avecComposants(vc2, null))).toBe(170);
+    expect(composantsPersonnalises(avecComposants(vc2, null))).toBeNull();
   });
 
   it('une boucle de fiches ne fige pas le calcul', () => {

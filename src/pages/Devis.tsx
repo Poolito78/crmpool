@@ -40,7 +40,8 @@ import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
-  cleSousCompo, sousVariantesRetenues, prixLigneCompo, detailCompo, prixForces, avecPrixForce, PREFIXE_PRIX,
+  cleSousCompo, sousVariantesRetenues, prixLigneCompo, detailCompo, prixForces, PREFIXE_PRIX, CLE_COMPOSANTS,
+  composantsPersonnalises,
   dimensionsDesComposants, type DimensionDeComposant,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -1134,7 +1135,13 @@ export default function Devis() {
         return reste;
       }
       const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map(d => ({
-        designation: d.produit ? designationProduit(d.produit) : (d.composant.description || 'Composant'),
+        /* La teinte du composant (la sienne, sinon celle de la ligne) suit sa désignation :
+           deux pigments de RAL différents se lisent sur le devis. */
+        designation: [
+          d.produit ? designationProduit(d.produit) : (d.composant.description || 'Composant'),
+          (d.composant as { teinte?: string }).teinte
+            || (d.produit?.variantes ?? []).map(dim => l.variantesChoisies?.[dim.id]).find(Boolean),
+        ].filter(Boolean).join(' — '),
         quantite: Math.round(d.quantite * 1e6) / 1e6,
         unite: d.composant.unite || d.produit?.unite || '',
         prixUnitaire: Math.round(d.prixUnitaire * d.facteurRemise * 1e4) / 1e4,
@@ -1366,8 +1373,9 @@ export default function Devis() {
          proposées : celles que la ligne n'a pas encore reprennent leur première
          option, et la variante composée s'ajoute sans rien retirer. Les
          sous-variantes d'un choix précédent, elles, tombent. */
-      // Les prix forcés du détail suivent la composition : une autre variante les efface.
-      const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) => !k.startsWith(`${CLE_COMPO}/`) && !k.startsWith(PREFIXE_PRIX)));
+      // Prix forcés et composition propre suivent la composition : une autre variante les efface.
+      const anciennes = Object.fromEntries(Object.entries(avant).filter(([k]) =>
+        !k.startsWith(`${CLE_COMPO}/`) && !k.startsWith(PREFIXE_PRIX) && k !== CLE_COMPOSANTS));
       const vc: Record<string, string> = {
         ...Object.fromEntries(
           (produitParId(produits, racine.id)?.variantes ?? racine.variantes ?? [])
@@ -3941,6 +3949,7 @@ export default function Devis() {
                                 variantesChoisies={l.variantesChoisies}
                                 resoudre={resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur)}
                                 trouver={id => produitParId(produits, id)}
+                                produits={produits}
                                 canAchat={canAchat}
                                 onChange={vc => {
                                   const client = clients.find(c => c.id === clientId);
@@ -3960,8 +3969,10 @@ export default function Devis() {
                                       ? 'Replier : le devis montre l\'ensemble sur une seule ligne'
                                       : 'Déplier : chaque composant avec son prix de vente, son poids, son prix d\'achat — et le devis le détaille aussi'}>
                                     {l.detailCompo ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-                                    Détail ({compoLigne.composants.length})
-                                    {Object.keys(prixForces(l.variantesChoisies)).length > 0 && <span className="text-orange-500 font-normal">· prix forcés</span>}
+                                    Détail ({composantsPersonnalises(l.variantesChoisies)?.length ?? compoLigne.composants.length})
+                                    {composantsPersonnalises(l.variantesChoisies)
+                                      ? <span className="text-orange-500 font-normal">· composition propre</span>
+                                      : Object.keys(prixForces(l.variantesChoisies)).length > 0 && <span className="text-orange-500 font-normal">· prix forcés</span>}
                                   </button>
                                 )}
                                 {teintesLigne.map((t, k) => teinteEdit === `${l.id}:${t.cle}` ? (

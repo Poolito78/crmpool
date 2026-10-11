@@ -1,5 +1,5 @@
 import type { LigneDevis, Produit } from './store';
-import { cleSousCompo, varianteDeLigne, type VarianteCompo } from './variantesCompo';
+import { cleSousCompo, composantsPersonnalises, varianteDeLigne, type VarianteCompo } from './variantesCompo';
 
 /**
  * LE CATALYSEUR D'UN DEVIS FLOWFAST, À LA TEMPÉRATURE DU CHANTIER.
@@ -220,6 +220,9 @@ export function calculerCatalyse(
     const p = trouver(l.produitId);
     if (!p || estCatalyseur(p) || !(l.quantite > 0)) continue;
     const compo = varianteDeLigne(p, l.variantesChoisies);
+    // Composition propre à la ligne (quantités retouchées, composant dupliqué) : elle fait foi, à plat.
+    const perso = compo ? composantsPersonnalises(l.variantesChoisies) : null;
+    if (perso) { resinesDeVariante({ id: 'perso', nom: '', composants: perso }, trouver, undefined, l.quantite, 0, resines, aVerifier, temperature); continue; }
     if (compo) { resinesDeVariante(compo, trouver, l.variantesChoisies, l.quantite, 0, resines, aVerifier, temperature); continue; }
     compter(p, l.quantite, `${p.description || p.reference} × ${l.quantite}`, l.description || p.reference, resines, aVerifier, temperature);
   }

@@ -141,6 +141,59 @@ export interface ComposantDetaille<P> {
   profondeur: number;
 }
 
+/**
+ * LA COMPOSITION PROPRE À UNE LIGNE. Dès qu'on retouche le détail — une
+ * quantité, un produit (SNLR11 → SNLR5), un composant dupliqué pour mêler deux
+ * RAL —, la ligne ne suit plus la variante de la fiche : elle garde SA liste,
+ * à plat, sous `__composants` (JSON) dans `variantesChoisies`. Comme les prix
+ * forcés, elle suit ainsi la ligne dans toutes les relectures de prix.
+ *
+ * Chaque composant porte sa quantité pour UNE unité de la ligne, son prix
+ * (figé s'il a été saisi, sinon celui de l'article au tarif du devis) et, au
+ * besoin, sa propre teinte. « Rétablir » efface la clé : la variante reprend.
+ */
+export const CLE_COMPOSANTS = '__composants';
+
+export interface ComposantLigne extends LigneKit {
+  /** Teinte propre à ce composant (« RAL 1015… ») ; sans elle, celle de la ligne. */
+  teinte?: string;
+}
+
+export function composantsPersonnalises(vc?: Record<string, string>): ComposantLigne[] | null {
+  const brut = vc?.[CLE_COMPOSANTS];
+  if (!brut) return null;
+  try {
+    const l = JSON.parse(brut);
+    return Array.isArray(l) ? l as ComposantLigne[] : null;
+  } catch { return null; }
+}
+
+export function avecComposants(vc: Record<string, string> | undefined, composants: ComposantLigne[] | null): Record<string, string> {
+  const out = { ...(vc ?? {}) };
+  if (composants == null) delete out[CLE_COMPOSANTS];
+  else {
+    out[CLE_COMPOSANTS] = JSON.stringify(composants);
+    // La liste porte désormais ses prix : les forçages par chemin n'ont plus d'objet.
+    for (const k of Object.keys(out)) if (k.startsWith(PREFIXE_PRIX)) delete out[k];
+  }
+  return out;
+}
+
+/**
+ * La composition à plat, pour en faire la composition propre de la ligne : les
+ * prix forcés deviennent des prix figés, les remises du chemin une remise.
+ */
+export function aPlat<P extends AvecVariantes>(
+  v: VarianteCompo, resoudre: ResoudrePrix, trouver: (id: string) => P | undefined, vc?: Record<string, string>,
+): ComposantLigne[] {
+  return detailCompo(v, resoudre, trouver, vc, prixForces(vc)).map(d => ({
+    ...d.composant,
+    quantite: Math.round(d.quantite * 1e6) / 1e6,
+    remise: Math.round((1 - d.facteurRemise) * 1e4) / 100,
+    ...(d.force ? { prixFige: true, prixUnitaireHT: d.prixUnitaire } : {}),
+  }));
+}
+
 export function detailCompo<P extends AvecVariantes>(
   v: VarianteCompo,
   resoudre: ResoudrePrix,
@@ -153,6 +206,19 @@ export function detailCompo<P extends AvecVariantes>(
   profondeur = 0,
 ): ComposantDetaille<P>[] {
   if (profondeur >= PROFONDEUR_MAX) return [];
+  // Composition propre à la ligne : elle remplace celle de la variante, déjà à plat.
+  const perso = profondeur === 0 ? composantsPersonnalises(variantesChoisies) : null;
+  if (perso) {
+    return perso.map((c, i) => {
+      const prixCalcule = prixComposant({ ...c, prixFige: false }, resoudre);
+      const prix = prixComposant(c, resoudre);
+      return {
+        cle: `perso:${i}`, composant: c, produit: c.produitId ? trouver(c.produitId) : undefined,
+        quantite: c.quantite || 0, facteurRemise: 1 - (c.remise || 0) / 100,
+        prixUnitaire: prix, prixCalcule, force: !!c.prixFige, profondeur: 0,
+      };
+    });
+  }
   return v.composants.flatMap((c, i) => {
     const cle = `${base}${v.id}:${i}`;
     const q = (c.quantite || 0) * facteur;
@@ -236,13 +302,17 @@ export function dimensionsDesComposants<P extends AvecDimensions>(
   trouver: (id: string) => P | undefined,
   variantesChoisies?: Record<string, string>,
 ): DimensionDeComposant<P>[] {
-  const variantes = [v, ...sousVariantesRetenues(v, trouver, variantesChoisies).map(s => s.variante)];
+  // Composition propre à la ligne : déjà à plat, ce sont SES composants qui portent les teintes.
+  const perso = composantsPersonnalises(variantesChoisies);
+  const variantes = perso
+    ? [{ id: 'perso', nom: v.nom, composants: perso }]
+    : [v, ...sousVariantesRetenues(v, trouver, variantesChoisies).map(s => s.variante)];
   const parNom = new Map<string, DimensionDeComposant<P>>();
   const vues = new Set<string>();
   for (const vr of variantes) {
     for (const c of vr.composants) {
       // Un composant déplié en sous-variante est représenté par SES composants.
-      if (sousVarianteDe(c, trouver, variantesChoisies)) continue;
+      if (!perso && sousVarianteDe(c, trouver, variantesChoisies)) continue;
       const p = c.produitId ? trouver(c.produitId) : undefined;
       for (const d of p?.variantes ?? []) {
         if (!d.options.length || vues.has(d.id)) continue;
@@ -270,6 +340,9 @@ export function achatVarianteCompo(
   variantesChoisies?: Record<string, string>,
   profondeur = 0,
 ): number | undefined {
+  // Composition propre à la ligne : son coût est celui de SES composants.
+  const perso = profondeur === 0 ? composantsPersonnalises(variantesChoisies) : null;
+  if (perso) return achatVarianteCompo({ id: 'perso', nom: v.nom, composants: perso }, produits, undefined, 1);
   if (v.composants.length === 0) return undefined;
   const trouver = (id: string) => produits.find(x => x.id === id);
   let total = 0;
