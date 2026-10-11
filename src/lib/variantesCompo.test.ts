@@ -41,7 +41,16 @@ describe('variantes composées', () => {
   });
 
   it('la désignation reprend l\'article de base puis la variante', () => {
-    expect(designationAvecVariante('FLOWFAST 107 Primer (20 kg)', V)).toBe('FLOWFAST 107 Primer (20 kg) — avec primaire');
+    expect(designationAvecVariante('FLOWFAST 107 Primer (20 kg)', V)).toBe('FLOWFAST 107 Primer (20 kg) - avec primaire');
+  });
+
+  it('les morceaux vides sont sautés (variante sans nom, article « . »)', () => {
+    // Le cas réel : FLOWFAST319R sans nom de variante, SNLR+P désigné « . ».
+    expect(designationAvecVariante('KIT FLOWFAST 319 ROAD (45,8 kg)', { nom: '' },
+      [{ article: '.', nom: '**2 Kits de 22,65 kg** - SNLR (2 x 11,65 kg)' }]))
+      .toBe('KIT FLOWFAST 319 ROAD (45,8 kg) - **2 Kits de 22,65 kg** - SNLR (2 x 11,65 kg)');
+    expect(designationAvecVariante('IS A', { nom: '  ' })).toBe('IS A');
+    expect(designationAvecVariante('IS A', { nom: 'kit' }, [{ article: '.', nom: 'x' }])).toBe('IS A - kit (x)');
   });
 
   it('la variante d\'une ligne se retrouve par la clé interne, et celle-ci ne s\'affiche pas', () => {
@@ -84,7 +93,7 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
     const sous = sousVariantesRetenues(KIT, trouver, vc);
     expect(sous.map(s => s.variante.nom)).toEqual(['avec pigment']);
     expect(designationAvecVariante('IS 319R', KIT, [{ article: 'SNLR', nom: 'avec pigment' }]))
-      .toBe('IS 319R — kit (SNLR : avec pigment)');
+      .toBe('IS 319R - kit (SNLR : avec pigment)');
   });
 
   it('la clé de cascade reste interne', () => {

@@ -199,15 +199,33 @@ export function varianteDeLigne(
   return id ? produit?.variantesCompo?.find(v => v.id === id) : undefined;
 }
 
-/** « Désignation de l'article — nom de la variante ». */
+/** Un libellé qui dit quelque chose : au moins une lettre ou un chiffre (« . » ne dit rien). */
+const significatif = (t: string | undefined) => !!t && /[\p{L}\p{N}]/u.test(noteSansBalises(t));
+/** Le texte sans balises de mise en forme (`**`), pour juger s'il est vide. */
+const noteSansBalises = (t: string) => t.replace(/\*\*/g, '').replace(/\{\{#[0-9a-f]{3,8}\|/gi, '').replace(/\}\}/g, '');
+
+/**
+ * « Désignation de l'article - nom de la variante (article composant : sa variante) ».
+ *
+ * Les morceaux VIDES sont sautés : la variante de FLOWFAST319R n'a pas de nom
+ * et l'article SNLR+P a pour désignation « . » — on écrivait
+ * « KIT FLOWFAST 319 ROAD (45,8 kg) — (. : 2 Kits…) ». Sans nom de variante,
+ * les sous-variantes prennent sa place, sans parenthèses ; sans désignation
+ * lisible, l'article composant n'est pas nommé.
+ */
 export function designationAvecVariante(
   designationBase: string,
   v: Pick<VarianteCompo, 'nom'>,
   /** Sous-variantes retenues : « désignation de l'article composant » + nom de sa variante. */
   sous: { article: string; nom: string }[] = [],
 ): string {
-  const suite = sous.length ? ` (${sous.map(s => `${s.article} : ${s.nom}`).join(' - ')})` : '';
-  return `${designationBase} — ${v.nom}${suite}`;
+  const sousTexte = sous
+    .filter(s => significatif(s.nom) || significatif(s.article))
+    .map(s => significatif(s.article) && significatif(s.nom) ? `${s.article} : ${s.nom}` : (significatif(s.nom) ? s.nom : s.article))
+    .join(' - ');
+  const nom = significatif(v.nom) ? v.nom.trim() : '';
+  if (nom) return `${designationBase} - ${nom}${sousTexte ? ` (${sousTexte})` : ''}`;
+  return sousTexte ? `${designationBase} - ${sousTexte}` : designationBase;
 }
 
 /** Les valeurs d'un `variantesChoisies` destinées à l'affichage (clés internes écartées). */
