@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { designationProduit, formatMontant, type Produit } from '@/lib/store';
 import { prixVarianteCompo, type VarianteCompo } from '@/lib/variantesCompo';
+import NoteRiche from '@/components/NoteRiche';
 
 /**
  * Choix d'une VARIANTE composée à la saisie d'un article dans un devis,
@@ -39,7 +40,7 @@ export default function VarianteCompoDialog({ produit, onChoix, prixDe, dans }: 
             <label key={v.id} className="flex items-start gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:bg-muted/50">
               <input type="radio" name="variante" className="mt-1" checked={choisie === v.id} onChange={() => setChoisie(v.id)} />
               <span className="flex-1 min-w-0">
-                <span className="block text-sm font-medium">{v.nom || 'Variante'}</span>
+                <span className="block text-sm font-medium">{v.nom ? <NoteRiche note={v.nom} /> : 'Variante'}</span>
                 <span className="block text-xs text-muted-foreground">
                   {v.composants.map(c => `${c.quantite} × ${c.description || 'produit'}`).join(' + ')}
                 </span>

@@ -24,7 +24,7 @@ import { useVeilleParProduit } from '@/lib/concurrents';
 import { comparerAuConcurrent } from '@/lib/veilleComparaison';
 import DevisPreview, { parseImgPct } from '@/components/DevisPreview';
 import NoteEditable from '@/components/NoteEditable';
-import { noteEnHtml } from '@/lib/noteRiche';
+import { noteEnHtml, noteEnTexte } from '@/lib/noteRiche';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
@@ -3617,7 +3617,12 @@ export default function Devis() {
                                     )}
                                   </div>
                                 ),
-                                description: <Input data-voice="ligne-desc" data-ligne-id={l.id} value={l.description} onChange={e => updateLigne(l.id, 'description', e.target.value)} className="h-8 text-sm" title={l.description} />,
+                                /* Champ riche : le gras d'un nom de variante y reste visible, et
+                                   sélectionner du texte permet d'en mettre (bouton G). Odoo, lui,
+                                   reçoit le texte sans balises (`noteEnTexte`, odooSync). */
+                                description: <NoteEditable uneLigne value={l.description} onChange={v => updateLigne(l.id, 'description', v)}
+                                  donnees={{ voice: 'ligne-desc', 'ligne-id': l.id }} title={noteEnTexte(l.description)}
+                                  className="text-sm text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />,
                                 surface: <Input type="number" step="0.01" value={l.surfaceM2 || ''} onFocus={e => e.target.select()} onChange={e => {
                                   const surface = parseFloat(e.target.value) || 0;
                                   const quantite = prod && surface > 0 && consoPourSurface(prod, l.consommation) != null ? calcQuantiteSurface(prod, surface, l.consommation, l.unite) : l.quantite;

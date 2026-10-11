@@ -86,9 +86,18 @@ interface Props {
   onPaste?: (e: ClipboardEvent<HTMLDivElement>) => void;
   placeholder?: string;
   id?: string;
+  /** Champ d'UNE ligne (nom de variante, désignation) : Entrée ne crée pas de saut de ligne. */
+  uneLigne?: boolean;
+  /** Remplace l'apparence du champ (sinon : celle d'une note de ligne). */
+  className?: string;
+  title?: string;
+  /** Attributs `data-*` posés sur le champ (ex. `{ voice: 'ligne-desc' }` → `data-voice`). */
+  donnees?: Record<string, string>;
 }
 
-export default function NoteEditable({ value, onChange, onPaste, placeholder, id }: Props) {
+const STYLE_NOTE = 'text-xs text-muted-foreground bg-transparent border border-transparent hover:border-input focus:border-input px-3 py-1 leading-5';
+
+export default function NoteEditable({ value, onChange, onPaste, placeholder, id, uneLigne, className, title, donnees }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const dernier = useRef<string | null>(null);
   const [barre, setBarre] = useState(false);
@@ -159,17 +168,24 @@ export default function NoteEditable({ value, onChange, onPaste, placeholder, id
         contentEditable
         suppressContentEditableWarning
         role="textbox"
-        aria-multiline="true"
+        aria-multiline={uneLigne ? 'false' : 'true'}
+        title={title}
+        {...Object.fromEntries(Object.entries(donnees ?? {}).map(([k, v]) => [`data-${k}`, v]))}
         data-placeholder={placeholder}
         onInput={emettre}
-        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); document.execCommand('insertLineBreak'); } }}
+        onKeyDown={e => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          if (!uneLigne) document.execCommand('insertLineBreak');
+        }}
         onPaste={e => {
           onPaste?.(e);
           if (e.defaultPrevented) return;
           e.preventDefault();
-          document.execCommand('insertText', false, e.clipboardData.getData('text/plain'));
+          const texte = e.clipboardData.getData('text/plain');
+          document.execCommand('insertText', false, uneLigne ? texte.replace(/\s*\n\s*/g, ' ') : texte);
         }}
-        className="w-full min-h-6 whitespace-pre-wrap break-words text-xs text-muted-foreground bg-transparent border border-transparent hover:border-input focus:border-input rounded-md px-3 py-1 outline-none leading-5 empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/60"
+        className={`w-full min-h-6 whitespace-pre-wrap break-words rounded-md outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-muted-foreground/60 ${className ?? STYLE_NOTE}`}
       />
     </div>
   );

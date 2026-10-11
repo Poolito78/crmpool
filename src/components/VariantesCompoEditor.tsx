@@ -1,6 +1,7 @@
 import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { InputNombre } from '@/components/InputNombre';
+import NoteEditable from '@/components/NoteEditable';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
@@ -69,7 +70,9 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
               <span className="mb-1"><BoutonsOrdre index={vIdx} total={variantes.length} onMove={d => onChange(prev => deplacer(prev, vIdx, d))} /></span>
               <div className="flex flex-col gap-0.5 flex-1">
                 <span className="text-xs text-muted-foreground">Nom de la variante (complète la désignation de l'article)</span>
-                <Input value={v.nom} onChange={e => majVariante(v.id, { nom: e.target.value })} placeholder="Ex : avec primaire et finition" className="h-8 text-xs" />
+                {/* Sélectionner du texte fait paraître la barre : G pour le gras (repris dans la ligne de devis). */}
+                <NoteEditable uneLigne value={v.nom} onChange={nom => majVariante(v.id, { nom })} placeholder="Ex : avec primaire et finition"
+                  className="text-xs text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />
               </div>
               <span className="text-xs text-muted-foreground pb-2">Public : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudre))}</strong> · Revendeur : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudreRevendeur))}</strong> HT</span>
               <button

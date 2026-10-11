@@ -8,6 +8,7 @@ import type { Devis, Client, Produit, Contact, LigneDevis } from './store';
 import { couvertureM2 } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
+import { noteEnTexte } from '@/lib/noteRiche';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -112,7 +113,8 @@ function buildLignes(devis: Devis, produits: Produit[]): LigneScript[] {
       const ref = (produit?.referenceOdoo || produit?.reference || l.referenceOdoo || '').trim();
       result.push({
         type: 'product',
-        desc: l.description,
+        // Odoo n'a pas de gras : le texte part sans les balises de mise en forme.
+        desc: noteEnTexte(l.description),
         ref: ref || undefined,
         qty: l.quantite,
         pu: l.prixUnitaireHT,

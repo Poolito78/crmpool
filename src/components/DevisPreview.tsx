@@ -1025,7 +1025,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       <td className="py-1.5 px-2 font-medium align-middle">
                         {/* Description + badge(s) sur la même ligne flex */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-                          <span style={{ whiteSpace: 'nowrap' }}>{l.description}</span>
+                          {/* Le gras posé dans un nom de variante (balises `**`, noteRiche) se rend ici et au PDF. */}
+                          <span style={{ whiteSpace: 'nowrap' }}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
@@ -1253,7 +1254,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       )}
                       <tr className="border-b border-border">
                         <td className={`py-2 ${myGrpS ? 'pl-4' : ''}`}>
-                          <span style={{ whiteSpace: 'nowrap' }}>{l.description}</span>
+                          <span style={{ whiteSpace: 'nowrap' }}>{noteEnTexte(l.description) === l.description ? l.description : <NoteRiche note={l.description} />}</span>
                           {l.variantesChoisies && (() => {
                             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
                             return [...new Set(valeursVisibles(l.variantesChoisies))].sort((a, b) => {
