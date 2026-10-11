@@ -1292,7 +1292,7 @@ export default function Devis() {
   const fileOptions = useRef<{ ligneId: string; produit: Produit }[]>([]);
   const dejaProposes = useRef(new Set<string>());
   function ouvrirChoix(ligneId: string, produit: Produit): boolean {
-    if (produit.typeVariantesCompo && (produit.variantesCompo?.length ?? 0) > 0) { setVariantePour({ ligneId, produit }); return true; }
+    if (produit.typeVariantesCompo && (produit.variantesCompo?.length ?? 0) > 0) { ouvrirVariante({ ligneId, produit }); return true; }
     if (produit.typeOptions && (produit.lignesOptions?.length ?? 0) > 0) { setOptionsPour({ ligneId, produit }); return true; }
     return false;
   }
@@ -1345,8 +1345,19 @@ export default function Devis() {
     };
   }
 
-  function appliquerVarianteCompo(v: VarianteCompo | null) {
-    const cible = variantePour;
+  /**
+   * Ouvre le choix de variante — SAUF s'il n'y a rien à choisir : un article
+   * sans prix de base (0,00 € HT) ne se vend pas « seul », et s'il n'a qu'UNE
+   * variante, c'est elle. Elle est alors retenue directement, sans fenêtre.
+   */
+  function ouvrirVariante(c: { ligneId: string; produit: Produit; racine?: Produit }) {
+    const variantes = c.produit.variantesCompo ?? [];
+    if (!(c.produit.prixHT > 0) && variantes.length === 1) { appliquerVarianteCompo(variantes[0], c); return; }
+    setVariantePour(c);
+  }
+
+  function appliquerVarianteCompo(v: VarianteCompo | null, cibleImposee?: { ligneId: string; produit: Produit; racine?: Produit }) {
+    const cible = cibleImposee ?? variantePour;
     setVariantePour(null);
     if (!cible) return;
     const racine = cible.racine ?? cible.produit;
@@ -1397,7 +1408,7 @@ export default function Devis() {
 
     // Le composant suivant à déplier, s'il en reste : SNLR après 319R.
     const suivant = fileSousVariantes.current.shift();
-    if (suivant) { setVariantePour({ ligneId: cible.ligneId, produit: suivant, racine }); return; }
+    if (suivant) { ouvrirVariante({ ligneId: cible.ligneId, produit: suivant, racine }); return; }
 
     /* LA TEINTE DES COMPOSANTS AVANT LES OPTIONS : le pigment du kit porte les
        220 RAL, l'article de la ligne aucun (voir `dimensionsDesComposants`). */

@@ -20,8 +20,12 @@ interface Props {
 
 export default function VarianteCompoDialog({ produit, onChoix, prixDe, dans }: Props) {
   const variantes = produit?.variantesCompo ?? [];
+  /* Sans prix de base (0,00 € HT), l'article ne se vend pas seul : « Article seul »
+     n'est pas proposé, et la première variante est présélectionnée. (Avec une seule
+     variante, le devis la retient sans ouvrir cette fenêtre.) */
+  const seulVendable = !!produit && produit.prixHT > 0;
   const [choisie, setChoisie] = useState<string>('');
-  useEffect(() => { setChoisie(''); }, [produit?.id]);
+  useEffect(() => { setChoisie(seulVendable ? '' : (produit?.variantesCompo?.[0]?.id ?? '')); }, [produit?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Dialog open={!!produit} onOpenChange={o => { if (!o) onChoix(null); }}>
@@ -31,11 +35,13 @@ export default function VarianteCompoDialog({ produit, onChoix, prixDe, dans }: 
           {dans && <p className="text-xs text-muted-foreground">Composant de {dans} : la variante retenue entre dans son prix et son intitulé.</p>}
         </DialogHeader>
         <div className="space-y-1.5 max-h-[50vh] overflow-y-auto">
-          <label className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:bg-muted/50">
-            <input type="radio" name="variante" checked={choisie === ''} onChange={() => setChoisie('')} />
-            <span className="flex-1 text-sm font-medium">Article seul</span>
-            {produit && <span className="text-xs text-muted-foreground">{formatMontant(produit.prixHT)} HT</span>}
-          </label>
+          {seulVendable && (
+            <label className="flex items-center gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:bg-muted/50">
+              <input type="radio" name="variante" checked={choisie === ''} onChange={() => setChoisie('')} />
+              <span className="flex-1 text-sm font-medium">Article seul</span>
+              {produit && <span className="text-xs text-muted-foreground">{formatMontant(produit.prixHT)} HT</span>}
+            </label>
+          )}
           {variantes.map(v => (
             <label key={v.id} className="flex items-start gap-3 rounded-lg border border-border px-3 py-2 cursor-pointer hover:bg-muted/50">
               <input type="radio" name="variante" className="mt-1" checked={choisie === v.id} onChange={() => setChoisie(v.id)} />
