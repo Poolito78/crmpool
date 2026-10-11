@@ -2113,7 +2113,7 @@ export default function Produits() {
                 const nbOptionsDim = variantes.reduce((t, d) => t + d.options.length, 0);
                 const contenu: Record<string, { n: number; detail: string }> = {
                   paliers: { n: paliersPrix.length, detail: pl(paliersPrix.length, 'palier') },
-                  variantes: { n: nbOptionsDim, detail: `${pl(variantes.length, 'dimension')} · ${pl(nbOptionsDim, 'option')}` },
+                  variantes: { n: variantes.length, detail: `${pl(variantes.length, 'dimension')} · ${pl(nbOptionsDim, 'option')}` },
                   compose: { n: composants.length, detail: pl(composants.length, 'composant') },
                   kit: { n: isTypeKit ? lignesKit.length : 0, detail: pl(lignesKit.length, 'ligne') },
                   variantesCompo: { n: isTypeVariantesCompo ? variantesCompo.length : 0, detail: pl(variantesCompo.length, 'variante') },
