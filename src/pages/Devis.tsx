@@ -1059,6 +1059,30 @@ export default function Devis() {
     });
   }
 
+  /* Une ligne à VARIANTE COMPOSÉE garde toujours sa teinte (RAL…) inscrite : celle que
+     l'écran montrait par défaut (la première option) n'était pas enregistrée sur certaines
+     lignes, et le choix « sautait » dès qu'une autre ligne était ajoutée. On l'inscrit une
+     fois : le prix ne change pas (la première option est déjà celle du calcul). */
+  useEffect(() => {
+    const manque = (l: LigneDevis) => {
+      if (!l.produitId || !l.variantesChoisies?.[CLE_COMPO]) return false;
+      const dims = produitParId(produits, l.produitId)?.variantes ?? [];
+      return dims.some(d => d.options.length > 0 && !l.variantesChoisies?.[d.id]);
+    };
+    if (!lignes.some(manque)) return;
+    setLignes(prev => prev.map(l => {
+      if (!manque(l)) return l;
+      const dims = produitParId(produits, l.produitId!)?.variantes ?? [];
+      return {
+        ...l,
+        variantesChoisies: {
+          ...Object.fromEntries(dims.filter(d => d.options.length > 0 && !l.variantesChoisies?.[d.id]).map(d => [d.id, d.options[0].label])),
+          ...l.variantesChoisies,
+        },
+      };
+    }));
+  }, [lignes, produits]);
+
   function addLigne() {
     saveSnapshot();
     const id = generateId();
