@@ -3996,6 +3996,8 @@ export default function Devis() {
                                 trouver={id => produitParId(produits, id)}
                                 produits={produits}
                                 canAchat={canAchat}
+                                detailMasque={!!l.detailMasque}
+                                onAfficherDetail={() => updateLigne(l.id, 'detailMasque', undefined)}
                                 onChange={vc => {
                                   const client = clients.find(c => c.id === clientId);
                                   // Un seul calcul : celui de toutes les relectures de prix (getPrixLigne).

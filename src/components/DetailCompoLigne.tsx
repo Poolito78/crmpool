@@ -34,11 +34,15 @@ interface Props {
   /** Droit Achat : prix d'achat et coefficients. */
   canAchat: boolean;
   onChange: (variantesChoisies: Record<string, string>) => void;
+  /** L'œil de la LIGNE est fermé : rien du détail ne s'imprime, quels que soient les yeux des composants. */
+  detailMasque?: boolean;
+  /** Rouvre l'œil de la ligne. */
+  onAfficherDetail?: () => void;
 }
 
 const fmtQ = (n: number) => String(Math.round(n * 1000) / 1000).replace('.', ',');
 
-export default function DetailCompoLigne({ variante, quantiteLigne, variantesChoisies, resoudre, trouver, produits, canAchat, onChange }: Props) {
+export default function DetailCompoLigne({ variante, quantiteLigne, variantesChoisies, resoudre, trouver, produits, canAchat, onChange, detailMasque, onAfficherDetail }: Props) {
   const detail = detailCompo(variante, resoudre, trouver, variantesChoisies, prixForces(variantesChoisies));
   const perso = composantsPersonnalises(variantesChoisies);
   // Imprimé sur le devis ? Par défaut, les seuls composants modifiés (composition propre).
@@ -57,6 +61,17 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
 
   return (
     <div className="mt-1 ml-9 rounded-md border border-border bg-background/70 text-xs overflow-x-auto">
+      {/* L'œil de la ligne l'emporte sur tout : on le dit, au lieu de laisser des yeux ouverts qui mentent. */}
+      {detailMasque && (
+        <div className="flex items-center justify-between gap-2 px-2 py-1 border-b border-border bg-muted">
+          <span className="inline-flex items-center gap-1 text-muted-foreground"><EyeOff className="w-3.5 h-3.5" /> Tout ce détail est masqué sur le devis et le PDF (œil de la ligne).</span>
+          {onAfficherDetail && (
+            <button type="button" onClick={onAfficherDetail} className="inline-flex items-center gap-1 text-primary hover:underline shrink-0">
+              <Eye className="w-3.5 h-3.5" /> Afficher sur le devis
+            </button>
+          )}
+        </div>
+      )}
       {perso && (
         <div className="flex items-center justify-between gap-2 px-2 py-1 border-b border-border bg-orange-50 dark:bg-orange-950/20">
           <span className="text-orange-700 dark:text-orange-400">Composition propre à cette ligne — elle ne suit plus la variante de la fiche article.</span>
@@ -88,7 +103,8 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
             const coeff = achat ? d.prixUnitaire * d.facteurRemise / achat : null;
             const dims = (d.produit?.variantes ?? []).filter(x => x.options.length > 0);
             const teinteRow = (d.composant as ComposantLigne).teinte;
-            const masque = !visibles[i];
+            // Œil de la ligne fermé : tout est masqué sur le devis, l'œil du composant le montre.
+            const masque = !!detailMasque || !visibles[i];
             return (
               <tr key={d.cle} className={`border-b border-border/50 last:border-0 align-top ${masque ? 'opacity-50' : ''}`}>
                 <td className="px-2 py-1" style={{ paddingLeft: 8 + d.profondeur * 14 }}>
@@ -158,8 +174,9 @@ export default function DetailCompoLigne({ variante, quantiteLigne, variantesCho
                     {/* L'œil du composant : il reste dans le prix, mais sort du devis imprimé et du PDF. */}
                     <button type="button"
                       title={masque ? 'Masqué sur le devis et le PDF (compté dans le prix) — cliquer pour l\'afficher' : 'Visible sur le devis et le PDF — cliquer pour le masquer'}
-                      // Choix explicite : il l'emporte sur la règle « seuls les modifiés ».
-                      onClick={() => majRow(i, { masque: !masque })}
+                      /* Choix explicite : il l'emporte sur la règle « seuls les modifiés ». Afficher un
+                         composant rouvre aussi l'œil de la ligne — sinon il resterait invisible. */
+                      onClick={() => { majRow(i, { masque: !masque }); if (masque && detailMasque) onAfficherDetail?.(); }}
                       className={masque ? 'text-muted-foreground/60 hover:text-foreground' : 'text-primary hover:text-primary/80'}>
                       {masque ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                     </button>
