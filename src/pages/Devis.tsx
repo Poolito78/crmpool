@@ -3383,14 +3383,12 @@ export default function Devis() {
                               const validIds = new Set(prod.variantes!.map(d => d.id));
                               const cleaned = Object.fromEntries(Object.entries(li.variantesChoisies || {}).filter(([k]) => validIds.has(k) || k.startsWith('__')));
                               const variantesChoisies = { ...cleaned, [dim.id]: label };
-                              const totalDiff = prod.variantes!.reduce((sum, d) => {
-                                const chosenLabel = d.id === dim.id ? label : (li.variantesChoisies?.[d.id] ?? d.options[0]?.label);
-                                const o = d.options.find(x => x.label === chosenLabel);
-                                return sum + (o?.prixDiff ?? 0);
-                              }, 0);
                               const client = clients.find(c => c.id === clientId);
-                              const basePrix = prixDeBase(prod, li.quantite, client?.estRevendeur);
-                              return { ...li, variantesChoisies, prixUnitaireHT: Math.round((basePrix + totalDiff) * 100) / 100 };
+                              /* Un seul calcul du prix d'une ligne : il connaît les ajustements de variantes
+                                 ET la variante composée (dont le prix suit celui de ses articles, au tarif
+                                 revendeur du client). Le recalculer à part faisait retomber la ligne sur le
+                                 prix public de l'article. */
+                              return { ...li, variantesChoisies, prixUnitaireHT: getPrixLigne(prod, li.quantite, variantesChoisies, client?.estRevendeur) };
                             }));
                           }}
                         />
