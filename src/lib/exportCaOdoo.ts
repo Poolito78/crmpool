@@ -5,7 +5,8 @@ import type { CaOdooData, CaMois, CaFlooringQuartz } from '@/lib/caOdoo';
 //
 // Reprend, onglet par onglet, ce que la tuile affiche : marques, réalisé
 // mensuel, puis « CA ISOFLOOR » — le tableau croisé Flooring & Quartz d'Odoo
-// (commerciaux × mois) suivi du CA national hors FM.
+// (commerciaux × mois) suivi du CA national hors FM — et « Rémunération FM »
+// (hors FM × TAUX_REMUNERATION_FM, en formule).
 //
 // ⚠️ ON NE RECALCULE RIEN. Les montants sont ceux du jeu publié par
 // `ca-refresh` ; seuls les cumuls de colonnes sont refaits, par simple somme
@@ -108,11 +109,46 @@ function ongletIsofloor(fq: CaFlooringQuartz | null) {
   return feuille(lignes, [40, ...fq.mois.map(() => 15), 16]);
 }
 
+/**
+ * Taux de rémunération de François MOUHOT sur le CA Flooring & Quartz national
+ * hors FM : 1 % (règle du 11/10/2026, d'abord annoncée à 2 % puis corrigée —
+ * 5 910,51 € en septembre → 59,11 €).
+ */
+export const TAUX_REMUNERATION_FM = 0.01;
+
+/**
+ * Récap mensuel : Total Flooring & Quartz, part F. MOUHOT, CA national hors FM
+ * et rémunération brute = hors FM × TAUX_REMUNERATION_FM. La rémunération part en FORMULE
+ * (`=D×taux`) : corriger un montant dans l'Excel la recalcule. Un mois au hors
+ * FM négatif (avoirs) donne une rémunération négative — on ne la plafonne pas,
+ * c'est au lecteur d'en décider.
+ */
+function ongletRemuneration(fq: CaFlooringQuartz | null) {
+  if (!fq || 'erreur' in fq) {
+    const raison = fq && 'erreur' in fq ? fq.erreur : 'relancer l\'actualisation.';
+    return feuille([['Rémunération FM — Flooring & Quartz'], [`Récap indisponible : ${raison}`]], [90]);
+  }
+  const debut = 4; // première ligne de mois (numérotation Excel)
+  const fin = debut + fq.mois.length - 1;
+  const lignes: Cellule[][] = [
+    [`Détail ISOFLOOR / quartz & granit par mois — ${fq.annee}, du 01/01 au ${fq.cutoff.split('-').reverse().join('/')}`],
+    [],
+    ['Mois', 'Total isofloor', 'F. MOUHOT', 'Hors FM CA NATIONAL', `RÉMUNÉRATION BRUT FM (${TAUX_REMUNERATION_FM * 100} %)`],
+    ...fq.mois.map(m => [NOMS_MOIS[m.mois - 1], m.total, m.fm, m.hors_fm, m.hors_fm * TAUX_REMUNERATION_FM] as Cellule[]),
+    ['Cumul', ...[1, 2, 3, 4].map(j => fq.mois.reduce((a, m) => a + [m.total, m.fm, m.hors_fm, m.hors_fm * TAUX_REMUNERATION_FM][j - 1], 0))],
+  ];
+  const ws = feuille(lignes, [14, 18, 18, 22, 30]);
+  for (let r = debut; r <= fin; r++) (ws[`E${r}`] as XLSX.CellObject).f = `D${r}*${TAUX_REMUNERATION_FM}`;
+  for (const col of ['B', 'C', 'D', 'E']) (ws[`${col}${fin + 1}`] as XLSX.CellObject).f = `SUM(${col}${debut}:${col}${fin})`;
+  return ws;
+}
+
 /** Télécharge le classeur de la tuile CA Odoo. */
 export function exporterCaOdoo(d: CaOdooData) {
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ongletMarques(d), 'Marques');
   XLSX.utils.book_append_sheet(wb, ongletMensuel(d), 'Réalisé mensuel');
   XLSX.utils.book_append_sheet(wb, ongletIsofloor(d.flooringQuartz), 'CA ISOFLOOR');
+  XLSX.utils.book_append_sheet(wb, ongletRemuneration(d.flooringQuartz), 'Rémunération FM');
   XLSX.writeFile(wb, `CA_Odoo_${d.cutoff ?? new Date().toISOString().slice(0, 10)}.xlsx`);
 }
