@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Loader2 } from 'lucide-react';
+import { TrendingUp, ExternalLink, ChevronDown, ChevronRight, RefreshCw, Loader2, Download } from 'lucide-react';
+import { exporterCaOdoo } from '@/lib/exportCaOdoo';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { formatMontant } from '@/lib/store';
@@ -605,6 +606,9 @@ export default function CaOdooPanel() {
             {actualisation
               ? <><Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> Actualisation… {secondes > 0 && `${secondes} s`}</>
               : <><RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Actualiser</>}
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => exporterCaOdoo(data)} disabled={actualisation}>
+            <Download className="w-3.5 h-3.5 mr-1.5" /> Extraire vers Excel
           </Button>
           <a
             href={CA_ODOO_URL}
