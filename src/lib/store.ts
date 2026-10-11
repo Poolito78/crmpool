@@ -555,6 +555,14 @@ export interface LigneDevis {
   qteMode?: 'surface' | 'chantier' | 'manuel';
   /** Usage de la consommation retenue sur la ligne, quand elle vient de la liste de l'article (« Primaire »). */
   consoUsage?: string;
+  /**
+   * Ligne de CATALYSEUR (CATALYST2) : température du chantier, en °C, parmi
+   * celles du tableau ISOFLOOR (`catalyseur.ts`). Absente = 20 °C. La quantité
+   * s'en déduit, d'après la résine Flowfast du devis.
+   */
+  temperatureCatalyse?: number;
+  /** Quantité de catalyseur saisie à la main : le calcul automatique ne la réécrit plus. */
+  catalyseManuelle?: boolean;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

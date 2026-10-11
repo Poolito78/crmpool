@@ -30,6 +30,10 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
+import {
+  calculerCatalyse, estCatalyseur, estTemperatureCatalyse, LIBELLE_FAMILLE, pourcentageCatalyse,
+  TEMPERATURES_CATALYSE, TEMPERATURE_PAR_DEFAUT,
+} from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
@@ -1084,6 +1088,27 @@ export default function Devis() {
         },
       };
     }));
+  }, [lignes, produits]);
+
+  /* LE CATALYSEUR SE CALCULE (catalyseur.ts) : la résine Flowfast du devis ×
+     le dosage à la température de la ligne → contenants entiers. Recalculé à
+     chaque changement de résine ou de température, sauf quantité forcée à la
+     main (`catalyseManuelle`). Rien n'est réécrit quand aucune résine n'a pu
+     être comptée : un 0 « calculé » sur un devis à vérifier serait faux. */
+  useEffect(() => {
+    const trouver = (id: string) => produitParId(produits, id);
+    let change = false;
+    const suivantes = lignes.map(l => {
+      if (!l.produitId || l.catalyseManuelle || l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return l;
+      const p = trouver(l.produitId);
+      if (!estCatalyseur(p)) return l;
+      const t = estTemperatureCatalyse(l.temperatureCatalyse) ? l.temperatureCatalyse : TEMPERATURE_PAR_DEFAUT;
+      const c = calculerCatalyse(lignes, trouver, t, p!.poids);
+      if (c.quantite == null || c.resines.length === 0 || c.quantite === l.quantite) return l;
+      change = true;
+      return { ...l, quantite: c.quantite };
+    });
+    if (change) setLignes(suivantes);
   }, [lignes, produits]);
 
   function addLigne() {
@@ -3563,6 +3588,24 @@ export default function Devis() {
                       setTeinteEdit(null);
                     };
 
+                    /* Ligne de CATALYSEUR : la température du chantier commande la quantité
+                       (catalyseur.ts). Changer la température repasse la quantité en automatique. */
+                    const estCata = estCatalyseur(prod);
+                    const tempCata = estTemperatureCatalyse(l.temperatureCatalyse) ? l.temperatureCatalyse : TEMPERATURE_PAR_DEFAUT;
+                    const calcCata = estCata ? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, prod!.poids) : null;
+                    const temperatureEl = estCata ? (
+                      <div className="shrink-0 w-[96px]">
+                        <span className="text-xs truncate block text-muted-foreground">T° chantier</span>
+                        <Select value={String(tempCata)} onValueChange={v => setLignes(prev => prev.map(li => li.id === l.id
+                          ? { ...li, temperatureCatalyse: Number(v), catalyseManuelle: undefined } : li))}>
+                          <SelectTrigger className="h-8 text-sm" title="Température du chantier : le dosage de catalyseur en dépend (fiche ISOFLOOR Flowfast CATALYST C2)"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {TEMPERATURES_CATALYSE.map(tc => <SelectItem key={tc} value={String(tc)}>{tc > 0 ? `+${tc}` : tc} °C</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : null;
+
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
                     const variantEls = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
                       <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
@@ -3690,6 +3733,8 @@ export default function Devis() {
                                 poids: <Input value={prod?.poids ? `${prod.poids}` : '—'} readOnly className="h-8 text-sm bg-muted/50" />,
                                 qte: <Input data-voice="ligne-qte" data-ligne-id={l.id} type="number" value={l.quantite || ''} onFocus={e => e.target.select()} onChange={e => {
                                   updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
+                                  // Catalyseur forcé à la main : le calcul à la température ne le réécrit plus.
+                                  if (estCata) updateLigne(l.id, 'catalyseManuelle', true);
                                   // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
                                   if (hasAutoCalc) setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, qteMode: 'manuel' as const } : li)));
                                 }} className="h-8 text-sm" title={hasAutoCalc ? 'Quantité modifiable : la forcer passe la ligne en « Qté manuel » ; cliquer sur le libellé la recalcule.' : undefined} />,
@@ -3768,9 +3813,16 @@ export default function Devis() {
                                   <div className="w-48 shrink-0"><Label className="text-xs">Réf.</Label>{cell.ref}</div>
                                   <div className="flex-1 min-w-[120px]"><Label className="text-xs">Description</Label>{cell.description}</div>
                                   {variantEls}
+                                  {temperatureEl}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
                                     <div key={c.key} style={{ width: c.key === 'conso' && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.width }} className="shrink-0">
-                                      {c.key === 'qte' && hasAutoCalc ? (
+                                      {c.key === 'qte' && estCata ? (
+                                        <button type="button" onClick={() => updateLigne(l.id, 'catalyseManuelle', undefined)}
+                                          className="text-xs font-medium text-primary hover:underline text-left"
+                                          title="Quantité calculée d'après la résine du devis et la température. La saisir à la main la fige ; cliquer ici la recalcule.">
+                                          {l.catalyseManuelle ? 'Qté manuel' : 'Qté auto'}
+                                        </button>
+                                      ) : c.key === 'qte' && hasAutoCalc ? (
                                         <button type="button" onClick={() => basculerQteAuto(l.id)} className="text-xs font-medium text-primary hover:underline text-left"
                                           title="Clic : recalcule à la surface de la ligne. Re-clic : au besoin cumulé du chantier (0 si l'article est déjà porté par une autre ligne).">
                                           {labels[c.key]}
@@ -3790,8 +3842,8 @@ export default function Devis() {
                               );
                             })()}
                             {/* Variantes en sous-ligne (mode tableau) */}
-                            {lignesView === 'tableau' && variantEls && (
-                              <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}</div>
+                            {lignesView === 'tableau' && (variantEls || temperatureEl) && (
+                              <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}{temperatureEl}</div>
                             )}
                             {/* Note */}
                             <div className="mt-1 pl-9">
@@ -3834,6 +3886,29 @@ export default function Devis() {
                                     <Pencil className="w-3 h-3 opacity-50" />
                                   </button>
                                 ))}
+                                {/* Le calcul du catalyseur, en clair — et ce qu'il n'a pas su compter. */}
+                                {calcCata && (() => {
+                                  const kgResine = Math.round(calcCata.resines.reduce((s, r) => s + r.kg, 0) * 100) / 100;
+                                  const detail = calcCata.resines.map(r =>
+                                    `${r.origine} : ${Math.round(r.kg * 100) / 100} kg ${LIBELLE_FAMILLE[r.famille]} à ${String(pourcentageCatalyse(r.famille, tempCata)).replace('.', ',')} %`).join('\n');
+                                  return (
+                                    <>
+                                      <span className="font-medium text-foreground" title={detail || undefined}>
+                                        {calcCata.resines.length === 0
+                                          ? `Catalyse à ${tempCata} °C : aucune résine Flowfast comptée`
+                                          : `Catalyse à ${tempCata} °C : ${String(kgResine).replace('.', ',')} kg de résine → ${String(calcCata.kgCatalyseur).replace('.', ',')} kg → ${calcCata.quantite ?? '?'} × ${prod?.poids ?? '?'} kg`}
+                                        {l.catalyseManuelle && calcCata.quantite != null && calcCata.quantite !== l.quantite && (
+                                          <span className="text-orange-500"> (calcul : {calcCata.quantite}, quantité forcée à la main)</span>
+                                        )}
+                                      </span>
+                                      {calcCata.aVerifier.length > 0 && (
+                                        <span className="text-amber-600" title={calcCata.aVerifier.join('\n')}>
+                                          À vérifier, non compté : {calcCata.aVerifier.join(', ')}
+                                        </span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                                 {/* Stock Odoo : jamais deviné. Sans lecture, on le dit. */}
                                 {prod && (prod.stockOdoo == null ? (
                                   <span className="text-muted-foreground/70" title={`Aucun stock Odoo connu pour « ${prod.referenceOdoo || prod.reference} » : la référence diffère peut-être chez Odoo (champ « Référence Odoo » de la fiche article).`}>
