@@ -17,7 +17,12 @@ interface Props {
 export default function OptionsArticleDialog({ produit, onConfirm, onCancel }: Props) {
   const options = produit?.lignesOptions ?? [];
   const [cochees, setCochees] = useState<Set<number>>(new Set());
-  useEffect(() => { setCochees(new Set()); }, [produit?.id]);
+  /* Le mode de chaque option : celui de la fiche article, modifiable ici. */
+  const [inclus, setInclus] = useState<Set<number>>(new Set());
+  useEffect(() => {
+    setCochees(new Set());
+    setInclus(new Set((produit?.lignesOptions ?? []).flatMap((o, i) => (o.inclusALaLigne ? [i] : []))));
+  }, [produit?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const bascule = (i: number) =>
     setCochees(prev => { const s = new Set(prev); if (s.has(i)) s.delete(i); else s.add(i); return s; });
@@ -35,15 +40,23 @@ export default function OptionsArticleDialog({ produit, onConfirm, onCancel }: P
               <span className="flex-1 min-w-0">
                 <span className="block text-sm font-medium truncate">{o.description || 'Option'}</span>
                 <span className="block text-xs text-muted-foreground">
-                  {o.quantite} {o.unite} · {formatMontant(o.prixUnitaireHT)} HT{o.remise ? ` · remise ${o.remise} %` : ''}
+                  {inclus.has(i) ? 'incluse à la ligne, non chiffrée' : `${o.quantite} ${o.unite} · ${formatMontant(o.prixUnitaireHT)} HT${o.remise ? ` · remise ${o.remise} %` : ''}`}
                 </span>
               </span>
+              {cochees.has(i) && (
+                <button
+                  type="button"
+                  onClick={e => { e.preventDefault(); setInclus(prev => { const n = new Set(prev); if (n.has(i)) n.delete(i); else n.add(i); return n; }); }}
+                  className="text-[11px] rounded-full border border-primary/40 bg-primary/10 text-primary px-2 py-0.5 shrink-0"
+                  title="Basculer entre ligne en plus (chiffrée) et incluse à la ligne (non chiffrée)"
+                >{inclus.has(i) ? 'Incluse' : 'Ligne en plus'}</button>
+              )}
             </label>
           ))}
         </div>
         <div className="flex justify-between gap-2 pt-1">
           <Button variant="outline" onClick={onCancel}>Sans option</Button>
-          <Button onClick={() => onConfirm(options.filter((_, i) => cochees.has(i)))} disabled={cochees.size === 0}>
+          <Button onClick={() => onConfirm(options.flatMap((o, i) => (cochees.has(i) ? [{ ...o, inclusALaLigne: inclus.has(i) ? true : undefined }] : [])))} disabled={cochees.size === 0}>
             Ajouter {cochees.size > 0 ? `${cochees.size} option${cochees.size > 1 ? 's' : ''}` : 'les options'}
           </Button>
         </div>

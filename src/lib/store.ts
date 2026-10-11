@@ -171,6 +171,8 @@ export interface LigneKit {
   note?: string;
   /** Variantes composées : prix saisi à la main, qui ne suit plus le prix de l'article. */
   prixFige?: boolean;
+  /** Options : `true` = incluse à la ligne de l'article, NON chiffrée ; absent = ligne en plus, chiffrée. */
+  inclusALaLigne?: boolean;
 }
 
 /** Une consommation d'un article pour un usage précis (« Primaire », « Finition »…), en plus de la consommation par défaut. */

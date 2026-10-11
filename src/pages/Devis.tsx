@@ -1206,7 +1206,12 @@ export default function Devis() {
   function insererOptions(ligneId: string, choisies: NonNullable<Produit['lignesOptions']>) {
     if (choisies.length === 0) { setOptionsPour(null); return; }
     saveSnapshot();
-    const nouvelles: LigneDevis[] = choisies.map(lk => ({
+    /* Deux façons de prendre une option :
+       - LIGNE EN PLUS : une ligne chiffrée sous l'article ;
+       - INCLUSE À LA LIGNE : non chiffrée, elle complète la désignation de l'article. */
+    const enPlus = choisies.filter(lk => !lk.inclusALaLigne);
+    const incluses = choisies.filter(lk => lk.inclusALaLigne);
+    const nouvelles: LigneDevis[] = enPlus.map(lk => ({
       id: generateId(),
       produitId: lk.produitId || undefined,
       description: lk.description,
@@ -1219,12 +1224,19 @@ export default function Devis() {
       note: lk.note,
     }));
     setLignes(prev => {
-      const i = prev.findIndex(l => l.id === ligneId);
-      if (i < 0) return [...prev, ...nouvelles];
-      return [...prev.slice(0, i + 1), ...nouvelles, ...prev.slice(i + 1)];
+      const complete = incluses.length > 0
+        ? prev.map(l => l.id === ligneId ? { ...l, description: `${l.description} + ${incluses.map(o => o.description).join(' + ')}` } : l)
+        : prev;
+      const i = complete.findIndex(l => l.id === ligneId);
+      if (i < 0) return [...complete, ...nouvelles];
+      return [...complete.slice(0, i + 1), ...nouvelles, ...complete.slice(i + 1)];
     });
     setOptionsPour(null);
-    toast.success(`${choisies.length} option${choisies.length > 1 ? 's' : ''} ajoutée${choisies.length > 1 ? 's' : ''} au devis.`);
+    const morceaux = [
+      enPlus.length > 0 ? `${enPlus.length} ligne${enPlus.length > 1 ? 's' : ''} chiffrée${enPlus.length > 1 ? 's' : ''}` : '',
+      incluses.length > 0 ? `${incluses.length} incluse${incluses.length > 1 ? 's' : ''} à la ligne` : '',
+    ].filter(Boolean).join(' et ');
+    toast.success(`Options ajoutées : ${morceaux}.`);
   }
 
   function insertKit(kitProd: Produit) {

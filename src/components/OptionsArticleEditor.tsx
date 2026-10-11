@@ -1,6 +1,7 @@
 import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import ProduitCombobox from '@/components/ProduitCombobox';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
 import { designationProduit, type LigneKit, type Produit } from '@/lib/store';
@@ -92,6 +93,16 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
             <div className="flex flex-col gap-0.5 w-16">
               <span className="text-xs text-muted-foreground">Unité</span>
               <Input value={lk.unite} onChange={e => maj(idx, { unite: e.target.value })} className="text-xs h-7" />
+            </div>
+            <div className="flex flex-col gap-0.5 w-40">
+              <span className="text-xs text-muted-foreground">Dans le devis</span>
+              <Select value={lk.inclusALaLigne ? 'inclus' : 'ligne'} onValueChange={v => maj(idx, { inclusALaLigne: v === 'inclus' ? true : undefined })}>
+                <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ligne">Ligne en plus (chiffrée)</SelectItem>
+                  <SelectItem value="inclus">Incluse à la ligne (non chiffrée)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="flex flex-col gap-0.5 w-20">
               <span className="text-xs text-muted-foreground">Prix HT</span>
