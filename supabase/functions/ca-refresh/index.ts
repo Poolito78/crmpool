@@ -683,7 +683,12 @@ async function extraireFlooringQuartz(ctx: Pick<CtxOdoo, "odoo" | "categName">, 
   if (!(mesure in champs)) throw new Error("mesure « Total HT » introuvable sur l'analyse des factures.");
 
   // Deux domaines bien formés mis bout à bout se combinent en ET.
+  // ⚠️ Factures et avoirs CLIENTS seulement : le favori ne porte pas ce filtre,
+  // c'est le menu « Analyse des factures » qui l'impose. Sans lui, les factures
+  // FOURNISSEURS des mêmes articles (achats de résine, de quartz) entrent en
+  // négatif sous « Sans commercial » — −166 068,75 € constatés le 11/10/2026.
   const domaine = [
+    ["move_type", "in", ["out_invoice", "out_refund"]],
     ["invoice_date", ">=", `${annee}-01-01`],
     ["invoice_date", "<=", today],
     ...domaineFavori,

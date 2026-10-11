@@ -429,12 +429,58 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
   return (
     <section className="space-y-3 border-t border-border pt-4">
       <h3 className="text-sm font-semibold">
-        Flooring & Quartz {fq.annee} — tous commerciaux, puis hors F. MOUHOT{' '}
+        Analyse des factures Flooring & Quartz {fq.annee} — tous commerciaux{' '}
         <span className="font-normal text-muted-foreground text-xs">
-          — national hors IDF Nord, du 01/01 au {formatJour(fq.cutoff)}
+          — Total HT du 01/01 au {formatJour(fq.cutoff)}, et CA national hors FM (hors IDF Nord)
         </span>
       </h3>
+      {/* Le tableau croisé d'Odoo à l'identique — commerciaux en lignes, mois
+          en colonnes, Total en tête — puis, en complément, le CA national hors
+          FM : Total − François MOUHOT, mois par mois. */}
       <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-muted-foreground">
+              <th className="py-2 pr-3 font-medium text-left" />
+              {fq.mois.map(m => (
+                <th key={m.mois} className="py-2 px-2 font-medium text-right whitespace-nowrap">
+                  {NOM_MOIS[m.mois - 1]?.toLowerCase()} {fq.annee}
+                  {m.mois === dernierMois && jour ? <span className="font-normal text-xs"> (au {jour})</span> : null}
+                </th>
+              ))}
+              <th className="py-2 pl-2 font-medium text-right">Total HT</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr className="border-b border-border font-semibold bg-muted/40">
+              <td className="py-2 pr-3">Total</td>
+              {fq.mois.map(m => <td key={m.mois} className="py-2 px-2 text-right tabular-nums whitespace-nowrap">{formatMontant(m.total)}</td>)}
+              <td className="py-2 pl-2 text-right tabular-nums whitespace-nowrap">{formatMontant(cumul.total)}</td>
+            </tr>
+            {fq.commerciaux.map(c => (
+              <tr key={c.id ?? 'aucun'} className={`border-b border-border/50 ${c.fm ? 'font-medium' : ''}`}>
+                <td className="py-1.5 pr-3 whitespace-nowrap">{c.nom}</td>
+                {c.mois.map((v, i) => (
+                  <td key={i} className="py-1.5 px-2 text-right tabular-nums whitespace-nowrap">{v ? formatMontant(v) : ''}</td>
+                ))}
+                <td className="py-1.5 pl-2 text-right tabular-nums font-semibold whitespace-nowrap">{formatMontant(c.total)}</td>
+              </tr>
+            ))}
+            <tr className="font-bold text-primary bg-primary/5 border-t-2 border-primary/40">
+              <td className="py-2 pr-3 whitespace-nowrap">
+                CA national hors FM
+                <span className="block text-[10.5px] font-normal text-muted-foreground">Total − François MOUHOT</span>
+              </td>
+              {fq.mois.map(m => <td key={m.mois} className="py-2 px-2 text-right tabular-nums whitespace-nowrap">{formatMontant(m.hors_fm)}</td>)}
+              <td className="py-2 pl-2 text-right tabular-nums whitespace-nowrap">{formatMontant(cumul.hors_fm)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer font-medium py-1">Détail ISOFLOOR / quartz & granit par mois</summary>
+      <div className="overflow-x-auto mt-1">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border text-muted-foreground text-left">
@@ -479,33 +525,6 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
           </tbody>
         </table>
       </div>
-
-      <details className="text-xs">
-        <summary className="cursor-pointer font-medium py-1">Par commercial ({fq.commerciaux.length})</summary>
-        <div className="overflow-x-auto mt-1">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-border text-muted-foreground text-left">
-                <th className="py-1.5 pr-2 font-medium">Commercial</th>
-                {fq.mois.map(m => (
-                  <th key={m.mois} className="py-1.5 px-2 font-medium text-right">{NOM_MOIS[m.mois - 1]?.slice(0, 4)}.</th>
-                ))}
-                <th className="py-1.5 pl-2 font-medium text-right">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {fq.commerciaux.map(c => (
-                <tr key={c.id ?? 'aucun'} className={`border-b border-border/50 ${c.fm ? 'text-muted-foreground' : ''}`}>
-                  <td className="py-1 pr-2 whitespace-nowrap">{c.nom}{c.fm && ' (déduit)'}</td>
-                  {c.mois.map((v, i) => (
-                    <td key={i} className="py-1 px-2 text-right tabular-nums">{v ? formatMontant(v) : ''}</td>
-                  ))}
-                  <td className="py-1 pl-2 text-right tabular-nums font-medium">{formatMontant(c.total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </details>
 
       <details className="text-xs">
@@ -523,11 +542,11 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
       <p className="text-xs text-muted-foreground leading-relaxed">
         Périmètre = favori Odoo <b className="text-foreground">« {fq.favori} »</b>
         {fq.favori_proprietaire ? ` (${fq.favori_proprietaire})` : ''}, relu à chaque actualisation ;
-        montants « Total HT » de l'analyse des factures, avoirs déduits, {fq.nb_lignes} lignes.
-        ISOFLOOR = catégories « ISOMARK / FLOORING », le reste du favori est compté en quartz & granit.{' '}
-        <b className="text-foreground">Hors FM</b> = total de tous les commerciaux − factures de
-        François MOUHOT : le national hors IDF Nord. Les colonnes en italique sont déjà comprises dans
-        le hors FM.
+        montants « Total HT » des factures et avoirs clients (avoirs déduits), {fq.nb_lignes} lignes.{' '}
+        <b className="text-foreground">CA national hors FM</b> = Total de tous les commerciaux − factures
+        de François MOUHOT : le national hors IDF Nord. Dans le détail par mois, ISOFLOOR = catégories
+        « ISOMARK / FLOORING », le reste du favori est compté en quartz & granit ; les colonnes en
+        italique sont déjà comprises dans le hors FM.
       </p>
     </section>
   );
