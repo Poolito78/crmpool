@@ -388,7 +388,8 @@ relu dans `ir.filters`**, jamais une liste de catégories : les quartz et
 granits sont en « ISOMARK / H2 » avec les BAO GRANITE. Favori introuvable
 (privé à un autre compte que celui de l'API) ou domaine dynamique → erreur
 affichée, aucun chiffre.
-**À déployer** : `.\deploy-function.ps1 ca-refresh`, puis Actualiser.
+**Déployé** (ca-refresh version 6, 11/10). Bouton « Actualiser » dans la
+tuile CA Odoo du CRM (`actualiserCaOdoo`, `caOdoo.ts`).
 
 ## Pièges d'implémentation rencontrés
 
