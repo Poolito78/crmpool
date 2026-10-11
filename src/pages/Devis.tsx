@@ -3644,7 +3644,32 @@ export default function Devis() {
                     ) : null;
 
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
-                    const variantEls = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
+                    /* LES TEINTES DES COMPOSANTS, TOUJOURS VISIBLES. Le pigment d'un kit (PIGMENTKG…)
+                       porte les 220 RAL, l'article de la ligne (319R) aucun : sans ce sélecteur, une
+                       ligne créée sans teinte (ou « Plus tard ») n'offrait plus aucun moyen d'en
+                       choisir une. Affiché même sans choix — « à choisir », jamais la première
+                       teinte d'office. Un choix vaut pour toutes les dimensions du même nom. */
+                    const teinteCompoEls = compoLigne
+                      ? dimensionsDesComposants(compoLigne, id => produitParId(produits, id), l.variantesChoisies).map(g => {
+                          const valeur = g.dimensions.map(d => l.variantesChoisies?.[d.id]).find(Boolean) ?? '';
+                          return (
+                            <div key={`teinte-${g.nom}`} className="shrink-0 min-w-[120px] max-w-[180px]">
+                              <span className={`text-xs truncate block ${valeur ? 'text-muted-foreground' : 'text-amber-600'}`}
+                                title={`${g.nom} de ${g.produits.map(p => designationProduit(p)).join(', ')}`}>{g.nom}{valeur ? '' : ' (à choisir)'}</span>
+                              <VarianteSelect
+                                dimension={g.dimensions[0]}
+                                value={valeur}
+                                vide="— à choisir —"
+                                onChange={label => setLignes(prev => prev.map(li => li.id !== l.id ? li : {
+                                  ...li,
+                                  variantesChoisies: { ...(li.variantesChoisies ?? {}), ...Object.fromEntries(g.dimensions.map(d => [d.id, label])) },
+                                }))}
+                              />
+                            </div>
+                          );
+                        })
+                      : [];
+                    const variantElsArticle = (prod?.variantes && prod.variantes.length > 0) ? prod.variantes.map(dim => (
                       <div key={dim.id} className="shrink-0 min-w-[120px] max-w-[180px]">
                         <span className="text-xs truncate block text-muted-foreground">{dim.nom || 'Variante'}</span>
                         <VarianteSelect
@@ -3673,7 +3698,9 @@ export default function Devis() {
                           }}
                         />
                       </div>
-                    )) : null;
+                    )) : [];
+                    const variantEls = variantElsArticle.length + teinteCompoEls.length > 0
+                      ? <>{variantElsArticle}{teinteCompoEls}</> : null;
 
                     const card = (
                       <div
