@@ -217,7 +217,7 @@ interface PartenaireOdoo {
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
     commandesFournisseur, commandesClient, fournisseurs, produits, produitsCharges, clients, devis,
-    produitFournisseurs,
+    numerosLiberes, produitFournisseurs,
     updateCommandesFournisseur, updateCommandesClient, updateClients, updateFournisseurs, updateDevis,
     updateProduits, updateProduitFournisseurs, creerProduits,
   } = useCRM();
@@ -1261,7 +1261,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
     if (result.typeDocument === 'devis_client' || result.typeDocument === 'demande_devis') {
       setCreerDevisClientId(prev => garder(prev, foundClient?.id));
-      setCreerDevisNumero(result.numeroDocument || prochainNumeroDevis(devis, Number(year)));
+      setCreerDevisNumero(result.numeroDocument || prochainNumeroDevis(devis, Number(year), numerosLiberes));
       setCreerDevisDate(result.dateDocument || today());
       setCreerDevisValidite(result.dateLivraisonPrevue || '');
       setCreerDevisRefAffaire(result.referencePartenaire || '');

@@ -117,7 +117,7 @@ const statutColors: Record<string, string> = {
 };
 
 export default function Devis() {
-  const { devis, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
+  const { devis, numerosLiberes, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
   const { canAchat, isAdmin, userId } = useCurrentUser();
   const { commercials, nameOf } = useCommercials();
   /* Les mots du client déjà retenus sur un article — pour ne pas réapprendre
@@ -991,7 +991,7 @@ export default function Devis() {
   }
 
   async function duplicate(d: DevisType) {
-    const numero = prochainNumeroDevis(devis);
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
     const newId = generateId();
     const newDevis: DevisType = {
       ...d,
@@ -1009,7 +1009,7 @@ export default function Devis() {
 
   // Duplique un modèle « système » puis le remplit avec les infos dictées (client, chantier, surface…)
   async function duplicateSystemeEtRemplir(sysDevis: DevisType, opts: { client?: typeof clients[number]; chantier?: string; systeme?: string; surf: number; dictees: LigneDevis[] }) {
-    const numero = prochainNumeroDevis(devis);
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
     const newId = generateId();
     const surf = opts.surf;
     // Lignes du modèle (nouveaux ids) + lignes dictées, quantités/prix recalculés selon la surface
@@ -1934,7 +1934,7 @@ export default function Devis() {
         logHistorique({ entiteType: 'devis', entiteId: editingId, entiteNumero: existing?.numero ?? editingId, action: 'modification', details: { client: clients.find(c => c.id === clientId)?.nom, referenceAffaire: referenceAffaire || undefined, snapshot: existing ?? null } });
       }
     } else {
-      const numero = prochainNumeroDevis(devis);
+      const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
       savedId = generateId();
       const newDevis: DevisType = {
         id: savedId, numero, clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined, dateCreation,

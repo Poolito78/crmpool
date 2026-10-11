@@ -25,5 +25,27 @@ export function prochainNumero(
   return `${prefixe}-${String(max + 1).padStart(largeur, '0')}`;
 }
 
-export const prochainNumeroDevis = (devis: { numero?: string }[], annee = new Date().getFullYear()) =>
-  prochainNumero(devis, `DEV-${annee}`);
+/**
+ * Numéro du prochain devis : le plus petit numéro LIBÉRÉ par une suppression
+ * (table `devis_numeros_liberes`, migration 20261011140000) et toujours libre,
+ * sinon le plus grand + 1. Règle du 11/10/2026 : « les devis supprimés sont
+ * supprimés, leur numéro redevient disponible » — pour une suite sans trou.
+ *
+ * Seuls les numéros notés à la suppression sont repris, jamais les trous
+ * anciens : combler « le plus petit libre » donnerait DEV-2026-002 à un devis
+ * d'octobre. Un numéro libéré d'une autre année n'est pas repris.
+ */
+export function prochainNumeroDevis(
+  devis: { numero?: string }[],
+  annee = new Date().getFullYear(),
+  liberes: string[] = [],
+): string {
+  const prefixe = `DEV-${annee}`;
+  const motif = new RegExp(`^${prefixe}-(\\d+)$`);
+  const pris = new Set(devis.map(d => (d.numero || '').trim()));
+  const candidats = liberes
+    .map(n => n.trim())
+    .filter(n => motif.test(n) && !pris.has(n))
+    .sort((a, b) => parseInt(a.match(motif)![1], 10) - parseInt(b.match(motif)![1], 10));
+  return candidats[0] ?? prochainNumero(devis, prefixe);
+}

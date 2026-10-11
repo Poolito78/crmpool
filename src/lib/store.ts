@@ -1663,6 +1663,15 @@ export function useStore() {
   const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
   const [produits, setProduits] = useState<Produit[]>([]);
   const [devis, setDevis] = useState<Devis[]>([]);
+  /* Numéros de devis libérés par une suppression (table `devis_numeros_liberes`) :
+     le prochain devis reprend le plus petit (`prochainNumeroDevis`). Le serveur
+     fait foi (`next_devis_numero`) ; ceci ne sert qu'au numéro AFFICHÉ avant
+     l'enregistrement, pour qu'il soit le même. */
+  const [numerosLiberes, setNumerosLiberes] = useState<string[]>([]);
+  const lireNumerosLiberes = useCallback(async () => {
+    const { data, error } = await supabase.from('devis_numeros_liberes' as any).select('numero');
+    if (!error && data) setNumerosLiberes((data as unknown as { numero: string }[]).map(r => r.numero));
+  }, []);
   const [produitFournisseurs, setProduitFournisseurs] = useState<ProduitFournisseur[]>([]);
   const [commandesFournisseur, setCommandesFournisseur] = useState<CommandeFournisseur[]>([]);
   const [commandesClient, setCommandesClient] = useState<CommandeClient[]>([]);
@@ -1756,6 +1765,7 @@ export function useStore() {
         dvRows.forEach(d => { d.numero = (d.numero as string).replace(/^DV-/, 'DEV-'); });
       }
       setDevis(dRes.map(dbToDevis));
+      void lireNumerosLiberes();
       setProduitFournisseurs(pfRes.map(dbToProduitFournisseur));
       setCommandesFournisseur(cfRes.map(dbToCommandeFournisseur));
       setCommandesClient(ccRes.map(dbToCommandeClient));
@@ -1881,7 +1891,11 @@ export function useStore() {
           } while (relectureProduits.encore);
         } finally { relectureProduits.enCours = false; }
       },   // repli : imports en masse
-      devis: async () => { const { data } = await supabase.from('devis').select('*'); if (data) setDevis(data.map(dbToDevis)); },
+      devis: async () => {
+        const { data } = await supabase.from('devis').select('*');
+        if (data) setDevis(data.map(dbToDevis));
+        void lireNumerosLiberes();   // une suppression libère un numéro, une création en reprend un
+      },
       produit_fournisseurs: async () => { const { data } = await supabase.from('produit_fournisseurs').select('*'); if (data) setProduitFournisseurs(data.map(dbToProduitFournisseur)); },
       commandes_fournisseur: async () => { const { data } = await supabase.from('commandes_fournisseur').select('*'); if (data) setCommandesFournisseur(data.map(dbToCommandeFournisseur)); },
       commandes_client: async () => { const { data } = await supabase.from('commandes_client').select('*'); if (data) setCommandesClient(data.map(dbToCommandeClient)); },
@@ -2138,6 +2152,8 @@ export function useStore() {
               return m && m.numero && m.numero !== d.numero ? { ...d, numero: m.numero } : d;
             }));
           }
+          // Un numéro libéré vient peut-être d'être repris : le suivant affiché doit le savoir.
+          void lireNumerosLiberes();
         });
         if (updated.length) {
           updated.forEach(d => supabase.from('devis').update(devisToDb(d, userId) as any).eq('id', d.id).then(({ error }) => {
@@ -2147,11 +2163,15 @@ export function useStore() {
             }
           }));
         }
-        if (removed.length) supabase.from('devis').delete().in('id', removed.map(d => d.id)).then(({ error }) => { if (error) console.error('[devis delete]', error.message); });
+        if (removed.length) supabase.from('devis').delete().in('id', removed.map(d => d.id)).then(({ error }) => {
+          if (error) { console.error('[devis delete]', error.message); return; }
+          // Le numéro supprimé redevient disponible (trigger `devis_liberer_numero`).
+          void lireNumerosLiberes();
+        });
       }
       return next;
     });
-  }, []);
+  }, [lireNumerosLiberes]);
 
   const updateProduitFournisseurs = useCallback((fn: (prev: ProduitFournisseur[]) => ProduitFournisseur[]) => {
     setProduitFournisseurs(prev => {
@@ -2233,7 +2253,7 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────

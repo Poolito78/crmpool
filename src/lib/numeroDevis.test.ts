@@ -16,6 +16,22 @@ describe('prochainNumeroDevis', () => {
   });
 });
 
+describe('numéros libérés par une suppression', () => {
+  const devis = [{ numero: 'DEV-2026-135' }, { numero: 'DEV-2026-136' }, { numero: 'DEV-2026-142' }];
+  it('le plus petit numéro libéré est repris', () => {
+    expect(prochainNumeroDevis(devis, 2026, ['DEV-2026-139', 'DEV-2026-137', 'DEV-2026-141'])).toBe('DEV-2026-137');
+  });
+  it('un numéro libéré mais repris entre-temps est sauté', () => {
+    expect(prochainNumeroDevis([...devis, { numero: 'DEV-2026-137' }], 2026, ['DEV-2026-137', 'DEV-2026-138'])).toBe('DEV-2026-138');
+  });
+  it('sans numéro libéré, le plus grand + 1 ; les vieux trous ne sont pas comblés', () => {
+    expect(prochainNumeroDevis(devis, 2026, [])).toBe('DEV-2026-143');
+  });
+  it("un numéro libéré d'une autre année n'est pas repris", () => {
+    expect(prochainNumeroDevis(devis, 2026, ['DEV-2025-010'])).toBe('DEV-2026-143');
+  });
+});
+
 describe('prochainNumero (commandes et factures)', () => {
   it('ne reprend pas un numéro après une suppression', () => {
     const f = [{ numero: 'FAC-2026-001' }, { numero: 'FAC-2026-003' }]; // la 002 a été supprimée

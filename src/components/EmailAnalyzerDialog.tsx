@@ -69,7 +69,7 @@ interface Props {
 const CATALOGUE_CLE = 'crm_catalogue_analyse';
 
 export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated }: Props) {
-  const { clients, produits, devis, updateDevis } = useCRM();
+  const { clients, produits, devis, numerosLiberes, updateDevis } = useCRM();
   const { regles } = useReglesAccompagnement();
   const [emailText, setEmailText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -396,7 +396,7 @@ export default function EmailAnalyzerDialog({ open, onOpenChange, onDevisCreated
       return;
     }
 
-    const numero = prochainNumeroDevis(devis);
+    const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
     const newDevis: DevisType = {
       id: generateId(),
       numero,
