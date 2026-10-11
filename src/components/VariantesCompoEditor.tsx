@@ -4,7 +4,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
 import { designationProduit, formatMontant, generateId, type LigneKit, type Produit } from '@/lib/store';
-import { prixVarianteCompo, type VarianteCompo } from '@/lib/variantesCompo';
+import { prixComposant, prixVarianteCompo, type ResoudrePrix, type VarianteCompo } from '@/lib/variantesCompo';
 
 /**
  * Les VARIANTES COMPOSÉES d'un article : chacune est une combinaison de
@@ -25,6 +25,8 @@ interface Props {
 const composantVide = (): LigneKit => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 });
 
 export default function VariantesCompoEditor({ actif, onActif, variantes, onChange, produits, onOpen }: Props) {
+  /* Prix courant de l'article du composant (tarif public de sa fiche). */
+  const resoudre: ResoudrePrix = c => produits.find(p => p.id === c.produitId)?.prixHT;
   const majVariante = (id: string, patch: Partial<VarianteCompo>) =>
     onChange(prev => prev.map(v => (v.id === id ? { ...v, ...patch } : v)));
   const majComposant = (id: string, idx: number, patch: Partial<LigneKit>) =>
@@ -66,7 +68,7 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                 <span className="text-xs text-muted-foreground">Nom de la variante (complète la désignation de l'article)</span>
                 <Input value={v.nom} onChange={e => majVariante(v.id, { nom: e.target.value })} placeholder="Ex : avec primaire et finition" className="h-8 text-xs" />
               </div>
-              <span className="text-xs text-muted-foreground pb-2">Total : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v))} HT</strong></span>
+              <span className="text-xs text-muted-foreground pb-2">Total : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudre))} HT</strong></span>
               <button
                 type="button" title="Supprimer cette variante"
                 onClick={() => onChange(prev => prev.filter(x => x.id !== v.id))}
@@ -114,10 +116,27 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                   <span className="text-xs text-muted-foreground">Unité</span>
                   <Input value={c.unite} onChange={e => majComposant(v.id, idx, { unite: e.target.value })} className="text-xs h-7" />
                 </div>
-                <div className="flex flex-col gap-0.5 w-20">
-                  <span className="text-xs text-muted-foreground">Prix HT</span>
-                  <Input type="number" min={0} step={0.01} value={c.prixUnitaireHT}
-                    onChange={e => majComposant(v.id, idx, { prixUnitaireHT: parseFloat(e.target.value) || 0 })} className="text-xs h-7" />
+                <div className="flex flex-col gap-0.5 w-24">
+                  <span className="text-xs text-muted-foreground flex items-center justify-between">
+                    Prix HT
+                    {c.produitId && (
+                      <button
+                        type="button"
+                        className="underline text-[10px] hover:text-foreground"
+                        title={c.prixFige ? 'Le prix est saisi à la main — cliquer pour suivre à nouveau le prix de l\'article' : 'Le prix suit celui de l\'article — cliquer pour le saisir à la main'}
+                        onClick={() => majComposant(v.id, idx, c.prixFige
+                          ? { prixFige: false }
+                          : { prixFige: true, prixUnitaireHT: prixComposant(c, resoudre) })}
+                      >{c.prixFige ? 'manuel' : 'auto'}</button>
+                    )}
+                  </span>
+                  <Input
+                    type="number" min={0} step={0.01}
+                    value={c.produitId && !c.prixFige ? prixComposant(c, resoudre) : c.prixUnitaireHT}
+                    readOnly={!!c.produitId && !c.prixFige}
+                    onChange={e => majComposant(v.id, idx, { prixUnitaireHT: parseFloat(e.target.value) || 0 })}
+                    className={`text-xs h-7 ${c.produitId && !c.prixFige ? 'bg-muted/50 text-muted-foreground' : ''}`}
+                  />
                 </div>
                 <div className="flex flex-col gap-0.5 w-14">
                   <span className="text-xs text-muted-foreground">Rem%</span>

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles,
+  CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixComposant, prixVarianteCompo, valeursVisibles,
   varianteDeLigne, type VarianteCompo,
 } from './variantesCompo';
 
@@ -24,6 +24,19 @@ describe('variantes composées', () => {
     expect(achatVarianteCompo(V, produits)).toBe(28);
     expect(achatVarianteCompo(V, [produits[0]])).toBeUndefined();
     expect(achatVarianteCompo({ ...V, composants: [ligne({ description: 'libre' })] }, produits)).toBeUndefined();
+  });
+
+  it('un composant suit le prix courant de son article, sauf prix saisi à la main ou article sans prix', () => {
+    const c = ligne({ produitId: 'a', prixUnitaireHT: 10 });
+    expect(prixComposant(c, () => 12.86)).toBe(12.86);
+    expect(prixComposant({ ...c, prixFige: true }, () => 12.86)).toBe(10);
+    expect(prixComposant(c, () => 0)).toBe(10);
+    expect(prixComposant(c, () => undefined)).toBe(10);
+    expect(prixVarianteCompo({ id: 'v', nom: 'x', composants: [ligne({ produitId: 'a', quantite: 2, prixUnitaireHT: 10 })] }, () => 15)).toBe(30);
+  });
+
+  it("pas de coût d'achat si le prix d'achat d'un article n'est pas renseigné", () => {
+    expect(achatVarianteCompo(V, [{ id: 'a', prixAchat: 4 }, { id: 'b', prixAchat: 0 }])).toBeUndefined();
   });
 
   it('la désignation reprend l\'article de base puis la variante', () => {

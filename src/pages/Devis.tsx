@@ -1192,7 +1192,7 @@ export default function Devis() {
         ...l,
         description: designationAvecVariante(designationProduit(cible.produit), v),
         unite: 'ens.',
-        prixUnitaireHT: prixVarianteCompo(v),
+        prixUnitaireHT: prixVarianteCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur)),
         prixAchatLigne: achat ?? 0,
         variantesChoisies: { ...(l.variantesChoisies ?? {}), [CLE_COMPO]: v.id },
       }));
@@ -1437,10 +1437,19 @@ export default function Devis() {
   }
 
   /** Prix unitaire HT final = palier + diff variantes */
+  /* Les composants d'une variante suivent le prix COURANT de leur article, au tarif
+     du devis (client revendeur, niveau). */
+  function resoudrePrixComposant(isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif) {
+    return (c: { produitId?: string; quantite: number }) => {
+      const p = c.produitId ? produitParId(produits, c.produitId) : undefined;
+      return p ? prixDeBase(p, c.quantite, isRevendeur, niveau || null) : undefined;
+    };
+  }
+
   function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
     // Une variante composée fixe le prix : somme de ses composants.
     const compo = varianteDeLigne(produit, variantesChoisies);
-    if (compo) return prixVarianteCompo(compo);
+    if (compo) return prixVarianteCompo(compo, resoudrePrixComposant(isRevendeur, niveau));
     const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
@@ -1543,7 +1552,7 @@ export default function Devis() {
       if (!p) return l;
       const compo = varianteDeLigne(p, l.variantesChoisies);
       const base = compo ? 0 : prixDeBase(p, l.quantite, estRevendeur, niveau, grille, grilleR4);
-      const prixUnitaireHT = compo ? prixVarianteCompo(compo) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
+      const prixUnitaireHT = compo ? prixVarianteCompo(compo, c => { const pc = c.produitId ? produitParId(produits, c.produitId) : undefined; return pc ? prixDeBase(pc, c.quantite, estRevendeur, niveau, grille, grilleR4) : undefined; }) : Math.round((base + getVarianteDiff(p, l.variantesChoisies)) * 100) / 100;
       return { ...l, prixUnitaireHT, ...(opts.remiseAZero ? { remise: 0 } : {}) };
     }));
     if (!opts.silencieux && niveau && auNiveau + horsNiveau > 0) {
@@ -4746,7 +4755,8 @@ export default function Devis() {
         </div>
       )}
 
-      <VarianteCompoDialog produit={variantePour?.produit ?? null} onChoix={appliquerVarianteCompo} />
+      <VarianteCompoDialog produit={variantePour?.produit ?? null} onChoix={appliquerVarianteCompo}
+        prixDe={v => prixVarianteCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur))} />
 
       <OptionsArticleDialog
         produit={optionsPour?.produit ?? null}

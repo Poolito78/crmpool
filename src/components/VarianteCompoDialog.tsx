@@ -11,9 +11,11 @@ import { prixVarianteCompo, type VarianteCompo } from '@/lib/variantesCompo';
 interface Props {
   produit: Produit | null;
   onChoix: (variante: VarianteCompo | null) => void;
+  /** Prix HT courant d'une variante, au tarif du devis. */
+  prixDe?: (v: VarianteCompo) => number;
 }
 
-export default function VarianteCompoDialog({ produit, onChoix }: Props) {
+export default function VarianteCompoDialog({ produit, onChoix, prixDe }: Props) {
   const variantes = produit?.variantesCompo ?? [];
   const [choisie, setChoisie] = useState<string>('');
   useEffect(() => { setChoisie(''); }, [produit?.id]);
@@ -39,7 +41,7 @@ export default function VarianteCompoDialog({ produit, onChoix }: Props) {
                   {v.composants.map(c => `${c.quantite} × ${c.description || 'produit'}`).join(' + ')}
                 </span>
               </span>
-              <span className="text-xs font-medium shrink-0">{formatMontant(prixVarianteCompo(v))} HT</span>
+              <span className="text-xs font-medium shrink-0">{formatMontant(prixDe ? prixDe(v) : prixVarianteCompo(v))} HT</span>
             </label>
           ))}
         </div>

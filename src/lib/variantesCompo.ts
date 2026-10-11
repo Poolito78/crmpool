@@ -26,15 +26,30 @@ export const CLE_COMPO = '__compo';
 
 const arrondi = (n: number) => Math.round(n * 100) / 100;
 
+/** Donne le prix unitaire courant de l'article d'un composant (celui du devis : client, niveau de tarif), ou `undefined`. */
+export type ResoudrePrix = (c: LigneKit) => number | undefined;
+
+/**
+ * Prix unitaire d'un composant. Un composant qui désigne un ARTICLE en suit le
+ * prix courant (`resoudre`) — c'est le reflet de l'article de base, il bouge
+ * avec lui. Il ne garde son prix enregistré que si on l'a saisi à la main
+ * (`prixFige`), ou si l'article est introuvable.
+ */
+export function prixComposant(c: LigneKit, resoudre?: ResoudrePrix): number {
+  const vivant = !c.prixFige && c.produitId && resoudre ? resoudre(c) : undefined;
+  // Un prix d'article non renseigné (0) ne remplace pas le prix enregistré : on ne vend pas à 0 par défaut.
+  return vivant != null && vivant > 0 ? vivant : (c.prixUnitaireHT || 0);
+}
+
 /** Prix HT d'un ensemble : somme des composants, remise comprise. */
-export function prixVarianteCompo(v: VarianteCompo): number {
+export function prixVarianteCompo(v: VarianteCompo, resoudre?: ResoudrePrix): number {
   return arrondi(v.composants.reduce(
-    (s, c) => s + (c.quantite || 0) * (c.prixUnitaireHT || 0) * (1 - (c.remise || 0) / 100), 0));
+    (s, c) => s + (c.quantite || 0) * prixComposant(c, resoudre) * (1 - (c.remise || 0) / 100), 0));
 }
 
 /**
  * Coût d'achat d'un ensemble, ou `undefined` : on ne le calcule que si CHAQUE
- * composant est un article du catalogue — un coût partiel annoncerait une
+ * composant est un article du catalogue AVEC un prix d'achat renseigné — un coût partiel annoncerait une
  * marge fausse, et on n'invente pas une donnée métier.
  */
 export function achatVarianteCompo(v: VarianteCompo, produits: Pick<Produit, 'id' | 'prixAchat'>[]): number | undefined {
@@ -42,8 +57,9 @@ export function achatVarianteCompo(v: VarianteCompo, produits: Pick<Produit, 'id
   let total = 0;
   for (const c of v.composants) {
     const p = c.produitId ? produits.find(x => x.id === c.produitId) : undefined;
-    if (!p) return undefined;
-    total += (c.quantite || 0) * (p.prixAchat || 0);
+    // Le prix d'achat de l'article doit être RENSEIGNÉ : à 0, on ne sait pas, on ne compte pas 0.
+    if (!p || !(p.prixAchat > 0)) return undefined;
+    total += (c.quantite || 0) * p.prixAchat;
   }
   return arrondi(total);
 }

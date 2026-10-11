@@ -169,6 +169,8 @@ export interface LigneKit {
   remise: number;
   consommation?: number;  // kg/m² — utilisé en mode calcul surface dans le devis
   note?: string;
+  /** Variantes composées : prix saisi à la main, qui ne suit plus le prix de l'article. */
+  prixFige?: boolean;
 }
 
 /** Une consommation d'un article pour un usage précis (« Primaire », « Finition »…), en plus de la consommation par défaut. */
