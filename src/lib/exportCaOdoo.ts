@@ -111,10 +111,10 @@ function ongletIsofloor(fq: CaFlooringQuartz | null) {
 
 /**
  * Taux de rémunération de François MOUHOT sur le CA Flooring & Quartz national
- * hors FM : 1 % (règle du 11/10/2026, d'abord annoncée à 2 % puis corrigée —
- * 5 910,51 € en septembre → 59,11 €).
+ * hors FM : 2 % (règle du 11/10/2026, confirmée après un passage à 1 % —
+ * 5 910,51 € en septembre → 118,21 €).
  */
-export const TAUX_REMUNERATION_FM = 0.01;
+export const TAUX_REMUNERATION_FM = 0.02;
 
 /**
  * Récap mensuel : Total Flooring & Quartz, part F. MOUHOT, CA national hors FM
