@@ -157,7 +157,7 @@ export function designationAvecVariante(
   /** Sous-variantes retenues : « désignation de l'article composant » + nom de sa variante. */
   sous: { article: string; nom: string }[] = [],
 ): string {
-  const suite = sous.length ? ` (${sous.map(s => `${s.article} : ${s.nom}`).join(' ; ')})` : '';
+  const suite = sous.length ? ` (${sous.map(s => `${s.article} : ${s.nom}`).join(' - ')})` : '';
   return `${designationBase} — ${v.nom}${suite}`;
 }
 
