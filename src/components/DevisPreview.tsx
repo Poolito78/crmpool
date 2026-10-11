@@ -592,9 +592,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               Remise
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
-                   title="Ajoute en bas du devis les fiches techniques et photos des articles. Les liens restent cliquables dans le PDF.">
+                   title="Ajoute en bas du devis les fiches techniques des articles. Les liens restent cliquables dans le PDF.">
               <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens: e.target.checked }); }} className="rounded" />
-              Fiches &amp; photos
+              Fiches techniques
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
@@ -1460,7 +1460,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           return (
             <div className="border-t border-border pt-4">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
-                Fiches techniques et photos
+                Fiches techniques
               </p>
               <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
                 {parArticle.map(a => (

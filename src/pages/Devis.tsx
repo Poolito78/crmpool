@@ -33,7 +33,7 @@ import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
 import { InputNombre } from '@/components/InputNombre';
 import {
-  calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE,
+  calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE, contenanceCatalyseur, repartirCatalyseur,
   TEMPERATURES_CATALYSE, TEMPERATURE_PAR_DEFAUT,
 } from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
@@ -1099,22 +1099,45 @@ export default function Devis() {
      main (`catalyseManuelle`). Rien n'est réécrit quand aucune résine n'a pu
      être comptée : un 0 « calculé » sur un devis à vérifier serait faux. */
   useEffect(() => {
-    const trouver = (id: string) => produitParId(produits, id);
+    const r = repartitionCatalyse(lignes);
+    if (!r) return;
     let change = false;
     const suivantes = lignes.map(l => {
-      if (!l.produitId || l.catalyseManuelle || l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return l;
-      const p = trouver(l.produitId);
-      if (!estCatalyseur(p)) return l;
-      // Ligne du tableau la plus prudente ; sous 0 °C, rien n'est calculé (hors tableau).
-      const t = ligneDuTableau(l.temperatureCatalyse);
-      if (t == null) return l;
-      const c = calculerCatalyse(lignes, trouver, t, p!.poids);
-      if (c.quantite == null || c.resines.length === 0 || c.quantite === l.quantite) return l;
+      const q = r.quantites[l.id];
+      if (q == null || l.catalyseManuelle || q === l.quantite) return l;
       change = true;
-      return { ...l, quantite: c.quantite };
+      return { ...l, quantite: q };
     });
     if (change) setLignes(suivantes);
-  }, [lignes, produits]);
+  }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * UN SEUL BESOIN DE CATALYSEUR POUR TOUT LE DEVIS, réparti entre ses
+   * conditionnements (sac 2 kg, sac 400 g, dose 150 g : `repartirCatalyseur`).
+   * La température est celle de la première ligne de catalyseur — elles la
+   * partagent (la changer sur l'une la change sur toutes). `null` : rien à
+   * calculer (pas de catalyseur, sous 0 °C, ou aucune résine comptée).
+   */
+  function repartitionCatalyse(ls: LigneDevis[]) {
+    const trouver = (id: string) => produitParId(produits, id);
+    const cata = ls.filter(l => l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte'
+      && estCatalyseur(trouver(l.produitId)));
+    if (!cata.length) return null;
+    const tSaisie = cata[0].temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
+    const t = ligneDuTableau(tSaisie);
+    if (t == null) return null;
+    const calc = calculerCatalyse(ls, trouver, t, undefined);
+    if (!calc.resines.length) return null;
+    const contenants = cata.flatMap(l => {
+      const kg = contenanceCatalyseur(trouver(l.produitId!));
+      return kg ? [{ id: l.id, kg, ...(l.catalyseManuelle ? { fixe: l.quantite } : {}) }] : [];
+    });
+    return {
+      calc, tSaisie, contenants,
+      quantites: repartirCatalyseur(calc.kgCatalyseur, contenants),
+      sansContenance: cata.filter(l => !contenants.some(c => c.id === l.id)).map(l => l.description),
+    };
+  }
 
   /* LE DÉTAIL IMPRIMÉ d'une ligne dépliée (`detailImprime`) suit la ligne : il
      est chiffré ici, avec le tarif du devis, parce que l'aperçu et le PDF —
@@ -3648,14 +3671,19 @@ export default function Devis() {
                     const compoLigne = prod ? varianteDeLigne(prod, l.variantesChoisies) : undefined;
                     const estCata = estCatalyseur(prod);
                     // Température saisie (libre) → ligne du tableau la plus prudente (18 °C → 15 °C).
-                    const tempSaisie = l.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
+                    /* Température COMMUNE aux lignes de catalyseur (sac, dose…) : celle de la première. */
+                    const premiereCata = estCata ? lignes.find(li => li.produitId && estCatalyseur(produitParId(produits, li.produitId))) : undefined;
+                    const tempSaisie = premiereCata?.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
                     const tempCata = ligneDuTableau(tempSaisie);
-                    const calcCata = estCata && tempCata != null ? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, prod!.poids) : null;
+                    const repartCata = estCata ? repartitionCatalyse(lignes) : null;
+                    const calcCata = estCata && tempCata != null
+                      ? (repartCata?.calc ?? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, undefined)) : null;
                     const temperatureEl = estCata ? (
                       <div className="shrink-0 w-[96px]">
                         <span className="text-xs truncate block text-muted-foreground">T° chantier °C</span>
                         <InputNombre decimales={1} value={tempSaisie}
-                          onChange={n => setLignes(prev => prev.map(li => li.id === l.id
+                          // Une seule température pour tous les conditionnements : la changer les recalcule tous.
+                          onChange={n => setLignes(prev => prev.map(li => li.produitId && estCatalyseur(produitParId(produits, li.produitId))
                             ? { ...li, temperatureCatalyse: n, catalyseManuelle: undefined } : li))}
                           className="h-8 text-sm"
                           title={`Température du chantier : le dosage de catalyseur en dépend (fiche ISOFLOOR Flowfast CATALYST C2). Entre deux lignes du tableau (${TEMPERATURES_CATALYSE.join(', ')} °C), la plus froide — la plus prudente.`} />
@@ -4016,11 +4044,21 @@ export default function Devis() {
                                       <span className="font-medium text-foreground" title={detail || undefined}>
                                         {calcCata.resines.length === 0
                                           ? `Catalyse à ${libT} : aucune résine Flowfast comptée`
-                                          : `Catalyse à ${libT} : ${String(kgResine).replace('.', ',')} kg de résine → ${String(calcCata.kgCatalyseur).replace('.', ',')} kg → ${calcCata.quantite ?? '?'} × ${prod?.poids ?? '?'} kg`}
-                                        {l.catalyseManuelle && calcCata.quantite != null && calcCata.quantite !== l.quantite && (
-                                          <span className="text-orange-500"> (calcul : {calcCata.quantite}, quantité forcée à la main)</span>
+                                          : `Catalyse à ${libT} : ${String(kgResine).replace('.', ',')} kg de résine → ${String(calcCata.kgCatalyseur).replace('.', ',')} kg`
+                                            /* La répartition entre conditionnements : sacs d'abord, doses ensuite. */
+                                            + (repartCata?.contenants.length
+                                              ? ' → ' + repartCata.contenants
+                                                  .slice().sort((a, b) => b.kg - a.kg)
+                                                  .map(c => `${repartCata.quantites[c.id] ?? 0} × ${c.kg >= 1 ? `${String(c.kg).replace('.', ',')} kg` : `${Math.round(c.kg * 1000)} g`}`)
+                                                  .join(' + ')
+                                              : '')}
+                                        {l.catalyseManuelle && (
+                                          <span className="text-orange-500"> (quantité de cette ligne forcée à la main : les autres conditionnements complètent)</span>
                                         )}
                                       </span>
+                                      {repartCata?.sansContenance.length ? (
+                                        <span className="text-amber-600">Contenance illisible, non répartie : {repartCata.sansContenance.join(', ')}</span>
+                                      ) : null}
                                       {calcCata.aVerifier.length > 0 && (
                                         <span className="text-amber-600" title={calcCata.aVerifier.join('\n')}>
                                           À vérifier, non compté : {calcCata.aVerifier.join(', ')}

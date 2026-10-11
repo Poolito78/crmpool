@@ -106,10 +106,65 @@ type Article = Pick<Produit, 'id' | 'reference' | 'description' | 'poids'>
 
 const texte = (p: Article) => `${p.reference ?? ''} ${p.description ?? ''} ${p.descriptionVariante ?? ''}`.toUpperCase();
 
-/** Le catalyseur lui-même (CATALYST2 « Catalyst (2 kg) ») — pas un kit qui en contient. */
+/**
+ * Le catalyseur lui-même, dans l'un de ses CONDITIONNEMENTS — pas un kit qui en
+ * contient. Trois articles portent la même matière (peroxyde de benzoyle 50 %,
+ * le « Catalyst C2 » des fiches) : CATALYST2 (sac de 2 kg), DUR50FT150
+ * (« DURCISSEUR NOVIPER BP50 FT (DOSE DE 150G) ») et DURFLOWFASTEURO
+ * (« DURCISSEUR CATALYST (400G) »). Ils couvrent UN SEUL besoin, réparti entre
+ * eux (`repartirCatalyseur`) — sans quoi le catalyseur serait compté deux fois.
+ */
 export function estCatalyseur(p: Article | undefined): boolean {
   if (!p) return false;
-  return /^CATALYST/i.test(p.reference ?? '') || /^\s*CATALYST\b/i.test(p.description ?? '');
+  const ref = p.reference ?? '';
+  const desc = p.description ?? '';
+  return /^CATALYST/i.test(ref) || /^DUR50/i.test(ref) || /^DURFLOWFASTEURO$/i.test(ref)
+    || /^\s*CATALYST\b/i.test(desc) || /^\s*DURCISSEUR\s+(NOVIPER|CATALYST)\b/i.test(desc);
+}
+
+/**
+ * Contenance d'un conditionnement de catalyseur, en kg : son poids, à défaut ce
+ * que dit sa désignation (« (400G) », « DOSE DE 150G », « (2 kg) »). `null` si
+ * rien ne le dit — DURFLOWFASTEURO est à 0 kg en base, sa désignation fait foi.
+ */
+export function contenanceCatalyseur(p: Article | undefined): number | null {
+  if (!p) return null;
+  if (p.poids && p.poids > 0) return p.poids;
+  const m = [...(p.description ?? '').matchAll(/(\d+(?:[.,]\d+)?)\s*(KG|G)\b/gi)].pop();
+  if (!m) return null;
+  const n = parseFloat(m[1].replace(',', '.'));
+  if (!(n > 0)) return null;
+  return m[2].toUpperCase() === 'G' ? n / 1000 : n;
+}
+
+export interface ContenantCatalyseur {
+  /** Identifiant de la ligne de devis. */
+  id: string;
+  /** Contenance en kg. */
+  kg: number;
+  /** Quantité saisie à la main : elle compte telle quelle, les autres complètent. */
+  fixe?: number;
+}
+
+/**
+ * LES SACS D'ABORD, LES DOSES ENSUITE (règle du 11/10/2026) : le besoin se
+ * couvre du plus grand conditionnement au plus petit — autant de sacs de 2 kg
+ * qu'il en tient, puis les sacs de 400 g, et le plus petit (dose de 150 g)
+ * arrondi au-dessus complète. 12,42 kg → 6 × 2 kg + 1 × 400 g + 1 × 150 g.
+ * Une quantité forcée à la main est déduite du besoin avant la répartition.
+ */
+export function repartirCatalyseur(kgBesoin: number, contenants: ContenantCatalyseur[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  let reste = kgBesoin;
+  for (const c of contenants) if (c.fixe != null) { out[c.id] = c.fixe; reste -= c.fixe * c.kg; }
+  const libres = contenants.filter(c => c.fixe == null).sort((a, b) => b.kg - a.kg);
+  libres.forEach((c, i) => {
+    const r = Math.max(0, arrondi(reste, 6));
+    const n = i === libres.length - 1 ? Math.ceil(arrondi(r / c.kg, 6)) : Math.floor(arrondi(r / c.kg, 6));
+    out[c.id] = n;
+    reste -= n * c.kg;
+  });
+  return out;
 }
 
 /**

@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur, ligneDuTableau, dosageA } from './catalyseur';
+import {
+  calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur, ligneDuTableau, dosageA,
+  contenanceCatalyseur, repartirCatalyseur,
+} from './catalyseur';
 import { CLE_COMPO } from './variantesCompo';
 import type { LigneDevis } from './store';
 
@@ -43,6 +46,26 @@ describe('catalyseur Flowfast', () => {
     expect(dosageA('216', -1)).toBeNull();                         // accélérateur 404 : hors calcul
     expect(ligneDuTableau(-3)).toBeNull();
     expect(ligneDuTableau(undefined)).toBe(20);
+  });
+
+  it('les trois conditionnements du catalyseur, et leur contenance', () => {
+    const dose = art('d', 'DUR50FT150', 'DURCISSEUR NOVIPER BP50 FT (DOSE DE 150G)', 0.15);
+    const euro = art('e', 'DURFLOWFASTEURO', 'DURCISSEUR CATALYST (400G)', 0);
+    expect([CATALYST2, dose, euro].map(estCatalyseur)).toEqual([true, true, true]);
+    expect(contenanceCatalyseur(CATALYST2)).toBe(2);
+    expect(contenanceCatalyseur(dose)).toBe(0.15);
+    expect(contenanceCatalyseur(euro)).toBe(0.4);       // poids 0 en base : la désignation fait foi
+    expect(familleResine(dose)).toBeNull();             // pas une résine à doser
+  });
+
+  it('les sacs d’abord, les doses ensuite', () => {
+    const c = [{ id: 'sac', kg: 2 }, { id: '400', kg: 0.4 }, { id: 'dose', kg: 0.15 }];
+    expect(repartirCatalyseur(12.42, c)).toEqual({ sac: 6, '400': 1, dose: 1 });   // 12 + 0,4 + 0,15
+    expect(repartirCatalyseur(12.42, [c[0], c[2]])).toEqual({ sac: 6, dose: 3 });  // 12 + 0,45
+    expect(repartirCatalyseur(12.42, [c[0]])).toEqual({ sac: 7 });                 // seul : il couvre tout
+    expect(repartirCatalyseur(1.1, [c[0], c[2]])).toEqual({ sac: 0, dose: 8 });    // 1,2 kg en doses
+    // Sacs forcés à 7 à la main : les doses n'ont plus rien à couvrir.
+    expect(repartirCatalyseur(12.42, [{ ...c[0], fixe: 7 }, c[2]])).toEqual({ sac: 7, dose: 0 });
   });
 
   it('les résines des fiches Flowcrete sont reconnues', () => {

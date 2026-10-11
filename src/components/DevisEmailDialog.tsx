@@ -246,7 +246,7 @@ export interface PreviewOptions {
   showRemise: boolean;
   showComposants: boolean;
   showKgRecap: boolean;
-  /** Bloc « Fiches techniques et photos » en bas du devis. */
+  /** Bloc « Fiches techniques » en bas du devis. */
   showLiens?: boolean;
   showCoutChantier?: boolean;
   /** Coût chantier consommé de chaque ligne sous son Total HT. */
@@ -876,7 +876,7 @@ Restant à ta disposition pour tout complément d'information.`
                 { key: 'showKgRecap',    label: 'Récap. KG' },
                 { key: 'showCoutChantier', label: 'Coût chantier' },
                 { key: 'showCoutLigne',  label: 'Coût chantier par ligne' },
-                { key: 'showLiens',      label: 'Fiches techniques et photos' },
+                { key: 'showLiens',      label: 'Fiches techniques' },
               ].map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
                   <input
