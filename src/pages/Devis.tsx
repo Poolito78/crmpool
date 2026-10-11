@@ -30,8 +30,9 @@ import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
+import { InputNombre } from '@/components/InputNombre';
 import {
-  calculerCatalyse, estCatalyseur, estTemperatureCatalyse, LIBELLE_FAMILLE, pourcentageCatalyse,
+  calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE, pourcentageCatalyse,
   TEMPERATURES_CATALYSE, TEMPERATURE_PAR_DEFAUT,
 } from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
@@ -1102,7 +1103,9 @@ export default function Devis() {
       if (!l.produitId || l.catalyseManuelle || l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return l;
       const p = trouver(l.produitId);
       if (!estCatalyseur(p)) return l;
-      const t = estTemperatureCatalyse(l.temperatureCatalyse) ? l.temperatureCatalyse : TEMPERATURE_PAR_DEFAUT;
+      // Ligne du tableau la plus prudente ; sous 0 °C, rien n'est calculé (hors tableau).
+      const t = ligneDuTableau(l.temperatureCatalyse);
+      if (t == null) return l;
       const c = calculerCatalyse(lignes, trouver, t, p!.poids);
       if (c.quantite == null || c.resines.length === 0 || c.quantite === l.quantite) return l;
       change = true;
@@ -3591,18 +3594,18 @@ export default function Devis() {
                     /* Ligne de CATALYSEUR : la température du chantier commande la quantité
                        (catalyseur.ts). Changer la température repasse la quantité en automatique. */
                     const estCata = estCatalyseur(prod);
-                    const tempCata = estTemperatureCatalyse(l.temperatureCatalyse) ? l.temperatureCatalyse : TEMPERATURE_PAR_DEFAUT;
-                    const calcCata = estCata ? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, prod!.poids) : null;
+                    // Température saisie (libre) → ligne du tableau la plus prudente (18 °C → 15 °C).
+                    const tempSaisie = l.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT;
+                    const tempCata = ligneDuTableau(tempSaisie);
+                    const calcCata = estCata && tempCata != null ? calculerCatalyse(lignes, id => produitParId(produits, id), tempCata, prod!.poids) : null;
                     const temperatureEl = estCata ? (
                       <div className="shrink-0 w-[96px]">
-                        <span className="text-xs truncate block text-muted-foreground">T° chantier</span>
-                        <Select value={String(tempCata)} onValueChange={v => setLignes(prev => prev.map(li => li.id === l.id
-                          ? { ...li, temperatureCatalyse: Number(v), catalyseManuelle: undefined } : li))}>
-                          <SelectTrigger className="h-8 text-sm" title="Température du chantier : le dosage de catalyseur en dépend (fiche ISOFLOOR Flowfast CATALYST C2)"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {TEMPERATURES_CATALYSE.map(tc => <SelectItem key={tc} value={String(tc)}>{tc > 0 ? `+${tc}` : tc} °C</SelectItem>)}
-                          </SelectContent>
-                        </Select>
+                        <span className="text-xs truncate block text-muted-foreground">T° chantier °C</span>
+                        <InputNombre decimales={1} value={tempSaisie}
+                          onChange={n => setLignes(prev => prev.map(li => li.id === l.id
+                            ? { ...li, temperatureCatalyse: n, catalyseManuelle: undefined } : li))}
+                          className="h-8 text-sm"
+                          title={`Température du chantier : le dosage de catalyseur en dépend (fiche ISOFLOOR Flowfast CATALYST C2). Entre deux lignes du tableau (${TEMPERATURES_CATALYSE.join(', ')} °C), la plus froide — la plus prudente.`} />
                       </div>
                     ) : null;
 
@@ -3887,16 +3890,20 @@ export default function Devis() {
                                   </button>
                                 ))}
                                 {/* Le calcul du catalyseur, en clair — et ce qu'il n'a pas su compter. */}
+                                {estCata && tempCata == null && (
+                                  <span className="text-amber-600">Catalyse à {tempSaisie} °C : sous 0 °C, hors du tableau ISOFLOOR — quantité à vérifier</span>
+                                )}
                                 {calcCata && (() => {
                                   const kgResine = Math.round(calcCata.resines.reduce((s, r) => s + r.kg, 0) * 100) / 100;
                                   const detail = calcCata.resines.map(r =>
-                                    `${r.origine} : ${Math.round(r.kg * 100) / 100} kg ${LIBELLE_FAMILLE[r.famille]} à ${String(pourcentageCatalyse(r.famille, tempCata)).replace('.', ',')} %`).join('\n');
+                                    `${r.origine} : ${Math.round(r.kg * 100) / 100} kg ${LIBELLE_FAMILLE[r.famille]} à ${String(pourcentageCatalyse(r.famille, calcCata.temperature)).replace('.', ',')} %`).join('\n');
+                                  const libT = `${String(tempSaisie).replace('.', ',')} °C${tempSaisie !== calcCata.temperature ? ` (dosé à ${calcCata.temperature} °C)` : ''}`;
                                   return (
                                     <>
                                       <span className="font-medium text-foreground" title={detail || undefined}>
                                         {calcCata.resines.length === 0
-                                          ? `Catalyse à ${tempCata} °C : aucune résine Flowfast comptée`
-                                          : `Catalyse à ${tempCata} °C : ${String(kgResine).replace('.', ',')} kg de résine → ${String(calcCata.kgCatalyseur).replace('.', ',')} kg → ${calcCata.quantite ?? '?'} × ${prod?.poids ?? '?'} kg`}
+                                          ? `Catalyse à ${libT} : aucune résine Flowfast comptée`
+                                          : `Catalyse à ${libT} : ${String(kgResine).replace('.', ',')} kg de résine → ${String(calcCata.kgCatalyseur).replace('.', ',')} kg → ${calcCata.quantite ?? '?'} × ${prod?.poids ?? '?'} kg`}
                                         {l.catalyseManuelle && calcCata.quantite != null && calcCata.quantite !== l.quantite && (
                                           <span className="text-orange-500"> (calcul : {calcCata.quantite}, quantité forcée à la main)</span>
                                         )}

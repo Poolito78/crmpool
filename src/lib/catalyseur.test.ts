@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur } from './catalyseur';
+import { calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur, ligneDuTableau } from './catalyseur';
 import { CLE_COMPO } from './variantesCompo';
 import type { LigneDevis } from './store';
 
@@ -31,6 +31,17 @@ describe('catalyseur Flowfast', () => {
     expect(pourcentageCatalyse('319clear', 30)).toBe(0.9);
     expect(pourcentageCatalyse('215', 5)).toBe(4.5);
     expect(pourcentageCatalyse('405', 0)).toBe(10);
+  });
+
+  it('entre deux lignes, la plus prudente (la plus froide)', () => {
+    expect(ligneDuTableau(18)).toBe(15);
+    expect(ligneDuTableau(20)).toBe(20);
+    expect(ligneDuTableau(24.9)).toBe(20);
+    expect(ligneDuTableau(35)).toBe(30);
+    expect(ligneDuTableau(2)).toBe(0);
+    expect(ligneDuTableau(0)).toBe(0);
+    expect(ligneDuTableau(-3)).toBeNull();     // hors tableau : pas de calcul
+    expect(ligneDuTableau(undefined)).toBe(20);
   });
 
   it('reconnaît les familles, et ne devine pas', () => {

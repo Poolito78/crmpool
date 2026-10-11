@@ -21,8 +21,8 @@ import { cleSousCompo, varianteDeLigne, type VarianteCompo } from './variantesCo
  * composition lisible, ou une résine absente du tableau (108, 203, 216…),
  * n'est PAS compté : il remonte « à vérifier » — on ne devine pas un dosage.
  *
- * Seules les températures du tableau sont proposées : entre deux lignes, on
- * n'interpole pas une donnée de fabricant.
+ * Entre deux lignes du tableau on n'interpole pas : on prend la plus froide,
+ * la plus prudente (`ligneDuTableau`).
  */
 
 export const TEMPERATURES_CATALYSE = [30, 25, 20, 15, 10, 5, 0] as const;
@@ -55,6 +55,19 @@ export function pourcentageCatalyse(famille: FamilleResine, t: TemperatureCataly
 
 export function estTemperatureCatalyse(t: unknown): t is TemperatureCatalyse {
   return TEMPERATURES_CATALYSE.includes(t as TemperatureCatalyse);
+}
+
+/**
+ * La ligne du tableau qui dose une température quelconque — LA PLUS PRUDENTE
+ * (règle du 11/10/2026) : entre deux lignes, on prend la plus FROIDE, celle
+ * qui met le plus de catalyseur. 18 °C se dose comme 15 °C. Au-dessus de
+ * +30 °C, la ligne +30 °C. Sous 0 °C, le tableau ne dit rien : `null`, et le
+ * calcul n'est pas fait (on n'extrapole pas une donnée de fabricant).
+ */
+export function ligneDuTableau(t: number | undefined | null): TemperatureCatalyse | null {
+  const v = t == null || !Number.isFinite(t) ? TEMPERATURE_PAR_DEFAUT : t;
+  if (v < 0) return null;
+  return TEMPERATURES_CATALYSE.find(x => x <= v) ?? null;   // tableau rangé du plus chaud au plus froid
 }
 
 type Article = Pick<Produit, 'id' | 'reference' | 'description' | 'poids'>
