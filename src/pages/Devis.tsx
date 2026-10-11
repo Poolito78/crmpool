@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
+import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -1149,7 +1149,9 @@ export default function Devis() {
     const trouver = (id: string) => produitParId(produits, id);
     let change = false;
     const suivantes = lignes.map(l => {
-      const p = l.detailCompo && l.produitId ? trouver(l.produitId) : undefined;
+      /* Imprimé : ligne dépliée, OU composition modifiée (toujours montrée) — sauf œil fermé. */
+      const imprimer = (l.detailCompo || !!composantsPersonnalises(l.variantesChoisies)) && !l.detailMasque;
+      const p = imprimer && l.produitId ? trouver(l.produitId) : undefined;
       const v = p ? varianteDeLigne(p, l.variantesChoisies) : undefined;
       if (!v) {
         if (!l.detailImprime) return l;
@@ -4012,6 +4014,16 @@ export default function Devis() {
                                     {composantsPersonnalises(l.variantesChoisies)
                                       ? <span className="text-orange-500 font-normal">· composition propre</span>
                                       : Object.keys(prixForces(l.variantesChoisies)).length > 0 && <span className="text-orange-500 font-normal">· prix forcés</span>}
+                                  </button>
+                                )}
+                                {/* L'œil : le détail sur le devis et le PDF. Ouvert d'office dès que la
+                                    ligne est dépliée ou que sa composition a été modifiée. */}
+                                {compoLigne && (l.detailCompo || !!composantsPersonnalises(l.variantesChoisies)) && (
+                                  <button type="button" onClick={() => updateLigne(l.id, 'detailMasque', l.detailMasque ? undefined : true)}
+                                    className={`inline-flex items-center gap-1 hover:underline ${l.detailMasque ? 'text-muted-foreground' : 'text-primary'}`}
+                                    title={l.detailMasque ? 'Détail masqué sur le devis et le PDF — cliquer pour l\'afficher' : 'Détail visible sur le devis et le PDF — cliquer pour le masquer'}>
+                                    {l.detailMasque ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                    {l.detailMasque ? 'masqué sur le devis' : 'visible sur le devis'}
                                   </button>
                                 )}
                                 {teintesLigne.map((t, k) => teinteEdit === `${l.id}:${t.cle}` ? (

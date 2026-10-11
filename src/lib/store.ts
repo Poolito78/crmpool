@@ -577,6 +577,13 @@ export interface LigneDevis {
    * la ligne (prix retouché à la main), les composants s'impriment sans prix.
    */
   detailImprime?: { designation: string; quantite: number; unite: string; prixUnitaire: number }[];
+  /**
+   * L'œil du détail : le détail imprimé est MASQUÉ sur le devis et le PDF.
+   * Sans lui, le détail s'imprime dès que la ligne est dépliée — et TOUJOURS
+   * quand sa composition a été modifiée (pigments, SNLR…) : le client doit
+   * voir ce qu'on lui vend.
+   */
+  detailMasque?: boolean;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

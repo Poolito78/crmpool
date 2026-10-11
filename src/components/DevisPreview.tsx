@@ -25,7 +25,8 @@ import { noteEnTexte } from '@/lib/noteRiche';
  * imprime alors les seules quantités.
  */
 function lignesDetail(l: Devis['lignes'][number]): { designation: string; quantite: string; unite: string; prixUnitaire: number | null; total: number | null }[] {
-  if (!l.detailCompo || !l.detailImprime?.length) return [];
+  // `detailImprime` n'existe que si le détail doit s'imprimer (dépliée ou composition modifiée, œil ouvert).
+  if (l.detailMasque || !l.detailImprime?.length) return [];
   const somme = l.detailImprime.reduce((s, d) => s + d.quantite * d.prixUnitaire, 0);
   const juste = Math.abs(somme - l.prixUnitaireHT) <= 0.02;
   const remise = 1 - (l.remise || 0) / 100;
