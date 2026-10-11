@@ -1,4 +1,4 @@
-import { Plus, Trash } from 'lucide-react';
+import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
@@ -18,11 +18,13 @@ interface Props {
   variantes: VarianteCompo[];
   onChange: (fn: (prev: VarianteCompo[]) => VarianteCompo[]) => void;
   produits: Produit[];
+  /** Ouvre la fiche d'un article composant (clic sur l'icône). */
+  onOpen?: (produitId: string) => void;
 }
 
 const composantVide = (): LigneKit => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 });
 
-export default function VariantesCompoEditor({ actif, onActif, variantes, onChange, produits }: Props) {
+export default function VariantesCompoEditor({ actif, onActif, variantes, onChange, produits, onOpen }: Props) {
   const majVariante = (id: string, patch: Partial<VarianteCompo>) =>
     onChange(prev => prev.map(v => (v.id === id ? { ...v, ...patch } : v)));
   const majComposant = (id: string, idx: number, patch: Partial<LigneKit>) =>
@@ -77,7 +79,8 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                 <span className="mb-0.5"><BoutonsOrdre index={idx} total={v.composants.length} onMove={d => majVariante(v.id, { composants: deplacer(v.composants, idx, d) })} /></span>
                 <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
                   <span className="text-xs text-muted-foreground">Produit</span>
-                  <ProduitCombobox
+                  <div className="flex items-center gap-1">
+                  <div className="flex-1 min-w-0"><ProduitCombobox
                     produits={produits.filter(p => !p.typeKit)}
                     value={c.produitId || ''}
                     onSelect={produitId => {
@@ -89,7 +92,14 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
                         prixUnitaireHT: p ? p.prixHT : c.prixUnitaireHT,
                       });
                     }}
-                  />
+                  /></div>
+                  {c.produitId && onOpen && (
+                  <button type="button" onClick={() => onOpen(c.produitId!)} title="Ouvrir la fiche de l'article"
+                    className="p-1.5 rounded hover:bg-primary/10 text-primary/60 hover:text-primary shrink-0">
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </button>
+                )}
+                  </div>
                 </div>
                 <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
                   <span className="text-xs text-muted-foreground">Description</span>

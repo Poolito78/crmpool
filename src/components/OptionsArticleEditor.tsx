@@ -1,4 +1,4 @@
-import { Plus, Trash } from 'lucide-react';
+import { ExternalLink, Plus, Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
@@ -16,11 +16,13 @@ interface Props {
   lignes: LigneKit[];
   onChange: (fn: (prev: LigneKit[]) => LigneKit[]) => void;
   produits: Produit[];
+  /** Ouvre la fiche d'un article proposé en option (clic sur l'icône). */
+  onOpen?: (produitId: string) => void;
 }
 
 const vide = (): LigneKit => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0 });
 
-export default function OptionsArticleEditor({ actif, onActif, lignes, onChange, produits }: Props) {
+export default function OptionsArticleEditor({ actif, onActif, lignes, onChange, produits, onOpen }: Props) {
   const maj = (idx: number, patch: Partial<LigneKit>) =>
     onChange(prev => prev.map((l, i) => (i === idx ? { ...l, ...patch } : l)));
 
@@ -55,7 +57,8 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
             <span className="mb-0.5"><BoutonsOrdre index={idx} total={lignes.length} onMove={d => onChange(prev => deplacer(prev, idx, d))} /></span>
             <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
               <span className="text-xs text-muted-foreground">Produit</span>
-              <ProduitCombobox
+              <div className="flex items-center gap-1">
+              <div className="flex-1 min-w-0"><ProduitCombobox
                 produits={produits.filter(p => !p.typeKit)}
                 value={lk.produitId || ''}
                 onSelect={produitId => {
@@ -68,7 +71,14 @@ export default function OptionsArticleEditor({ actif, onActif, lignes, onChange,
                     consommation: p?.consommation ?? lk.consommation,
                   });
                 }}
-              />
+              /></div>
+              {lk.produitId && onOpen && (
+              <button type="button" onClick={() => onOpen(lk.produitId!)} title="Ouvrir la fiche de l'article"
+                className="p-1.5 rounded hover:bg-primary/10 text-primary/60 hover:text-primary shrink-0">
+                <ExternalLink className="w-3.5 h-3.5" />
+              </button>
+                )}
+              </div>
             </div>
             <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
               <span className="text-xs text-muted-foreground">Description</span>

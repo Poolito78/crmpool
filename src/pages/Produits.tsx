@@ -1096,9 +1096,24 @@ export default function Produits() {
     if (!editing) return;
     // Sauvegarde immédiate avant navigation
     const composantsValides = composants.filter(c => c.produitId && c.produitId !== '');
-    majProduitEdite(p => ({ ...p, ...form, composants: composantsValides.length > 0 ? composantsValides : undefined }));
+    /* Le kit, les options et les variantes composées en cours de saisie partent
+       avec : sans cela, ouvrir un article lié les effaçait de la fiche. */
+    majProduitEdite(p => ({
+      ...p, ...form,
+      composants: composantsValides.length > 0 ? composantsValides : undefined,
+      typeKit: isTypeKit, lignesKit: isTypeKit && lignesKit.length > 0 ? lignesKit : undefined,
+      typeOptions: isTypeOptions, lignesOptions: isTypeOptions && lignesOptions.length > 0 ? lignesOptions : [],
+      typeVariantesCompo: isTypeVariantesCompo, variantesCompo: isTypeVariantesCompo && variantesCompo.length > 0 ? variantesCompo : [],
+    }));
     setEditingStack(prev => [...prev, editing]);
     openEdit(compProd);
+  }
+
+  /** Ouvre la fiche d'un article désigné par son identifiant (composant d'une variante, d'une option, d'un kit). */
+  function ouvrirArticleLie(produitId: string) {
+    const p = produits.find(x => x.id === produitId);
+    if (!editing) { toast.info("Enregistrez d'abord l'article avant d'ouvrir un article lié."); return; }
+    if (p) openComposant(p);
   }
 
   function goBack() {
@@ -3087,6 +3102,8 @@ export default function Produits() {
                         {/* Produit */}
                         <div className="flex flex-col gap-0.5 min-w-[200px] flex-1">
                           <span className="text-xs text-muted-foreground">Produit</span>
+                          <div className="flex items-center gap-1">
+                          <div className="flex-1 min-w-0">
                           <ProduitCombobox
                             produits={produits.filter(p => !p.typeKit)}
                             value={lk.produitId || ''}
@@ -3102,6 +3119,14 @@ export default function Produits() {
                               }));
                             }}
                           />
+                          </div>
+                          {lk.produitId && (
+                            <button type="button" onClick={() => ouvrirArticleLie(lk.produitId!)} title="Ouvrir la fiche de l'article"
+                              className="p-1.5 rounded hover:bg-primary/10 text-primary/60 hover:text-primary shrink-0">
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          </div>
                         </div>
                         {/* Description */}
                         <div className="flex flex-col gap-0.5 flex-1 min-w-[120px]">
@@ -3205,6 +3230,7 @@ export default function Produits() {
                 variantes={variantesCompo}
                 onChange={setVariantesCompo}
                 produits={produits}
+                onOpen={ouvrirArticleLie}
               />
             </div>
 
@@ -3216,6 +3242,7 @@ export default function Produits() {
                 lignes={lignesOptions}
                 onChange={setLignesOptions}
                 produits={produits}
+                onOpen={ouvrirArticleLie}
               />
             </div>
 
