@@ -157,8 +157,43 @@ export const CLE_COMPOSANTS = '__composants';
 export interface ComposantLigne extends LigneKit {
   /** Teinte propre à ce composant (« RAL 1015… ») ; sans elle, celle de la ligne. */
   teinte?: string;
-  /** L'œil du composant : compté dans le prix, mais absent du devis imprimé et du PDF. */
+  /**
+   * L'œil du composant sur le devis imprimé : `true` masqué, `false` affiché,
+   * absent = par défaut (affiché s'il a été MODIFIÉ, voir `composantsVisibles`).
+   * Masqué, il reste compté dans le prix.
+   */
   masque?: boolean;
+}
+
+/**
+ * Quels composants s'impriment — dans l'ordre de `detailCompo`.
+ *
+ * Règle du 11/10/2026 : quand la ligne a sa propre composition, seuls les
+ * composants MODIFIÉS s'impriment par défaut — produit changé, quantité
+ * retouchée, teinte propre, prix forcé, composant ajouté. Ceux restés tels que
+ * la fiche article les donne n'apprennent rien au client : masqués d'office.
+ * Sans composition propre (ligne simplement dépliée), tout s'imprime. L'œil
+ * d'un composant (`masque`) l'emporte toujours.
+ */
+export function composantsVisibles<P extends AvecVariantes>(
+  v: VarianteCompo, resoudre: ResoudrePrix, trouver: (id: string) => P | undefined, vc?: Record<string, string>,
+): boolean[] {
+  const perso = composantsPersonnalises(vc);
+  if (!perso) return detailCompo(v, resoudre, trouver, vc, prixForces(vc)).map(() => true);
+  // La composition de la fiche : la même ligne sans sa composition propre.
+  const sansPerso = { ...(vc ?? {}) };
+  delete sansPerso[CLE_COMPOSANTS];
+  const origine = aPlat(v, resoudre, trouver, sansPerso);
+  const pris = new Set<number>();
+  return perso.map(c => {
+    if (c.masque === true) return false;
+    if (c.masque === false) return true;
+    // Inchangé = un composant de la fiche, même produit, même quantité, sans teinte ni prix propres.
+    const k = c.teinte || c.prixFige ? -1 : origine.findIndex((o, i) => !pris.has(i)
+      && o.produitId === c.produitId && Math.abs((o.quantite || 0) - (c.quantite || 0)) < 1e-6 && !o.prixFige);
+    if (k >= 0) { pris.add(k); return false; }
+    return true;
+  });
 }
 
 export function composantsPersonnalises(vc?: Record<string, string>): ComposantLigne[] | null {

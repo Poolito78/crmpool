@@ -41,7 +41,7 @@ import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
   cleSousCompo, sousVariantesRetenues, prixLigneCompo, detailCompo, prixForces, PREFIXE_PRIX, CLE_COMPOSANTS,
-  composantsPersonnalises,
+  composantsPersonnalises, composantsVisibles,
   dimensionsDesComposants, type DimensionDeComposant,
 } from '@/lib/variantesCompo';
 import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
@@ -1159,7 +1159,8 @@ export default function Devis() {
         const { detailImprime: _d, ...reste } = l;
         return reste;
       }
-      const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map(d => ({
+      const visibles = composantsVisibles(v, resoudre, trouver, l.variantesChoisies);
+      const imprime = detailCompo(v, resoudre, trouver, l.variantesChoisies, prixForces(l.variantesChoisies)).map((d, i) => ({
         /* La teinte du composant (la sienne, sinon celle de la ligne) suit sa désignation :
            deux pigments de RAL différents se lisent sur le devis. */
         designation: [
@@ -1171,7 +1172,8 @@ export default function Devis() {
         unite: d.composant.unite || d.produit?.unite || '',
         prixUnitaire: Math.round(d.prixUnitaire * d.facteurRemise * 1e4) / 1e4,
         // Gardé dans la copie (il compte dans le prix, donc dans le contrôle), mais non imprimé.
-        ...((d.composant as { masque?: boolean }).masque ? { masque: true } : {}),
+        // Par défaut, seuls les composants modifiés s'impriment (composantsVisibles).
+        ...(!visibles[i] ? { masque: true } : {}),
       }));
       if (JSON.stringify(imprime) === JSON.stringify(l.detailImprime)) return l;
       change = true;

@@ -4,7 +4,7 @@ import {
   varianteDeLigne, type VarianteCompo,
   cleSousCompo, resoudreAvecSousVariantes, sousVariantesRetenues, dimensionsDesComposants,
   detailCompo, prixDetailCompo, prixLigneCompo, prixForces, avecPrixForce,
-  aPlat, avecComposants, composantsPersonnalises,
+  aPlat, avecComposants, composantsPersonnalises, composantsVisibles,
 } from './variantesCompo';
 
 const ligne = (p: object) => ({ description: '', quantite: 1, unite: 'pièce', prixUnitaireHT: 0, remise: 0, ...p });
@@ -157,6 +157,21 @@ describe('variantes en cascade (SNLR dans 319R)', () => {
     // Rétablir : la variante reprend.
     expect(prixLigneCompo(KIT, prixArticle, trouver, avecComposants(vc2, null))).toBe(170);
     expect(composantsPersonnalises(avecComposants(vc2, null))).toBeNull();
+  });
+
+  it('composition modifiée : seuls les composants modifiés s’impriment par défaut, l’œil l’emporte', () => {
+    const vc = { [CLE_COMPO]: 'k', [cleSousCompo('snlr')]: 's1' };
+    expect(composantsVisibles(KIT, prixArticle, trouver, vc)).toEqual([true, true, true]);   // simplement dépliée
+    const plat = aPlat(KIT, prixArticle, trouver, vc);
+    // Pigment dupliqué en deux RAL ; 319 et base inchangés.
+    const perso = [plat[0], plat[1], { ...plat[2], quantite: 1, teinte: 'RAL 1015' }, { ...plat[2], quantite: 1, teinte: 'RAL 7040' }];
+    expect(composantsVisibles(KIT, prixArticle, trouver, avecComposants(vc, perso))).toEqual([false, false, true, true]);
+    // L'œil : la base affichée à la main, un pigment masqué à la main.
+    const yeux = [plat[0], { ...plat[1], masque: false }, { ...perso[2], masque: true }, perso[3]];
+    expect(composantsVisibles(KIT, prixArticle, trouver, avecComposants(vc, yeux))).toEqual([false, true, false, true]);
+    // Une quantité retouchée suffit à rendre le composant « modifié ».
+    expect(composantsVisibles(KIT, prixArticle, trouver, avecComposants(vc, [plat[0], { ...plat[1], quantite: 3 }, plat[2]])))
+      .toEqual([false, true, false]);
   });
 
   it('une boucle de fiches ne fige pas le calcul', () => {
