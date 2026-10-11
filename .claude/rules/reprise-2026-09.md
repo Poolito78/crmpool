@@ -376,6 +376,20 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - Teintes standard : sable, rouge brun, gris. « Jaune clair » n'y est pas —
   à valider avec ISOMARK (BAT), le système ne le dit que dans sa description.
 
+## CA Odoo : Flooring & Quartz hors FM (11 oct.)
+
+`ca-refresh` (`extraireFlooringQuartz`) publie `summary.flooring_quartz` : le
+CA de **tous les commerciaux** par mois, ISOFLOOR / quartz & granit, moins la
+part de François MOUHOT = **hors FM** (national hors IDF Nord). Affiché sous
+le réalisé mensuel de la tuile CA Odoo, et onglet « CA ISOFLOOR » de l'export
+Excel du site `ca-mouhot`.
+⚠️ **Le périmètre est le favori Odoo « Analyse des factures Flooring&Quartz »,
+relu dans `ir.filters`**, jamais une liste de catégories : les quartz et
+granits sont en « ISOMARK / H2 » avec les BAO GRANITE. Favori introuvable
+(privé à un autre compte que celui de l'API) ou domaine dynamique → erreur
+affichée, aucun chiffre.
+**À déployer** : `.\deploy-function.ps1 ca-refresh`, puis Actualiser.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
