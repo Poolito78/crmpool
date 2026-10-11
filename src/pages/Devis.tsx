@@ -1359,6 +1359,22 @@ export default function Devis() {
     return out;
   }
 
+  /**
+   * L'intitulé d'une ligne à variante composée dont on retouche le détail.
+   *
+   * Il garde la mention de la variante et des sous-variantes (« - 8 Kits de
+   * 5,66 kg -SNLR 8 sacs… ») ; les composants modifiés — les pigments — ont
+   * leurs sous-lignes et n'y entrent pas. On ne le reconstitue QUE s'il est
+   * réduit au nom seul de l'article (article re-sélectionné sur la ligne) : un
+   * intitulé écrit ou retouché à la main ne bouge jamais.
+   */
+  function intituleCompo(l: LigneDevis, racine: Produit, v: VarianteCompo, vc: Record<string, string>): string {
+    const base = designationProduit(racine);
+    if (noteEnTexte(l.description).trim() !== base.trim()) return l.description;
+    const sous = sousVariantesRetenues(v, (id: string) => produitParId(produits, id), vc);
+    return designationAvecVariante(base, v, sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom })));
+  }
+
   /** Prix, coût d'achat et intitulé d'une ligne à variante composée, sous-variantes comprises. */
   function ligneAvecCompo(l: LigneDevis, racine: Produit): LigneDevis {
     const v = varianteDeLigne(racine, l.variantesChoisies);
@@ -4002,8 +4018,12 @@ export default function Devis() {
                                 onChange={vc => {
                                   const client = clients.find(c => c.id === clientId);
                                   // Un seul calcul : celui de toutes les relectures de prix (getPrixLigne).
-                                  setLignes(prev => prev.map(li => li.id === l.id
-                                    ? { ...li, variantesChoisies: vc, prixUnitaireHT: getPrixLigne(prod, li.quantite, vc, client?.estRevendeur) } : li));
+                                  setLignes(prev => prev.map(li => li.id !== l.id ? li : {
+                                    ...li,
+                                    variantesChoisies: vc,
+                                    prixUnitaireHT: getPrixLigne(prod, li.quantite, vc, client?.estRevendeur),
+                                    description: intituleCompo(li, prod, compoLigne, vc),
+                                  }));
                                 }}
                               />
                             )}
