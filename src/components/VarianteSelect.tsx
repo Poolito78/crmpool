@@ -119,8 +119,10 @@ export default function VarianteSelect({ dimension, value, onChange, className }
           style={{ minWidth: '200px', maxWidth: '340px', left: 0 }}>
           {hasVisuals ? (
             // Grille de swatches visuels
-            <div className="p-2 grid gap-1"
-              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))' }}>
+            /* Dix lignes au plus (~76 px chacune), puis un ascenseur : 220 teintes ne
+               doivent pas faire déborder le menu hors de l'écran. */
+            <div className="p-2 grid gap-1 overflow-y-auto"
+              style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(64px, 1fr))', maxHeight: 'min(760px, 70vh)' }}>
               {dimension.options.map(opt => (
                 <button
                   key={opt.id}
