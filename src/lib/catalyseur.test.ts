@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur, ligneDuTableau } from './catalyseur';
+import { calculerCatalyse, familleResine, pourcentageCatalyse, estCatalyseur, ligneDuTableau, dosageA } from './catalyseur';
 import { CLE_COMPO } from './variantesCompo';
 import type { LigneDevis } from './store';
 
@@ -33,15 +33,31 @@ describe('catalyseur Flowfast', () => {
     expect(pourcentageCatalyse('405', 0)).toBe(10);
   });
 
-  it('entre deux lignes, la plus prudente (la plus froide)', () => {
-    expect(ligneDuTableau(18)).toBe(15);
-    expect(ligneDuTableau(20)).toBe(20);
-    expect(ligneDuTableau(24.9)).toBe(20);
-    expect(ligneDuTableau(35)).toBe(30);
-    expect(ligneDuTableau(2)).toBe(0);
-    expect(ligneDuTableau(0)).toBe(0);
-    expect(ligneDuTableau(-3)).toBeNull();     // hors tableau : pas de calcul
+  it('entre deux points, le plus prudent (le plus froid) de SA fiche', () => {
+    expect(dosageA('107', 18)).toEqual({ pct: 3, point: 15 });     // tableau ISOFLOOR, 7 points
+    expect(dosageA('107', 24.9)).toEqual({ pct: 2, point: 20 });
+    expect(dosageA('107', 35)).toEqual({ pct: 1, point: 30 });
+    expect(dosageA('108', 18)).toEqual({ pct: 4, point: 10 });     // fiche Flowcrete, 4 points
+    expect(dosageA('230', 20)).toEqual({ pct: 1.4, point: 20 });
+    expect(dosageA('203', 0)).toEqual({ pct: 5, point: 0 });
+    expect(dosageA('216', -1)).toBeNull();                         // accélérateur 404 : hors calcul
+    expect(ligneDuTableau(-3)).toBeNull();
     expect(ligneDuTableau(undefined)).toBe(20);
+  });
+
+  it('les résines des fiches Flowcrete sont reconnues', () => {
+    expect(familleResine(art('x', 'FLOWFASTPRIMER108.20', 'FLOWFAST 108 DAMP PRIMER (20KG)', 20))).toBe('108');
+    expect(familleResine(art('x', 'FLOWFAST203', 'FLOWFAST 203 HOT BINDER (20KG)', 20))).toBe('203');
+    expect(familleResine(art('x', 'FLOWFAST205', 'FLOWFAST 205 STANDARD SEAL (20KG)', 20))).toBe('205');
+    expect(familleResine(art('x', 'FLOWFAST230', 'FLOWFAST 230 MENBRANE (20KG)', 0))).toBe('230');
+  });
+
+  it('un poids absent ne se devine pas (FLOWFAST230 à 0 kg en base)', () => {
+    const m = art('230', 'FLOWFAST230', 'FLOWFAST 230 MENBRANE (20KG)', 0);
+    const c = calculerCatalyse([{ id: 'a', produitId: '230', description: m.description, quantite: 2, unite: 'U', prixUnitaireHT: 0, tva: 20, remise: 0 }],
+      id => (id === '230' ? m : undefined), 20, 2);
+    expect(c.resines).toHaveLength(0);
+    expect(c.aVerifier).toEqual([m.description]);
   });
 
   it('reconnaît les familles, et ne devine pas', () => {
@@ -50,7 +66,8 @@ describe('catalyseur Flowfast', () => {
     expect(familleResine(F319C)).toBe('319clear');
     expect(familleResine(art('x', 'FLOWFASTPRIMER107.20', 'FLOWFAST 107 CERAMIC PRIMER (20KG)', 20))).toBe('107');
     expect(familleResine(F215KIT)).toBe('a_verifier');                      // kit : poids ≠ résine
-    expect(familleResine(art('x', 'FLOWFAST216', 'FLOWFAST 216 FLEXIBLE BINDER R (20KG)', 20))).toBe('a_verifier'); // hors tableau
+    expect(familleResine(art('x', 'FLOWFAST216', 'FLOWFAST 216 FLEXIBLE BINDER R (20KG)', 20))).toBe('216');
+    expect(familleResine(art('x', 'FLOWFASTF1', 'FLOWFAST F1 MORTAR (A 2,2 KG + B 17,8 kG)', 0))).toBe('a_verifier'); // sans fiche
     expect(familleResine(art('x', 'FLOWFASTSNLFILLER', 'SNL Filler (25 kg)', 25))).toBeNull();
     expect(familleResine(art('x', 'DURFLOWFASTEURO', 'DURCISSEUR CATALYST (400G)', 0))).toBeNull();
     expect(familleResine(SNLR)).toBeNull();

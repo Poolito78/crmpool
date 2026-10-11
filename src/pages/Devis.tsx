@@ -32,7 +32,7 @@ import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import { InputNombre } from '@/components/InputNombre';
 import {
-  calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE, pourcentageCatalyse,
+  calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE,
   TEMPERATURES_CATALYSE, TEMPERATURE_PAR_DEFAUT,
 } from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
@@ -3896,8 +3896,10 @@ export default function Devis() {
                                 {calcCata && (() => {
                                   const kgResine = Math.round(calcCata.resines.reduce((s, r) => s + r.kg, 0) * 100) / 100;
                                   const detail = calcCata.resines.map(r =>
-                                    `${r.origine} : ${Math.round(r.kg * 100) / 100} kg ${LIBELLE_FAMILLE[r.famille]} à ${String(pourcentageCatalyse(r.famille, calcCata.temperature)).replace('.', ',')} %`).join('\n');
-                                  const libT = `${String(tempSaisie).replace('.', ',')} °C${tempSaisie !== calcCata.temperature ? ` (dosé à ${calcCata.temperature} °C)` : ''}`;
+                                    `${r.origine} : ${Math.round(r.kg * 100) / 100} kg ${LIBELLE_FAMILLE[r.famille]} à ${String(r.pct).replace('.', ',')} %`
+                                    + (r.famille !== '405' && r.point !== tempSaisie ? ` (point ${r.point} °C de sa fiche, le plus prudent)` : '')).join('\n');
+                                  const arrondiPoint = calcCata.resines.some(r => r.famille !== '405' && r.point !== tempSaisie);
+                                  const libT = `${String(tempSaisie).replace('.', ',')} °C${arrondiPoint ? ' (dosé au point le plus froid de chaque fiche)' : ''}`;
                                   return (
                                     <>
                                       <span className="font-medium text-foreground" title={detail || undefined}>
