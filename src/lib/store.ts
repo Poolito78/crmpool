@@ -846,6 +846,33 @@ export function designationProduit(p: { description?: string; descriptionVariant
   return ajouts.length ? `${variante} + ${ajouts.join(' + ')}` : variante;
 }
 
+/**
+ * Les colonnes JSON volumineuses d'un article, par colonne → champ.
+ *
+ * ⚠️ Un message temps réel d'une MISE À JOUR n'embarque pas les colonnes lourdes
+ * (TOAST) qui n'ont pas changé : la ligne reçue n'a alors PAS la clé
+ * `variantes`, `composants`… Reconstruire l'article depuis ce message effaçait
+ * les 220 teintes RAL d'un pigment dès qu'un prix ou une fiche bougeait — et
+ * le prochain enregistrement les effaçait en base.
+ */
+const COLONNES_LOURDES: [string, keyof Produit][] = [
+  ['variantes', 'variantes'], ['composants', 'composants'], ['lignes_kit', 'lignesKit'],
+  ['lignes_options', 'lignesOptions'], ['variantes_compo', 'variantesCompo'],
+  ['paliers_prix', 'paliersPrix'], ['achats_historique', 'achatsHistorique'],
+  ['fiches_supplementaires', 'fichesSupplementaires'], ['consommations', 'consommations'],
+];
+
+/** Garde la valeur en mémoire des colonnes lourdes absentes du message reçu. */
+export function fusionnerColonnesLourdes(courant: Produit, recu: Produit, row: Record<string, unknown>): Produit {
+  let out = recu;
+  for (const [colonne, champ] of COLONNES_LOURDES) {
+    if (colonne in row) continue;
+    if (out === recu) out = { ...recu };
+    (out as unknown as Record<string, unknown>)[champ] = courant[champ];
+  }
+  return out;
+}
+
 export function dbToProduitPublic(r: any): Produit { return dbToProduit(r); }
 
 function dbToProduit(r: any): Produit {
@@ -1819,15 +1846,16 @@ export function useStore() {
           }
           const row = ev?.new;
           if (!row?.id) { refetchers.produits(); return prev; }
-          const p = dbToProduit(row);
-          const i = index.get(p.id);
+          const p0 = dbToProduit(row);
+          const i = index.get(p0.id);
           if (i === undefined) {
             n = n || prev.slice();
-            index.set(p.id, n.length);
-            n.push(p);
+            index.set(p0.id, n.length);
+            n.push(p0);
             continue;
           }
           const courant = (n || prev)[i];
+          const p = fusionnerColonnesLourdes(courant, p0, row);
           if (JSON.stringify(courant) === JSON.stringify(p)) continue;  // notre écho
           n = n || prev.slice();
           n[i] = p;
