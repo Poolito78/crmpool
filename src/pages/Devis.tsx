@@ -123,6 +123,8 @@ const statutColors: Record<string, string> = {
 /* « Relancé » n'est pas un statut (voir relanceDevis.ts) : un devis envoyé et
    relancé garde `statut: 'envoyé'`, il n'en change que l'affichage. */
 const couleurStatut = (d: DevisType) => estRelance(d) ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' : statutColors[d.statut];
+/** Statuts absents de la liste tant que le filtre de statut ne les sélectionne pas. */
+const STATUTS_MASQUES: DevisType['statut'][] = ['accepté', 'expiré', 'archivé', 'système'];
 /** Le filtre de statut connaît deux valeurs de plus que le statut : « relancé » et « à relancer ». */
 function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean {
   if (s === 'relancé') return estRelance(d);
@@ -733,13 +735,13 @@ export default function Devis() {
       || d.lignes.some(l => l.variantesChoisies && valeursVisibles(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
     const cs = parseChoiceFilter(colFiltersD.statut || '');
-    /* ARCHIVÉS ET SYSTÈME (MODÈLES) MASQUÉS PAR DÉFAUT — ils ne paraissent que
-       lorsque le filtre de statut les sélectionne. Une exclusion (« sauf
-       brouillon ») ne les fait pas revenir. Ancien réglage `showArchived`
-       supprimé : sans bouton pour l'éteindre, il restait allumé. */
+    /* ACCEPTÉS, EXPIRÉS, ARCHIVÉS ET SYSTÈME (MODÈLES) MASQUÉS PAR DÉFAUT — la liste
+       montre ce qui reste à faire ; ils ne paraissent que lorsque le filtre de
+       statut les sélectionne. Une exclusion (« sauf brouillon ») ne les fait
+       pas revenir. Ancien réglage `showArchived` supprimé : sans bouton pour
+       l'éteindre, il restait allumé. */
     const statutChoisi = (s: string) => filterStatut === s || cs.only === s;
-    if (d.statut === 'archivé' && !statutChoisi('archivé')) return false;
-    if (d.statut === 'système' && !statutChoisi('système')) return false;
+    if (STATUTS_MASQUES.includes(d.statut) && !statutChoisi(d.statut)) return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterProduit.trim()) {
