@@ -1193,10 +1193,13 @@ export default function Devis() {
       const p = l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte' ? produitParId(produits, l.produitId) : undefined;
       const v = p ? varianteDeLigne(p, l.variantesChoisies) : undefined;
       if (!p || !v) return l;
-      const d = intituleCompo(l, p, v, l.variantesChoisies ?? {});
-      if (d === l.description) return l;
+      const vc = l.variantesChoisies ?? {};
+      // Saisi à la main : on n'y touche pas, et on ne le retient pas comme automatique.
+      if (!intituleEstAuto(l, p, v, vc)) return l;
+      const d = intituleCompo(l, p, v, vc);
+      if (d === l.description && l.intituleAuto === d) return l;
       change = true;
-      return { ...l, description: d };
+      return { ...l, description: d, intituleAuto: d };
     });
     if (change) setLignes(suivantes);
   }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1413,11 +1416,19 @@ export default function Devis() {
     }
 
     /* On ne réécrit qu'un intitulé posé automatiquement : le nom seul de l'article
-       (article re-sélectionné), ou l'intitulé complet ou épuré déjà calculé. Un
+       (article re-sélectionné), l'intitulé complet ou épuré, ou le DERNIER posé
+       (`intituleAuto` — il suit ainsi un nom de variante renommé sur la fiche). Un
        intitulé écrit ou retouché à la main ne bouge jamais. */
     const actuel = noteEnTexte(l.description).trim();
-    const auto = [base, complet, filtre].map(t => noteEnTexte(t).trim());
+    const auto = [base, complet, filtre, l.intituleAuto ?? ''].map(t => noteEnTexte(t).trim()).filter(Boolean);
     return auto.includes(actuel) ? filtre : l.description;
+  }
+
+  /** L'intitulé est-il automatique (donc à suivre) ? Mêmes critères que `intituleCompo`. */
+  function intituleEstAuto(l: LigneDevis, racine: Produit, v: VarianteCompo, vc: Record<string, string>): boolean {
+    const d = intituleCompo(l, racine, v, vc);
+    return d !== l.description || noteEnTexte(l.description).trim() === noteEnTexte(l.intituleAuto ?? '').trim()
+      || noteEnTexte(l.description).trim() === noteEnTexte(d).trim() && intituleCompo({ ...l, description: designationProduit(racine) }, racine, v, vc) === d;
   }
 
   /** Prix, coût d'achat et intitulé d'une ligne à variante composée, sous-variantes comprises. */
@@ -1426,10 +1437,13 @@ export default function Devis() {
     if (!v) return l;
     const trouver = (id: string) => produitParId(produits, id);
     const sous = sousVariantesRetenues(v, trouver, l.variantesChoisies);
+    const intitule = designationAvecVariante(designationProduit(racine), v,
+      sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom })));
     return {
       ...l,
-      description: designationAvecVariante(designationProduit(racine), v,
-        sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom }))),
+      description: intitule,
+      // Posé automatiquement : il suivra la composition tant qu'on n'y touche pas.
+      intituleAuto: intitule,
       unite: 'ens.',
       prixUnitaireHT: prixLigneCompo(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur), trouver, l.variantesChoisies),
       prixAchatLigne: achatVarianteCompo(v, produits, l.variantesChoisies) ?? 0,

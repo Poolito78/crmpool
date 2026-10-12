@@ -586,6 +586,12 @@ export interface LigneDevis {
    * voir ce qu'on lui vend.
    */
   detailMasque?: boolean;
+  /**
+   * Le dernier intitulé posé AUTOMATIQUEMENT (variante composée). Tant que la
+   * désignation lui est identique, elle suit la composition — y compris un nom
+   * de variante renommé sur la fiche. Retouchée à la main, elle ne bouge plus.
+   */
+  intituleAuto?: string;
 }
 
 export type RaisonArchive = 'doublon' | 'concurrent_prix' | 'concurrent_delai' | 'budget' | 'injoignable' | 'autre';

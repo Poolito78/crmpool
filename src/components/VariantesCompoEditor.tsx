@@ -6,7 +6,7 @@ import ProduitCombobox from '@/components/ProduitCombobox';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
 import { designationProduit, formatMontant, generateId, type LigneKit, type Produit } from '@/lib/store';
-import { prixComposant, prixVarianteCompo, type ResoudrePrix, type VarianteCompo } from '@/lib/variantesCompo';
+import { nomVariante, prixComposant, prixVarianteCompo, type ResoudrePrix, type VarianteCompo } from '@/lib/variantesCompo';
 
 /**
  * Les VARIANTES COMPOSÉES d'un article : chacune est une combinaison de
@@ -71,7 +71,7 @@ export default function VariantesCompoEditor({ actif, onActif, variantes, onChan
               <div className="flex flex-col gap-0.5 flex-1">
                 <span className="text-xs text-muted-foreground">Nom de la variante (complète la désignation de l'article)</span>
                 {/* Sélectionner du texte fait paraître la barre : G pour le gras (repris dans la ligne de devis). */}
-                <NoteEditable uneLigne value={v.nom} onChange={nom => majVariante(v.id, { nom })} placeholder="Ex : avec primaire et finition"
+                <NoteEditable uneLigne value={v.nom} onChange={nom => majVariante(v.id, { nom })} placeholder={nomVariante({ nom: '', composants: v.composants }, c => c.description) || 'Ex : avec primaire et finition (facultatif si des articles sont choisis)'}
                   className="text-xs text-foreground leading-6 px-3 py-1 border border-input bg-background focus:ring-1 focus:ring-ring" />
               </div>
               <span className="text-xs text-muted-foreground pb-2">Public : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudre))}</strong> · Revendeur : <strong className="text-foreground">{formatMontant(prixVarianteCompo(v, resoudreRevendeur))}</strong> HT</span>

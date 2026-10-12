@@ -408,6 +408,18 @@ export function varianteDeLigne(
   return id ? produit?.variantesCompo?.find(v => v.id === id) : undefined;
 }
 
+/**
+ * Le nom d'une variante, ou à défaut celui de ses composants (« FLOWFAST 319
+ * Flexible Seal Unpigmented (20 kg) + SNL 319 ROAD ») : le nom est FACULTATIF
+ * dès que la variante désigne des articles. Les désignations vides ou sans
+ * lettre (« . ») sont sautées. Sert à l'affichage (fiche, choix au devis) :
+ * l'intitulé de la ligne, lui, ne reprend que le nom saisi.
+ */
+export function nomVariante(v: Pick<VarianteCompo, 'nom' | 'composants'>, nommer: (c: LigneKit) => string): string {
+  if (significatif(v.nom)) return v.nom;
+  return v.composants.map(nommer).filter(significatif).join(' + ');
+}
+
 /** Un libellé qui dit quelque chose : au moins une lettre ou un chiffre (« . » ne dit rien). */
 const significatif = (t: string | undefined) => !!t && /[\p{L}\p{N}]/u.test(noteSansBalises(t));
 /** Le texte sans balises de mise en forme (`**`), pour juger s'il est vide. */
