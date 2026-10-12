@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -15,6 +15,9 @@ import { useCommercials } from '@/hooks/useCommercials';
 const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 import { CA_ODOO_URL } from '@/lib/caOdoo';
+import { ouvrirFenetre } from '@/lib/fenetres';
+import { useFenetres } from '@/hooks/useFenetres';
+import FenetresMenu from '@/components/FenetresMenu';
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
@@ -26,7 +29,9 @@ type NavEntry = NavLink | NavGroup;
 /* Un item de nav : <Link> interne, ou <a target="_blank"> pour un lien externe.
    Passer par un seul composant évite d'oublier le cas externe dans l'un des
    quatre endroits où la nav se rend (icônes repliées, lien racine, item de
-   groupe, barre mobile). */
+   groupe, barre mobile). Maj+clic sur un lien interne l'ouvre dans une
+   fenêtre liée (`ouvrirFenetre`) plutôt que de laisser le navigateur en
+   ouvrir une qu'on ne saurait plus retrouver. */
 function NavItem({ item, className, onClick, title, children }: {
   item: NavLink; className: string; onClick?: () => void; title?: string; children: React.ReactNode;
 }) {
@@ -38,7 +43,15 @@ function NavItem({ item, className, onClick, title, children }: {
     );
   }
   return (
-    <Link to={item.path} onClick={onClick} title={title} className={className}>
+    <Link
+      to={item.path}
+      onClick={e => {
+        if (e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); ouvrirFenetre(item.path); return; }
+        onClick?.();
+      }}
+      title={title}
+      className={className}
+    >
       {children}
     </Link>
   );
@@ -84,6 +97,24 @@ const NAV: NavEntry[] = [
     ],
   },
 ];
+
+/* Icône « ouvrir dans une nouvelle fenêtre », au survol d'une entrée du menu
+   déplié. Sœur du lien et non enfant : un bouton dans un <a> est invalide. */
+function BoutonFenetre({ path, actif }: { path: string; actif: boolean }) {
+  return (
+    <button
+      type="button"
+      onClick={() => ouvrirFenetre(path)}
+      title="Ouvrir dans une nouvelle fenêtre (Maj+clic)"
+      className={cn(
+        'hidden md:flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center justify-center w-6 h-6 rounded-md opacity-0 group-hover/nav:opacity-100 focus:opacity-100 transition-opacity',
+        actif ? 'text-sidebar-primary-foreground/80 hover:bg-white/15' : 'text-sidebar-foreground/60 hover:bg-sidebar-border hover:text-sidebar-foreground',
+      )}
+    >
+      <ExternalLink className="w-3.5 h-3.5" />
+    </button>
+  );
+}
 
 export default function CRMLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -247,8 +278,8 @@ export default function CRMLayout() {
       if (entry.type === 'link') {
         const active = isLinkActive(entry.path);
         return (
+          <div key={entry.path} className="relative group/nav">
           <NavItem
-            key={entry.path}
             item={entry}
             onClick={onLinkClick}
             className={cn(
@@ -261,6 +292,8 @@ export default function CRMLayout() {
             <entry.icon className="w-5 h-5 shrink-0" />
             {entry.label}
           </NavItem>
+          {!entry.external && <BoutonFenetre path={entry.path} actif={active} />}
+          </div>
         );
       }
 
@@ -289,8 +322,8 @@ export default function CRMLayout() {
               {entry.items.map(item => {
                 const active = isLinkActive(item.path);
                 return (
+                  <div key={item.path} className="relative group/nav">
                   <NavItem
-                    key={item.path}
                     item={item}
                     onClick={onLinkClick}
                     className={cn(
@@ -303,6 +336,8 @@ export default function CRMLayout() {
                     <item.icon className="w-4 h-4 shrink-0" />
                     <span className={cn('min-w-0 truncate', item.label.length > 16 && 'text-[13px]')}>{item.label}</span>
                   </NavItem>
+                  {!item.external && <BoutonFenetre path={item.path} actif={active} />}
+                  </div>
                 );
               })}
             </div>
@@ -316,6 +351,18 @@ export default function CRMLayout() {
     ?? navFlat.find(i => i.path.split('?')[0] === location.pathname);
   const currentLabel = currentNav?.label ?? (location.pathname === '/crm' ? 'CRM' : 'MonCRM');
   const currentShort = currentNav?.shortLabel ?? currentLabel;
+
+  /* Nom de la fenêtre : « Devis » des Paramètres ne doit pas se confondre
+     avec la page Devis dans la liste des fenêtres ni dans la barre des tâches. */
+  const groupeCourant = currentNav
+    ? nav.find((e): e is NavGroup => e.type === 'group' && e.items.includes(currentNav))
+    : undefined;
+  const libelleFenetre = groupeCourant?.label === 'Paramètres' ? `Paramètres · ${currentLabel}` : currentLabel;
+  const fenetres = useFenetres(libelleFenetre);
+  const pagesFenetre = useMemo(
+    () => navFlat.filter(i => !i.external && !i.path.startsWith('/parametres') && i.path !== '/ged'),
+    [navFlat],
+  );
 
   return (
     <div
@@ -377,6 +424,13 @@ export default function CRMLayout() {
           </button>
         </nav>
         <div className={cn('pb-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
+          <FenetresMenu
+            fenetres={fenetres}
+            pages={pagesFenetre}
+            pageCourante={location.pathname + location.search}
+            libelleCourant={libelleFenetre}
+            collapsed={collapsed}
+          />
           {/* Utilisateur connecté */}
           {collapsed ? (
             <div title={`${currentLabel2} · ${roleLabel}`} className="flex items-center justify-center w-9 h-9 mx-auto mb-1 rounded-full bg-sidebar-accent/40 text-sidebar-foreground text-xs font-semibold uppercase">
