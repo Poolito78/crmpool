@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type React
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
 import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone } from 'lucide-react';
+import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -283,10 +283,13 @@ export default function Devis() {
       if (s) {
         const p = JSON.parse(s) as DevisTableColKey[];
         if (Array.isArray(p) && p.length > 0) {
-          // La colonne « Relance » s'ajoute UNE fois (oct. 2026) ; masquée ensuite, elle le reste.
-          const relanceVue = localStorage.getItem('devis_table_cols_relance') === '1';
-          if (!relanceVue) localStorage.setItem('devis_table_cols_relance', '1');
-          return new Set<DevisTableColKey>([...p, 'commercial', ...(relanceVue ? [] : ['relance' as const])]);
+          // Une colonne nouvelle s'ajoute UNE fois (oct. 2026) ; masquée ensuite, elle le reste.
+          const nouvelles: DevisTableColKey[] = [];
+          for (const col of ['relance', 'chantier'] as const) {
+            const cle = `devis_table_cols_${col}`;
+            if (localStorage.getItem(cle) !== '1') { localStorage.setItem(cle, '1'); nouvelles.push(col); }
+          }
+          return new Set<DevisTableColKey>([...p, 'commercial', ...nouvelles]);
         }
       }
     } catch {}
@@ -724,7 +727,7 @@ export default function Devis() {
     if (!isAdmin && d.userId && d.userId !== userId) return false;
     const client = clients.find(c => c.id === d.clientId);
     const q = search.toLowerCase();
-    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
+    const matchSearch = [d.numero, client?.nom, client?.societe, d.statut, d.referenceAffaire, d.chantier, d.systeme, d.notes].some(v => v?.toLowerCase().includes(q))
       || d.lignes.some(l => l.variantesChoisies && valeursVisibles(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
     const cs = parseChoiceFilter(colFiltersD.statut || '');
@@ -774,6 +777,8 @@ export default function Devis() {
       case 'statut_desc': return b.statut.localeCompare(a.statut);
       case 'refAffaire_asc':  return (a.referenceAffaire || '').localeCompare(b.referenceAffaire || '');
       case 'refAffaire_desc': return (b.referenceAffaire || '').localeCompare(a.referenceAffaire || '');
+      case 'chantier_asc':  return (a.chantier || '').localeCompare(b.chantier || '');
+      case 'chantier_desc': return (b.chantier || '').localeCompare(a.chantier || '');
       case 'systeme_asc':  return (a.systeme || '').localeCompare(b.systeme || '');
       case 'systeme_desc': return (b.systeme || '').localeCompare(a.systeme || '');
       case 'validite_asc':  return a.dateValidite.localeCompare(b.dateValidite);
@@ -816,6 +821,8 @@ export default function Devis() {
         }
         const fRef = colFiltersD.refAffaire || '';
         if (fRef) { const nv = fRef === NON_VIDE; if (nv ? !d.referenceAffaire?.trim() : !(d.referenceAffaire || '').toLowerCase().includes(fRef.toLowerCase())) return false; }
+        const fCh = colFiltersD.chantier || '';
+        if (fCh) { const nv = fCh === NON_VIDE; if (nv ? !d.chantier?.trim() : !(d.chantier || '').toLowerCase().includes(fCh.toLowerCase())) return false; }
         const fSys = colFiltersD.systeme || '';
         if (fSys) { const nv = fSys === NON_VIDE; if (nv ? !d.systeme?.trim() : !(d.systeme || '').toLowerCase().includes(fSys.toLowerCase())) return false; }
         const fVal = colFiltersD.validite || '';
@@ -2632,6 +2639,7 @@ export default function Devis() {
       client: clientSugg,
       numero: devis.map(d => d.numero).filter(Boolean),
       refAffaire: devis.map(d => d.referenceAffaire).filter(Boolean) as string[],
+      chantier: devis.map(d => d.chantier).filter(Boolean) as string[],
       systeme: devis.map(d => d.systeme).filter(Boolean) as string[],
     };
     return <FilterSuggestInput value={fVal} onChange={v => setFilterD(colKey, v)} onClose={handleClose} suggestions={suggSource[colKey] || []} placeholder={colKey === 'client' ? 'Client ou contact…' : 'Filtrer…'} />;
@@ -2740,7 +2748,7 @@ export default function Devis() {
                     const isDesc = sortBy === `${sortKey}_desc`;
                     const isSorted = isAsc || isDesc;
                     const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
+                    const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'chantier', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
                     const hasFilter = !!(colFiltersD[col.key]);
                     const isFilterOpen = openFilterColsD.has(col.key);
                     const isDragOver = devisCols.dragOverKey === col.key && devisCols.dragKey !== col.key;
@@ -2828,6 +2836,7 @@ export default function Devis() {
                       );
                       case 'client': return <td style={ws} className="px-3 py-2.5"><p className="text-sm font-medium truncate max-w-[160px]">{client?.societe || client?.nom || '—'}</p></td>;
                       case 'refAffaire': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.referenceAffaire || ''}>{d.referenceAffaire || '—'}</td>;
+                      case 'chantier': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.chantier || ''}>{d.chantier || '—'}</td>;
                       case 'systeme': return <td style={ws} className={`px-3 py-2.5 text-muted-foreground text-xs${trunc}`} title={d.systeme || ''}>{d.systeme || '—'}</td>;
                       case 'date': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{formatDate(d.dateCreation)}</td>;
                       case 'validite': return <td style={ws} className={`px-3 py-2.5 text-sm whitespace-nowrap ${horsDelai ? 'text-destructive font-medium' : 'text-muted-foreground'}`} title={horsDelai ? 'Hors délais' : undefined}>{formatDate(d.dateValidite)}</td>;
@@ -2896,7 +2905,7 @@ export default function Devis() {
             const isDesc = sortBy === `${sortKey}_desc`;
             const isSorted = isAsc || isDesc;
             const SI = isSorted ? (isAsc ? ChevronUp : ChevronDown) : ChevronsUpDown;
-            const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
+            const isFilterable = ['numero', 'statut', 'client', 'refAffaire', 'chantier', 'systeme', 'validite', 'date', 'totalHT'].includes(col.key) || (isAdmin && col.key === 'commercial');
             const hasFilter = !!(colFiltersD[col.key]);
             const isFilterOpen = openFilterColsD.has(col.key);
             const isChoice = col.key === 'statut' || col.key === 'validite';
@@ -2981,6 +2990,12 @@ export default function Devis() {
                     {visDevisTableCols.has('refAffaire') && d.referenceAffaire && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-accent text-accent-foreground font-medium">
                         {d.referenceAffaire}
+                      </span>
+                    )}
+                    {/* Le chantier au sens d'Odoo (« Garage Choisy ») — distinct de la réf. affaire. */}
+                    {visDevisTableCols.has('chantier') && d.chantier?.trim() && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 font-medium inline-flex items-center gap-1" title="Chantier">
+                        <HardHat className="w-3 h-3" /> {d.chantier.trim()}
                       </span>
                     )}
                     {visDevisTableCols.has('systeme') && d.systeme && (

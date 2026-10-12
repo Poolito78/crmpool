@@ -6,6 +6,7 @@ export const DEVIS_TABLE_COLS_DEF = [
   { key: 'statut',     label: 'Statut',       align: 'left'  },
   { key: 'client',     label: 'Client',       align: 'left'  },
   { key: 'refAffaire', label: 'Réf. affaire', align: 'left'  },
+  { key: 'chantier',   label: 'Chantier',     align: 'left'  },
   { key: 'systeme',    label: 'Système',      align: 'left'  },
   { key: 'date',       label: 'Date',         align: 'left'  },
   { key: 'validite',   label: 'Validité',     align: 'left'  },
@@ -19,4 +20,4 @@ export const DEVIS_TABLE_COLS_DEF = [
 ] as const;
 
 export type DevisTableColKey = typeof DEVIS_TABLE_COLS_DEF[number]['key'];
-export const DEFAULT_DEVIS_TABLE_COLS: DevisTableColKey[] = ['numero', 'statut', 'client', 'refAffaire', 'date', 'totalHT', 'relance', 'commercial'];
+export const DEFAULT_DEVIS_TABLE_COLS: DevisTableColKey[] = ['numero', 'statut', 'client', 'refAffaire', 'chantier', 'date', 'totalHT', 'relance', 'commercial'];

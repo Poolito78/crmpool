@@ -563,6 +563,7 @@ export default function CRM() {
                         {d.dateEnvoi && <> · envoyé le {formatDate(d.dateEnvoi)}</>}
                         {d.dateValidite && <> · valable jusqu'au {formatDate(d.dateValidite)}</>}
                         {d.referenceAffaire && <> · {d.referenceAffaire}</>}
+                        {d.chantier?.trim() && <> · chantier <span className="font-medium text-foreground">{d.chantier.trim()}</span></>}
                         {tel && <> · <a href={`tel:${tel.numero.replace(/[^\d+]/g, '')}`} className="text-primary hover:underline">{tel.numero}</a></>}
                       </p>
                       {der && <HistoriqueRelances relances={d.relances} />}
