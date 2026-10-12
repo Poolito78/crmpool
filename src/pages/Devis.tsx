@@ -166,7 +166,10 @@ export default function Devis() {
     try { const s = localStorage.getItem('crm_devis_filters'); return s ? JSON.parse(s) : {}; }
     catch { return {}; }
   }, []);
-  const [filterStatut, setFilterStatut] = useState<string>(_savedFilters.filterStatut ?? 'tous');
+  /* Plus aucun écran ne règle ce filtre : relu du stockage, une ancienne valeur
+     (« archivé ») resterait collée sans moyen de l'enlever. Le statut se
+     filtre dans la colonne Statut. */
+  const [filterStatut, setFilterStatut] = useState<string>('tous');
   const [filterClient, setFilterClient] = useState<string>(_savedFilters.filterClient ?? 'tous');
   const [filterProduit, setFilterProduit] = useState<string>('');
   const [searchMode, setSearchMode] = useState<'global' | 'produit'>('global');
@@ -712,10 +715,9 @@ export default function Devis() {
   // Archive
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveTarget, setArchiveTarget] = useState<DevisType | null>(null);
-  const [showArchived, setShowArchived] = useState<boolean>(_savedFilters.showArchived ?? false);
   useEffect(() => {
-    try { localStorage.setItem('crm_devis_filters', JSON.stringify({ filterStatut, filterClient, filterPeriode, sortBy, showArchived })); } catch {}
-  }, [filterStatut, filterClient, filterPeriode, sortBy, showArchived]);
+    try { localStorage.setItem('crm_devis_filters', JSON.stringify({ filterClient, filterPeriode, sortBy })); } catch {}
+  }, [filterClient, filterPeriode, sortBy]);
 
   // CRM tab in devis dialog
   const { actions: crmActions, addAction: addCrmAction } = useCrmActions();
@@ -731,10 +733,13 @@ export default function Devis() {
       || d.lignes.some(l => l.variantesChoisies && valeursVisibles(l.variantesChoisies).some(v => v.toLowerCase().includes(q)));
     if (!matchSearch) return false;
     const cs = parseChoiceFilter(colFiltersD.statut || '');
-    // Archivés masqués par défaut sauf si showArchived ou ciblés explicitement (colonne "only" archivé)
-    if (!showArchived && filterStatut !== 'archivé' && cs.only !== 'archivé' && d.statut === 'archivé') return false;
-    // Système (modèles) masqués par défaut sauf si ciblés explicitement (colonne "only" système)
-    if (filterStatut === 'tous' && cs.only !== 'système' && d.statut === 'système') return false;
+    /* ARCHIVÉS ET SYSTÈME (MODÈLES) MASQUÉS PAR DÉFAUT — ils ne paraissent que
+       lorsque le filtre de statut les sélectionne. Une exclusion (« sauf
+       brouillon ») ne les fait pas revenir. Ancien réglage `showArchived`
+       supprimé : sans bouton pour l'éteindre, il restait allumé. */
+    const statutChoisi = (s: string) => filterStatut === s || cs.only === s;
+    if (d.statut === 'archivé' && !statutChoisi('archivé')) return false;
+    if (d.statut === 'système' && !statutChoisi('système')) return false;
     if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
     if (filterClient !== 'tous' && d.clientId !== filterClient) return false;
     if (filterProduit.trim()) {

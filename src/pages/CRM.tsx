@@ -35,6 +35,7 @@ const STATUT_DEVIS: Record<string, { label: string; color: string; icon?: any }>
   refusé:    { label: 'Perdu ✗',   color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' },
   expiré:    { label: 'Expiré',     color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   archivé:   { label: 'Archivé',    color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
+  système:   { label: 'Modèle (système)', color: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400' },
 };
 // Un devis envoyé puis relancé : libellé seulement, le statut reste « envoyé ».
 const STATUT_RELANCE = { label: 'Relancé', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' };
@@ -156,6 +157,8 @@ export default function CRM() {
     const filtered = devis
       .filter(d => {
         if (filterStatut !== 'tous' && d.statut !== filterStatut) return false;
+        // Archivés et modèles (système) : seulement quand le filtre les sélectionne.
+        if ((d.statut === 'archivé' || d.statut === 'système') && filterStatut !== d.statut) return false;
         if (filterClientId && d.clientId !== filterClientId) return false;
         if (searchDevis) {
           const q = searchDevis.toLowerCase();

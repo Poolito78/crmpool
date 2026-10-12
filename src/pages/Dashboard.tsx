@@ -411,7 +411,7 @@ export default function Dashboard() {
             <Link to="/devis" className="text-sm text-primary hover:underline">Voir tout</Link>
           </div>
           <div className="space-y-3">
-            {devis.slice(0, 5).map(d => {
+            {devis.filter(d => d.statut !== 'archivé' && d.statut !== 'système').slice(0, 5).map(d => {
               const client = clients.find(c => c.id === d.clientId);
               const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA);
               return (
