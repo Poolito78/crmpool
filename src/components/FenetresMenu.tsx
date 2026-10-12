@@ -74,6 +74,14 @@ export default function FenetresMenu({ fenetres: f, pages, pageCourante, libelle
                   </kbd>
                   <span className="min-w-0 truncate font-medium">{w.libelle}</span>
                   {ici && <span className="shrink-0 text-[11px] text-muted-foreground">cette fenêtre</span>}
+                  {!ici && w.racine !== f.maRacine && (
+                    <span
+                      className="shrink-0 text-[11px] text-amber-600"
+                      title="Ouverte hors du CRM (barre des tâches) : le navigateur ne laisse pas la mettre au premier plan. Alt+Tab, ou fermez-la et rouvrez la page d'ici."
+                    >
+                      indépendante
+                    </span>
+                  )}
                   {!ici && w.active && <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500" title="Au premier plan" />}
                 </button>
                 {!ici && (

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { basculerVers, idFenetre, ouvrirFenetre, renommerFenetre } from '@/lib/fenetres';
+import { basculerVers, idFenetre, ouvrirFenetre, racineFenetre, renommerFenetre } from '@/lib/fenetres';
 
 /* Les fenêtres CRM ouvertes, vues de celle-ci (ouvrir/basculer : `lib/fenetres`).
  *
@@ -11,6 +11,10 @@ import { basculerVers, idFenetre, ouvrirFenetre, renommerFenetre } from '@/lib/f
  * navigateur — jusqu'à une fois par minute —, d'où la purge à 90 s et la
  * relance (`qui`) à l'ouverture du menu, à laquelle tout le monde répond : un
  * message, lui, n'est pas ralenti.
+ *
+ * Chaque annonce porte la `racine` du groupe (`racineFenetre`) : on ne
+ * tente de basculer que vers une fenêtre du même groupe, les autres sont
+ * signalées « indépendantes ».
  *
  * La clé est le `jeton` de l'instance, pas le nom : après un renommage
  * (onglet dupliqué, même `window.name`), l'ancienne entrée est remplacée.
@@ -22,6 +26,7 @@ import { basculerVers, idFenetre, ouvrirFenetre, renommerFenetre } from '@/lib/f
 export type Fenetre = {
   id: string;
   jeton: string;
+  racine: string;
   path: string;
   libelle: string;
   active: boolean;
@@ -33,8 +38,7 @@ type Message =
   | { type: 'etat'; fenetre: Omit<Fenetre, 'vu'> }
   | { type: 'qui' }
   | { type: 'bye'; jeton: string }
-  | { type: 'aller'; id: string; path: string }
-  | { type: 'focus'; id: string };
+  | { type: 'aller'; id: string; path: string };
 
 const CANAL = 'crm-fenetres';
 const BATTEMENT_MS = 15_000;
@@ -54,6 +58,7 @@ export function useFenetres(libelle: string) {
   const etat = useCallback((): Omit<Fenetre, 'vu'> => ({
     id: idFenetre(),
     jeton: moi.current.jeton,
+    racine: racineFenetre(),
     path: courant.current.path,
     libelle: courant.current.libelle,
     active: document.hasFocus(),
@@ -90,9 +95,6 @@ export function useFenetres(libelle: string) {
         });
       } else if (m.type === 'aller' && m.id === idFenetre()) {
         navigate(m.path);
-        window.focus();
-      } else if (m.type === 'focus' && m.id === idFenetre()) {
-        window.focus();
       }
     };
 
@@ -147,8 +149,7 @@ export function useFenetres(libelle: string) {
 
   const basculer = useCallback((f: Fenetre) => {
     if (f.jeton === moi.current.jeton) return;
-    if (basculerVers(f.id)) return;
-    canal.current?.postMessage({ type: 'focus', id: f.id } satisfies Message);
+    if (f.racine === racineFenetre() && basculerVers(f.id)) return;
     toast.info(`« ${f.libelle} » est ouverte dans une fenêtre indépendante`, {
       description: 'Retrouvez-la dans la barre des tâches (Alt+Tab).',
     });
@@ -157,8 +158,8 @@ export function useFenetres(libelle: string) {
   /** Affiche `cible` dans la fenêtre `f` et la met au premier plan. */
   const envoyer = useCallback((f: Fenetre, cible: string) => {
     canal.current?.postMessage({ type: 'aller', id: f.id, path: cible } satisfies Message);
-    basculerVers(f.id);
-  }, []);
+    basculer(f);
+  }, [basculer]);
 
   const nouvelle = useCallback((cible: string) => {
     if (!ouvrirFenetre(cible)) toast.error("Le navigateur a bloqué l'ouverture de la fenêtre");
@@ -184,5 +185,5 @@ export function useFenetres(libelle: string) {
     return () => window.removeEventListener('keydown', onKey);
   }, [basculer, nouvelle]);
 
-  return { fenetres, monJeton: moi.current.jeton, rafraichir, basculer, envoyer, nouvelle };
+  return { fenetres, monJeton: moi.current.jeton, maRacine: racineFenetre(), rafraichir, basculer, envoyer, nouvelle };
 }
