@@ -7,8 +7,8 @@ import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
 import {
-  type ChampsRelance, type ModeleRelance, MODELES_RELANCE_BASE, LIBELLE_CHAMPS, DELAI_RELANCE_JOURS,
-  ajouterJours, champsRelance, modeleParDefaut, remplirModele, versModele,
+  type ChampsRelance, type ModeleRelance, MODELES_RELANCE_BASE, LIBELLE_CHAMPS,
+  champsRelance, modeleParDefaut, relanceProposee, remplirModele, versModele,
 } from '@/lib/relanceDevis';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
@@ -457,7 +457,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       setChamps(c);
       setModeleId(m.id);
       setBody(remplirModele(m.contenu, c));
-      setProchaine(ajouterJours(aujourdhui, DELAI_RELANCE_JOURS));
+      setProchaine(relanceProposee(aujourdhui, devis.dateRealisation));
     } else
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(

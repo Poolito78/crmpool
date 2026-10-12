@@ -30,7 +30,7 @@ import {
   type Client, type CrmAction, type Devis, type RelanceDevis,
   calculerTotalDevis, formatDate, formatDateISO, formatMontant,
 } from '@/lib/store';
-import { DELAI_RELANCE_JOURS, ajouterJours, numerosDuDevis } from '@/lib/relanceDevis';
+import { ajouterJours, numerosDuDevis, prochaineRelance, relanceProposee } from '@/lib/relanceDevis';
 
 export type ModeRelanceOuvert = 'email' | 'tel';
 
@@ -41,6 +41,35 @@ function lireOptions(): PreviewOptions {
     if (saved) return { ...defaut, ...JSON.parse(saved) };
   } catch { /* stockage indisponible */ }
   return defaut;
+}
+
+/**
+ * La prochaine relance, modifiable à la main. Affiche la date calculée tant
+ * qu'aucune n'est saisie ; « ↺ » efface la saisie et rend la main au calcul
+ * (`prochaineRelance` : délai après l'envoi, un mois avant la réalisation).
+ */
+export function DateRelanceInput({ devis, onChange, className = '' }: {
+  devis: Devis;
+  onChange: (dateRelance: string) => void;
+  className?: string;
+}) {
+  const p = prochaineRelance(devis) ?? '';
+  const saisie = !!devis.dateRelance;
+  return (
+    <span className="inline-flex items-center gap-1" onClick={e => e.stopPropagation()}>
+      <input
+        type="date"
+        value={p}
+        onChange={e => onChange(e.target.value)}
+        title={saisie ? 'Date saisie à la main' : 'Date calculée — modifiable'}
+        className={`rounded border border-input bg-background px-1.5 py-0.5 text-xs ${saisie ? 'font-medium' : ''} ${className}`}
+      />
+      {saisie && (
+        <button type="button" onClick={() => onChange('')} title="Revenir à la date calculée"
+          className="text-xs text-muted-foreground hover:text-foreground px-1">↺</button>
+      )}
+    </span>
+  );
 }
 
 /** Les relances passées, la plus récente d'abord. */
@@ -100,8 +129,12 @@ export default function RelanceDevisDialogs({ devis, mode, onClose, ajouterActio
   function enregistrer(relance: RelanceDevis, prochaine: string | undefined) {
     if (!devis) return;
     const rang = (devis.relances?.length ?? 0) + 1;
+    /* La date proposée n'est PAS enregistrée comme saisie : restée calculée,
+       elle suivra une date de réalisation déplacée plus tard. Seule une date
+       retouchée dans le dialogue devient `dateRelance`. */
+    const saisie = prochaine && prochaine !== relanceProposee(relance.date, devis.dateRealisation) ? prochaine : '';
     updateDevis(prev => prev.map(d => d.id === devis.id
-      ? { ...d, relances: [...(d.relances ?? []), relance], dateRelance: prochaine ?? '' }
+      ? { ...d, relances: [...(d.relances ?? []), relance], dateRelance: saisie }
       : d));
     logHistorique({
       entiteType: 'devis', entiteId: devis.id, entiteNumero: devis.numero, action: 'relance',
@@ -190,7 +223,7 @@ function RelanceTelDialog({ devis, client, onClose, onEnregistrer }: {
     const aujourdhui = formatDateISO(new Date());
     setDate(aujourdhui);
     setNote('');
-    setProchaine(ajouterJours(aujourdhui, DELAI_RELANCE_JOURS));
+    setProchaine(relanceProposee(aujourdhui, devis.dateRealisation));
   }, [devis]);
 
   if (!devis) return null;

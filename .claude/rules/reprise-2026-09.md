@@ -395,8 +395,11 @@ tuile CA Odoo du CRM (`actualiserCaOdoo`, `caOdoo.ts`).
 
 `relanceDevis.ts` + `RelanceDevisDialogs.tsx` (migration `20261012100000`) :
 `devis.relances` (jsonb `[{date, mode: 'email'|'tel', note}]`) et
-`devis.date_relance` (prochaine relance ; absente = 7 j après la dernière
-relance ou l'envoi). Relance par mail = `DevisEmailDialog` en mode `relance`
+`devis.date_relance` (prochaine relance SAISIE ; absente = 7 j après la
+dernière relance ou l'envoi, et **jamais avant 30 j avant la date de
+réalisation** — règle du 12/10). Modifiable sur la carte, dans le devis
+ouvert et au CRM (`DateRelanceInput`, « ↺ » revient au calcul) ; une date
+proposée et non retouchée n'est pas enregistrée comme saisie. Relance par mail = `DevisEmailDialog` en mode `relance`
 (même PDF, mêmes PJ, .eml) avec mails types — 3 de base selon le rang +
 ceux de l'utilisateur (`devis_message_templates.usage = 'relance'`, écartés
 du dialogue d'archivage). Relance tél. = compte rendu + prochaine date.

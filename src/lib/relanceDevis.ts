@@ -15,6 +15,11 @@
  * **Échéance** (`prochaineRelance`) : la date saisie fait foi ; sans elle,
  * `DELAI_RELANCE_JOURS` après la dernière relance, ou après l'envoi (la
  * création, si l'envoi n'a pas de date). Seul un devis envoyé en a une.
+ * ⚠️ **Une date de réalisation future repousse la relance** à
+ * `RELANCE_AVANT_REALISATION_JOURS` (30) jours avant elle (règle du
+ * 12/10/2026) : un chantier prévu en décembre ne se relance pas en juin —
+ * mais un mois avant, le temps de sécuriser la commande. Seule la date
+ * SAISIE passe outre.
  *
  * **Mails types** : trois de base — suivi, validité, dernière relance — dont
  * le rang de la relance choisit le défaut, plus ceux que l'utilisateur
@@ -28,6 +33,7 @@
 import type { Client, Devis, RelanceDevis } from './store';
 
 export const DELAI_RELANCE_JOURS = 7;
+export const RELANCE_AVANT_REALISATION_JOURS = 30;
 
 /** `iso` + `n` jours, en date pure (aucun fuseau ne la décale). */
 export function ajouterJours(iso: string, n: number): string {
@@ -36,7 +42,7 @@ export function ajouterJours(iso: string, n: number): string {
   return t.toISOString().slice(0, 10);
 }
 
-type DevisRelance = Pick<Devis, 'statut' | 'relances' | 'dateRelance' | 'dateEnvoi' | 'dateCreation'>;
+type DevisRelance = Pick<Devis, 'statut' | 'relances' | 'dateRelance' | 'dateEnvoi' | 'dateCreation'> & Partial<Pick<Devis, 'dateRealisation'>>;
 
 export function derniereRelance(d: Pick<Devis, 'relances'>): RelanceDevis | undefined {
   const r = d.relances ?? [];
@@ -48,12 +54,28 @@ export function estRelance(d: Pick<Devis, 'statut' | 'relances'>): boolean {
   return d.statut === 'envoyé' && (d.relances?.length ?? 0) > 0;
 }
 
+/**
+ * Relance proposée `DELAI_RELANCE_JOURS` après `depuis`, mais jamais plus
+ * d'un mois avant la date de réalisation prévue.
+ */
+export function relanceProposee(depuis: string, dateRealisation?: string): string {
+  const apres = ajouterJours(depuis, DELAI_RELANCE_JOURS);
+  if (!dateRealisation) return apres;
+  const avantRealisation = ajouterJours(dateRealisation, -RELANCE_AVANT_REALISATION_JOURS);
+  return avantRealisation > apres ? avantRealisation : apres;
+}
+
 /** Date de la prochaine relance (YYYY-MM-DD), ou `undefined` hors devis envoyé. */
 export function prochaineRelance(d: DevisRelance): string | undefined {
   if (d.statut !== 'envoyé') return undefined;
   if (d.dateRelance) return d.dateRelance;
   const base = derniereRelance(d)?.date || d.dateEnvoi || d.dateCreation;
-  return base ? ajouterJours(base, DELAI_RELANCE_JOURS) : undefined;
+  return base ? relanceProposee(base, d.dateRealisation) : undefined;
+}
+
+/** La prochaine relance a été saisie à la main (et non calculée). */
+export function relanceSaisie(d: Pick<Devis, 'dateRelance'>): boolean {
+  return !!d.dateRelance;
 }
 
 export type EtatRelance = 'en_retard' | 'aujourdhui' | 'a_venir';

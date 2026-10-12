@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  ajouterJours, prochaineRelance, etatRelance, devisARelancer, libelleStatutDevis,
+  ajouterJours, prochaineRelance, relanceProposee, etatRelance, devisARelancer, libelleStatutDevis,
   remplirModele, versModele, modeleParDefaut, champsRelance, numerosDuDevis, type ChampsRelance,
 } from './relanceDevis';
 import type { Client, Devis } from './store';
@@ -20,6 +20,20 @@ describe('prochaineRelance', () => {
   it('rien hors devis envoyé', () => {
     expect(prochaineRelance({ ...base, statut: 'accepté' })).toBeUndefined();
     expect(prochaineRelance({ ...base, statut: 'brouillon' })).toBeUndefined();
+  });
+  it('une réalisation lointaine repousse la relance à un mois avant', () => {
+    // DEV-2026-027 : envoyé le 26/05, réalisation prévue le 01/12.
+    expect(prochaineRelance({ ...base, dateEnvoi: '2026-05-26', dateRealisation: '2026-12-01' })).toBe('2026-11-01');
+  });
+  it('une réalisation proche ne change rien', () => {
+    expect(prochaineRelance({ ...base, dateRealisation: '2026-10-20' })).toBe('2026-10-09');
+  });
+  it('la date saisie passe outre la réalisation', () => {
+    expect(prochaineRelance({ ...base, dateRealisation: '2026-12-01', dateRelance: '2026-10-15' })).toBe('2026-10-15');
+  });
+  it('relanceProposee, après une relance', () => {
+    expect(relanceProposee('2026-10-12')).toBe('2026-10-19');
+    expect(relanceProposee('2026-10-12', '2027-01-15')).toBe('2026-12-16');
   });
   it('passe les fins de mois', () => {
     expect(ajouterJours('2026-10-28', 7)).toBe('2026-11-04');

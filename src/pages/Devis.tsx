@@ -28,8 +28,8 @@ import { noteEnHtml, noteEnTexte } from '@/lib/noteRiche';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
-import RelanceDevisDialogs, { type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
-import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance } from '@/lib/relanceDevis';
+import RelanceDevisDialogs, { DateRelanceInput, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
+import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance, ajouterJours, RELANCE_AVANT_REALISATION_JOURS } from '@/lib/relanceDevis';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
@@ -3062,8 +3062,13 @@ export default function Devis() {
                           : <span className="text-muted-foreground">Pas encore relancé</span>}
                         {p && (
                           <span className={e === 'en_retard' ? 'text-destructive font-medium' : e === 'aujourdhui' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
-                            · {e === 'en_retard' ? `relance en retard (prévue le ${formatDate(p)})` : e === 'aujourdhui' ? 'relance prévue aujourd\'hui' : `prochaine relance le ${formatDate(p)}`}
+                            · {e === 'en_retard' ? 'relance en retard, prévue le' : e === 'aujourdhui' ? 'relance prévue aujourd\'hui' : 'prochaine relance le'}
                           </span>
+                        )}
+                        {/* Date modifiable sur place ; « ↺ » revient au calcul (envoi + 7 j, un mois avant la réalisation). */}
+                        {p && <DateRelanceInput devis={d} onChange={v => updateDevis(prev => prev.map(x => x.id === d.id ? { ...x, dateRelance: v } : x))} />}
+                        {!d.dateRelance && d.dateRealisation && p === ajouterJours(d.dateRealisation, -RELANCE_AVANT_REALISATION_JOURS) && (
+                          <span className="text-muted-foreground" title="Relance calée un mois avant la date de réalisation">(réalisation le {formatDate(d.dateRealisation)})</span>
                         )}
                         <button onClick={() => setRelance({ devis: d, mode: 'email' })} title="Relancer par email" className="ml-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-primary hover:bg-primary/10">
                           <Mail className="w-3 h-3" /> Mail
@@ -3618,6 +3623,24 @@ export default function Devis() {
                     <Label className="text-xs">Date de réalisation</Label>
                     <Input type="date" value={dateRealisation} onChange={e => setDateRealisation(e.target.value)} className="h-8 text-sm" />
                   </div>
+                  {/* Prochaine relance : écrite droit dans le devis enregistré (pas
+                      dans le formulaire), pour qu'une relance faite pendant
+                      l'édition ne soit pas écrasée par la sauvegarde. Calculée
+                      avec la date de réalisation de l'écran. */}
+                  {editingId && statut === 'envoyé' && (() => {
+                    const dv = devis.find(x => x.id === editingId);
+                    if (!dv) return null;
+                    const vue = { ...dv, statut, dateEnvoi: dateEnvoi || undefined, dateRealisation: dateRealisation || undefined };
+                    return (
+                      <div>
+                        <Label className="text-xs">Prochaine relance</Label>
+                        <div className="h-8 flex items-center">
+                          <DateRelanceInput devis={vue} className="h-8 text-sm"
+                            onChange={v => updateDevis(prev => prev.map(x => x.id === editingId ? { ...x, dateRelance: v } : x))} />
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               </div>{/* fin colonne droite */}

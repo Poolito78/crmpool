@@ -24,7 +24,7 @@ import {
   FileText, PieChart, Users, BellRing,
 } from 'lucide-react';
 import { RAISON_ARCHIVE, type Devis } from '@/lib/store';
-import RelanceDevisDialogs, { HistoriqueRelances, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
+import RelanceDevisDialogs, { DateRelanceInput, HistoriqueRelances, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
 import { estRelance, etatRelance, prochaineRelance, ajouterJours, derniereRelance, numerosDuDevis } from '@/lib/relanceDevis';
 
 // ── Statut devis ──────────────────────────────────────────────────────────
@@ -576,8 +576,8 @@ export default function CRM() {
                         <span className={cn('text-xs', etat === 'en_retard' ? 'text-red-600 font-medium' : etat === 'aujourdhui' ? 'text-orange-600 font-medium' : 'text-muted-foreground')}>
                           {etat === 'en_retard' ? 'En retard —' : etat === 'aujourdhui' ? "Aujourd'hui —" : 'Relance le'}
                         </span>
-                        <Input type="date" value={prochaine} className="h-8 w-36 text-xs" title="Prochaine relance"
-                          onChange={e => { const v = e.target.value; updateDevis(prev => prev.map(x => x.id === d.id ? { ...x, dateRelance: v } : x)); }} />
+                        <DateRelanceInput devis={d} className="h-8"
+                          onChange={v => updateDevis(prev => prev.map(x => x.id === d.id ? { ...x, dateRelance: v } : x))} />
                       </div>
                       <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setRelance({ devis: d, mode: 'email' })}>
                         <Mail className="w-3.5 h-3.5" /> Mail
