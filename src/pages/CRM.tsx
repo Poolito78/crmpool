@@ -16,14 +16,16 @@ import { cn } from '@/lib/utils';
 import CRMActionDialog from '@/components/CRMActionDialog';
 import DevisPreview from '@/components/DevisPreview';
 import PageHeaderSlot from '@/components/PageHeaderSlot';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   TrendingUp, TrendingDown, Clock, BarChart3,
   Plus, Pencil, Trash2, CheckCircle2, XCircle, ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Phone, Mail, Calendar, MapPin, CheckSquare, Star, AlertCircle, Filter,
-  FileText, PieChart, Users,
+  FileText, PieChart, Users, BellRing,
 } from 'lucide-react';
-import { RAISON_ARCHIVE } from '@/lib/store';
+import { RAISON_ARCHIVE, type Devis } from '@/lib/store';
+import RelanceDevisDialogs, { HistoriqueRelances, type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
+import { estRelance, etatRelance, prochaineRelance, ajouterJours, derniereRelance, numerosDuDevis } from '@/lib/relanceDevis';
 
 // ── Statut devis ──────────────────────────────────────────────────────────
 const STATUT_DEVIS: Record<string, { label: string; color: string; icon?: any }> = {
@@ -34,6 +36,8 @@ const STATUT_DEVIS: Record<string, { label: string; color: string; icon?: any }>
   expiré:    { label: 'Expiré',     color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
   archivé:   { label: 'Archivé',    color: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
+// Un devis envoyé puis relancé : libellé seulement, le statut reste « envoyé ».
+const STATUT_RELANCE = { label: 'Relancé', color: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' };
 
 // ── Calendar helpers ──────────────────────────────────────────────────────
 function getDaysInMonth(year: number, month: number) {
@@ -56,7 +60,33 @@ export default function CRM() {
   const { actions, loading: actionsLoading, addAction, updateAction, deleteAction } = useCrmActions();
   const navigate = useNavigate();
 
-  const [tab, setTab] = useState<'pipeline' | 'actions' | 'calendrier' | 'analyse'>('pipeline');
+  // `?tab=relances` : l'alerte « devis à relancer » du tableau de bord ouvre l'onglet.
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<'pipeline' | 'relances' | 'actions' | 'calendrier' | 'analyse'>(
+    () => searchParams.get('tab') === 'relances' ? 'relances' : 'pipeline',
+  );
+
+  // ── Relances ──────────────────────────────────────────────────────────
+  const [relance, setRelance] = useState<{ devis: Devis; mode: ModeRelanceOuvert } | null>(null);
+  const [filtreRelances, setFiltreRelances] = useState<'dues' | 'semaine' | 'tous'>('dues');
+  const aujourdhuiISO = formatDateISO(new Date());
+  /* Les devis en attente de réponse, l'échéance de relance la plus ancienne
+     d'abord — c'est l'ordre dans lequel on décroche le téléphone. */
+  const relances = useMemo(() => {
+    const enAttente = devis
+      .filter(d => d.statut === 'envoyé')
+      .map(d => ({ d, prochaine: prochaineRelance(d) ?? '', etat: etatRelance(d, aujourdhuiISO) }))
+      .sort((a, b) => a.prochaine.localeCompare(b.prochaine));
+    const dues = enAttente.filter(x => x.etat === 'en_retard' || x.etat === 'aujourdhui');
+    const semaine = enAttente.filter(x => x.prochaine <= ajouterJours(aujourdhuiISO, 7));
+    const il30j = ajouterJours(aujourdhuiISO, -30);
+    const faites30j = devis.reduce((n, d) => n + (d.relances ?? []).filter(r => r.date >= il30j).length, 0);
+    // Les devis gagnés l'ont-ils été après relance ? Ce que la relance rapporte.
+    const gagnes = devis.filter(d => d.statut === 'accepté');
+    const gagnesApresRelance = gagnes.filter(d => (d.relances?.length ?? 0) > 0).length;
+    return { enAttente, dues, semaine, faites30j, gagnes: gagnes.length, gagnesApresRelance };
+  }, [devis, aujourdhuiISO]);
+  const listeRelances = filtreRelances === 'dues' ? relances.dues : filtreRelances === 'semaine' ? relances.semaine : relances.enAttente;
 
   // ── Analyse — sections ouvertes/fermées ───────────────────────────────
   const [analyseSections, setAnalyseSections] = useState<Record<string, boolean>>({
@@ -269,6 +299,7 @@ export default function CRM() {
         <div className="flex-1 flex items-center gap-0.5 overflow-x-auto">
           {([
             { key: 'pipeline',    label: 'Pipeline',   icon: BarChart3 },
+            { key: 'relances',    label: relances.dues.length > 0 ? `Relances (${relances.dues.length})` : 'Relances', icon: BellRing },
             { key: 'actions',     label: 'Actions',    icon: CheckSquare },
             { key: 'calendrier',  label: 'Calendrier', icon: Calendar },
             { key: 'analyse',     label: 'Analyse',    icon: PieChart },
@@ -401,7 +432,7 @@ export default function CRM() {
                   )}
                   {devisFiltres.map(d => {
                     const client = clients.find(c => c.id === d.clientId);
-                    const st = STATUT_DEVIS[d.statut];
+                    const st = estRelance(d) ? STATUT_RELANCE : STATUT_DEVIS[d.statut];
                     return (
                       <tr key={d.id} className="hover:bg-muted/30 transition-colors">
                         <td className="px-3 py-2.5">
@@ -465,6 +496,105 @@ export default function CRM() {
                 </tbody>
               </table>
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════ RELANCES ══════════════════════════ */}
+      {tab === 'relances' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <StatCard label="En attente de réponse" value={String(relances.enAttente.length)}
+              sub={formatMontant(relances.enAttente.reduce((s, x) => s + calculerTotalDevis(x.d.lignes, x.d.fraisPortHT, x.d.fraisPortTVA).totalHT, 0))}
+              color="blue" icon={Clock} />
+            <StatCard label="À relancer" value={String(relances.dues.length)}
+              sub={`${relances.dues.filter(x => x.etat === 'en_retard').length} en retard`} color="red" icon={BellRing} />
+            <StatCard label="Relances (30 j)" value={String(relances.faites30j)} sub="mails et appels" color="purple" icon={Phone} />
+            <StatCard label="Gagnés après relance" value={`${relances.gagnesApresRelance} / ${relances.gagnes}`}
+              sub={relances.gagnes > 0 ? `${Math.round(relances.gagnesApresRelance / relances.gagnes * 100)} % des devis gagnés` : 'aucun devis gagné'}
+              color="green" icon={TrendingUp} />
+          </div>
+
+          <div className="flex flex-wrap gap-1.5 items-center">
+            {([
+              { k: 'dues',    label: 'À relancer',        n: relances.dues.length },
+              { k: 'semaine', label: 'Sous 7 jours',      n: relances.semaine.length },
+              { k: 'tous',    label: 'Tous les envoyés',  n: relances.enAttente.length },
+            ] as const).map(f => (
+              <button key={f.k} type="button" onClick={() => setFiltreRelances(f.k)}
+                className={cn('text-xs rounded-full border px-3 py-1 transition-colors',
+                  filtreRelances === f.k ? 'bg-primary/10 border-primary/40 text-primary font-medium' : 'text-muted-foreground hover:bg-muted')}>
+                {f.label} ({f.n})
+              </button>
+            ))}
+          </div>
+
+          {listeRelances.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground text-sm">
+              <BellRing className="w-10 h-10 mx-auto mb-3 opacity-30" />
+              <p>{filtreRelances === 'dues' ? 'Aucune relance due — tout est à jour.' : 'Aucun devis en attente de réponse.'}</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {listeRelances.map(({ d, prochaine, etat }) => {
+                const client = clients.find(c => c.id === d.clientId);
+                const contact = d.contactId ? (client?.contacts || []).find(ct => ct.id === d.contactId) : undefined;
+                const nomContact = contact ? [contact.prenom, contact.nom].filter(Boolean).join(' ') : '';
+                const tel = numerosDuDevis(d, client)[0];
+                const total = calculerTotalDevis(d.lignes, d.fraisPortHT, d.fraisPortTVA).totalHT;
+                const der = derniereRelance(d);
+                return (
+                  <div key={d.id} className={cn('rounded-lg border p-3 flex flex-col md:flex-row md:items-start gap-3',
+                    etat === 'en_retard' ? 'border-red-200 bg-red-50/60 dark:border-red-900 dark:bg-red-900/10'
+                      : etat === 'aujourdhui' ? 'border-orange-200 bg-orange-50/60 dark:border-orange-900 dark:bg-orange-900/10'
+                      : 'border-border bg-card')}>
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button onClick={() => setPreviewDevisId(d.id)} className="font-medium text-primary hover:underline flex items-center gap-1">
+                          <FileText className="w-3.5 h-3.5" /> {d.numero}
+                        </button>
+                        <span className="font-medium truncate">{client?.societe || client?.nom || '—'}</span>
+                        {nomContact && <span className="text-xs text-muted-foreground">· {nomContact}</span>}
+                        <Badge className={cn('text-xs', estRelance(d) ? STATUT_RELANCE.color : STATUT_DEVIS.envoyé.color)}>
+                          {estRelance(d) ? `Relancé ${d.relances!.length}×` : 'Envoyé'}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground tabular-nums">{formatMontant(total)} HT</span>
+                        {d.dateEnvoi && <> · envoyé le {formatDate(d.dateEnvoi)}</>}
+                        {d.dateValidite && <> · valable jusqu'au {formatDate(d.dateValidite)}</>}
+                        {d.referenceAffaire && <> · {d.referenceAffaire}</>}
+                        {tel && <> · <a href={`tel:${tel.numero.replace(/[^\d+]/g, '')}`} className="text-primary hover:underline">{tel.numero}</a></>}
+                      </p>
+                      {der && <HistoriqueRelances relances={d.relances} />}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 md:justify-end shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn('text-xs', etat === 'en_retard' ? 'text-red-600 font-medium' : etat === 'aujourdhui' ? 'text-orange-600 font-medium' : 'text-muted-foreground')}>
+                          {etat === 'en_retard' ? 'En retard —' : etat === 'aujourdhui' ? "Aujourd'hui —" : 'Relance le'}
+                        </span>
+                        <Input type="date" value={prochaine} className="h-8 w-36 text-xs" title="Prochaine relance"
+                          onChange={e => { const v = e.target.value; updateDevis(prev => prev.map(x => x.id === d.id ? { ...x, dateRelance: v } : x)); }} />
+                      </div>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setRelance({ devis: d, mode: 'email' })}>
+                        <Mail className="w-3.5 h-3.5" /> Mail
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => setRelance({ devis: d, mode: 'tel' })}>
+                        <Phone className="w-3.5 h-3.5" /> Appel
+                      </Button>
+                      <button onClick={() => handleStatutDevis(d.id, 'accepté')} title="Marquer Gagné"
+                        className="p-1.5 rounded hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-emerald-600 transition-colors">
+                        <CheckCircle2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => handleStatutDevis(d.id, 'refusé')} title="Marquer Perdu"
+                        className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-red-600 transition-colors">
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1233,6 +1363,13 @@ export default function CRM() {
         clients={clients}
         produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         onSave={handleSaveAction}
+      />
+
+      <RelanceDevisDialogs
+        devis={relance?.devis ?? null}
+        mode={relance?.mode ?? null}
+        onClose={() => setRelance(null)}
+        ajouterAction={addAction}
       />
 
       {/* ── Dialog aperçu devis ──────────────────────────────────────── */}

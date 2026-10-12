@@ -23,7 +23,9 @@ interface Props {
 }
 
 export default function DevisArchiveDialog({ devis, open, onOpenChange, onConfirm, produits = [] }: Props) {
-  const { templates, addTemplate, deleteTemplate } = useDevisMessageTemplates();
+  const { templates: tousModeles, addTemplate, deleteTemplate } = useDevisMessageTemplates();
+  // Les mails types de relance partagent la table : ils n'ont rien à faire ici.
+  const templates = tousModeles.filter(t => t.usage !== 'relance');
   const [raison, setRaison] = useState<RaisonArchive>('autre');
   const [commentaire, setCommentaire] = useState('');
   const [concurrents, setConcurrents] = useState<ConcurrentProduit[]>([]);

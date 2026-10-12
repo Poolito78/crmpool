@@ -3,8 +3,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers } from 'lucide-react';
-import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { Mail, Send, Loader2, FileText, FolderOpen, X, CheckCircle2, AlertCircle, Paperclip, File as FileIcon, FileImage, FileSpreadsheet, ExternalLink, Eye, Copy, Check, Image as ImageIcon, Globe, Layers, BellRing, Save, Trash2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { type Devis, type Client, type Produit, dbToProduitPublic, calculerTotalDevis, formatMontant, formatDate, formatDateISO, useDevisMessageTemplates } from '@/lib/store';
+import {
+  type ChampsRelance, type ModeleRelance, MODELES_RELANCE_BASE, LIBELLE_CHAMPS, DELAI_RELANCE_JOURS,
+  ajouterJours, champsRelance, modeleParDefaut, remplirModele, versModele,
+} from '@/lib/relanceDevis';
 import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToFolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import { supabase } from '@/integrations/supabase/client';
@@ -259,13 +264,90 @@ interface Props {
   devis: Devis | null;
   client?: Client;
   produits?: Produit[];
-  onSent: (dateEnvoi: string) => void;
+  /**
+   * Mode RELANCE : même envoi (PDF joint, pièces jointes, .eml), mais objet
+   * « Relance — … », corps tiré d'un mail type (`relanceDevis.ts`) et la
+   * prochaine relance à planifier, que `onSent` reçoit alors.
+   */
+  relance?: boolean;
+  onSent: (dateEnvoi: string, prochaineRelance?: string) => void;
   pdfContainerRef?: React.RefObject<HTMLDivElement | null>;
   previewOptions: PreviewOptions;
   onPreviewOptionsChange: (opts: PreviewOptions) => void;
 }
 
-export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], onSent, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
+/* Choix du mail type de relance — sous-composant pour que les mails types ne
+   soient lus qu'à l'ouverture d'une relance, pas à chaque envoi de devis. */
+function ChoixMailTypeRelance({ modeleId, corps, champs, onChoisir }: {
+  modeleId: string;
+  corps: string;
+  champs: ChampsRelance | null;
+  onChoisir: (m: ModeleRelance) => void;
+}) {
+  const { templates, addTemplate, deleteTemplate } = useDevisMessageTemplates();
+  const perso: ModeleRelance[] = templates
+    .filter(t => t.usage === 'relance')
+    .map(t => ({ id: t.id, nom: t.nom, contenu: t.contenu }));
+  const tous = [...MODELES_RELANCE_BASE, ...perso];
+  const choisi = tous.find(m => m.id === modeleId);
+  const [nom, setNom] = useState('');
+  const [enregistrement, setEnregistrement] = useState(false);
+
+  async function enregistrer() {
+    if (!nom.trim() || !champs) return;
+    const err = await addTemplate({ nom: nom.trim(), contenu: versModele(corps, champs), usage: 'relance' });
+    if (err) { toast.error(`Mail type non enregistré : ${err.message}`); return; }
+    toast.success(`Mail type « ${nom.trim()} » enregistré`);
+    setNom('');
+    setEnregistrement(false);
+  }
+
+  async function supprimer() {
+    if (!choisi || choisi.base) return;
+    const err = await deleteTemplate(choisi.id);
+    if (err) { toast.error(`Suppression impossible : ${err.message}`); return; }
+    onChoisir(MODELES_RELANCE_BASE[0]);
+  }
+
+  return (
+    <div className="rounded-md border px-3 py-2 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Label className="shrink-0">Mail type</Label>
+        <Select value={modeleId} onValueChange={id => { const m = tous.find(x => x.id === id); if (m) onChoisir(m); }}>
+          <SelectTrigger className="h-8 flex-1 min-w-[220px]"><SelectValue placeholder="Choisir un mail type" /></SelectTrigger>
+          <SelectContent>
+            {MODELES_RELANCE_BASE.map(m => <SelectItem key={m.id} value={m.id}>{m.nom}</SelectItem>)}
+            {perso.length > 0 && <SelectSeparator />}
+            {perso.map(m => <SelectItem key={m.id} value={m.id}>{m.nom}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        {choisi && !choisi.base && (
+          <Button type="button" size="sm" variant="ghost" className="h-8 px-2 text-muted-foreground hover:text-destructive" title="Supprimer ce mail type" onClick={supprimer}>
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        )}
+        <Button type="button" size="sm" variant="outline" className="h-8" onClick={() => setEnregistrement(v => !v)} disabled={!champs}>
+          <Save className="w-3.5 h-3.5 mr-1.5" /> Enregistrer comme mail type
+        </Button>
+      </div>
+      {enregistrement && (
+        <div className="flex items-center gap-2">
+          <Input value={nom} onChange={e => setNom(e.target.value)} placeholder="Nom du mail type" className="h-8 text-sm" autoFocus
+            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); void enregistrer(); } }} />
+          <Button type="button" size="sm" className="h-8" onClick={enregistrer} disabled={!nom.trim()}>Enregistrer</Button>
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground">
+        À l'enregistrement, les valeurs du devis redeviennent des champs :{' '}
+        {(Object.keys(LIBELLE_CHAMPS) as (keyof ChampsRelance)[]).map((k, i) => (
+          <span key={k}>{i > 0 && ', '}<code>{`{${k}}`}</code> {LIBELLE_CHAMPS[k]}</span>
+        ))}.
+      </p>
+    </div>
+  );
+}
+
+export default function DevisEmailDialog({ open, onOpenChange, devis, client, produits = [], relance = false, onSent, pdfContainerRef, previewOptions, onPreviewOptionsChange }: Props) {
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
@@ -276,6 +358,11 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [selectedLiensIds, setSelectedLiensIds] = useState<Set<string>>(new Set());
   const [copie, setCopie] = useState(false);
   const [dateEnvoi, setDateEnvoi] = useState(new Date().toISOString().split('T')[0]);
+  // Relance : prochaine échéance, mail type retenu, et les valeurs du devis
+  // qui remplissent les mails types (et en sont retirées à l'enregistrement).
+  const [prochaine, setProchaine] = useState('');
+  const [modeleId, setModeleId] = useState(MODELES_RELANCE_BASE[0].id);
+  const [champs, setChamps] = useState<ChampsRelance | null>(null);
   const [generating, setGenerating] = useState(false);
   const [sending, setSending] = useState(false);
   const [pdfReady, setPdfReady] = useState(false);
@@ -347,7 +434,8 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       return;
     }
     // Toujours mettre à jour la date d'envoi à aujourd'hui à chaque ouverture (renvoi inclus)
-    setDateEnvoi(new Date().toISOString().split('T')[0]);
+    const aujourdhui = formatDateISO(new Date());
+    setDateEnvoi(aujourdhui);
     const totals = calculerTotalDevis(devis.lignes, devis.fraisPortHT || 0, devis.fraisPortTVA ?? 20);
     /* LE DESTINATAIRE EST LE CONTACT DU DEVIS, pas le contact principal de la
        fiche : changer le contact sur le devis doit changer l'adresse ET le
@@ -359,8 +447,18 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       ? [contactDevis.prenom, contactDevis.nom].filter(Boolean).join(' ') || client?.nom
       : client?.nom;
     setTo(contactDevis?.email?.trim() || client?.email || '');
-    setSubject(`Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}${devis.chantier?.trim() ? ` — ${devis.chantier.trim()}` : ''}`);
+    const objet = `Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}${devis.chantier?.trim() ? ` — ${devis.chantier.trim()}` : ''}`;
+    setSubject(relance ? `Relance — ${objet}` : objet);
 
+    if (relance) {
+      // Le rang de la relance choisit le mail type proposé (suivi, validité, dernière).
+      const c = champsRelance(devis, client, formatMontant(totals.totalHT));
+      const m = modeleParDefaut((devis.relances?.length ?? 0) + 1);
+      setChamps(c);
+      setModeleId(m.id);
+      setBody(remplirModele(m.contenu, c));
+      setProchaine(ajouterJours(aujourdhui, DELAI_RELANCE_JOURS));
+    } else
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
     setBody(
 `Bonjour${nomDestinataire ? ` ${nomDestinataire}` : ''},
@@ -376,7 +474,7 @@ Restant à ta disposition pour tout complément d'information.`
       pdfBase64Ref.current = null;
       setTimeout(() => generatePdf(), 600);
     }
-  }, [devis, client, open, produits]);
+  }, [devis, client, open, produits, relance]);
 
   /* ── Liens d'article ──────────────────────────────────────────────────────
      On ne lit QUE les photos des articles du devis, pas la table entière : le
@@ -647,7 +745,7 @@ Restant à ta disposition pour tout complément d'information.`
         description: desc || (folderRes.ok ? `PDF aussi sauvegardé dans "${folderRes.folderName}"` : ''),
         duration: 6000,
       });
-      onSent(dateEnvoi);
+      onSent(dateEnvoi, relance ? prochaine || undefined : undefined);
       onOpenChange(false);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -666,8 +764,11 @@ Restant à ta disposition pour tout complément d'information.`
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Mail className="w-5 h-5" />
-            Envoyer le devis {devis.numero}
+            {relance ? <BellRing className="w-5 h-5" /> : <Mail className="w-5 h-5" />}
+            {relance ? `Relancer le devis ${devis.numero}` : `Envoyer le devis ${devis.numero}`}
+            {relance && (devis.relances?.length ?? 0) > 0 && (
+              <span className="text-sm font-normal text-muted-foreground">— relance n° {(devis.relances?.length ?? 0) + 1}</span>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -680,13 +781,37 @@ Restant à ta disposition pour tout complément d'information.`
             <Label>Objet</Label>
             <Input value={subject} onChange={e => setSubject(e.target.value)} />
           </div>
-          <div>
-            <Label className="flex items-center gap-2">
-              Date d'envoi
-              <span className="text-xs font-normal text-muted-foreground">(modifiable — sera enregistrée sur le devis)</span>
-            </Label>
-            <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} className="w-48" />
-          </div>
+          {relance ? (
+            <div className="flex flex-wrap gap-4">
+              <div>
+                <Label>Date de relance</Label>
+                <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} className="w-44" />
+              </div>
+              <div>
+                <Label className="flex items-center gap-2">
+                  Prochaine relance
+                  <span className="text-xs font-normal text-muted-foreground">(rappel au CRM)</span>
+                </Label>
+                <Input type="date" value={prochaine} onChange={e => setProchaine(e.target.value)} className="w-44" />
+              </div>
+            </div>
+          ) : (
+            <div>
+              <Label className="flex items-center gap-2">
+                Date d'envoi
+                <span className="text-xs font-normal text-muted-foreground">(modifiable — sera enregistrée sur le devis)</span>
+              </Label>
+              <Input type="date" value={dateEnvoi} onChange={e => setDateEnvoi(e.target.value)} className="w-48" />
+            </div>
+          )}
+          {relance && open && (
+            <ChoixMailTypeRelance
+              modeleId={modeleId}
+              corps={body}
+              champs={champs}
+              onChoisir={m => { setModeleId(m.id); if (champs) setBody(remplirModele(m.contenu, champs)); }}
+            />
+          )}
           <div>
             <Label>Corps du message</Label>
             <textarea
@@ -949,7 +1074,7 @@ Restant à ta disposition pour tout complément d'information.`
           <Button onClick={handleSend} disabled={!canSend}>
             {sending
               ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Préparation…</>
-              : <><Send className="w-4 h-4 mr-2" /> Ouvrir dans Outlook</>
+              : <><Send className="w-4 h-4 mr-2" /> {relance ? 'Relancer dans Outlook' : 'Ouvrir dans Outlook'}</>
             }
           </Button>
         </DialogFooter>

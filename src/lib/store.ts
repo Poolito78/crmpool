@@ -618,7 +618,16 @@ export interface DevisMessageTemplate {
   nom: string;
   contenu: string;
   raisonArchive?: RaisonArchive;
+  /** Absent = mail type d'archivage ; 'relance' = mail type de relance de devis. */
+  usage?: 'relance';
   createdAt: string;
+}
+
+/** Une relance d'un devis envoyé — voir `relanceDevis.ts`. */
+export interface RelanceDevis {
+  date: string; // YYYY-MM-DD
+  mode: 'email' | 'tel';
+  note?: string;
 }
 
 export interface Devis {
@@ -634,6 +643,13 @@ export interface Devis {
   dateValidite: string;
   statut: 'brouillon' | 'envoyé' | 'accepté' | 'refusé' | 'expiré' | 'système' | 'archivé';
   dateEnvoi?: string;
+  /**
+   * Relances du devis envoyé, la plus ancienne d'abord. Le statut reste
+   * « envoyé » : « Relancé » n'est qu'un libellé (`libelleStatutDevis`).
+   */
+  relances?: RelanceDevis[];
+  /** Prochaine relance prévue (YYYY-MM-DD). Absente = calculée (`prochaineRelance`). */
+  dateRelance?: string;
   lignes: LigneDevis[];
   referenceAffaire?: string;
   /**
@@ -1055,6 +1071,8 @@ function dbToDevis(r: any): Devis {
     dateValidite: r.date_validite?.split('T')[0] || '',
     statut: r.statut as Devis['statut'],
     dateEnvoi: r.date_envoi?.split('T')[0] || undefined,
+    relances: Array.isArray(r.relances) && r.relances.length > 0 ? (r.relances as RelanceDevis[]) : undefined,
+    dateRelance: r.date_relance?.split('T')[0] || undefined,
     lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
     referenceAffaire: r.reference_affaire || undefined,
     chantier: r.chantier || undefined,
@@ -1092,6 +1110,8 @@ function devisToDb(d: Devis, userId: string) {
     date_validite: d.dateValidite || null,
     statut: d.statut,
     date_envoi: d.dateEnvoi || null,
+    ...(d.relances !== undefined ? { relances: d.relances.length > 0 ? d.relances : null } : {}),
+    ...(d.dateRelance !== undefined ? { date_relance: d.dateRelance || null } : {}),
     lignes: d.lignes as any,
     reference_affaire: d.referenceAffaire || null,
     /* Colonne ajoutée par migration : incluse conditionnellement, sinon
@@ -1205,6 +1225,7 @@ function dbToTemplate(r: any): DevisMessageTemplate {
     nom: r.nom,
     contenu: r.contenu,
     raisonArchive: r.raison_archive as RaisonArchive || undefined,
+    usage: r.usage === 'relance' ? 'relance' : undefined,
     createdAt: r.created_at?.split('T')[0] || '',
   };
 }
@@ -1228,7 +1249,10 @@ export function useDevisMessageTemplates() {
     const userId = userIdRef.current;
     if (!userId) return;
     const newT: DevisMessageTemplate = { ...t, id: crypto.randomUUID(), createdAt: new Date().toISOString().split('T')[0] };
-    const { error } = await supabase.from('devis_message_templates').insert({ id: newT.id, user_id: userId, nom: newT.nom, contenu: newT.contenu, raison_archive: newT.raisonArchive || null });
+    const { error } = await supabase.from('devis_message_templates').insert({
+      id: newT.id, user_id: userId, nom: newT.nom, contenu: newT.contenu, raison_archive: newT.raisonArchive || null,
+      ...(newT.usage ? { usage: newT.usage } : {}),
+    } as never);
     if (!error) setTemplates(prev => [newT, ...prev]);
     return error;
   }, []);

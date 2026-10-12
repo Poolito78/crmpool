@@ -2,8 +2,8 @@ import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
-import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff } from 'lucide-react';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
 import { Button } from '@/components/ui/button';
@@ -28,6 +28,8 @@ import { noteEnHtml, noteEnTexte } from '@/lib/noteRiche';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import ClientCombobox from '@/components/ClientCombobox';
 import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDialog';
+import RelanceDevisDialogs, { type ModeRelanceOuvert } from '@/components/RelanceDevisDialogs';
+import { estRelance, etatRelance, prochaineRelance, devisARelancer, derniereRelance } from '@/lib/relanceDevis';
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
@@ -118,6 +120,15 @@ const statutColors: Record<string, string> = {
   système: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
   archivé: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400',
 };
+/* « Relancé » n'est pas un statut (voir relanceDevis.ts) : un devis envoyé et
+   relancé garde `statut: 'envoyé'`, il n'en change que l'affichage. */
+const couleurStatut = (d: DevisType) => estRelance(d) ? 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400' : statutColors[d.statut];
+/** Le filtre de statut connaît deux valeurs de plus que le statut : « relancé » et « à relancer ». */
+function statutCorrespond(d: DevisType, s: string, aujourdhui: string): boolean {
+  if (s === 'relancé') return estRelance(d);
+  if (s === 'à relancer') { const e = etatRelance(d, aujourdhui); return e === 'en_retard' || e === 'aujourdhui'; }
+  return d.statut === s;
+}
 
 export default function Devis() {
   const { devis, numerosLiberes, updateDevis, clients, updateClients, produits, updateProduits, assurerProduits, fournisseurs, produitFournisseurs, commandesFournisseur, updateCommandesFournisseur, commandesClient, updateCommandesClient, facturesClient, updateFacturesClient } = useCRM();
@@ -170,6 +181,7 @@ export default function Devis() {
   const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [emailDevis, setEmailDevis] = useState<DevisType | null>(null);
+  const [relance, setRelance] = useState<{ devis: DevisType; mode: ModeRelanceOuvert } | null>(null);
   const pdfContainerRef = useRef<HTMLDivElement>(null);
   // Mémorise la valeur précédente de surfaceGlobaleM2 pour éviter de l'écraser à l'ouverture du formulaire
   const prevSurfaceGlobaleRef = useRef<number>(0);
@@ -268,7 +280,15 @@ export default function Devis() {
     try {
       const s = localStorage.getItem('devis_table_cols');
       // Fusionne la nouvelle colonne « commercial » pour les utilisateurs existants.
-      if (s) { const p = JSON.parse(s) as DevisTableColKey[]; if (Array.isArray(p) && p.length > 0) return new Set([...p, 'commercial']); }
+      if (s) {
+        const p = JSON.parse(s) as DevisTableColKey[];
+        if (Array.isArray(p) && p.length > 0) {
+          // La colonne « Relance » s'ajoute UNE fois (oct. 2026) ; masquée ensuite, elle le reste.
+          const relanceVue = localStorage.getItem('devis_table_cols_relance') === '1';
+          if (!relanceVue) localStorage.setItem('devis_table_cols_relance', '1');
+          return new Set<DevisTableColKey>([...p, 'commercial', ...(relanceVue ? [] : ['relance' as const])]);
+        }
+      }
     } catch {}
     return new Set(DEFAULT_DEVIS_TABLE_COLS);
   });
@@ -760,12 +780,18 @@ export default function Devis() {
       case 'validite_desc': return b.dateValidite.localeCompare(a.dateValidite);
       case 'port_asc':  return (a.fraisPortHT || 0) - (b.fraisPortHT || 0);
       case 'port_desc': return (b.fraisPortHT || 0) - (a.fraisPortHT || 0);
+      // Sans relance prévue (devis non envoyé) : toujours en fin de liste.
+      case 'relance_asc':  return (prochaineRelance(a) ?? '9999').localeCompare(prochaineRelance(b) ?? '9999');
+      case 'relance_desc': return (prochaineRelance(b) ?? '').localeCompare(prochaineRelance(a) ?? '');
       default: return 0;
     }
   });
 
   // Tableau trié+filtré (colonne sort → remplace le sortBy select en mode tableau)
   // ⚠️ DOIT être déclaré APRÈS `sorted` : cette IIFE lit `sorted` à l'exécution.
+  const aujourdhuiISO = formatDateISO(new Date());
+  // Relances dues, dans le périmètre du commercial (même règle que `filtered`).
+  const nbARelancer = devisARelancer(devis.filter(d => isAdmin || !d.userId || d.userId === userId), aujourdhuiISO).length;
   const sortedTable = (() => {
     const NON_VIDE = '!empty';
     let arr = sorted;
@@ -775,8 +801,8 @@ export default function Devis() {
         const fNum = colFiltersD.numero || '';
         if (fNum) { const nv = fNum === NON_VIDE; if (nv ? !d.numero?.trim() : !d.numero?.toLowerCase().includes(fNum.toLowerCase())) return false; }
         const cSt = parseChoiceFilter(colFiltersD.statut || '');
-        if (cSt.mode === 'only' && d.statut !== cSt.only) return false;
-        if (cSt.mode === 'exclude' && cSt.excluded.includes(d.statut)) return false;
+        if (cSt.mode === 'only' && !statutCorrespond(d, cSt.only, aujourdhuiISO)) return false;
+        if (cSt.mode === 'exclude' && cSt.excluded.some(s => statutCorrespond(d, s, aujourdhuiISO))) return false;
         const fCl = colFiltersD.client || '';
         if (fCl && fCl !== NON_VIDE) {
           const q = fCl.toLowerCase();
@@ -2579,6 +2605,8 @@ export default function Devis() {
         { value: '', label: 'Tous' },
         { value: 'brouillon', label: 'Brouillon' },
         { value: 'envoyé', label: 'Envoyé' },
+        { value: 'relancé', label: 'Relancé' },
+        { value: 'à relancer', label: '🔔 À relancer' },
         { value: 'accepté', label: 'Accepté' },
         { value: 'refusé', label: 'Refusé' },
         { value: 'expiré', label: 'Expiré' },
@@ -2644,6 +2672,17 @@ export default function Devis() {
             </DropdownMenu>
           </div>
           <div className="ml-auto flex gap-2 shrink-0 flex-wrap justify-end items-center">
+            {/* Relances dues : un clic filtre la liste sur elles. */}
+            {nbARelancer > 0 && (
+              <Button
+                variant="outline" size="sm"
+                className="gap-1.5 shrink-0 text-orange-600 border-orange-300 hover:text-orange-700 dark:border-orange-800"
+                title={`${nbARelancer} devis à relancer (relance prévue aujourd'hui ou en retard)`}
+                onClick={() => setFilterD('statut', 'à relancer')}
+              >
+                <BellRing className="w-4 h-4" /> {nbARelancer}<span className="hidden lg:inline"> à relancer</span>
+              </Button>
+            )}
             {/* Sélecteur de vue (icône, identique à la page Clients) */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -2782,8 +2821,8 @@ export default function Devis() {
                       case 'numero': return <td style={ws} className={`px-3 py-2.5${trunc}`}><p className="font-semibold text-sm truncate">{d.numero}</p></td>;
                       case 'statut': return (
                         <td style={ws} className="px-3 py-2.5">
-                          <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; const patch = ns === 'accepté' ? { probabiliteReussite: 100, dateRealisation: d.dateRealisation || new Date().toISOString().split('T')[0] } : {}; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns, ...patch } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${statutColors[d.statut] || 'bg-muted text-muted-foreground'}`}>
-                            <option value="brouillon">brouillon</option><option value="envoyé">envoyé</option><option value="accepté">accepté</option><option value="refusé">refusé</option><option value="expiré">expiré</option><option value="archivé">archivé</option>
+                          <select value={d.statut} onClick={e => e.stopPropagation()} onChange={e => { const ns = e.target.value as DevisType['statut']; const patch = ns === 'accepté' ? { probabiliteReussite: 100, dateRealisation: d.dateRealisation || new Date().toISOString().split('T')[0] } : {}; updateDevis(prev => prev.map(dv => dv.id === d.id ? { ...dv, statut: ns, ...patch } : dv)); }} className={`text-xs px-1.5 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary ${couleurStatut(d) || 'bg-muted text-muted-foreground'}`}>
+                            <option value="brouillon">brouillon</option><option value="envoyé">{estRelance(d) ? 'relancé' : 'envoyé'}</option><option value="accepté">accepté</option><option value="refusé">refusé</option><option value="expiré">expiré</option><option value="archivé">archivé</option>
                           </select>
                         </td>
                       );
@@ -2798,6 +2837,20 @@ export default function Devis() {
                       case 'reussite': return <td style={ws} className="px-3 py-2.5 text-right text-sm whitespace-nowrap">{d.probabiliteReussite != null ? <span className={`font-medium ${d.probabiliteReussite >= 75 ? 'text-success' : d.probabiliteReussite >= 50 ? 'text-warning' : d.probabiliteReussite > 0 ? 'text-orange-500' : 'text-muted-foreground'}`}>{d.probabiliteReussite}%</span> : <span className="text-muted-foreground">—</span>}</td>;
                       case 'realisation': return <td style={ws} className="px-3 py-2.5 text-sm text-muted-foreground whitespace-nowrap">{d.dateRealisation ? formatDate(d.dateRealisation) : '—'}</td>;
                       case 'commercial': return <td style={ws} className={`px-3 py-2.5 text-sm text-muted-foreground${trunc}`} title={nameOf(d.userId)}>{nameOf(d.userId)}</td>;
+                      case 'relance': {
+                        const p = prochaineRelance(d);
+                        const e = etatRelance(d, aujourdhuiISO);
+                        const n = d.relances?.length ?? 0;
+                        return (
+                          <td style={ws} className="px-3 py-2.5 text-sm whitespace-nowrap" title={n > 0 ? `${n} relance${n > 1 ? 's' : ''} — dernière le ${formatDate(derniereRelance(d)!.date)}` : undefined}>
+                            {p ? (
+                              <span className={e === 'en_retard' ? 'text-destructive font-medium' : e === 'aujourdhui' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
+                                {formatDate(p)}{n > 0 && <span className="text-xs text-muted-foreground font-normal"> · {n}×</span>}
+                              </span>
+                            ) : <span className="text-muted-foreground">—</span>}
+                          </td>
+                        );
+                      }
                       default: return <td style={ws} className="px-3 py-2.5" />;
                     }
                   };
@@ -2811,6 +2864,8 @@ export default function Devis() {
                             { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
                             { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
                             { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                            { icon: <BellRing className="w-4 h-4" />, label: 'Relancer par email', onClick: () => setRelance({ devis: d, mode: 'email' }), hidden: d.statut !== 'envoyé' },
+                            { icon: <Phone className="w-4 h-4" />, label: 'Relance téléphonique', onClick: () => setRelance({ devis: d, mode: 'tel' }), hidden: d.statut !== 'envoyé' },
                             { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
                             { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                             { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
@@ -2933,7 +2988,7 @@ export default function Devis() {
                         {d.systeme}
                       </span>
                     )}
-                    {visDevisTableCols.has('statut') && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statutColors[d.statut]}`}>{d.statut}</span>}
+                    {visDevisTableCols.has('statut') && <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${couleurStatut(d)}`}>{estRelance(d) ? 'relancé' : d.statut}</span>}
                     {d.statut === 'système' && (
                       <span className="text-xs px-2 py-0.5 rounded-full font-bold bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400 border border-violet-300 dark:border-violet-700 tracking-wide">
                         MODÈLE
@@ -2971,6 +3026,32 @@ export default function Devis() {
                     </p>
                   )}
                   {d.notes && <p className="text-xs text-muted-foreground mt-1">{d.notes}</p>}
+                  {/* ── Relance : où on en est, et de quoi relancer d'un clic ── */}
+                  {d.statut === 'envoyé' && visDevisTableCols.has('relance') && (() => {
+                    const p = prochaineRelance(d);
+                    const e = etatRelance(d, aujourdhuiISO);
+                    const der = derniereRelance(d);
+                    const n = d.relances?.length ?? 0;
+                    return (
+                      <div className="flex items-center gap-1.5 flex-wrap mt-1 text-xs">
+                        <BellRing className={`w-3.5 h-3.5 shrink-0 ${e === 'en_retard' ? 'text-destructive' : e === 'aujourdhui' ? 'text-orange-600' : 'text-muted-foreground'}`} />
+                        {der
+                          ? <span className="text-muted-foreground">Relancé {n}× · dernière le {formatDate(der.date)} ({der.mode === 'tel' ? 'tél.' : 'mail'})</span>
+                          : <span className="text-muted-foreground">Pas encore relancé</span>}
+                        {p && (
+                          <span className={e === 'en_retard' ? 'text-destructive font-medium' : e === 'aujourdhui' ? 'text-orange-600 font-medium' : 'text-muted-foreground'}>
+                            · {e === 'en_retard' ? `relance en retard (prévue le ${formatDate(p)})` : e === 'aujourdhui' ? 'relance prévue aujourd\'hui' : `prochaine relance le ${formatDate(p)}`}
+                          </span>
+                        )}
+                        <button onClick={() => setRelance({ devis: d, mode: 'email' })} title="Relancer par email" className="ml-1 inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-primary hover:bg-primary/10">
+                          <Mail className="w-3 h-3" /> Mail
+                        </button>
+                        <button onClick={() => setRelance({ devis: d, mode: 'tel' })} title="Relance téléphonique" className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-primary hover:bg-primary/10">
+                          <Phone className="w-3 h-3" /> Tél.
+                        </button>
+                      </div>
+                    );
+                  })()}
                   {/* ── Documents liés ── */}
                   {(cfLies.length > 0 || ccLies.length > 0 || facLies.length > 0 || d.statut === 'accepté' || d.statut === 'envoyé') && (
                     <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
@@ -3042,7 +3123,7 @@ export default function Devis() {
                       onChange={e => updateStatut(d.id, e.target.value as DevisType['statut'])}
                     >
                       <option value="brouillon">Brouillon</option>
-                      <option value="envoyé">Envoyé</option>
+                      <option value="envoyé">{estRelance(d) ? 'Relancé' : 'Envoyé'}</option>
                       <option value="accepté">Accepté</option>
                       <option value="refusé">Refusé</option>
                       <option value="expiré">Expiré</option>
@@ -3054,6 +3135,8 @@ export default function Devis() {
                       { icon: <MessageSquare className="w-4 h-4" />, label: 'Notes & fichiers', onClick: () => setChatterDevis(d) },
                       { icon: <Copy className="w-4 h-4" />, label: 'Dupliquer', onClick: () => duplicate(d) },
                       { icon: <Mail className="w-4 h-4" />, label: 'Envoyer par email', onClick: () => setEmailDevis(d) },
+                      { icon: <BellRing className="w-4 h-4" />, label: 'Relancer par email', onClick: () => setRelance({ devis: d, mode: 'email' }), hidden: d.statut !== 'envoyé' },
+                      { icon: <Phone className="w-4 h-4" />, label: 'Relance téléphonique', onClick: () => setRelance({ devis: d, mode: 'tel' }), hidden: d.statut !== 'envoyé' },
                       { icon: <Send className="w-4 h-4" />, label: 'Créer le devis dans Odoo', onClick: () => { void creerDevisOdooDepuisListe(d); } },
                       { icon: <Archive className="w-4 h-4" />, label: 'Archiver', onClick: () => openArchiveDialog(d) },
                       { icon: <Trash2 className="w-4 h-4" />, label: 'Supprimer', onClick: () => confirmRemove(d.id), danger: true },
@@ -3141,6 +3224,25 @@ export default function Devis() {
                         <Mail className="w-4 h-4 mr-2 text-muted-foreground" /> Envoyer par mail
                       </DropdownMenuItem>
                     )}
+                    {editingId && statut === 'envoyé' && (['email', 'tel'] as const).map(mode => (
+                      <DropdownMenuItem key={mode} onClick={() => {
+                        save(true);
+                        const existing = devis.find(d => d.id === editingId);
+                        if (!existing) return;
+                        // Le devis tel qu'à l'écran, relances comprises (le formulaire ne les porte pas).
+                        setRelance({ mode, devis: {
+                          ...existing,
+                          clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined,
+                          dateCreation, dateValidite, statut, dateEnvoi: dateEnvoi || undefined, lignes, referenceAffaire, chantier,
+                          systeme: systeme || undefined, notes, conditions, fraisPortHT, fraisPortTVA, modeCalcul,
+                          surfaceGlobaleM2: modeCalcul === 'surface' ? surfaceGlobaleM2 : undefined,
+                        } });
+                      }}>
+                        {mode === 'email'
+                          ? <><BellRing className="w-4 h-4 mr-2 text-muted-foreground" /> Relancer par mail</>
+                          : <><Phone className="w-4 h-4 mr-2 text-muted-foreground" /> Relance téléphonique</>}
+                      </DropdownMenuItem>
+                    ))}
                     {editingId && (
                       <>
                         <DropdownMenuItem onClick={() => preparerOdoo(false)}>
@@ -5411,6 +5513,14 @@ export default function Devis() {
             logHistorique({ entiteType: 'devis', entiteId: emailDevis.id, entiteNumero: emailDevis.numero, action: 'envoi_email', details: { destinataire: clients.find(c => c.id === emailDevis.clientId)?.email, dateEnvoi, client: clients.find(c => c.id === emailDevis.clientId)?.nom } });
           }
         }}
+      />
+
+      {/* Relance (mail type + devis joint, ou appel) */}
+      <RelanceDevisDialogs
+        devis={relance?.devis ?? null}
+        mode={relance?.mode ?? null}
+        onClose={() => setRelance(null)}
+        ajouterAction={addCrmAction}
       />
 
       {/* Commande Fournisseur Dialog */}

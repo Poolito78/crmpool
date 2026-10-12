@@ -13,6 +13,7 @@ import { useHiddenTiles } from '@/lib/dashboardSettings';
 import { useCurrentUser } from '@/hooks/useAuth';
 import CaOdooPanel from '@/components/CaOdooPanel';
 import { useCaOdoo } from '@/lib/caOdoo';
+import { devisARelancer, prochaineRelance } from '@/lib/relanceDevis';
 
 type DashTab = 'overview' | 'previsionnel' | 'caodoo';
 const DASH_TABS: DashTab[] = ['overview', 'previsionnel', 'caodoo'];
@@ -132,6 +133,8 @@ export default function Dashboard() {
   ).sort((a, b) => (a.datePlanifiee || '') > (b.datePlanifiee || '') ? 1 : -1);
   const actionsEnRetard = actionsUrgentes.filter(a => a.datePlanifiee && a.datePlanifiee < today);
   const actionsAujourdhui = actionsUrgentes.filter(a => a.datePlanifiee === today);
+  // Devis envoyés dont la relance est due (relanceDevis.ts).
+  const devisRelance = devisARelancer(devis, today);
 
   const stats = [
     { id: 'stat-clients', label: 'Clients', value: clients.length, icon: Users, color: 'text-primary', bg: 'bg-primary/10', link: '/clients' },
@@ -169,7 +172,7 @@ export default function Dashboard() {
       ) : (
       <>
       {/* ── Alertes prioritaires ── */}
-      {(((isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes'))) || (actionsUrgentes.length > 0 && !hidden.has('alerte-relances'))) && (
+      {(((isAdmin && commandesATraiter.length > 0 && !hidden.has('alerte-commandes'))) || ((actionsUrgentes.length > 0 || devisRelance.length > 0) && !hidden.has('alerte-relances'))) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
           {/* Commandes client à traiter (admin uniquement) */}
@@ -251,6 +254,44 @@ export default function Dashboard() {
                 })}
                 {actionsUrgentes.length > 4 && (
                   <p className="text-xs text-violet-500 dark:text-violet-400 text-right">+{actionsUrgentes.length - 4} autres</p>
+                )}
+              </div>
+            </Link>
+          )}
+
+          {/* Devis à relancer */}
+          {devisRelance.length > 0 && !hidden.has('alerte-relances') && (
+            <Link to="/crm?tab=relances" className="block rounded-xl border-2 border-sky-300 dark:border-sky-700 bg-sky-50 dark:bg-sky-900/20 p-4 hover:bg-sky-100 dark:hover:bg-sky-900/30 transition-colors">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-9 h-9 rounded-lg bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center shrink-0">
+                  <Bell className="w-5 h-5 text-sky-600 dark:text-sky-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-sky-700 dark:text-sky-300">
+                    {devisRelance.length} devis à relancer
+                  </p>
+                  <p className="text-xs text-sky-600/70 dark:text-sky-400/70">
+                    {formatMontant(devisRelance.reduce((s, d) => s + calculerTotalDevis(d.lignes, d.fraisPortHT || 0, d.fraisPortTVA ?? 20).totalHT, 0))} HT en attente de réponse
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                {devisRelance.slice(0, 4).map(d => {
+                  const client = clients.find(c => c.id === d.clientId);
+                  const p = prochaineRelance(d) ?? today;
+                  const retard = Math.round((new Date(today).getTime() - new Date(p).getTime()) / 86400000);
+                  return (
+                    <div key={d.id} className="flex items-center gap-2 text-xs">
+                      <span className="font-mono font-medium text-sky-700 dark:text-sky-300 shrink-0">{d.numero}</span>
+                      <span className="truncate flex-1 text-sky-600/80 dark:text-sky-400/80">{client?.societe || client?.nom || '—'}</span>
+                      <span className={cn('shrink-0 font-medium', retard > 0 ? 'text-red-500' : 'text-sky-600 dark:text-sky-400')}>
+                        {retard > 0 ? `−${retard}j` : 'auj.'}
+                      </span>
+                    </div>
+                  );
+                })}
+                {devisRelance.length > 4 && (
+                  <p className="text-xs text-sky-500 dark:text-sky-400 text-right">+{devisRelance.length - 4} autres</p>
                 )}
               </div>
             </Link>

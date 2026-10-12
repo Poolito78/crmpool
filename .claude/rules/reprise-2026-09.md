@@ -391,6 +391,23 @@ affichée, aucun chiffre.
 **Déployé** (ca-refresh version 6, 11/10). Bouton « Actualiser » dans la
 tuile CA Odoo du CRM (`actualiserCaOdoo`, `caOdoo.ts`).
 
+## Relance des devis (12 oct.)
+
+`relanceDevis.ts` + `RelanceDevisDialogs.tsx` (migration `20261012100000`) :
+`devis.relances` (jsonb `[{date, mode: 'email'|'tel', note}]`) et
+`devis.date_relance` (prochaine relance ; absente = 7 j après la dernière
+relance ou l'envoi). Relance par mail = `DevisEmailDialog` en mode `relance`
+(même PDF, mêmes PJ, .eml) avec mails types — 3 de base selon le rang +
+ceux de l'utilisateur (`devis_message_templates.usage = 'relance'`, écartés
+du dialogue d'archivage). Relance tél. = compte rendu + prochaine date.
+Chaque relance va au devis, à l'historique (`action: 'relance'`) et au CRM
+(action réalisée). Points d'entrée : menu ⚙ du devis, menu Action du devis
+ouvert, ligne « Relance » des cartes, colonne Relance, filtre de statut
+« Relancé » / « À relancer », onglet CRM **Relances**, alerte du tableau de
+bord (`/crm?tab=relances`).
+⚠️ **« Relancé » N'EST PAS UN STATUT** : `statut` reste `'envoyé'`, sinon les
+devis relancés sortiraient de tous les comptes de devis en cours.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

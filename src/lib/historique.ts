@@ -17,6 +17,7 @@ export type ActionType =
   | 'modification'
   | 'suppression'
   | 'envoi_email'
+  | 'relance'
   | 'statut'
   | 'reception'
   | 'prise_stock';

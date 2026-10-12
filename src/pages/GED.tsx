@@ -33,6 +33,7 @@ const actionConfig: Record<ActionType, { label: string; icon: typeof Plus; color
   modification: { label: 'Modification',        icon: Pencil,         color: 'text-blue-600 dark:text-blue-400' },
   suppression:  { label: 'Suppression',         icon: Trash2,         color: 'text-destructive' },
   envoi_email:  { label: 'Envoi email',         icon: Mail,           color: 'text-violet-600 dark:text-violet-400' },
+  relance:      { label: 'Relance',             icon: Mail,           color: 'text-sky-600 dark:text-sky-400' },
   statut:       { label: 'Changement de statut',icon: ArrowRightLeft, color: 'text-amber-600 dark:text-amber-400' },
   reception:    { label: 'Réception',           icon: PackageCheck,   color: 'text-emerald-600 dark:text-emerald-400' },
   prise_stock:  { label: 'Prise sur stock',     icon: Warehouse,      color: 'text-teal-600 dark:text-teal-400' },
@@ -163,7 +164,7 @@ function groupByDay(entries: HistoriqueEntry[]): [string, HistoriqueEntry[]][] {
 
 const CRM_TYPES: EntiteType[] = ['devis', 'commande_fournisseur', 'commande_client', 'client', 'produit', 'fournisseur'];
 const ALL_TYPES: EntiteType[] = [...CRM_TYPES, 'concurrent', 'concurrent_produit', 'concurrent_note'];
-const ALL_ACTIONS: ActionType[] = ['creation', 'modification', 'suppression', 'envoi_email', 'statut', 'reception', 'prise_stock'];
+const ALL_ACTIONS: ActionType[] = ['creation', 'modification', 'suppression', 'envoi_email', 'relance', 'statut', 'reception', 'prise_stock'];
 
 export default function GED() {
   const [entries, setEntries] = useState<HistoriqueEntry[]>([]);

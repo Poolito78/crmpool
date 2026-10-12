@@ -154,6 +154,7 @@ explication.
 `planDirectionnel` (carnet de plans Kadri lu sans IA, chiffré par ensemble → DF50/DR50 Lapérouse P50 par défaut, Vasco = option F, Urville hors grille, grands formats en Tasman PAL = variante Odoo D3.l.h.Cx.ST.IS.BRUT (face standard), 1 collier CO{Ø}SFP50 par rail et par support sur la plus petite section, lattes Tasman de 300 complétées de 150, brides PAL = lattes×supports + 2 + 4/ml ; mât rehaussé existant jamais commandé, mât neuf en option = mono de son type à la longueur hors tout, moment Kadri ≤ admissible ; sous un PAL, supports IPN1-5 (= IA-IE) choisis au moment ; ni pose ni dépose) ·
 `catalyseur` (CATALYST2 dosé à la température du chantier, fiche ISOFLOOR, sur la RÉSINE du devis — un kit se lit par composants, sinon « à vérifier ») ·
 `cacheCatalogue` (catalogue en IndexedDB, relu par `updated_at` + `produits_effaces` — pas `produits_supprimes`, la liste noire) ·
+`relanceDevis` (relance mail/tél. d'un devis envoyé ; « Relancé » est un libellé, le statut reste `'envoyé'`) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·

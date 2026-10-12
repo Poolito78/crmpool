@@ -86,6 +86,7 @@ const actionLabel: Record<string, { label: string; icon: typeof Clock; color: st
   modification: { label: 'Modifié',                 icon: Pencil,         color: 'text-blue-600' },
   suppression:  { label: 'Supprimé',                icon: Trash2,         color: 'text-destructive' },
   envoi_email:  { label: 'Email envoyé',            icon: Mail,           color: 'text-violet-600' },
+  relance:      { label: 'Relancé',                 icon: Mail,           color: 'text-sky-600' },
   statut:       { label: 'Statut modifié',          icon: ArrowRightLeft, color: 'text-amber-600' },
   reception:    { label: 'Réceptionné',             icon: PackageCheck,   color: 'text-emerald-600' },
   prise_stock:  { label: 'Prise sur stock',         icon: Clock,          color: 'text-teal-600' },
