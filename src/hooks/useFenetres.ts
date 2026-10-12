@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { basculerVers, idFenetre, ouvrirFenetre, racineFenetre, renommerFenetre } from '@/lib/fenetres';
+import { basculerVers, idFenetre, ouvrirFenetre, groupeFenetre, renommerFenetre } from '@/lib/fenetres';
 
 /* Les fenêtres CRM ouvertes, vues de celle-ci (ouvrir/basculer : `lib/fenetres`).
  *
@@ -12,7 +12,7 @@ import { basculerVers, idFenetre, ouvrirFenetre, racineFenetre, renommerFenetre 
  * relance (`qui`) à l'ouverture du menu, à laquelle tout le monde répond : un
  * message, lui, n'est pas ralenti.
  *
- * Chaque annonce porte la `racine` du groupe (`racineFenetre`) : on ne
+ * Chaque annonce porte son `groupe` (`groupeFenetre`) : on ne
  * tente de basculer que vers une fenêtre du même groupe, les autres sont
  * signalées « indépendantes ».
  *
@@ -26,7 +26,7 @@ import { basculerVers, idFenetre, ouvrirFenetre, racineFenetre, renommerFenetre 
 export type Fenetre = {
   id: string;
   jeton: string;
-  racine: string;
+  groupe: string;
   path: string;
   libelle: string;
   active: boolean;
@@ -58,7 +58,7 @@ export function useFenetres(libelle: string) {
   const etat = useCallback((): Omit<Fenetre, 'vu'> => ({
     id: idFenetre(),
     jeton: moi.current.jeton,
-    racine: racineFenetre(),
+    groupe: groupeFenetre(),
     path: courant.current.path,
     libelle: courant.current.libelle,
     active: document.hasFocus(),
@@ -149,7 +149,7 @@ export function useFenetres(libelle: string) {
 
   const basculer = useCallback((f: Fenetre) => {
     if (f.jeton === moi.current.jeton) return;
-    if (f.racine === racineFenetre() && basculerVers(f.id)) return;
+    if (f.groupe === groupeFenetre() && basculerVers(f.id)) return;
     toast.info(`« ${f.libelle} » est ouverte dans une fenêtre indépendante`, {
       description: 'Retrouvez-la dans la barre des tâches (Alt+Tab).',
     });
@@ -185,5 +185,5 @@ export function useFenetres(libelle: string) {
     return () => window.removeEventListener('keydown', onKey);
   }, [basculer, nouvelle]);
 
-  return { fenetres, monJeton: moi.current.jeton, maRacine: racineFenetre(), rafraichir, basculer, envoyer, nouvelle };
+  return { fenetres, monJeton: moi.current.jeton, monGroupe: groupeFenetre(), rafraichir, basculer, envoyer, nouvelle };
 }

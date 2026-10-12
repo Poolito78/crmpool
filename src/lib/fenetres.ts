@@ -19,12 +19,21 @@
  * premier plan n'importe quelle fenêtre du même groupe — sœur comme mère — et
  * ne la recharge pas (URL vide).
  *
- * LE GROUPE : les fenêtres ouvertes les unes par les autres (`opener`).
- * `ouvrirFenetre` ne coupe donc jamais le lien (pas de `noopener`). Une
- * fenêtre lancée depuis la barre des tâches forme son propre groupe :
- * `window.open` ne la trouverait pas et ouvrirait une page vierge. On compare
- * d'abord les racines (`racineFenetre`) pour ne pas tenter ; la page vierge
- * reste détectée et refermée si le cas se présente quand même. */
+ * LE GROUPE : les fenêtres ouvertes les unes par les autres. `ouvrirFenetre`
+ * ne coupe donc jamais le lien (pas de `noopener`). Une fenêtre lancée depuis
+ * la barre des tâches forme son propre groupe : `window.open` ne la
+ * trouverait pas et ouvrirait une page vierge. On compare d'abord les groupes
+ * (`groupeFenetre`) pour ne pas tenter ; la page vierge reste détectée et
+ * refermée si le cas se présente quand même (onglet dupliqué).
+ *
+ * ⚠️ LE GROUPE NE SE LIT PAS EN REMONTANT LES `opener`. `window.open('', nom)`
+ * fait de l'appelante la nouvelle `opener` de la fenêtre rappelée : après une
+ * bascule vers sa mère, la fille et la mère sont chacune l'opener de l'autre.
+ * Une boucle `while (w.opener)` ne finit plus — et les fenêtres d'un groupe
+ * partagent un même processus : TOUTES se figent (« Pages ne répondant pas »,
+ * 12/10/2026). Le groupe est un identifiant gardé en sessionStorage, que
+ * Chrome recopie dans la fenêtre ouverte par `window.open` et qu'une fenêtre
+ * lancée depuis la barre des tâches n'a pas. */
 
 const PREFIXE = 'crm-';
 
@@ -44,15 +53,19 @@ export function renommerFenetre(): string {
   return window.name;
 }
 
-/** Nom de la fenêtre au sommet de la chaîne des `opener` : deux fenêtres de
- *  même racine sont du même groupe et peuvent basculer l'une vers l'autre. */
-export function racineFenetre(): string {
-  let w: Window = window;
-  try {
-    while (w.opener && w.opener !== w && !w.opener.closed) w = w.opener;
-  } catch { /* opener d'une autre origine : on s'arrête là */ }
-  if (w === window) return idFenetre();
-  try { return w.name || idFenetre(); } catch { return idFenetre(); }
+const CLE_GROUPE = 'crm-fenetres-groupe';
+let groupe: string | null = null;
+
+/** Groupe de cette fenêtre : deux fenêtres du même groupe peuvent basculer
+ *  l'une vers l'autre. Hérité de l'ouvreuse par la copie du sessionStorage. */
+export function groupeFenetre(): string {
+  if (groupe) return groupe;
+  try { groupe = sessionStorage.getItem(CLE_GROUPE); } catch { /* stockage bloqué */ }
+  if (!groupe) {
+    groupe = nouveauNom();
+    try { sessionStorage.setItem(CLE_GROUPE, groupe); } catch { /* ignore */ }
+  }
+  return groupe;
 }
 
 /** Ouvre `path` dans une nouvelle fenêtre du groupe. `null` si le navigateur bloque. */
