@@ -31,6 +31,7 @@ import DevisEmailDialog, { type PreviewOptions } from '@/components/DevisEmailDi
 import OptionsArticleDialog from '@/components/OptionsArticleDialog';
 import TeintesCompoDialog from '@/components/TeintesCompoDialog';
 import DetailCompoLigne from '@/components/DetailCompoLigne';
+import ChampSysteme from '@/components/ChampSysteme';
 import { InputNombre } from '@/components/InputNombre';
 import {
   calculerCatalyse, estCatalyseur, ligneDuTableau, LIBELLE_FAMILLE, contenanceCatalyseur, repartirCatalyseur,
@@ -1053,6 +1054,37 @@ export default function Devis() {
     openEdit(newDevis); // ouvre la copie persistée pour vérification / enregistrement
     const n = await copyDevisPiecesJointes(sysDevis.id, newId);
     toast.success(`Modèle « ${sysDevis.systeme || sysDevis.numero} » dupliqué${n > 0 ? ` (+ ${n} pièce${n > 1 ? 's' : ''})` : ''} et pré-rempli`);
+  }
+
+  /**
+   * Ajoute au devis ouvert les lignes d'un modèle de système (« + lignes » du
+   * champ Système) : nouveaux identifiants, quantités et prix recalculés à la
+   * surface du devis et au tarif de son client — la règle de
+   * `duplicateSystemeEtRemplir`, sans créer de nouveau devis. Les lignes vides
+   * du devis (aucun article, aucun texte) cèdent la place.
+   */
+  function insererLignesSysteme(id: string) {
+    const sys = devis.find(d => d.id === id);
+    if (!sys) return;
+    const client = clients.find(c => c.id === clientId);
+    const surf = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : (sys.surfaceGlobaleM2 || 0);
+    const nouvelles = sys.lignes.map(l0 => {
+      const l: LigneDevis = { ...l0, id: generateId() };
+      if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
+      const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+      if (prod && consoPourSurface(prod, l.consommation) != null) {
+        const quantite = calcQuantiteSurface(prod, surf, l.consommation);
+        return { ...l, quantite, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
+      }
+      return l;
+    });
+    saveSnapshot();
+    if (surf > 0 && !(surfaceGlobaleM2 > 0)) { setSurfaceGlobaleM2(surf); setModeCalcul('surface'); }
+    setLignes(prev => [
+      ...prev.filter(l => !((!l.type || l.type === 'ligne') && !l.produitId && !(l.description || '').trim())),
+      ...nouvelles,
+    ]);
+    toast.success(`${nouvelles.length} ligne(s) du système « ${sys.systeme || sys.numero} » ajoutée(s)${surf > 0 ? ` — recalculées pour ${surf} m²` : ''}.`);
   }
 
   const [newLigneId, setNewLigneId] = useState<string | null>(null);
@@ -3384,7 +3416,20 @@ export default function Devis() {
               </div>
               <div>
                 <Label>Système</Label>
-                <Input data-voice="systeme" placeholder="Ex: Chape liquide isolante" value={systeme} onChange={e => setSysteme(e.target.value)} />
+                {/* Les systèmes du CRM (devis « Système (modèle) ») proposés pendant la saisie. */}
+                <ChampSysteme
+                  value={systeme}
+                  onChange={setSysteme}
+                  placeholder="Ex: Chape liquide isolante"
+                  systemes={devis
+                    .filter(d => d.statut === 'système' && d.id !== editingId)
+                    .map(d => ({
+                      id: d.id,
+                      nom: d.systeme || d.referenceAffaire || d.numero,
+                      nbLignes: d.lignes.filter(l => l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte').length,
+                    }))}
+                  onInsererLignes={insererLignesSysteme}
+                />
                 {lignesMoquette.length > 0 && (
                   <div className="mt-2 flex items-center gap-2">
                     <Label className="text-xs shrink-0">Épaisseur moquette</Label>
