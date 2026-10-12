@@ -1183,6 +1183,24 @@ export default function Devis() {
     if (change) setLignes(suivantes);
   }, [lignes, produits, clients, clientId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* L'INTITULÉ D'UNE LIGNE À VARIANTE COMPOSÉE suit sa composition — tant qu'il
+     est automatique (`intituleCompo` ne réécrit jamais un intitulé saisi) : un
+     pigment modifié qui passe en sous-ligne sort de l'intitulé, et y revient si
+     on le masque. */
+  useEffect(() => {
+    let change = false;
+    const suivantes = lignes.map(l => {
+      const p = l.produitId && l.type !== 'groupe' && l.type !== 'soustotal' && l.type !== 'texte' ? produitParId(produits, l.produitId) : undefined;
+      const v = p ? varianteDeLigne(p, l.variantesChoisies) : undefined;
+      if (!p || !v) return l;
+      const d = intituleCompo(l, p, v, l.variantesChoisies ?? {});
+      if (d === l.description) return l;
+      change = true;
+      return { ...l, description: d };
+    });
+    if (change) setLignes(suivantes);
+  }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function addLigne() {
     saveSnapshot();
     const id = generateId();
@@ -1369,10 +1387,37 @@ export default function Devis() {
    * intitulé écrit ou retouché à la main ne bouge jamais.
    */
   function intituleCompo(l: LigneDevis, racine: Produit, v: VarianteCompo, vc: Record<string, string>): string {
+    const trouver = (id: string) => produitParId(produits, id);
     const base = designationProduit(racine);
-    if (noteEnTexte(l.description).trim() !== base.trim()) return l.description;
-    const sous = sousVariantesRetenues(v, (id: string) => produitParId(produits, id), vc);
-    return designationAvecVariante(base, v, sous.map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom })));
+    const sous = sousVariantesRetenues(v, trouver, vc).map(s => ({ article: designationProduit(s.produit), nom: s.variante.nom }));
+    const complet = designationAvecVariante(base, v, sous);
+
+    /* Un composant IMPRIMÉ À PART (sous-ligne : pigment modifié) sort de l'intitulé :
+       dans « 8 Kits de 5,66 kg - SNLR (8 x 2,91 kg) - Pigment (8 x 0,25 kg) », le
+       morceau « Pigment … » part, « SNLR … » (inchangé, sans sous-ligne) reste. Un
+       morceau se reconnaît à son premier mot, cherché dans la désignation des
+       composants imprimés. */
+    const perso = composantsPersonnalises(vc);
+    let filtre = complet;
+    // Œil de la ligne fermé : rien n'est imprimé à part, l'intitulé garde tout.
+    if (perso && !l.detailMasque) {
+      const visibles = composantsVisibles(v, resoudrePrixComposant(clients.find(c => c.id === clientId)?.estRevendeur), trouver, vc);
+      const imprimes = perso.filter((_, i) => visibles[i])
+        .map(c => (c.produitId ? designationProduit(trouver(c.produitId) ?? { description: c.description } as Produit) : c.description).toLowerCase());
+      const garde = (morceau: string) => {
+        const mot = noteEnTexte(morceau).match(/[\p{L}]{3,}/u)?.[0]?.toLowerCase();
+        return !mot || !imprimes.some(d => d.includes(mot));
+      };
+      const epure = (nom: string) => nom.split(/\s+-\s+/).filter(garde).join(' - ');
+      filtre = designationAvecVariante(base, { nom: epure(v.nom) }, sous.map(s => ({ ...s, nom: epure(s.nom) })));
+    }
+
+    /* On ne réécrit qu'un intitulé posé automatiquement : le nom seul de l'article
+       (article re-sélectionné), ou l'intitulé complet ou épuré déjà calculé. Un
+       intitulé écrit ou retouché à la main ne bouge jamais. */
+    const actuel = noteEnTexte(l.description).trim();
+    const auto = [base, complet, filtre].map(t => noteEnTexte(t).trim());
+    return auto.includes(actuel) ? filtre : l.description;
   }
 
   /** Prix, coût d'achat et intitulé d'une ligne à variante composée, sous-variantes comprises. */
