@@ -17,16 +17,33 @@ export default function RowActionsMenu({ actions, title = 'Actions' }: { actions
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number; maxHeight: number } | null>(null);
   const visible = actions.filter(a => !a.hidden);
 
+  /* Sous le bouton s'il y a la place, AU-DESSUS sinon : en bas de fenêtre le
+     menu sortait de l'écran et ses dernières actions étaient inaccessibles.
+     La hauteur réelle du menu est mesurée après un premier rendu ; s'il ne
+     tient d'aucun côté, il prend le plus grand et défile. */
   const compute = () => {
     const r = btnRef.current?.getBoundingClientRect();
     if (!r) return;
     const width = 200;
-    setPos({ top: r.bottom + 4, left: Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8)) });
+    const marge = 8;
+    const left = Math.max(marge, Math.min(r.right - width, window.innerWidth - width - marge));
+    const hauteur = menuRef.current?.scrollHeight ?? 0;
+    const dessous = window.innerHeight - r.bottom - 4 - marge;
+    const dessus = r.top - 4 - marge;
+    if (hauteur <= dessous || dessous >= dessus) {
+      setPos({ top: r.bottom + 4, left, maxHeight: dessous });
+    } else {
+      const h = Math.min(hauteur, dessus);
+      setPos({ top: r.top - 4 - h, left, maxHeight: dessus });
+    }
   };
-  useLayoutEffect(() => { if (open) compute(); }, [open]);
+  useLayoutEffect(() => { if (open) compute(); else setPos(null); }, [open]);
+  // Second passage, le menu rendu : sa hauteur est connue.
+  const rendu = pos !== null;
+  useLayoutEffect(() => { if (open && rendu) compute(); }, [open, rendu]);
   useEffect(() => {
     if (!open) return;
     const onDown = (e: MouseEvent) => {
@@ -57,8 +74,8 @@ export default function RowActionsMenu({ actions, title = 'Actions' }: { actions
       {open && pos && createPortal(
         <div
           ref={menuRef}
-          style={{ position: 'fixed', top: pos.top, left: pos.left, width: 200 }}
-          className="z-[70] bg-card border border-border rounded-xl shadow-xl py-1"
+          style={{ position: 'fixed', top: pos.top, left: pos.left, width: 200, maxHeight: pos.maxHeight }}
+          className="z-[70] bg-card border border-border rounded-xl shadow-xl py-1 overflow-y-auto"
           onClick={e => e.stopPropagation()}
         >
           {visible.map((a, i) => (
