@@ -2750,6 +2750,33 @@ export function consoDeLigne(l: Pick<LigneDevis, 'consommation' | 'consommationM
   return unite === 'ml' ? l.consommationMl : l.consommation;
 }
 
+/**
+ * Passe un devis en m² ou en ml. Les lignes qui ont leur propre unité ne
+ * bougent pas. `garderValeurs` : l'utilisateur déclare que les consos
+ * affichées étaient DÉJÀ dans la nouvelle unité (0,28 « kg/m² » qui sont en
+ * fait des kg/ml) — elles sont reprises telles quelles, celle de la ligne ou à
+ * défaut celle de la fiche, et les quantités ne changent pas. Sans lui, rien
+ * n'est converti : la conso de la nouvelle unité s'applique (on ne devine
+ * jamais une largeur pour passer des kg/m² aux kg/ml).
+ */
+export function changerUniteDevis(
+  d: Devis,
+  u: UniteSurface,
+  garderValeurs: boolean,
+  parId: (id: string) => Produit | undefined,
+): Devis {
+  const ancienne = d.uniteSurface ?? 'm2';
+  if (u === ancienne) return d;
+  const lignes = !garderValeurs ? d.lignes : d.lignes.map(l => {
+    if (l.uniteSurface || (l.type && l.type !== 'ligne')) return l;
+    const p = l.produitId ? parId(l.produitId) : undefined;
+    const valeur = consoDeLigne(l, ancienne) ?? consoFiche(p, ancienne);
+    if (valeur == null || consoDeLigne(l, u) != null) return l;
+    return u === 'ml' ? { ...l, consommationMl: valeur } : { ...l, consommation: valeur };
+  });
+  return { ...d, uniteSurface: u, lignes };
+}
+
 /** « m² » ou « ml », pour les libellés. */
 export function libelleSurface(u?: UniteSurface): string {
   return u === 'ml' ? 'ml' : 'm²';

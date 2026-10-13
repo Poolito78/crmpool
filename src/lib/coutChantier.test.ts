@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { coutChantier, coutChantierParGroupe } from './odooSync';
-import { consoPourSurface, type Devis, type Produit } from './store';
+import { consoPourSurface, changerUniteDevis, type Devis, type Produit } from './store';
 
 /* DEV-2026-112 (EMPREINTE SIGNA, 28/09/2026) : Pavés à coller 15x20, 4 m². */
 describe('coût chantier', () => {
@@ -81,6 +81,23 @@ describe('unité par ligne et coût par groupe', () => {
     // 100 ml × 0,5 kg/ml × 8 €/kg = 400 ; les 3 kg/m² ne comptent pas sur une ligne au ml
     const [, joints] = coutChantierParGroupe(retouchee, [resine, mastic], 120, 'm2');
     expect(joints.total).toBeCloseTo(400);
+  });
+
+  it('passe un devis au ml en gardant les valeurs déclarées déjà en kg/ml', () => {
+    // BAO : 0,28 saisi comme « kg/m² » (ligne) et 0,5 lu sur la fiche — ce sont des kg/ml.
+    const d = { uniteSurface: undefined, surfaceGlobaleM2: 64, lignes: [
+      { id: 'a', produitId: 'res', description: 'Cove mix', quantite: 1, unite: 'U', prixUnitaireHT: 322, tva: 20, remise: 0, consommation: 0.28 },
+      { id: 'b', produitId: 'res', description: 'Sans retouche', quantite: 2, unite: 'U', prixUnitaireHT: 322, tva: 20, remise: 0 },
+      { id: 'c', produitId: 'mas', description: 'Ligne déjà au ml', quantite: 5, unite: 'U', prixUnitaireHT: 40, tva: 20, remise: 0, uniteSurface: 'ml' },
+    ] } as unknown as Devis;
+    const parId = (id: string) => [resine, mastic].find(p => p.id === id);
+    const gardé = changerUniteDevis(d, 'ml', true, parId);
+    expect(gardé.uniteSurface).toBe('ml');
+    expect(gardé.lignes[0]).toMatchObject({ consommationMl: 0.28, quantite: 1 });
+    expect(gardé.lignes[1]).toMatchObject({ consommationMl: 0.5, quantite: 2 });
+    expect(gardé.lignes[2]).toBe(d.lignes[2]);
+    // Sans « garder », rien n'est converti.
+    expect(changerUniteDevis(d, 'ml', false, parId).lignes[0].consommationMl).toBeUndefined();
   });
 
   it('rapporte chaque groupe à sa propre surface', () => {

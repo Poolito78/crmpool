@@ -2,7 +2,7 @@ import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, changerUniteDevis, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
@@ -940,6 +940,7 @@ export default function Devis() {
     setSurfaceGlobaleM2(d.surfaceGlobaleM2 || 0);
     prevUniteSurfaceRef.current = d.uniteSurface === 'ml' ? 'ml' : 'm2';
     setUniteSurface(d.uniteSurface === 'ml' ? 'ml' : 'm2');
+    setUniteEnAttente(null);
     prevClientIdRef.current = d.clientId;
     setDialogTab('devis');
     const fInit: Record<string, string> = {};
@@ -986,6 +987,7 @@ export default function Devis() {
     setSurfaceGlobaleM2(0);
     prevUniteSurfaceRef.current = 'm2';
     setUniteSurface('m2');
+    setUniteEnAttente(null);
     prevClientIdRef.current = '';
     setDialogTab('devis');
     setSelectedFournisseurPerLigne({});
@@ -2423,10 +2425,55 @@ export default function Devis() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniteSurface, dialogOpen]);
 
+  /* Le passage m² ↔ ml pose d'abord la question : les consos affichées étaient-elles déjà
+     dans la nouvelle unité ? (Un devis de gorges chiffré « 0,28 kg/m² » qui sont des kg/ml.) */
+  const [uniteEnAttente, setUniteEnAttente] = useState<UniteSurface | null>(null);
   function changerUniteSurface(u: UniteSurface) {
-    if (u === uniteSurface) return;
+    setUniteEnAttente(u === uniteSurface ? null : u);
+  }
+  function confirmerUniteSurface(garderValeurs: boolean) {
+    const u = uniteEnAttente;
+    setUniteEnAttente(null);
+    if (!u || u === uniteSurface) return;
     saveSnapshot();
+    if (garderValeurs) {
+      // Mêmes valeurs, nouvelle unité : les quantités restent, l'effet de bascule ne recalcule pas.
+      const d = changerUniteDevis({ lignes, uniteSurface } as DevisType, u, true, id => produitParId(produits, id));
+      prevUniteSurfaceRef.current = u;
+      setLignes(d.lignes);
+    }
     setUniteSurface(u);
+  }
+
+  /**
+   * Passage m² ↔ ml demandé dans l'APERÇU — du devis ouvert ou d'un devis de la
+   * liste. `garder` : les consos étaient déjà dans la nouvelle unité, rien ne
+   * bouge que l'unité ; sinon la conso de la nouvelle unité (ligne, puis fiche)
+   * recalcule les quantités des lignes qui suivent l'unité du devis.
+   */
+  function changerUniteApercu(d: DevisType, u: UniteSurface, garder: boolean) {
+    const client = clients.find(c => c.id === d.clientId);
+    let d2 = changerUniteDevis(d, u, garder, id => produitParId(produits, id));
+    if (!garder) {
+      d2 = { ...d2, lignes: d2.lignes.map(l => {
+        if (l.uniteSurface || (l.type && l.type !== 'ligne') || !l.produitId) return l;
+        const p = produitParId(produits, l.produitId);
+        const surface = surfaceDeLigne(l, d2.surfaceGlobaleM2 || 0, u);
+        if (!p || !(surface > 0) || consoPourSurface(p, consoDeLigne(l, u), u) == null) return l;
+        const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, u), l.unite, u);
+        return { ...l, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur, d.niveauTarif ?? null) };
+      }) };
+    }
+    setPreviewDevis(d2);
+    if (dialogOpen && (editingId === d2.id || d2.id === 'preview')) {
+      saveSnapshot();
+      prevUniteSurfaceRef.current = u;   // déjà recalculé ici
+      setUniteSurface(u);
+      setLignes(d2.lignes);
+    } else {
+      updateDevis(prev => prev.map(x => x.id === d2.id ? { ...x, uniteSurface: d2.uniteSurface, lignes: d2.lignes } : x));
+    }
+    toast.success(`Devis en ${libelleSurface(u)}${garder ? ' : consos gardées telles quelles' : ' : quantités recalculées'}`);
   }
 
   /**
@@ -3664,7 +3711,7 @@ export default function Devis() {
                         title={uniteSurface === 'ml' ? 'Si linéaire + conso. au ml (kg/ml) de l\'article renseignés → quantité calculée automatiquement' : 'Si surface + conso. renseignées → quantité calculée automatiquement'}
                         onKeyDown={e => { if (e.key === 'Enter') appliquerSurfaceGlobale(); }} />
                       {/* m² : conso kg/m² de la fiche ; ml : conso kg/ml (joints, bandes…). */}
-                      <Select value={uniteSurface} onValueChange={v => changerUniteSurface(v as UniteSurface)}>
+                      <Select value={uniteEnAttente ?? uniteSurface} onValueChange={v => changerUniteSurface(v as UniteSurface)}>
                         <SelectTrigger className="h-8 w-[64px] text-sm shrink-0" title="Unité de la surface globale : m² ou mètres linéaires"><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="m2">m²</SelectItem>
@@ -3673,6 +3720,14 @@ export default function Devis() {
                       </Select>
                     </div>
                   </div>
+                  {uniteEnAttente && (
+                    <div className="flex items-center gap-2 text-xs bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 rounded px-2 py-1.5">
+                      <span>Passer en {libelleSurface(uniteEnAttente)} : consos des lignes déjà en kg/{libelleSurface(uniteEnAttente)} ?</span>
+                      <button type="button" className="underline font-medium" title="Les valeurs restent (0,28 devient 0,28 kg/ml), les quantités ne changent pas" onClick={() => confirmerUniteSurface(true)}>Oui, garder les valeurs</button>
+                      <button type="button" className="underline" title={`Prendre la conso en kg/${libelleSurface(uniteEnAttente)} des fiches et recalculer les quantités`} onClick={() => confirmerUniteSurface(false)}>Non, conso des fiches</button>
+                      <button type="button" className="text-muted-foreground" onClick={() => setUniteEnAttente(null)}>Annuler</button>
+                    </div>
+                  )}
                   {surfaceGlobaleM2 > 0 && (
                     <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => { saveSnapshot(); appliquerSurfaceGlobale(); }}
                       title="Remet toutes les lignes à cette surface et recalcule leurs quantités (annule les surfaces et quantités retouchées ligne par ligne ; les consommations saisies sur une ligne sont conservées)">
@@ -5648,7 +5703,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-[98vw] md:max-w-[960px] max-h-[95vh] overflow-y-auto p-0 bg-muted/30">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} initialShowCoutChantier={previewOptions.showCoutChantier} initialShowCoutLigne={previewOptions.showCoutLigne} initialShowCoutGroupe={previewOptions.showCoutGroupe} initialShowLiens={previewOptions.showLiens} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onUniteSurfaceChange={(u, garder) => changerUniteApercu(previewDevis, u, garder)} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} initialShowCoutChantier={previewOptions.showCoutChantier} initialShowCoutLigne={previewOptions.showCoutLigne} initialShowCoutGroupe={previewOptions.showCoutGroupe} initialShowLiens={previewOptions.showLiens} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
           </DialogContent>
         </Dialog>
       )}

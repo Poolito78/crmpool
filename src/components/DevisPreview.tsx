@@ -157,6 +157,8 @@ interface Props {
   onPrint?: () => void;
   lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
+  /** Passe le devis en m² ou en ml depuis l'aperçu ; `garderValeurs` = les consos affichées étaient déjà dans la nouvelle unité. */
+  onUniteSurfaceChange?: (u: 'm2' | 'ml', garderValeurs: boolean) => void;
   /** Changement live de la taille d'impression d'une image collée (aperçu) */
   onImageTailleChange?: (ligneId: string, url: string, taille: number) => void;
 }
@@ -169,7 +171,7 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onUniteSurfaceChange, onImageTailleChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
@@ -177,6 +179,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
   const [showCoutLigne, setShowCoutLigne] = useState(initialShowCoutLigne);
   const [showCoutGroupe, setShowCoutGroupe] = useState(initialShowCoutGroupe);
+  // Passage m² ↔ ml demandé dans l'aperçu, en attente de la question « garder les valeurs ? ».
+  const [uniteEnAttente, setUniteEnAttente] = useState<'m2' | 'ml' | null>(null);
   const [showLiens, setShowLiens] = useState(initialShowLiens);
   const { principaleDe, chargement: chargementImages } = useProduitImages();
   const [printing, setPrinting] = useState(false);
@@ -641,8 +645,31 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     placeholder={uS}
                     className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
                   />
-                  {uS}
+                  {onUniteSurfaceChange ? (
+                    /* Boutons, pas de <select> natif : l'aperçu vit dans un dialogue Radix. */
+                    <span className="inline-flex rounded border border-border overflow-hidden" title="Unité de la surface du devis : m² ou mètres linéaires (conso. en kg/ml, coût en €/ml)">
+                      {(['m2', 'ml'] as const).map(u => (
+                        <button key={u} type="button"
+                          onClick={() => { if (u !== (uniteSurface ?? 'm2')) setUniteEnAttente(u); }}
+                          className={`px-1.5 py-0.5 ${u === (uniteSurface ?? 'm2') ? 'bg-primary text-primary-foreground' : 'bg-background hover:bg-muted'}`}>
+                          {libelleSurface(u)}
+                        </button>
+                      ))}
+                    </span>
+                  ) : uS}
                 </label>
+                {uniteEnAttente && (
+                  <span className="flex items-center gap-1.5 text-xs bg-amber-50 dark:bg-amber-900/20 border border-amber-300/60 rounded px-2 py-1">
+                    Consos affichées déjà en kg/{libelleSurface(uniteEnAttente)} ?
+                    <button type="button" className="underline font-medium text-foreground"
+                      title="Les valeurs restent (0,28 devient 0,28 kg/ml), les quantités ne changent pas"
+                      onClick={() => { onUniteSurfaceChange?.(uniteEnAttente, true); setUniteEnAttente(null); }}>Oui, garder les valeurs</button>
+                    <button type="button" className="underline text-foreground"
+                      title={`Prendre la conso en kg/${libelleSurface(uniteEnAttente)} des fiches article et recalculer les quantités`}
+                      onClick={() => { onUniteSurfaceChange?.(uniteEnAttente, false); setUniteEnAttente(null); }}>Non, conso des fiches</button>
+                    <button type="button" className="text-muted-foreground" onClick={() => setUniteEnAttente(null)}>Annuler</button>
+                  </span>
+                )}
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
                   <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
                   Récap. KG
