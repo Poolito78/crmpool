@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { exportToExcel } from '@/lib/exportExcel';
+import { quantitesReservees } from '@/lib/stockDisponible';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { useTableColumns } from '@/hooks/useTableColumns';
@@ -116,15 +117,7 @@ export default function Stock() {
   const { canAchat, isAdmin } = useCurrentUser();
 
   // Quantité réservée par produit (commandes clients en cours) → dispo finale = stock − réservé.
-  const stockReserveParProduit = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const cc of commandesClient.filter(c => ['a_traiter', 'accuse_envoye', 'commande_envoyee'].includes(c.statut))) {
-      for (const l of cc.lignes) {
-        if (l.produitId) map[l.produitId] = (map[l.produitId] || 0) + (l.quantite || 0);
-      }
-    }
-    return map;
-  }, [commandesClient]);
+  const stockReserveParProduit = useMemo(() => quantitesReservees(commandesClient), [commandesClient]);
 
   // Délai de livraison d'un produit = délai du fournisseur prioritaire.
   const delaiProduit = (produitId: string) => {

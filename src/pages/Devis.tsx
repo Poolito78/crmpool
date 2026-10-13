@@ -415,6 +415,12 @@ export default function Devis() {
       setSearchParams({}, { replace: true });
     }
   }, [devis, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* `?nouveau=1` : « nouveau devis » dit à l'assistant vocal ouvre un devis vierge. */
+  useEffect(() => {
+    if (searchParams.get('nouveau') !== '1') return;
+    openNew();
+    setSearchParams({}, { replace: true });
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const [clientId, setClientId] = useState('');
   const [contactId, setContactId] = useState('');

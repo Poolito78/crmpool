@@ -19,6 +19,18 @@ active, et gardent leur état dans `openGroups: string[]`. La liste plate
 - Stock, Calcul Transport
 - **Paramètres** : Tableau de bord, Entrepôts, Devis, Veille Concurrence, Historique GED. Les 4 premiers sont des **liens profonds** vers les onglets de `/parametres` via `?tab=dashboard|entrepots|devis|veille` ; `Parametres.tsx` lit l'onglet actif depuis `useSearchParams`.
 
+**Assistant vocal — bouton sous « Analyse de document », ou Alt+M.**
+`AssistantVocal.tsx`, monté par `CRMLayout` tant qu'il est allumé, écoute en
+continu ; `assistantVocal.ts` dit ce que veut une phrase (page, « nouvelle
+tâche [pour X] » → `/crm?tab=actions&nouvelle=…&clientId=…`, « nouveau
+devis » → `/devis?nouveau=1`, « cherche le devis 112 » → `?editDevis=`,
+« stock du produit KC1 » → `chercherProduits` + `quantitesReservees`, lu à
+voix haute). Les champs se trouvent **par leur libellé à l'écran** dans la
+fenêtre au premier plan (« aller au titre », « date planifiée demain »,
+« priorité haute ») ; le reste est dicté dans le champ actif. ⚠️ Le panneau
+est hors du dialogue Radix : `pointerdown` arrêté, `mousedown` sans focus,
+sinon un clic fermerait la fenêtre.
+
 **Glisser-déposer d'un document — dans `CRMLayout`, donc sur TOUTES les pages.**
 Les gestionnaires (`depotDragEnter/Over/Leave/Drop`), le voile et l'unique
 `<AnalyseDocumentDialog>` vivent dans la coquille ; une page ne doit **pas** en

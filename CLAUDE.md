@@ -155,6 +155,8 @@ explication.
 `catalyseur` (CATALYST2 dosé à la température du chantier, fiche ISOFLOOR, sur la RÉSINE du devis — un kit se lit par composants, sinon « à vérifier ») ·
 `cacheCatalogue` (catalogue en IndexedDB, relu par `updated_at` + `produits_effaces` — pas `produits_supprimes`, la liste noire) ·
 `relanceDevis` (relance mail/tél. d'un devis envoyé ; « Relancé » est un libellé, le statut reste `'envoyé'`) ·
+`assistantVocal` (phrase dite → commande ; une commande ne vaut que si elle se résout entièrement, sinon c'est de la dictée) ·
+`stockDisponible` (stock − commandes clients en cours ; page Stock et assistant vocal) ·
 `mailsTypes` (objet + texte des mails d'envoi devis / commande fournisseur / facture / AR, par utilisateur, Paramètres → Mails ; `[[ ]]` = passage retiré si un champ est vide) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·

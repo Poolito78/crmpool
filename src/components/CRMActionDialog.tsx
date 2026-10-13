@@ -20,6 +20,8 @@ interface Props {
   produits?: { id: string; reference: string; description: string }[];
   defaultClientId?: string;
   defaultDevisId?: string;
+  /** Type d'une action neuve (« nouvel appel » dicté à l'assistant vocal). Défaut : tâche. */
+  defaultType?: TypeCrmAction;
   onSave: (a: Omit<CrmAction, 'id' | 'createdAt'>) => Promise<any>;
 }
 
@@ -47,7 +49,7 @@ const empty = (): Omit<CrmAction, 'id' | 'createdAt'> => ({
   concurrents: undefined,
 });
 
-export default function CRMActionDialog({ open, onOpenChange, action, clients, produits = [], defaultClientId, defaultDevisId, onSave }: Props) {
+export default function CRMActionDialog({ open, onOpenChange, action, clients, produits = [], defaultClientId, defaultDevisId, defaultType, onSave }: Props) {
   const [form, setForm] = useState<Omit<CrmAction, 'id' | 'createdAt'>>(empty());
   const [saving, setSaving] = useState(false);
   const [concurrentsOpen, setConcurrentsOpen] = useState(false);
@@ -60,13 +62,13 @@ export default function CRMActionDialog({ open, onOpenChange, action, clients, p
         setForm(rest);
         setConcurrentsOpen(!!(rest.concurrents && rest.concurrents.length > 0));
       } else {
-        const initial = { ...empty(), clientId: defaultClientId, devisId: defaultDevisId };
+        const initial = { ...empty(), type: defaultType ?? 'tache', clientId: defaultClientId, devisId: defaultDevisId };
         setForm(initial);
         // Auto-open concurrents section for visit/call/rdv types
         setConcurrentsOpen(TYPES_AVEC_CONCURRENTS.includes(initial.type));
       }
     }
-  }, [open, action, defaultClientId, defaultDevisId]);
+  }, [open, action, defaultClientId, defaultDevisId, defaultType]);
 
   function set<K extends keyof typeof form>(k: K, v: typeof form[K]) {
     setForm(prev => ({ ...prev, [k]: v }));

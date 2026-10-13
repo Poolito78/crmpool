@@ -537,23 +537,24 @@ export default function Produits() {
      document), le catalogue n'était pas encore lu, l'article introuvable, et
      le paramètre effacé — la page s'ouvrait sans la fiche. On attend donc
      l'article, on le fait lire au besoin, et on n'abandonne qu'une fois le
-     catalogue entier chargé. */
-  const highlightFait = useRef(false);
+     catalogue entier chargé. Mémorisé PAR ARTICLE : l'assistant vocal en
+     ouvre un autre alors que la page est déjà montée. */
+  const highlightFait = useRef<string | null>(null);
   useEffect(() => {
     const id = searchParams.get('highlight');
-    if (!id || highlightFait.current) return;
+    if (!id || highlightFait.current === id) return;
     const prod = produits.find(p => p.id === id);
     if (prod) {
-      highlightFait.current = true;
+      highlightFait.current = id;
       openEdit(prod);
       setSearchParams({}, { replace: true });
     } else if (produitsCharges) {
-      highlightFait.current = true;
+      highlightFait.current = id;
       setSearchParams({}, { replace: true });
     } else {
       void assurerProduits([id]);
     }
-  }, [produits, produitsCharges]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [produits, produitsCharges, searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const highlightId = searchParams.get('highlight');

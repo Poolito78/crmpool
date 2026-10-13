@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -18,6 +18,7 @@ import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
 import FenetresMenu from '@/components/FenetresMenu';
+import AssistantVocal from '@/components/AssistantVocal';
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
@@ -122,6 +123,20 @@ export default function CRMLayout() {
   const analyseDejaOuvert = useRef(false);
   if (analyseOpen) analyseDejaOuvert.current = true;
 
+  /* Assistant vocal : allumé par le bouton du menu ou Alt+M, il écoute
+     jusqu'à « stop ». Monté seulement allumé — le micro ne reste pas ouvert. */
+  const [assistantActif, setAssistantActif] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyM') {
+        e.preventDefault();
+        setAssistantActif(a => !a);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   /* ── Glisser-déposer d'un document, sur TOUTE l'application ─────────────
    *
    * Le tableau de bord savait le faire, et lui seul. Or on ne se trouve
@@ -219,6 +234,11 @@ export default function CRMLayout() {
       : e),
   [canAchat, canCrm, isAdmin]);
   const navFlat = useMemo<NavLink[]>(() => nav.flatMap(e => e.type === 'group' ? e.items : [e]), [nav]);
+  /** Une page s'ouvre à la voix si le menu la propose à cet utilisateur. */
+  const pageAutorisee = (path: string) => {
+    const base = path.split('?')[0];
+    return navFlat.some(i => !i.external && i.path.split('?')[0] === base);
+  };
 
   // Lien actif : compare le pathname et, pour les liens avec ?tab=, l'onglet courant.
   const isLinkActive = (path: string) => {
@@ -422,6 +442,22 @@ export default function CRMLayout() {
             <ScanText className="w-5 h-5 shrink-0" />
             {!collapsed && 'Analyse de document'}
           </button>
+          <div className="pt-3 mt-3 border-t border-sidebar-border/50">
+            <button
+              onClick={() => setAssistantActif(a => !a)}
+              title={assistantActif ? "Arrêter l'assistant vocal (Alt+M)" : 'Assistant vocal (Alt+M)'}
+              className={cn(
+                'rounded-lg text-sm font-medium transition-all duration-150',
+                assistantActif
+                  ? 'bg-destructive/15 text-destructive hover:bg-destructive/20'
+                  : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
+                collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
+              )}
+            >
+              <Mic className={cn('w-5 h-5 shrink-0', assistantActif && 'animate-pulse')} />
+              {!collapsed && (assistantActif ? 'Assistant vocal (écoute)' : 'Assistant vocal')}
+            </button>
+          </div>
         </nav>
         <div className={cn('pb-4 space-y-1', collapsed ? 'px-2' : 'px-3')}>
           <FenetresMenu
@@ -481,6 +517,18 @@ export default function CRMLayout() {
             <ScanText className="w-5 h-5 shrink-0" />
             Analyse de document
           </button>
+          <div className="pt-3 mt-3 border-t border-sidebar-border/50">
+            <button
+              onClick={() => { setAssistantActif(a => !a); setSidebarOpen(false); }}
+              className={cn(
+                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors',
+                assistantActif ? 'bg-destructive/15 text-destructive' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent'
+              )}
+            >
+              <Mic className={cn('w-5 h-5 shrink-0', assistantActif && 'animate-pulse')} />
+              {assistantActif ? 'Assistant vocal (écoute)' : 'Assistant vocal'}
+            </button>
+          </div>
         </nav>
       </aside>
 
@@ -529,6 +577,14 @@ export default function CRMLayout() {
             initialText={texteDepose || undefined}
           />
         </Suspense>
+      )}
+
+      {assistantActif && (
+        <AssistantVocal
+          onArret={() => setAssistantActif(false)}
+          ouvrirAnalyse={() => setAnalyseOpen(true)}
+          pageAutorisee={pageAutorisee}
+        />
       )}
 
       {/* Mobile bottom nav — show first 5 flat items */}

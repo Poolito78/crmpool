@@ -1,10 +1,10 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { toast } from 'sonner';
 import { useCRM } from '@/lib/StoreContext';
 import {
   calculerTotalDevis, formatMontant, formatDate, formatDateISO,
   useCrmActions,
-  CrmAction, TYPE_CRM_ACTION, STATUT_CRM_ACTION,
+  CrmAction, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type TypeCrmAction,
 } from '@/lib/store';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -61,11 +61,31 @@ export default function CRM() {
   const { actions, loading: actionsLoading, addAction, updateAction, deleteAction } = useCrmActions();
   const navigate = useNavigate();
 
-  // `?tab=relances` : l'alerte « devis à relancer » du tableau de bord ouvre l'onglet.
-  const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<'pipeline' | 'relances' | 'actions' | 'calendrier' | 'analyse'>(
-    () => searchParams.get('tab') === 'relances' ? 'relances' : 'pipeline',
-  );
+  /* `?tab=relances` : l'alerte « devis à relancer » du tableau de bord ouvre
+     l'onglet. L'assistant vocal ouvre de même n'importe quel onglet, et
+     `?nouvelle=tache|appel|…` (+ `clientId`) ouvre une action neuve — relu à
+     chaque changement d'URL : la page est souvent déjà montée. */
+  const [searchParams, setSearchParams] = useSearchParams();
+  type OngletCRM = 'pipeline' | 'relances' | 'actions' | 'calendrier' | 'analyse';
+  const ongletDeUrl = (): OngletCRM | null => {
+    const t = searchParams.get('tab');
+    return t === 'pipeline' || t === 'relances' || t === 'actions' || t === 'calendrier' || t === 'analyse' ? t : null;
+  };
+  const [tab, setTab] = useState<OngletCRM>(() => ongletDeUrl() ?? 'pipeline');
+  const [nouvelleActionType, setNouvelleActionType] = useState<TypeCrmAction | undefined>();
+  const [nouvelleActionClient, setNouvelleActionClient] = useState<string | undefined>();
+  useEffect(() => {
+    const onglet = ongletDeUrl();
+    if (onglet) setTab(onglet);
+    const nouvelle = searchParams.get('nouvelle');
+    if (nouvelle && nouvelle in TYPE_CRM_ACTION) {
+      setNouvelleActionType(nouvelle as TypeCrmAction);
+      setNouvelleActionClient(searchParams.get('clientId') || undefined);
+      setEditingAction(null);
+      setActionDialogOpen(true);
+      setSearchParams(onglet ? { tab: onglet } : {}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Relances ──────────────────────────────────────────────────────────
   const [relance, setRelance] = useState<{ devis: Devis; mode: ModeRelanceOuvert } | null>(null);
@@ -1362,8 +1382,13 @@ export default function CRM() {
       {/* ── Dialog action ─────────────────────────────────────────────── */}
       <CRMActionDialog
         open={actionDialogOpen}
-        onOpenChange={v => { setActionDialogOpen(v); if (!v) setEditingAction(null); }}
+        onOpenChange={v => {
+          setActionDialogOpen(v);
+          if (!v) { setEditingAction(null); setNouvelleActionType(undefined); setNouvelleActionClient(undefined); }
+        }}
         action={editingAction}
+        defaultType={nouvelleActionType}
+        defaultClientId={nouvelleActionClient}
         clients={clients}
         produits={produits.map(p => ({ id: p.id, reference: p.reference, description: p.description }))}
         onSave={handleSaveAction}
