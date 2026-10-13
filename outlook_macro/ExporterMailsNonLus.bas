@@ -32,7 +32,10 @@ Sub ExporterMailsNonLus()
     Dim it      As Object
     Dim nom     As String
     Dim limite  As Date
-    Dim n       As Long
+    Dim n       As Long      ' exportes
+    Dim deja    As Long      ' deja presents (dossier ou Traites)
+    Dim echecs  As Long
+    Dim erreur  As String
 
     dossier = DossierMailsCRM()
     CreerDossierMail dossier
@@ -49,9 +52,16 @@ Sub ExporterMailsNonLus()
                 If Dir(dossier & nom) = "" And Dir(dossier & "Traites\" & nom) = "" Then
                     On Error Resume Next
                     it.SaveAs dossier & nom, 9                         ' olMSGUnicode
-                    If Err.Number = 0 Then n = n + 1
+                    If Err.Number = 0 Then
+                        n = n + 1
+                    Else
+                        echecs = echecs + 1
+                        If erreur = "" Then erreur = it.Subject & " : " & Err.Description
+                    End If
                     Err.Clear
                     On Error GoTo 0
+                Else
+                    deja = deja + 1
                 End If
             End If
         End If
@@ -60,8 +70,13 @@ Sub ExporterMailsNonLus()
     ' Ouvre MonCRM sur l'Agent mail, qui lit le dossier.
     CreateObject("Shell.Application").ShellExecute URL_AGENT_MAIL
 
-    If n = 0 Then
-        Application.ActiveExplorer.StatusBar = "MonCRM : aucun nouveau mail non lu a exporter."
+    ' (Un Explorer Outlook n'a pas de barre d'etat accessible : erreur 438.)
+    If echecs > 0 Then
+        MsgBox n & " mail(s) exporte(s), " & echecs & " en echec." & vbCrLf & vbCrLf & _
+               "Premier echec : " & erreur, vbExclamation, "Agent mail MonCRM"
+    ElseIf n = 0 Then
+        MsgBox "Aucun nouveau mail non lu a exporter" & _
+               IIf(deja > 0, " (" & deja & " deja dans MonCRM).", "."), vbInformation, "Agent mail MonCRM"
     End If
 
 End Sub
