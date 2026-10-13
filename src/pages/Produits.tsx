@@ -155,6 +155,7 @@ const emptyProduit = {
   disponibleVente: true,
   adr: undefined as boolean | undefined,
   consoUnite: undefined as 'kg' | 'm2' | undefined,
+  consommationMl: undefined as number | undefined,
   notes: undefined as string | undefined,
   consommations: undefined as ConsoUsage[] | undefined,
   surfaceUniteM2: undefined as number | undefined,
@@ -1074,7 +1075,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2609,6 +2610,12 @@ export default function Produits() {
                     <SelectItem value="m2">m² (surface de l'unité)</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+              {/* Conso. au mètre linéaire (joint, bande) : lue quand le devis se chiffre au ml. */}
+              <div>
+                <Label>Conso. au ml (kg/ml)</Label>
+                <InputNombre decimales={3} value={form.consommationMl ?? 0} onChange={v => setForm(p => ({ ...p, consommationMl: v }))} placeholder="Ex: 0,25" />
+                {(form.consommationMl ?? 0) > 0 && !(form.poids > 0) && <p className="text-[10px] text-destructive mt-0.5">Poids à renseigner : sans lui, la quantité n'est pas calculée.</p>}
               </div>
               {form.consoUnite === 'm2' && (
                 <div>

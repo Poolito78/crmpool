@@ -4,8 +4,8 @@
  * pour créer un devis CRMPool dans Odoo (sale.order + lignes).
  */
 
-import type { Devis, Client, Produit, Contact, LigneDevis } from './store';
-import { couvertureM2 } from './store';
+import type { Devis, Client, Produit, Contact, LigneDevis, UniteSurface } from './store';
+import { couvertureM2, consoFiche, libelleSurface } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
@@ -191,11 +191,14 @@ export function m2Consommes(l: Pick<LigneDevis, 'quantite' | 'surfaceM2' | 'cons
  * devis annonçait bien moins pour le même chantier. Un seul calcul désormais,
  * celui de l'écran : surface × consommation × prix au kilo net pour un
  * article qui porte une consommation, prix conditionné net pour les autres.
+ * Au ml (`unite` = 'ml'), la « surface » est un linéaire et la consommation
+ * celle de la fiche au ml : le coût se rapporte alors au mètre linéaire.
  */
 export function coutChantierLigne(
   l: LigneDevis,
   produits: Produit[],
   surfaceGlobaleM2: number,
+  unite?: UniteSurface,
 ): number {
   if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return 0;
   /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
@@ -208,12 +211,12 @@ export function coutChantierLigne(
     return m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
   }
   const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-  const conso = l.consommation || prod?.consommation || 0;
+  const conso = l.consommation || consoFiche(prod, unite) || 0;
   const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
   const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
   /* Article consommé au m² (toile de verre) : une unité couvre N m², le coût
      chantier est la part de rouleau consommée, pas le rouleau entier. */
-  const couverture = couvertureM2(prod);
+  const couverture = unite === 'ml' ? null : couvertureM2(prod);
   if (couverture && surfLigne > 0 && l.prixUnitaireHT) return surfLigne * (conso > 0 ? conso : 1) * (net / couverture);
   if (conso > 0 && surfLigne > 0) {
     const poids = prod?.poids || null;
@@ -226,8 +229,9 @@ export function coutChantier(
   lignes: Devis['lignes'],
   produits: Produit[],
   surfaceGlobaleM2: number,
+  unite?: UniteSurface,
 ): { total: number; parM2: number | null } {
-  const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2), 0);
+  const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, unite), 0);
   const surfaceRef = surfaceGlobaleM2 > 0
     ? surfaceGlobaleM2
     : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
@@ -243,13 +247,14 @@ export function buildOdooPayload(
   options?: { surface?: number; contactNom?: string; contact?: Contact; odooPartnerName?: string }
 ): OdooPayload {
   const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
-  const coutM2 = coutChantier(devis.lignes, produits, surface).parM2 ?? 0;
+  const coutM2 = coutChantier(devis.lignes, produits, surface, devis.uniteSurface).parM2 ?? 0;
+  const u = libelleSurface(devis.uniteSurface);
   const ct = options?.contact;
 
   const noteLines: string[] = [];
   if (devis.systeme) noteLines.push(`Système : ${devis.systeme}`);
-  if (surface > 0) noteLines.push(`Surface globale : ${surface} m²`);
-  if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/m²`);
+  if (surface > 0) noteLines.push(`${devis.uniteSurface === 'ml' ? 'Linéaire global' : 'Surface globale'} : ${surface} ${u}`);
+  if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/${u}`);
 
   // Prix net (remise appliquée), arrondi supérieur au centime — comme l'export console.
   const lines = buildLignes(devis, produits).map(l =>
@@ -319,7 +324,8 @@ export function genererScriptOdoo(
   }
 ): string {
   const surface = options?.surface ?? devis.surfaceGlobaleM2 ?? 0;
-  const coutM2 = coutChantier(devis.lignes, produits, surface).parM2 ?? 0;
+  const coutM2 = coutChantier(devis.lignes, produits, surface, devis.uniteSurface).parM2 ?? 0;
+  const u = libelleSurface(devis.uniteSurface);
 
   const lignes = buildLignes(devis, produits);
   const refs = [...new Set(lignes.filter(l => l.ref).map(l => l.ref as string))];
@@ -327,8 +333,8 @@ export function genererScriptOdoo(
   // Texte de la note système (haut du devis)
   const noteLines: string[] = [];
   if (devis.systeme) noteLines.push(`Système : ${devis.systeme}`);
-  if (surface > 0) noteLines.push(`Surface globale : ${surface} m²`);
-  if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/m²`);
+  if (surface > 0) noteLines.push(`${devis.uniteSurface === 'ml' ? 'Linéaire global' : 'Surface globale'} : ${surface} ${u}`);
+  if (coutM2 > 0) noteLines.push(`Coût chantier : ${coutM2} €/${u}`);
   const noteText = noteLines.join('\n');
 
   const clientName = options?.odooPartnerName || client.societe || client.nom;

@@ -269,6 +269,12 @@ export interface Produit {
    * vente couvre `surfaceUniteM2` m²). Absent = kg.
    */
   consoUnite?: 'kg' | 'm2';
+  /**
+   * Consommation au mètre linéaire, en kg/ml (joint, bande, solin) — lue à la
+   * place de `consommation` quand le devis se chiffre au ml (`Devis.uniteSurface`).
+   * Absente = l'article ne se calcule pas au ml : sa quantité reste à saisir.
+   */
+  consommationMl?: number;
   /** Notes libres de la fiche (texte et chiffres saisis à la main) — internes, jamais imprimées au devis. */
   notes?: string;
   /** m² couverts par UNE unité de vente (rouleau de 100,78 m²). Lu seulement si `consoUnite` = 'm2'. */
@@ -685,7 +691,10 @@ export interface Devis {
   fraisPortLibelle?: string;
   fraisPortAuto?: boolean;
   modeCalcul?: 'standard' | 'surface';
+  /** Surface globale — en m², ou en mètres linéaires si `uniteSurface` = 'ml' (le nom du champ est historique). */
   surfaceGlobaleM2?: number;
+  /** Ce que mesurent la surface globale et celles des lignes. Absent = m². */
+  uniteSurface?: UniteSurface;
   raisonRefus?: string;
   // Champs archivage
   archiveDate?: string;
@@ -950,6 +959,7 @@ function dbToProduit(r: any): Produit {
     poids: r.poids != null ? Number(r.poids) : undefined,
     consommation: r.consommation != null ? Number(r.consommation) : undefined,
     consoUnite: r.conso_unite === 'm2' ? 'm2' : undefined,
+    consommationMl: r.consommation_ml != null ? Number(r.consommation_ml) : undefined,
     notes: r.notes || undefined,
     consommations: Array.isArray(r.consommations) && r.consommations.length ? r.consommations : undefined,
     surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
@@ -1022,6 +1032,7 @@ function produitToDb(p: Produit, userId: string) {
     ...(p.consommations !== undefined ? { consommations: p.consommations.filter(c => c.valeur > 0).length ? p.consommations.filter(c => c.valeur > 0) : null } : {}),
     ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
+    ...(p.consommationMl !== undefined ? { consommation_ml: p.consommationMl > 0 ? p.consommationMl : null } : {}),
     stock: p.stock,
     stock_min: p.stockMin,
     fournisseur_id: p.fournisseurId || null,
@@ -1089,6 +1100,7 @@ function dbToDevis(r: any): Devis {
     fraisPortAuto: r.frais_port_auto != null ? Boolean(r.frais_port_auto) : undefined,
     modeCalcul: r.mode_calcul || 'standard',
     surfaceGlobaleM2: r.surface_globale_m2 != null ? Number(r.surface_globale_m2) : undefined,
+    uniteSurface: r.unite_surface === 'ml' ? 'ml' : undefined,
     raisonRefus: r.raison_refus || undefined,
     archiveDate: r.archive_date || undefined,
     archiveRaison: r.archive_raison as RaisonArchive || undefined,
@@ -1132,6 +1144,7 @@ function devisToDb(d: Devis, userId: string) {
     ...(d.fraisPortAuto !== undefined ? { frais_port_auto: d.fraisPortAuto } : {}),
     mode_calcul: d.modeCalcul || 'standard',
     surface_globale_m2: d.surfaceGlobaleM2 ?? null,
+    ...(d.uniteSurface !== undefined ? { unite_surface: d.uniteSurface } : {}),
     raison_refus: d.raisonRefus || null,
     archive_date: d.archiveDate || null,
     archive_raison: d.archiveRaison || null,
@@ -2694,15 +2707,44 @@ export function couvertureM2(p?: Pick<Produit, 'consoUnite' | 'surfaceUniteM2'> 
 }
 
 /**
+ * Ce que mesure la surface d'un devis : des m² (sol, mur) ou des mètres
+ * linéaires (joint, bande, solin). Au ml, la quantité d'une ligne se calcule
+ * avec `Produit.consommationMl` (kg/ml) ; un article qui n'en porte pas n'est
+ * pas calculé — on ne convertit jamais des kg/m² en kg/ml, il faudrait
+ * deviner une largeur.
+ */
+export type UniteSurface = 'm2' | 'ml';
+
+/** « m² » ou « ml », pour les libellés. */
+export function libelleSurface(u?: UniteSurface): string {
+  return u === 'ml' ? 'ml' : 'm²';
+}
+
+/** Consommation de la fiche dans l'unité du devis : kg/m² (ou m²/m²), ou kg/ml. */
+export function consoFiche(
+  p: Pick<Produit, 'consommation' | 'consommationMl'> | null | undefined,
+  unite?: UniteSurface,
+): number | undefined {
+  return unite === 'ml' ? p?.consommationMl : p?.consommation;
+}
+
+/**
  * Consommation à retenir pour chiffrer une ligne à la surface, ou `null` si
  * l'article ne s'y prête pas. En kg/m² il faut un poids et une conso ; en m²,
  * la couverture de l'unité suffit et une conso absente ou nulle vaut 1 m²/m².
+ * Au ml (`unite` = 'ml') : un poids et une conso en kg/ml, la couverture en m²
+ * n'a plus de sens.
  */
 export function consoPourSurface(
-  p: Pick<Produit, 'consoUnite' | 'surfaceUniteM2' | 'consommation' | 'poids'> | null | undefined,
+  p: Pick<Produit, 'consoUnite' | 'surfaceUniteM2' | 'consommation' | 'consommationMl' | 'poids'> | null | undefined,
   consoLigne?: number,
+  unite?: UniteSurface,
 ): number | null {
   if (!p) return null;
+  if (unite === 'ml') {
+    const cMl = consoLigne ?? p.consommationMl;
+    return p.poids && p.poids > 0 && cMl != null && cMl > 0 ? cMl : null;
+  }
   const c = consoLigne ?? p.consommation;
   if (couvertureM2(p)) return c && c > 0 ? c : 1;
   return p.poids && p.poids > 0 && c != null && c > 0 ? c : null;

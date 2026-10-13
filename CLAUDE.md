@@ -102,7 +102,7 @@ appliquée. En oublier un cause une perte de données silencieuse.
 | `LigneDevis` | `type` = `'ligne' \| 'groupe' \| 'soustotal' \| 'texte'`, **optionnel** (voir garde-fous). `prixAchatLigne` = coût d'achat d'une ligne libre. |
 | `ProduitFournisseur` | Lie un article à un fournisseur. `prixAchat` = prix au kg du catalogue fournisseur — **différent** de `Produit.prixAchat`. |
 | `Client` | `delaiReglement?` (`'Comptant' \| '30J' \| '30J FDM' \| '45J' \| '45J FDM'`) pré-remplit le textarea `conditions` du devis. `DELAI_REGLEMENT_OPTIONS` exporté de `Clients.tsx`. |
-| `Devis` | `modeCalcul: 'standard' \| 'surface'`. `statut` inclut `'archivé'` (+ `archiveDate/Raison/Commentaire/Concurrents`). Prévisionnel : `probabiliteReussite?` (0/25/50/75/100), `dateRealisation?`, `moContent?`. `chantier?` (case Chantier d'Odoo, sous Réf. affaire). Passer à `'accepté'` met auto `probabiliteReussite=100` + `dateRealisation=today` sur les 3 sélecteurs. |
+| `Devis` | `modeCalcul: 'standard' \| 'surface'`. `uniteSurface?: 'm2' \| 'ml'` : au ml, `surfaceGlobaleM2` est un linéaire et la quantité se calcule avec `Produit.consommationMl` (kg/ml) — `consoPourSurface(p, conso, unite)`, jamais de conversion kg/m² → kg/ml. `statut` inclut `'archivé'` (+ `archiveDate/Raison/Commentaire/Concurrents`). Prévisionnel : `probabiliteReussite?` (0/25/50/75/100), `dateRealisation?`, `moContent?`. `chantier?` (case Chantier d'Odoo, sous Réf. affaire). Passer à `'accepté'` met auto `probabiliteReussite=100` + `dateRealisation=today` sur les 3 sélecteurs. |
 | `CrmAction` | `concurrents?: CrmActionConcurrent[]`. À n'inclure dans le payload que si défini. |
 | `RaisonArchive` | `'doublon' \| 'concurrent_prix' \| 'concurrent_delai' \| 'budget' \| 'injoignable' \| 'autre'`. Constante `RAISON_ARCHIVE` (label/couleur/messageDefaut). |
 
@@ -120,7 +120,7 @@ Ne jamais lire `p.description` directement pour afficher ou nommer une ligne.
 **Helpers locaux de `Devis.tsx`** (après `calcQuantiteSurface`, hoistés) :
 - `getVarianteDiff(produit, variantesChoisies?)` — somme des `prixDiff`.
 - `getPrixLigne(produit, quantite, variantesChoisies?, isRevendeur?)` — base + diff. **Toujours l'utiliser plutôt que `getPrixPourQuantite` seul dès que des variantes sont possibles** (changement de quantité, surface/conso, `populateForm`). Le handler `VarianteSelect onChange` est la référence.
-- `calcQuantiteSurface(prod, surface, consoOverride?)` — `Math.ceil(surface × conso / poids)`.
+- `calcQuantiteSurface(prod, surface, consoOverride?, unite?, metre?)` — `Math.ceil(surface × conso / poids)` ; `metre` = unité du devis (m² ou ml).
 
 ## Où est le détail
 

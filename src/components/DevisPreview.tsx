@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
-import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -186,6 +186,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   const coutChantierRef = useRef<number | null>(null);
   const coutChantierTotalRef = useRef<number>(0);
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
+  // m² ou ml : au ml la surface est un linéaire, la conso celle de la fiche au ml (kg/ml).
+  const uniteSurface = devis.uniteSurface;
+  const uS = libelleSurface(uniteSurface);
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
   // Images associées aux lignes (fetched depuis Supabase + merged avec lineImages prop)
@@ -251,10 +254,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
        l'aperçu, ligne par ligne ou par la surface globale. */
     const modifiee = surfacesParLigne[l.id] !== undefined && surfacesParLigne[l.id] !== (l.surfaceM2 || 0);
     if (!modifiee) return { ...l, surfaceM2: surface };
-    const consoSurface = consoPourSurface(prod, l.consommation || undefined);
+    const consoSurface = consoPourSurface(prod, l.consommation || undefined, uniteSurface);
     if (consoSurface != null && prod) {
       // Math.ceil identique à calcQuantiteSurface dans Devis.tsx → totaux cohérents
-      const couverture = couvertureM2(prod);
+      const couverture = uniteSurface === 'ml' ? null : couvertureM2(prod);
       const newQty = Math.ceil(surface * consoSurface / (couverture ?? prod.poids!) - 1e-9);
       return { ...l, surfaceM2: surface, quantite: newQty > 0 ? newQty : l.quantite };
     }
@@ -574,20 +577,20 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
               <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
-              m²/conso
+              {uS}/conso
             </label>
             {showConso && (
               <>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  Surface :
+                  {uniteSurface === 'ml' ? 'Linéaire' : 'Surface'} :
                   <input
                     type="number" min={0} step={1}
                     value={surfaceGlobale || ''}
                     onChange={e => updateSurfaceGlobale(parseFloat(e.target.value) || 0)}
-                    placeholder="m²"
+                    placeholder={uS}
                     className="w-16 text-right border border-border rounded px-1.5 py-0.5 text-xs bg-background text-foreground"
                   />
-                  m²
+                  {uS}
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
                   <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier, showCoutLigne }); }} className="rounded" />
@@ -792,11 +795,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   {devis.systeme && (
                     <div>
                       <span className="text-muted-foreground whitespace-nowrap mr-1">Système :</span>
-                      <span className="font-medium">{devis.systeme}{(devis.surfaceGlobaleM2 || 0) > 0 && <span className="text-muted-foreground ml-1">{devis.surfaceGlobaleM2} m²</span>}</span>
+                      <span className="font-medium">{devis.systeme}{(devis.surfaceGlobaleM2 || 0) > 0 && <span className="text-muted-foreground ml-1">{devis.surfaceGlobaleM2} {uS}</span>}</span>
                     </div>
                   )}
                   {!devis.systeme && (devis.surfaceGlobaleM2 || 0) > 0 && (
-                    <div><span className="text-muted-foreground mr-1">Surface :</span><span className="font-medium">{devis.surfaceGlobaleM2} m²</span></div>
+                    <div><span className="text-muted-foreground mr-1">{uniteSurface === 'ml' ? 'Linéaire' : 'Surface'} :</span><span className="font-medium">{devis.surfaceGlobaleM2} {uS}</span></div>
                   )}
                 </div>
               )}
@@ -835,7 +838,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
           const allLines: LineData[] = lignesEffectives.map(l => {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            const conso = l.consommation || prod?.consommation || 0;
+            const conso = l.consommation || consoFiche(prod, uniteSurface) || 0;
             const t = calculerTotalLigne(l);
             const composants = prod?.composants;
             const isComposite = !!(composants && composants.length > 0);
@@ -892,8 +895,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             /* Article consommé au m² (toile de verre) : son coût chantier est la
                part de rouleau réellement consommée, et ses m² ne sont pas des kg —
                ni dans les kg/m², ni dans le total KG. */
-            if (couvertureM2(prod)) {
-              sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale);
+            if (uniteSurface !== 'ml' && couvertureM2(prod)) {
+              sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale, uniteSurface);
               continue;
             }
             if (isComposite) {
@@ -979,7 +982,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <span style={{ textDecoration: 'underline' }}>www.isofloor.fr</span>
                   </th>
                   <th className="border-l border-white/20 align-middle"
-                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg/m²</th>
+                      style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'right', whiteSpace: 'nowrap' }}>kg/{uS}</th>
                   <th className="align-middle"
                       style={{ padding: '2px 4px', fontSize: '11px', textAlign: 'center', whiteSpace: 'nowrap' }}>KG</th>
                   <th className="border-l border-white/20 align-middle"
@@ -1109,10 +1112,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {/* Surface m² sur sa propre ligne en dessous */}
                         {surfaceGlobale > 0 ? (
                           getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
-                            <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                            <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
                           ) : null
                         ) : getSurfaceLigne(l.id) > 0 && (hideControls || pdfMode) ? (
-                          <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                          <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
                         ) : (!hideControls && !pdfMode) ? (
                           <span className="print:hidden inline-flex items-center gap-1.5">
                             <input
@@ -1120,9 +1123,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               value={getSurfaceLigne(l.id) || ''}
                               onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                               className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                              placeholder="m²"
+                              placeholder={uS}
                             />
-                            <span className="text-xs text-muted-foreground">m²</span>
+                            <span className="text-xs text-muted-foreground">{uS}</span>
                           </span>
                         ) : null}
                         {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
@@ -1173,7 +1176,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className="py-1.5 px-1 text-right">{poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale, uniteSurface))}</td>
                           </>
                         );
                       })()}
@@ -1351,10 +1354,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           {/* Surface par ligne — affichée si différente du global, input si pas de global */}
                           {surfaceGlobale > 0 ? (
                             getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
-                              <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                              <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
                             ) : null
                           ) : getSurfaceLigne(l.id) > 0 && (hideControls || pdfMode) ? (
-                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} m²</span>
+                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
                           ) : (!hideControls && !pdfMode) ? (
                             <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
                               <input
@@ -1362,9 +1365,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 value={getSurfaceLigne(l.id) || ''}
                                 onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                                 className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                                placeholder="m²"
+                                placeholder={uS}
                               />
-                              <span className="text-xs text-muted-foreground">m²</span>
+                              <span className="text-xs text-muted-foreground">{uS}</span>
                             </span>
                           ) : null}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
@@ -1390,7 +1393,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
                         {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
                         <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: getSurfaceLigne(l.id) || undefined }, produits, surfaceGlobale))}</td>
+                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: getSurfaceLigne(l.id) || undefined }, produits, surfaceGlobale, uniteSurface))}</td>
                       </tr>
                       {showComposants && composants && composants.length > 0 && composants.map(comp => {
                         const compProd = produits.find(p => p.id === comp.produitId);
@@ -1432,7 +1435,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             {showCoutChantier && coutChantierRef.current != null && (
               <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
                 <span>Coût chantier</span>
-                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2)} €/m²</span>
+                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2)} €/{uS}</span>
               </div>
             )}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
