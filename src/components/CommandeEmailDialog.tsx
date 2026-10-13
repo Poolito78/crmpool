@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Paperclip } from 'lucide-react';
 import { type CommandeFournisseur, type CommandeClient, type Fournisseur, type Client, formatMontant, formatDate } from '@/lib/store';
-import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteSansImages, type ImageMail } from '@/lib/mailsTypes';
 
 type EmailTarget =
   | { type: 'fournisseur'; commande: CommandeFournisseur; contact: Fournisseur; pdfBase64?: string; pdfFileName?: string }
@@ -50,6 +50,8 @@ function generateAndDownloadEml(params: {
   body: string;
   pdfBase64?: string;
   pdfFileName?: string;
+  /** Images du mail type : seules celles placées dans le texte partent, en ligne. */
+  images?: ImageMail[];
 }) {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const lines: string[] = [];
@@ -60,21 +62,15 @@ function generateAndDownloadEml(params: {
   lines.push(`To: ${params.to}`);
   lines.push(`Subject: ${encodeHeader(params.subject)}`);
 
-  const htmlBody = params.body
-    .split('\n')
-    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${l.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</p>`)
-    .join('\n');
-  const fullHtml = `<html><body>${htmlBody}</body></html>`;
+  const imagesPlacees = imagesUtilisees(params.body, params.images);
+  const fullHtml = `<html><body>${corpsEnHtml(params.body, imagesPlacees)}</body></html>`;
+  const partieHtml = partieHtmlEml(fullHtml, imagesPlacees, toQuotedPrintable);
 
   if (params.pdfBase64 && params.pdfFileName) {
     lines.push(`Content-Type: multipart/mixed; boundary="${boundary}"`);
     lines.push('');
     lines.push(`--${boundary}`);
-    lines.push('Content-Type: text/html; charset="utf-8"');
-    lines.push('Content-Transfer-Encoding: quoted-printable');
-    lines.push('');
-    lines.push(toQuotedPrintable(fullHtml));
-    lines.push('');
+    lines.push(...partieHtml);
     lines.push(`--${boundary}`);
     lines.push(`Content-Type: application/pdf; name="${params.pdfFileName}"`);
     lines.push('Content-Transfer-Encoding: base64');
@@ -85,17 +81,15 @@ function generateAndDownloadEml(params: {
     lines.push('');
     lines.push(`--${boundary}--`);
   } else {
-    lines.push('Content-Type: text/html; charset="utf-8"');
-    lines.push('Content-Transfer-Encoding: quoted-printable');
-    lines.push('');
-    lines.push(toQuotedPrintable(fullHtml));
+    // Sans PDF, la partie HTML (ou related, avec ses images) est le message entier.
+    lines.push(...partieHtml);
   }
 
   const eml = lines.join('\r\n');
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if (isMobile) {
     // Sur mobile : blob .eml non supporté → mailto ouvre Outlook mobile directement
-    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`;
+    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteSansImages(params.body))}`;
     window.location.href = mailto;
     return;
   }
@@ -115,6 +109,7 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
   const [body, setBody] = useState('');
   // Objet et texte proposés : les mails types de l'utilisateur (Paramètres → Mails).
   const { modele: modeleMail } = useMailsTypes();
+  const [imagesMail, setImagesMail] = useState<ImageMail[]>([]);
 
   useEffect(() => {
     if (!target || !open) return;
@@ -131,6 +126,7 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
         montantTTC: formatMontant(commande.totalTTC),
       };
       const m = modeleMail('commande_fournisseur');
+      setImagesMail(m.images ?? []);
       setSubject(remplirMail(m.objet, valeurs));
       setBody(remplirMail(m.corps, valeurs));
     } else {
@@ -144,6 +140,7 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
         echeance: commande.dateEcheance ? formatDate(commande.dateEcheance) : '',
       };
       const m = modeleMail('facture');
+      setImagesMail(m.images ?? []);
       setSubject(remplirMail(m.objet, valeurs));
       setBody(remplirMail(m.corps, valeurs));
     }
@@ -160,6 +157,7 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
       body,
       pdfBase64,
       pdfFileName,
+      images: imagesMail,
     });
     onSent?.();
     onOpenChange(false);
@@ -194,6 +192,9 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
               value={body}
               onChange={e => setBody(e.target.value)}
             />
+            {/{img:[\w-]+}/.test(body) && (
+              <p className="text-[11px] text-muted-foreground mt-1">Les repères <code>{'{img:…}'}</code> sont les images de votre mail type : elles partent dans le mail (texte seul sur mobile).</p>
+            )}
           </div>
           <p className="text-xs text-muted-foreground flex items-center gap-1">
             <Paperclip className="w-3 h-3 shrink-0" />

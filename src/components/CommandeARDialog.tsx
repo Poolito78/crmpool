@@ -15,7 +15,7 @@ import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToSubfolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import CommandeARPreview from '@/components/CommandeARPreview';
-import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteSansImages, type ImageMail } from '@/lib/mailsTypes';
 
 const SUBFOLDER = 'Commandes Clients';
 
@@ -45,13 +45,12 @@ function encodeHeader(str: string): string {
 function generateEml(params: {
   from: string; to: string; subject: string; body: string;
   pdfBase64: string; pdfFileName: string;
+  /** Images du mail type : seules celles placées dans le texte partent, en ligne. */
+  images?: ImageMail[];
 }): string {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-  const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const htmlBody = params.body.split('\n')
-    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0">${esc(l)}</p>`)
-    .join('\n');
-  const fullHtml = `<html><body>${htmlBody}</body></html>`;
+  const imagesPlacees = imagesUtilisees(params.body, params.images);
+  const fullHtml = `<html><body>${corpsEnHtml(params.body, imagesPlacees)}</body></html>`;
 
   const lines: string[] = [
     'MIME-Version: 1.0', 'X-Unsent: 1',
@@ -59,9 +58,7 @@ function generateEml(params: {
     `Subject: ${encodeHeader(params.subject)}`,
     `Content-Type: multipart/mixed; boundary="${boundary}"`, '',
     `--${boundary}`,
-    'Content-Type: text/html; charset="utf-8"',
-    'Content-Transfer-Encoding: quoted-printable', '',
-    toQuotedPrintable(fullHtml), '',
+    ...partieHtmlEml(fullHtml, imagesPlacees, toQuotedPrintable),
     `--${boundary}`,
     `Content-Type: application/pdf; name="${params.pdfFileName}"`,
     'Content-Transfer-Encoding: base64',
@@ -85,13 +82,13 @@ async function openEmlInOutlook(params: {
     const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
     const pdfFile = new File([pdfBytes], params.pdfFileName, { type: 'application/pdf' });
     if (navigator.canShare?.({ files: [pdfFile] })) {
-      try { await navigator.share({ title: params.subject, text: params.body, files: [pdfFile] }); return; } catch { /* ignored */ }
+      try { await navigator.share({ title: params.subject, text: texteSansImages(params.body), files: [pdfFile] }); return; } catch { /* ignored */ }
     }
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement('a'); a.href = url; a.download = params.pdfFileName; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    setTimeout(() => { window.location.href = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(params.body)}`; }, 600);
+    setTimeout(() => { window.location.href = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteSansImages(params.body))}`; }, 600);
     return;
   }
   const blob = new Blob([params.emlContent], { type: 'message/rfc822' });
@@ -124,6 +121,7 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
   const previewRef = useRef<HTMLDivElement>(null);
   // Objet et texte proposés : le mail type de l'utilisateur (Paramètres → Mails).
   const { modele: modeleMail } = useMailsTypes();
+  const [imagesMail, setImagesMail] = useState<ImageMail[]>([]);
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -142,6 +140,7 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
       dateLivraison: dateLivraison ? formatDate(dateLivraison) : '',
     };
     const m = modeleMail('ar_commande');
+    setImagesMail(m.images ?? []);
     setSubject(remplirMail(m.objet, valeurs));
     setBody(remplirMail(m.corps, valeurs));
 
@@ -223,6 +222,7 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
         body,
         pdfBase64: pdfBase64Ref.current,
         pdfFileName,
+        images: imagesMail,
       });
 
       // Sauvegarder dans le dossier Commandes Clients en même temps

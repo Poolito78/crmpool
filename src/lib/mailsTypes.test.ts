@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MAILS_DEFAUT, remplirMail } from './mailsTypes';
+import { MAILS_DEFAUT, remplirMail, corpsEnHtml, imagesUtilisees, partieHtmlEml, texteSansImages, idImage } from './mailsTypes';
 
 describe('remplirMail', () => {
   it('retire un passage [[ ]] dont un champ est vide, garde les autres', () => {
@@ -40,5 +40,41 @@ Restant à votre disposition pour tout complément d'information.
 
 Cordialement,
 ISOSIGN`);
+  });
+});
+
+describe('images du mail', () => {
+  const logo = { id: 'logo', nom: 'logo.png', dataUrl: 'data:image/png;base64,QUJD', largeur: 180 };
+  const corps = 'Cordialement,\n{img:logo}\nFrançois';
+
+  it("placent l'image en ligne (cid) dans le HTML, texte échappé", () => {
+    const html = corpsEnHtml('A <b> {img:logo}', [logo]);
+    expect(html).toContain('A &lt;b&gt; <img src="cid:logo@crmpool"');
+    expect(html).toContain('width="180"');
+  });
+
+  it('ne joignent que les images placées dans le texte', () => {
+    expect(imagesUtilisees(corps, [logo, { ...logo, id: 'autre' }]).map(i => i.id)).toEqual(['logo']);
+  });
+
+  it('partent dans un multipart/related avec leur Content-ID', () => {
+    const lignes = partieHtmlEml('<p>x</p>', [logo], s => s).join('\n');
+    expect(lignes).toMatch(/^Content-Type: multipart\/related; boundary=/);
+    expect(lignes).toContain('Content-ID: <logo@crmpool>');
+    expect(lignes).toContain('Content-Type: image/png; name="logo.png"');
+    expect(lignes).toContain('QUJD');
+  });
+
+  it('sans image, la partie HTML reste seule', () => {
+    expect(partieHtmlEml('<p>x</p>', [], s => s)[0]).toBe('Content-Type: text/html; charset="utf-8"');
+  });
+
+  it("s'effacent du texte seul (mobile)", () => {
+    expect(texteSansImages(corps)).toBe('Cordialement,\n\nFrançois');
+  });
+
+  it("donnent un repère unique tiré du nom de fichier", () => {
+    expect(idImage('Logo ISOSIGN.png', [])).toBe('logo-isosign');
+    expect(idImage('Logo ISOSIGN.png', ['logo-isosign'])).toBe('logo-isosign-2');
   });
 });

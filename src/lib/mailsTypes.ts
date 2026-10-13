@@ -15,13 +15,29 @@
  *
  * Les relances de devis gardent leurs propres mails types (`relanceDevis.ts`),
  * choisis au rang de la relance.
+ *
+ * IMAGES (logo, signature) : rangées avec le mail type en data URL, placées
+ * dans le texte par un repère `{img:logo}` — sur sa propre ligne ou dans le
+ * fil du texte. À l'envoi, le .eml les porte EN LIGNE (multipart/related,
+ * `cid:`) : un lien vers une image externe est bloqué par Outlook. Sur
+ * mobile (mailto, texte seul), les repères s'effacent.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
 export type TypeMail = 'devis' | 'commande_fournisseur' | 'facture' | 'ar_commande';
 
-export interface ModeleMail { objet: string; corps: string }
+export interface ImageMail {
+  /** Identifiant du repère `{img:id}` (lettres, chiffres, tirets). */
+  id: string;
+  nom: string;
+  /** L'image elle-même, réduite à l'ajout (data:image/png;base64,…). */
+  dataUrl: string;
+  /** Largeur affichée dans le mail, en pixels. */
+  largeur: number;
+}
+
+export interface ModeleMail { objet: string; corps: string; images?: ImageMail[] }
 
 export interface DefinitionMail extends ModeleMail {
   libelle: string;
@@ -167,11 +183,11 @@ const prevenir = () => abonnes.forEach(f => f());
 function charger(): Promise<void> {
   if (!chargement) {
     chargement = (async () => {
-      const { data, error } = await supabase.from('mails_types' as never).select('type, objet, corps');
+      const { data, error } = await supabase.from('mails_types' as never).select('type, objet, corps, images');
       const lus: Partial<Record<TypeMail, ModeleMail>> = {};
       if (!error) {
-        for (const r of (data ?? []) as { type: string; objet: string; corps: string }[]) {
-          if (r.type in MAILS_DEFAUT) lus[r.type as TypeMail] = { objet: r.objet, corps: r.corps };
+        for (const r of (data ?? []) as { type: string; objet: string; corps: string; images: ImageMail[] | null }[]) {
+          if (r.type in MAILS_DEFAUT) lus[r.type as TypeMail] = { objet: r.objet, corps: r.corps, images: Array.isArray(r.images) ? r.images : [] };
         }
       } else {
         console.error('[mails_types] lecture', error.message);
@@ -204,7 +220,7 @@ export function useMailsTypes() {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) return 'Non connecté';
     const { error } = await supabase.from('mails_types' as never).upsert(
-      { user_id: session.user.id, type: t, objet: m.objet, corps: m.corps, updated_at: new Date().toISOString() } as never,
+      { user_id: session.user.id, type: t, objet: m.objet, corps: m.corps, images: m.images?.length ? m.images : null, updated_at: new Date().toISOString() } as never,
       { onConflict: 'user_id,type' },
     );
     if (error) return error.message;
@@ -226,5 +242,118 @@ export function useMailsTypes() {
     return null;
   }, []);
 
-  return { modele, estPersonnalise, enregistrer, reinitialiser, charge: cache !== null, version };
+  /** Toutes les images de l'utilisateur, tous mails confondus (pour réutiliser un logo). */
+  const toutesImages = useCallback((): ImageMail[] => {
+    const vues = new Map<string, ImageMail>();
+    for (const m of Object.values(cache ?? {})) for (const i of m?.images ?? []) if (!vues.has(i.dataUrl)) vues.set(i.dataUrl, i);
+    return [...vues.values()];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [version]);
+
+  return { modele, estPersonnalise, enregistrer, reinitialiser, toutesImages, charge: cache !== null, version };
+}
+
+/* ── Images dans le mail ──────────────────────────────────────────────────── */
+
+const JETON_IMAGE = /\{img:([\w-]+)\}/g;
+
+export const jetonImage = (id: string) => `{img:${id}}`;
+
+/** Identifiant de repère tiré du nom de fichier, unique parmi `pris`. */
+export function idImage(nom: string, pris: string[]): string {
+  const base = (nom.replace(/\.[^.]+$/, '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'image').slice(0, 24);
+  let id = base;
+  for (let n = 2; pris.includes(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+/** Le texte du mail sans ses repères d'image (envoi texte seul : mailto, mobile). */
+export function texteSansImages(corps: string): string {
+  return corps.replace(JETON_IMAGE, '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n');
+}
+
+/** Images réellement placées dans le texte. */
+export function imagesUtilisees(corps: string, images: ImageMail[] = []): ImageMail[] {
+  const ids = new Set([...corps.matchAll(JETON_IMAGE)].map(m => m[1]));
+  return images.filter(i => ids.has(i.id));
+}
+
+const echapper = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Le texte en HTML, une ligne par paragraphe (la mise en forme des .eml
+ * d'avant), les repères remplacés par leur image. `src` : `cid` pour le
+ * .eml, `data` pour un aperçu dans le navigateur.
+ */
+export function corpsEnHtml(corps: string, images: ImageMail[] = [], src: 'cid' | 'data' = 'cid'): string {
+  const parId = new Map(images.map(i => [i.id, i]));
+  return corps.split('\n').map(ligne => {
+    if (ligne.trim() === '') return '<br>';
+    let html = '';
+    let dernier = 0;
+    for (const m of ligne.matchAll(JETON_IMAGE)) {
+      html += echapper(ligne.slice(dernier, m.index));
+      const img = parId.get(m[1]);
+      html += img
+        ? `<img src="${src === 'cid' ? `cid:${img.id}@crmpool` : img.dataUrl}" alt="${echapper(img.nom)}" width="${img.largeur}" style="width:${img.largeur}px;height:auto;border:0;vertical-align:middle">`
+        : echapper(m[0]);
+      dernier = (m.index ?? 0) + m[0].length;
+    }
+    html += echapper(ligne.slice(dernier));
+    return `<p style="margin:0">${html}</p>`;
+  }).join('\n');
+}
+
+/**
+ * La partie HTML d'un .eml, prête à suivre une ligne `--frontière` : le HTML
+ * seul, ou un multipart/related qui porte aussi les images placées dans le
+ * texte (`Content-ID` = la référence `cid:` de `corpsEnHtml`).
+ */
+export function partieHtmlEml(html: string, images: ImageMail[], enQuotedPrintable: (s: string) => string): string[] {
+  const htmlPart = ['Content-Type: text/html; charset="utf-8"', 'Content-Transfer-Encoding: quoted-printable', '', enQuotedPrintable(html), ''];
+  if (!images.length) return htmlPart;
+  const rel = `----=_Rel_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+  const lignes = [`Content-Type: multipart/related; boundary="${rel}"`, '', `--${rel}`, ...htmlPart];
+  for (const img of images) {
+    const m = img.dataUrl.match(/^data:([^;]+);base64,(.*)$/);
+    if (!m) continue;
+    const ext = (m[1].split('/')[1] || 'png').replace('jpeg', 'jpg');
+    const nom = `${img.id}.${ext}`;
+    lignes.push(`--${rel}`, `Content-Type: ${m[1]}; name="${nom}"`, 'Content-Transfer-Encoding: base64',
+      `Content-ID: <${img.id}@crmpool>`, `Content-Disposition: inline; filename="${nom}"`, '',
+      ...(m[2].match(/.{1,76}/g) ?? []), '');
+  }
+  lignes.push(`--${rel}--`, '');
+  return lignes;
+}
+
+/**
+ * Réduit une image choisie (600 px de large au plus) et la rend en data URL —
+ * PNG pour garder la transparence d'un logo, JPEG pour une photo. Refuse
+ * au-delà de 400 Ko : elle part dans chaque mail envoyé.
+ */
+export async function lireImageMail(fichier: File): Promise<{ dataUrl: string; largeur: number }> {
+  const url = URL.createObjectURL(fichier);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('Image illisible'));
+      i.src = url;
+    });
+    const largeur = Math.min(600, img.naturalWidth || 600);
+    const hauteur = Math.max(1, Math.round((img.naturalHeight || largeur) * largeur / (img.naturalWidth || largeur)));
+    const canvas = document.createElement('canvas');
+    canvas.width = largeur;
+    canvas.height = hauteur;
+    canvas.getContext('2d')!.drawImage(img, 0, 0, largeur, hauteur);
+    const photo = /jpe?g/i.test(fichier.type);
+    const dataUrl = canvas.toDataURL(photo ? 'image/jpeg' : 'image/png', 0.85);
+    if (dataUrl.length > 400 * 1024 * 4 / 3) throw new Error('Image trop lourde (400 Ko au plus après réduction)');
+    // Affichée à 250 px au plus par défaut : la taille d'un logo de signature.
+    return { dataUrl, largeur: Math.min(largeur, 250) };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }

@@ -17,7 +17,7 @@ import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from 
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import logoIsofloor from '@/assets/logo-isofloor.png';
-import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteSansImages, type ImageMail } from '@/lib/mailsTypes';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
    famille » : ceux attachés à la CATÉGORIE de l'article — homologation, fiche
@@ -100,6 +100,8 @@ function generateEml(params: {
   pdfFileName: string;
   extraAttachments?: Array<{ filename: string; content: string; mime?: string }>;
   ficheLinks?: Array<{ label: string; url: string }>;
+  /** Images du mail type : seules celles placées dans le texte partent, en ligne. */
+  images?: ImageMail[];
 }): string {
   const boundary = `----=_Part_${Date.now()}_${Math.random().toString(36).slice(2)}`;
   const lines: string[] = [];
@@ -114,10 +116,8 @@ function generateEml(params: {
 
   // Corps HTML — Outlook insère sa signature APRÈS le HTML (pas avant)
   const esc = (s: string) => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const htmlBody = params.body
-    .split('\n')
-    .map(l => l.trim() === '' ? '<br>' : `<p style="margin:0 0 0 0">${esc(l)}</p>`)
-    .join('\n');
+  const imagesPlacees = imagesUtilisees(params.body, params.images);
+  const htmlBody = corpsEnHtml(params.body, imagesPlacees);
 
   // Section fiches produit avec vrais liens cliquables
   const ficheHtml = params.ficheLinks && params.ficheLinks.length > 0
@@ -129,11 +129,7 @@ function generateEml(params: {
 
   const fullHtml = `<html><body>${htmlBody}${ficheHtml}</body></html>`;
   lines.push(`--${boundary}`);
-  lines.push('Content-Type: text/html; charset="utf-8"');
-  lines.push('Content-Transfer-Encoding: quoted-printable');
-  lines.push('');
-  lines.push(toQuotedPrintable(fullHtml));
-  lines.push('');
+  lines.push(...partieHtmlEml(fullHtml, imagesPlacees, toQuotedPrintable));
 
   // PDF devis
   lines.push(`--${boundary}`);
@@ -183,7 +179,7 @@ async function openEmlInOutlook(params: {
     const ficheText = params.ficheLinks && params.ficheLinks.length > 0
       ? `\n\nFiches produit :\n${params.ficheLinks.map(f => `• ${f.label} : ${f.url}`).join('\n')}`
       : '';
-    const mobileBody = params.body + ficheText;
+    const mobileBody = texteSansImages(params.body) + ficheText;
 
     // Essayer Web Share API avec tous les fichiers (PDF + PJs) en pièces jointes
     try {
@@ -356,6 +352,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [body, setBody] = useState('');
   // Objet et texte proposés : le mail type de l'utilisateur (Paramètres → Mails).
   const { modele: modeleMail } = useMailsTypes();
+  const [imagesMail, setImagesMail] = useState<ImageMail[]>([]);
   // Liens d'article proposés pour ce devis (fiche technique / photo / fiche
   // publique du CRM). `selectedLiensIds` dit lesquels partent dans le mail :
   // proposer les trois et n'en cocher que deux vaut mieux que d'en imposer un.
@@ -458,6 +455,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       montantTTC: formatMontant(totals.totalTTC), validite: devis.dateValidite ? formatDate(devis.dateValidite) : '',
     };
     const mailType = modeleMail('devis');
+    setImagesMail(mailType.images ?? []);
     const objet = remplirMail(mailType.objet, valeursMail);
     setSubject(relance ? `Relance — ${objet}` : objet);
 
@@ -731,6 +729,7 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
         pdfFileName,
         extraAttachments,
         ficheLinks: allLinks,
+        images: imagesMail,
       });
       const result = await openEmlInOutlook({
         emlContent,
@@ -823,6 +822,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
               value={body}
               onChange={e => setBody(e.target.value)}
             />
+            {/{img:[\w-]+}/.test(body) && (
+              <p className="text-[11px] text-muted-foreground mt-1">Les repères <code>{'{img:…}'}</code> sont les images de votre mail type : elles partent dans le mail (texte seul sur mobile).</p>
+            )}
           </div>
 
           {/* ── Liens produit (hypertextes courts : le texte affiché est la désignation) ── */}
