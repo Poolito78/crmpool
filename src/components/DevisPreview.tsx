@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
-import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, consoDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -261,7 +261,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
        l'aperçu, ligne par ligne ou par la surface globale. */
     const modifiee = surfacesParLigne[l.id] !== undefined && surfacesParLigne[l.id] !== (l.surfaceM2 || 0);
     if (!modifiee) return { ...l, surfaceM2: surface };
-    const consoSurface = consoPourSurface(prod, l.consommation || undefined, uniteL(l));
+    const consoSurface = consoPourSurface(prod, consoDeLigne(l, uniteL(l)) || undefined, uniteL(l));
     if (consoSurface != null && prod) {
       // Math.ceil identique à calcQuantiteSurface dans Devis.tsx → totaux cohérents
       const couverture = uniteL(l) === 'ml' ? null : couvertureM2(prod);
@@ -845,7 +845,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
           const allLines: LineData[] = lignesEffectives.map(l => {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            const conso = l.consommation || consoFiche(prod, uniteL(l)) || 0;
+            const conso = consoDeLigne(l, uniteL(l)) || consoFiche(prod, uniteL(l)) || 0;
             const t = calculerTotalLigne(l);
             const composants = prod?.composants;
             const isComposite = !!(composants && composants.length > 0);

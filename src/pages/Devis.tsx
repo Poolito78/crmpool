@@ -2,7 +2,7 @@ import { prochainNumero, prochainNumeroDevis } from '@/lib/numeroDevis';
 import { useState, useEffect, useRef, useCallback, useMemo, Fragment, type ReactNode } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useCRM } from '@/lib/StoreContext';
-import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
+import { designationProduit, generateId, calculerTotalDevis, calculerTotalLigne, calculerFraisPort, calculerFraisPortBareme, BAREMES_TRANSPORT, getStandardBareme, formatMontant, formatDate, formatDateISO, getPrixPourQuantite, forfaitCommandeLigne, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne, type UniteSurface, useCrmActions, RAISON_ARCHIVE, TYPE_CRM_ACTION, STATUT_CRM_ACTION, type Devis as DevisType, type LigneDevis, type TransporteurType, type CommandeClient, type FactureClient, type Produit, type RaisonArchive, type ConcurrentProduit } from '@/lib/store';
 import { Plus, Search, Eye, EyeOff, Trash2, FileText, Pencil, Copy, ExternalLink, Download, User, Mail, ShoppingCart, ArrowUp, ArrowDown, Package, Bot, MessageSquare, StickyNote, Paperclip, Receipt, Undo2, FolderPlus, GripVertical, Layers, Send, TrendingUp, Zap, Archive, CalendarClock, RotateCcw, MapPin, LayoutList, Table2, Filter, ChevronUp, ChevronDown, ChevronRight, ChevronsUpDown, X as XIcon, Settings, Check, Mic, MicOff, BellRing, Phone, HardHat } from 'lucide-react';
 import { genererScriptOdoo, promptOdooPartnerName, buildOdooPayload, envoyerVersOdoo, coutChantier, coutChantierLigne, coutChantierParGroupe, type OdooPayload } from '@/lib/odooSync';
 import { compterBrides } from '@/lib/bridesDevis';
@@ -1088,8 +1088,8 @@ export default function Devis() {
       if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       // Une ligne du modèle dans l'autre unité garde sa quantité : la surface dictée ne la concerne pas.
-      if (prod && uniteDeLigne(l, sysDevis.uniteSurface) === (sysDevis.uniteSurface ?? 'm2') && consoPourSurface(prod, l.consommation, sysDevis.uniteSurface) != null) {
-        const quantite = calcQuantiteSurface(prod, surf, l.consommation, undefined, sysDevis.uniteSurface ?? 'm2');
+      if (prod && uniteDeLigne(l, sysDevis.uniteSurface) === (sysDevis.uniteSurface ?? 'm2') && consoPourSurface(prod, consoDeLigne(l, sysDevis.uniteSurface ?? 'm2'), sysDevis.uniteSurface) != null) {
+        const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, sysDevis.uniteSurface ?? 'm2'), undefined, sysDevis.uniteSurface ?? 'm2');
         const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null);
         return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
       }
@@ -1143,8 +1143,8 @@ export default function Devis() {
       const l: LigneDevis = { ...l0, id: generateId() };
       if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-      if (prod && uniteDeLigne(l, sys.uniteSurface) === unite && consoPourSurface(prod, l.consommation, unite) != null) {
-        const quantite = calcQuantiteSurface(prod, surf, l.consommation, undefined, unite);
+      if (prod && uniteDeLigne(l, sys.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null) {
+        const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite);
         return { ...l, quantite, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
       }
       return l;
@@ -1856,7 +1856,7 @@ export default function Devis() {
       let kg = 0;
       for (const x of memes) {
         const s = surfaceL(x);
-        const c = consoPourSurface(p, x.consommation, uniteL(x));
+        const c = consoPourSurface(p, consoDeLigne(x, uniteL(x)), uniteL(x));
         if (s > 0 && c != null) kg += s * c;
       }
       if (kg <= 0) continue;
@@ -1890,8 +1890,8 @@ export default function Devis() {
       return recalcChantier(prev.map(l => {
         if (l.produitId !== cur.produitId) return l;
         const surface = surfaceL(l);
-        if (!(surface > 0 && consoPourSurface(p, l.consommation, uniteL(l)) != null)) return { ...l, qteMode: 'surface' as const };
-        const quantite = calcQuantiteSurface(p, surface, l.consommation, l.unite, uniteL(l));
+        if (!(surface > 0 && consoPourSurface(p, consoDeLigne(l, uniteL(l)), uniteL(l)) != null)) return { ...l, qteMode: 'surface' as const };
+        const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, uniteL(l)), l.unite, uniteL(l));
         return { ...l, qteMode: 'surface' as const, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
       }));
     });
@@ -2092,7 +2092,8 @@ export default function Devis() {
       if (!prod || !role) return l;
       const conso = role === 'flowbind' ? preset.flowbindKgM2! : preset.granulatKgM2!;
       const surface = surfaceL(l);
-      const quantite = surface > 0 ? calcQuantiteSurface(prod, surface, conso, l.unite, uniteL(l)) : l.quantite;
+      // Le préréglage est en kg/m² : une ligne au ml garde sa quantité.
+      const quantite = surface > 0 && uniteL(l) === 'm2' ? calcQuantiteSurface(prod, surface, conso, l.unite, 'm2') : l.quantite;
       const prixUnitaireHT = getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur);
       return { ...l, consommation: conso, consoUsage: preset.label, quantite, ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), prixUnitaireHT };
     })));
@@ -2410,16 +2411,14 @@ export default function Devis() {
     appliquerSurfaceGlobale();
   }, [surfaceGlobaleM2, modeCalcul, dialogOpen]);
 
-  /* Passage m² ↔ ml : les consommations retouchées sur les lignes étaient dans
-     l'autre unité (des kg/m² ne sont pas des kg/ml) — elles s'effacent, puis
-     les lignes se recalculent à la surface globale avec la conso de la fiche. */
+  /* Passage m² ↔ ml : les lignes se recalculent à la surface globale avec la
+     conso de leur nouvelle unité (kg/m² et kg/ml retouchés se gardent tous deux). */
   useEffect(() => {
     if (!dialogOpen || prevUniteSurfaceRef.current === uniteSurface) {
       prevUniteSurfaceRef.current = uniteSurface;
       return;
     }
     prevUniteSurfaceRef.current = uniteSurface;
-    setLignes(prev => prev.map(l => !l.uniteSurface && (l.consommation != null || l.consoUsage) ? { ...l, consommation: undefined, consoUsage: undefined } : l));
     appliquerSurfaceGlobale();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uniteSurface, dialogOpen]);
@@ -2427,16 +2426,14 @@ export default function Devis() {
   function changerUniteSurface(u: UniteSurface) {
     if (u === uniteSurface) return;
     saveSnapshot();
-    const retouchees = lignes.filter(l => !l.uniteSurface && l.consommation != null).length;
     setUniteSurface(u);
-    if (retouchees > 0) toast.info(`${retouchees} consommation(s) saisie(s) sur les lignes effacée(s) : elles étaient en ${uniteSurface === 'ml' ? 'kg/ml' : 'kg/m²'}.`);
   }
 
   /**
-   * Passe UNE ligne de m² en ml (ou l'inverse). Sa surface et sa conso
-   * retouchées étaient dans l'autre unité : elles s'effacent. Revenue dans
-   * l'unité du devis, elle reprend la surface globale ; sinon son linéaire
-   * (ou sa surface) est à saisir.
+   * Passe UNE ligne de m² en ml (ou l'inverse). Sa surface était dans l'autre
+   * unité : revenue dans celle du devis, elle reprend la surface globale ;
+   * sinon son linéaire (ou sa surface) est à saisir. Ses consos kg/m² et
+   * kg/ml retouchées se gardent : c'est l'unité qui choisit laquelle compte.
    */
   function changerUniteLigne(id: string) {
     saveSnapshot();
@@ -2444,11 +2441,11 @@ export default function Devis() {
     setLignes(prev => recalcChantier(prev.map(l => {
       if (l.id !== id) return l;
       const u: UniteSurface = uniteL(l) === 'ml' ? 'm2' : 'ml';
-      const base: LigneDevis = { ...l, uniteSurface: u, surfaceM2: u === uniteSurface && surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined, consommation: undefined, consoUsage: undefined };
+      const base: LigneDevis = { ...l, uniteSurface: u, surfaceM2: u === uniteSurface && surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : undefined };
       const p = l.produitId ? produitParId(produits, l.produitId) : null;
       const surface = surfaceDeLigne(base, surfaceGlobaleM2, uniteSurface);
-      if (!p || !(surface > 0) || consoPourSurface(p, undefined, u) == null) return base;
-      const quantite = calcQuantiteSurface(p, surface, undefined, l.unite, u);
+      if (!p || !(surface > 0) || consoPourSurface(p, consoDeLigne(l, u), u) == null) return base;
+      const quantite = calcQuantiteSurface(p, surface, consoDeLigne(l, u), l.unite, u);
       return { ...base, quantite, prixUnitaireHT: getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur) };
     })));
   }
@@ -2469,8 +2466,8 @@ export default function Devis() {
       if (uniteL(l) !== uniteSurface) return l;
       const p = produitParId(produits, l.produitId);
       const sansManuel = l.qteMode === 'manuel' ? { qteMode: undefined } : {};
-      if (!p || consoPourSurface(p, l.consommation || undefined, uniteSurface) == null) return { ...l, ...sansManuel, surfaceM2: surfaceGlobaleM2 };
-      const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, l.consommation, l.unite);
+      if (!p || consoPourSurface(p, consoDeLigne(l, uniteSurface) || undefined, uniteSurface) == null) return { ...l, ...sansManuel, surfaceM2: surfaceGlobaleM2 };
+      const quantite = calcQuantiteSurface(p, surfaceGlobaleM2, consoDeLigne(l, uniteSurface), l.unite);
       const prixUnitaireHT = getPrixLigne(p, quantite, l.variantesChoisies, client?.estRevendeur);
       return { ...l, ...sansManuel, quantite, surfaceM2: surfaceGlobaleM2, prixUnitaireHT };
     })));
@@ -4025,11 +4022,11 @@ export default function Devis() {
                     const surfaceVal = surfaceL(l);
                     const couvertureLigne = uniteLigne === 'ml' ? null : couvertureM2(prod);
                     const consoFicheLigne = consoFiche(prod, uniteLigne);
-                    const consoLigne = consoPourSurface(prod, l.consommation, uniteLigne) ?? (l.consommation ?? consoFicheLigne);
+                    const consoLigne = consoPourSurface(prod, consoDeLigne(l, uniteLigne), uniteLigne) ?? (consoDeLigne(l, uniteLigne) ?? consoFicheLigne);
                     const kgReel = surfaceVal > 0 && consoLigne != null && consoLigne > 0
                       ? Math.round(surfaceVal * consoLigne * 1000) / 1000 : null;
                     // Auto-calc quantité : surface ET conso renseignées (peu importe le mode)
-                    const hasAutoCalc = !!(surfaceVal > 0 && consoPourSurface(prod, l.consommation, uniteLigne) != null);
+                    const hasAutoCalc = !!(surfaceVal > 0 && consoPourSurface(prod, consoDeLigne(l, uniteLigne), uniteLigne) != null);
                     // Teinte choisie en toutes lettres (« RAL 7042 Gris signalisation A »), lue sur la ligne elle-même
                     const teintesLigne = Object.entries(sansClesInternes(l.variantesChoisies))
                       .map(([cle, v]) => ({ cle, texte: libelleTeinte(v), hex: getRalInfo(v)?.hex }))
@@ -4162,33 +4159,40 @@ export default function Devis() {
                               const classePrixVente = `h-8 text-sm${margeBasse ? ' text-destructive font-semibold border-destructive/60' : ''}`;
                               /* Consommation de la ligne : saisie à la main (l'usage s'efface) ou choisie
                                  dans la liste de l'article (l'usage suit, en info-bulle). */
-                              const appliquerConso = (conso: number | undefined, usage?: string) => {
+                              /* `u` : l'unité de la conso saisie (kg/m² ou kg/ml). Les deux se gardent sur la ligne ;
+                                 seule celle de l'unité de la ligne recalcule la quantité. */
+                              const appliquerConso = (conso: number | undefined, usage?: string, u: UniteSurface = uniteLigne) => {
+                                const champ = u === 'ml' ? { consommationMl: conso } : { consommation: conso, consoUsage: usage || undefined };
+                                if (u !== uniteLigne) {
+                                  setLignes(prev => prev.map(li => li.id === l.id ? { ...li, ...champ } : li));
+                                  return;
+                                }
                                 const surface = surfaceL(l);
-                                const quantite = prod && surface > 0 && consoPourSurface(prod, conso, uniteLigne) != null ? calcQuantiteSurface(prod, surface, conso, l.unite, uniteLigne) : l.quantite;
+                                const quantite = prod && surface > 0 && consoPourSurface(prod, conso, u) != null ? calcQuantiteSurface(prod, surface, conso, l.unite, u) : l.quantite;
                                 const client = clients.find(c => c.id === clientId);
                                 const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
-                                setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, consommation: conso, consoUsage: usage || undefined, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
+                                setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, ...champ, quantite, ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}), ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}) } : li)));
                               };
                               const colLineaire = visibleLigneCols.has('lineaire');
                               const colConsoMl = visibleLigneCols.has('consoMl');
                               /* Surface ou linéaire saisi : l'unité de la colonne devient celle de la ligne
-                                 (rien n'est retenu quand c'est celle du devis). Changer d'unité efface la conso
-                                 retouchée, qui était dans l'autre. */
+                                 (rien n'est retenu quand c'est celle du devis), et sa conso (kg/m² ou kg/ml) compte. */
                               const saisirSurface = (surface: number, u: UniteSurface) => {
-                                const change = u !== uniteLigne;
-                                const conso = change ? undefined : l.consommation;
+                                const conso = consoDeLigne(l, u);
                                 const quantite = prod && surface > 0 && consoPourSurface(prod, conso, u) != null ? calcQuantiteSurface(prod, surface, conso, l.unite, u) : l.quantite;
                                 const client = clients.find(c => c.id === clientId);
                                 const prixUnitaireHT = prod ? getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) : undefined;
                                 setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? {
                                   ...li, uniteSurface: u === uniteSurface ? undefined : u, surfaceM2: surface, quantite,
-                                  ...(change ? { consommation: undefined, consoUsage: undefined } : {}),
                                   ...(li.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}),
                                   ...(prixUnitaireHT != null ? { prixUnitaireHT } : {}),
                                 } : li)));
                               };
-                              /* Les consommations par usage de la fiche sont en kg/m² : au ml, la liste n'est pas proposée. */
-                              const optionsConso = prod && uniteLigne !== 'ml' ? [
+                              /* Cellule « Conso. » : en kg/m² dès que la colonne kg/ml est affichée, sinon dans l'unité de la ligne. */
+                              const consoCellM2 = colConsoMl || uniteLigne === 'm2';
+                              const couvM2 = couvertureM2(prod);
+                              /* Les consommations par usage de la fiche sont en kg/m² : proposées dans la cellule kg/m². */
+                              const optionsConso = prod ? [
                                 ...(prod.consommation ? [{ valeur: prod.consommation, usage: 'Par défaut' }] : []),
                                 ...(prod.consommations || []),
                               ] : [];
@@ -4234,28 +4238,32 @@ export default function Devis() {
                                     title={uniteLigne === 'm2' ? 'Ligne au m² : saisir un linéaire la passe au mètre linéaire (conso. en kg/ml)' : undefined}
                                     className="h-8 text-sm" placeholder={uniteLigne === 'm2' ? '—' : 'ml'} />
                                 ),
-                                consoMl: uniteLigne === 'ml' ? (
-                                  <Input type="number" step="0.01" value={l.consommation ?? consoFicheLigne ?? ''} onFocus={e => e.target.select()}
-                                    onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                                    className="h-8 text-sm" placeholder={consoFicheLigne != null ? String(consoFicheLigne) : 'kg/ml'}
-                                    title={consoFicheLigne == null ? "Pas de conso. au ml sur la fiche article : la quantité n'est pas calculée" : undefined} />
-                                ) : <Input value="—" readOnly tabIndex={-1} className="h-8 text-sm bg-muted/50 text-muted-foreground" title="Ligne au m² : conso. dans la colonne kg/m²" />,
-                                conso: colConsoMl && uniteLigne === 'ml'
-                                  ? <Input value="—" readOnly tabIndex={-1} className="h-8 text-sm bg-muted/50 text-muted-foreground" title="Ligne au mètre linéaire : conso. dans la colonne kg/ml" />
-                                  : (
+                                /* Les deux consos se modifient sur toute ligne ; celle de l'autre unité est grisée :
+                                   gardée, elle ne compte qu'une fois la ligne passée dans son unité. */
+                                consoMl: (
+                                  <Input type="number" step="0.01" value={l.consommationMl ?? prod?.consommationMl ?? ''} onFocus={e => e.target.select()}
+                                    onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value), undefined, 'ml')}
+                                    className={`h-8 text-sm${uniteLigne === 'ml' ? '' : ' text-muted-foreground bg-muted/40'}`}
+                                    placeholder={prod?.consommationMl != null ? String(prod.consommationMl) : 'kg/ml'}
+                                    title={uniteLigne === 'ml'
+                                      ? (prod?.consommationMl == null && l.consommationMl == null ? "Pas de conso. au ml sur la fiche article : la quantité n'est pas calculée" : undefined)
+                                      : 'Ligne au m² : cette conso au ml est gardée, elle comptera si la ligne passe au mètre linéaire'} />
+                                ),
+                                conso: (
                                   <div className="flex items-center gap-0.5">
-                                    <Input type="number" step="0.01" value={l.consommation ?? (couvertureLigne ? consoLigne : consoFicheLigne) ?? ''} onFocus={e => e.target.select()}
-                                      onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value))}
-                                      title={l.consoUsage ? `Usage : ${l.consoUsage}` : undefined}
-                                      className="h-8 text-sm" placeholder={couvertureLigne ? 'm²/m²' : consoFicheLigne != null ? String(consoFicheLigne) : uniteLigne === 'ml' ? 'kg/ml' : 'kg/m²'} />
-                                    {uniteLigne !== 'ml' && (prod?.consommations?.length ?? 0) > 0 && (
+                                    <Input type="number" step="0.01" value={consoCellM2 ? (l.consommation ?? (couvM2 ? (consoPourSurface(prod, l.consommation, 'm2') ?? undefined) : prod?.consommation) ?? '') : (l.consommationMl ?? prod?.consommationMl ?? '')} onFocus={e => e.target.select()}
+                                      onChange={e => appliquerConso(e.target.value === '' ? undefined : parseFloat(e.target.value), undefined, consoCellM2 ? 'm2' : 'ml')}
+                                      title={consoCellM2 && uniteLigne === 'ml' ? 'Ligne au mètre linéaire : cette conso au m² est gardée, elle comptera si la ligne repasse au m²' : l.consoUsage ? `Usage : ${l.consoUsage}` : undefined}
+                                      className={`h-8 text-sm${consoCellM2 && uniteLigne === 'ml' ? ' text-muted-foreground bg-muted/40' : ''}`}
+                                      placeholder={consoCellM2 ? (couvM2 ? 'm²/m²' : prod?.consommation != null ? String(prod.consommation) : 'kg/m²') : (prod?.consommationMl != null ? String(prod.consommationMl) : 'kg/ml')} />
+                                    {consoCellM2 && (prod?.consommations?.length ?? 0) > 0 && (
                                       <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                           <button type="button" title="Choisir une consommation selon l'usage" className="h-8 w-5 shrink-0 rounded text-muted-foreground hover:bg-muted flex items-center justify-center"><ChevronDown className="w-3.5 h-3.5" /></button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                           {optionsConso.map((o, k) => (
-                                            <DropdownMenuItem key={k} title={o.usage || 'Sans usage précisé'} onSelect={() => appliquerConso(o.valeur, o.usage === 'Par défaut' ? undefined : o.usage)}>
+                                            <DropdownMenuItem key={k} title={o.usage || 'Sans usage précisé'} onSelect={() => appliquerConso(o.valeur, o.usage === 'Par défaut' ? undefined : o.usage, 'm2')}>
                                               <span className="font-medium mr-2">{o.valeur}</span><span className="text-muted-foreground">{o.usage || '—'}</span>
                                             </DropdownMenuItem>
                                           ))}
@@ -4349,7 +4357,7 @@ export default function Devis() {
                                   {variantEls}
                                   {temperatureEl}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
-                                    <div key={c.key} style={{ width: c.key === 'conso' && uniteLigne !== 'ml' && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.key === 'surface' && !colLineaire ? c.width + 28 : c.width }} className="shrink-0">
+                                    <div key={c.key} style={{ width: c.key === 'conso' && (colConsoMl || uniteLigne !== 'ml') && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.key === 'surface' && !colLineaire ? c.width + 28 : c.width }} className="shrink-0">
                                       {c.key === 'qte' && estCata ? (
                                         <button type="button" onClick={() => updateLigne(l.id, 'catalyseManuelle', undefined)}
                                           className="text-xs font-medium text-primary hover:underline text-left"
@@ -5848,7 +5856,8 @@ export default function Devis() {
               return { ...l, surfaceM2: surfaceGlobaleM2, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
             }
             return l;
-          });
+          // L'assistant donne sa conso dans l'unité du devis : au ml, c'est une conso au ml.
+          }).map(l => uniteSurface === 'ml' && l.consommation != null ? { ...l, consommationMl: l.consommation, consommation: undefined } : l);
           setLignes(prev => [...prev, ...prepared]);
           setNewLigneId(prepared[prepared.length - 1]?.id ?? null);
         }}
@@ -5924,8 +5933,8 @@ export default function Devis() {
           const applySurface = (ls: LigneDevis[]): LigneDevis[] => surf > 0 ? ls.map(l => {
             if (l.type && l.type !== 'ligne') return l;
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-            if (prod && consoPourSurface(prod, l.consommation, uniteSurface) != null) {
-              const quantite = calcQuantiteSurface(prod, surf, l.consommation);
+            if (prod && consoPourSurface(prod, consoDeLigne(l, uniteSurface), uniteSurface) != null) {
+              const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, uniteSurface));
               const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur);
               return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
             }

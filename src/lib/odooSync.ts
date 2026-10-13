@@ -5,7 +5,7 @@
  */
 
 import type { Devis, Client, Produit, Contact, LigneDevis, UniteSurface } from './store';
-import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne } from './store';
+import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne, consoDeLigne } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
@@ -214,7 +214,7 @@ export function coutChantierLigne(
   }
   const prod = l.produitId ? produitParId(produits, l.produitId) : null;
   const unite = uniteDeLigne(l, uniteDevis);
-  const conso = l.consommation || consoFiche(prod, unite) || 0;
+  const conso = consoDeLigne(l, unite) || consoFiche(prod, unite) || 0;
   const surfLigne = surfaceDeLigne(l, surfaceGlobaleM2, uniteDevis);
   const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
   /* Article consommé au m² (toile de verre) : une unité couvre N m², le coût

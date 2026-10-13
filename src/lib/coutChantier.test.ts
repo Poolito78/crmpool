@@ -76,6 +76,13 @@ describe('unité par ligne et coût par groupe', () => {
     expect(coutChantier(sansLineaire, [resine, mastic], 120, 'm2').total).toBeCloseTo(300 + 200);
   });
 
+  it("lit la conso retouchée de l'unité de la ligne, l'autre est gardée sans compter", () => {
+    const retouchee = lignes.map(l => l.id === '2' ? { ...l, consommation: 3, consommationMl: 0.5 } : l);
+    // 100 ml × 0,5 kg/ml × 8 €/kg = 400 ; les 3 kg/m² ne comptent pas sur une ligne au ml
+    const [, joints] = coutChantierParGroupe(retouchee, [resine, mastic], 120, 'm2');
+    expect(joints.total).toBeCloseTo(400);
+  });
+
   it('rapporte chaque groupe à sa propre surface', () => {
     const [sol, joints] = coutChantierParGroupe(lignes, [resine, mastic], 120, 'm2');
     expect(sol).toMatchObject({ titre: 'Sol', surface: 120, unite: 'm2' });

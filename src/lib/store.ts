@@ -531,7 +531,10 @@ export interface LigneDevis {
   surfaceM2?: number;
   /** m² ou ml pour cette ligne seule ; absent = l'unité du devis. La conso suit (kg/m² ou kg/ml). */
   uniteSurface?: UniteSurface;
+  /** Conso retouchée sur la ligne, en kg/m² (m²/m² pour un article couvrant). Lue quand la ligne est au m². */
   consommation?: number;
+  /** Conso retouchée sur la ligne, en kg/ml. Lue quand la ligne est au ml ; les deux se gardent, changer d'unité n'efface rien. */
+  consommationMl?: number;
   cellules?: number;
   note?: string;
   variantesChoisies?: Record<string, string>; // dimensionId -> option.label
@@ -1087,7 +1090,13 @@ function dbToDevis(r: any): Devis {
     dateEnvoi: r.date_envoi?.split('T')[0] || undefined,
     relances: Array.isArray(r.relances) && r.relances.length > 0 ? (r.relances as RelanceDevis[]) : undefined,
     dateRelance: r.date_relance?.split('T')[0] || undefined,
-    lignes: Array.isArray(r.lignes) ? (r.lignes as LigneDevis[]) : [],
+    /* Les lignes au ml d'avant `consommationMl` portaient leur kg/ml dans `consommation` :
+       elles le retrouvent à sa place, et `consommation` redevient des kg/m². */
+    lignes: Array.isArray(r.lignes)
+      ? (r.lignes as LigneDevis[]).map(l => uniteDeLigne(l, r.unite_surface === 'ml' ? 'ml' : 'm2') === 'ml' && l.consommation != null && l.consommationMl == null
+        ? { ...l, consommationMl: l.consommation, consommation: undefined }
+        : l)
+      : [],
     referenceAffaire: r.reference_affaire || undefined,
     chantier: r.chantier || undefined,
     niveauTarif: /^R[0-4]$/.test(r.niveau_tarif || '') ? r.niveau_tarif : undefined,
@@ -2734,6 +2743,11 @@ export function surfaceDeLigne(
 ): number {
   if (l.surfaceM2) return l.surfaceM2;
   return uniteDeLigne(l, uniteDevis) === (uniteDevis ?? 'm2') ? surfaceGlobale || 0 : 0;
+}
+
+/** Conso retouchée d'une ligne dans une unité donnée (kg/m² ou kg/ml), `undefined` = celle de la fiche. */
+export function consoDeLigne(l: Pick<LigneDevis, 'consommation' | 'consommationMl'>, unite: UniteSurface): number | undefined {
+  return unite === 'ml' ? l.consommationMl : l.consommation;
 }
 
 /** « m² » ou « ml », pour les libellés. */
