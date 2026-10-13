@@ -14,15 +14,17 @@
 '  dans le dossier ou dans son sous-dossier Traites) n'est pas reexporte.
 ' ============================================================
 
-Private Const URL_AGENT As String = "https://crmpool.vercel.app/?agentMail=1"
-Private Const JOURS As Integer = 14      ' mails non lus des 14 derniers jours
-
-Private Function DossierExport() As String
-    DossierExport = Environ("USERPROFILE") & "\OneDrive - ISOSIGN\Documents\MonCRM\Mails a traiter\"
+Private Function DossierMailsCRM() As String
+    DossierMailsCRM = Environ("USERPROFILE") & "\OneDrive - ISOSIGN\Documents\MonCRM\Mails a traiter\"
 End Function
 
 ' ------------------------------------------------------------
 Sub ExporterMailsNonLus()
+
+    ' Constantes locales : la macro peut etre collee sous JoindreDevisPDF,
+    ' dans le meme module, sans erreur de compilation.
+    Const URL_AGENT_MAIL As String = "https://crmpool.vercel.app/?agentMail=1"
+    Const JOURS_MAILS As Integer = 14      ' mails non lus des 14 derniers jours
 
     Dim dossier As String
     Dim boite   As Object
@@ -32,18 +34,18 @@ Sub ExporterMailsNonLus()
     Dim limite  As Date
     Dim n       As Long
 
-    dossier = DossierExport()
-    CreerDossier dossier
-    CreerDossier dossier & "Traites\"
+    dossier = DossierMailsCRM()
+    CreerDossierMail dossier
+    CreerDossierMail dossier & "Traites\"
 
-    limite = Now - JOURS
+    limite = Now - JOURS_MAILS
     Set boite = Application.GetNamespace("MAPI").GetDefaultFolder(6)   ' olFolderInbox
     Set liste = boite.Items.Restrict("[UnRead] = True")
 
     For Each it In liste
         If it.Class = 43 Then                                          ' olMail
             If it.ReceivedTime >= limite Then
-                nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichier(it.Subject) & ".msg"
+                nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichierMail(it.Subject) & ".msg"
                 If Dir(dossier & nom) = "" And Dir(dossier & "Traites\" & nom) = "" Then
                     On Error Resume Next
                     it.SaveAs dossier & nom, 9                         ' olMSGUnicode
@@ -56,7 +58,7 @@ Sub ExporterMailsNonLus()
     Next it
 
     ' Ouvre MonCRM sur l'Agent mail, qui lit le dossier.
-    CreateObject("Shell.Application").ShellExecute URL_AGENT
+    CreateObject("Shell.Application").ShellExecute URL_AGENT_MAIL
 
     If n = 0 Then
         Application.ActiveExplorer.StatusBar = "MonCRM : aucun nouveau mail non lu a exporter."
@@ -65,7 +67,7 @@ Sub ExporterMailsNonLus()
 End Sub
 
 ' ------------------------------------------------------------
-Private Sub CreerDossier(ByVal chemin As String)
+Private Sub CreerDossierMail(ByVal chemin As String)
     Dim parties() As String
     Dim courant   As String
     Dim i         As Integer
@@ -79,7 +81,7 @@ Private Sub CreerDossier(ByVal chemin As String)
 End Sub
 
 ' Objet du mail -> nom de fichier Windows valide (80 caracteres maximum).
-Private Function NomFichier(ByVal s As String) As String
+Private Function NomFichierMail(ByVal s As String) As String
     Dim i As Long
     Dim c As String
     Dim r As String
@@ -97,5 +99,5 @@ Private Function NomFichier(ByVal s As String) As String
         r = Left(r, Len(r) - 1)
     Loop
     If r = "" Then r = "sans objet"
-    NomFichier = r
+    NomFichierMail = r
 End Function
