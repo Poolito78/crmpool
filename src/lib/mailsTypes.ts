@@ -21,6 +21,12 @@
  * fil du texte. À l'envoi, le .eml les porte EN LIGNE (multipart/related,
  * `cid:`) : un lien vers une image externe est bloqué par Outlook. Sur
  * mobile (mailto, texte seul), les repères s'effacent.
+ *
+ * MISE EN FORME (police, taille, couleur, gras, italique) : le texte d'un mail
+ * type mis en forme est du HTML (`EditeurMail`) ; les textes d'origine et les
+ * réglages d'avant restent du texte brut, lu ligne à ligne. `estHtmlMail`
+ * tranche, et chaque fonction ci-dessous accepte les deux. Le HTML est
+ * nettoyé (`nettoyerHtml`) avant d'être affiché ou envoyé.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -161,15 +167,85 @@ export const TYPES_MAIL = Object.keys(MAILS_DEFAUT) as TypeMail[];
  * à deux (un passage retiré ne laisse pas de trou).
  */
 export function remplirMail(modele: string, valeurs: Record<string, string | null | undefined>): string {
+  const html = estHtmlMail(modele);
   const val = (k: string) => String(valeurs[k] ?? '').trim();
   const connu = (k: string) => k in valeurs;
   const sansOptions = modele.replace(/\[\[([\s\S]*?)\]\]/g, (_, segment: string) => {
     const cles = [...segment.matchAll(/\{(\w+)\}/g)].map(m => m[1]);
     return cles.some(k => connu(k) && !val(k)) ? '' : segment;
   });
-  return sansOptions
-    .replace(/\{(\w+)\}/g, (m, k: string) => (connu(k) ? val(k) : m))
-    .replace(/\n{3,}/g, '\n\n');
+  // Dans du HTML, une valeur est du texte : échappée, ses sauts de ligne en <br>.
+  const rempli = sansOptions.replace(/\{(\w+)\}/g, (m, k: string) =>
+    !connu(k) ? m : html ? echapper(val(k)).replace(/\n/g, '<br>') : val(k));
+  return html ? rempli : rempli.replace(/\n{3,}/g, '\n\n');
+}
+
+/* ── Texte brut ou HTML ───────────────────────────────────────────────────── */
+
+/** Police et taille de base du mail : celles d'Outlook. */
+export const POLICE_MAIL = 'Calibri, Aptos, Arial, sans-serif';
+export const TAILLE_MAIL = '11pt';
+
+/** Le texte est-il du HTML (mis en forme dans `EditeurMail`) ? */
+export function estHtmlMail(corps: string): boolean {
+  return /<(div|p|br|span|font|b|strong|i|em|u)\b[^>]*>/i.test(corps);
+}
+
+/** Texte brut → HTML de l'éditeur : une ligne = un bloc, la ligne vide gardée. */
+export function texteVersHtml(texte: string): string {
+  return texte.split('\n').map(l => `<div>${l.trim() === '' ? '<br>' : echapper(l)}</div>`).join('');
+}
+
+const BALISES_GARDEES = new Set(['DIV', 'P', 'BR', 'SPAN', 'FONT', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'A', 'UL', 'OL', 'LI', 'BLOCKQUOTE']);
+const BALISES_RETIREES = new Set(['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'TITLE', 'HEAD', 'SVG', 'MATH', 'FORM', 'INPUT', 'BUTTON', 'TEXTAREA', 'SELECT', 'IMG', 'VIDEO', 'AUDIO']);
+
+/**
+ * Ne garde du HTML que la mise en forme d'un mail : blocs, gras, italique,
+ * souligné, police / taille / couleur, liens http(s), mailto, tel. Le reste
+ * (scripts, attributs `on…`, images collées) part ; une balise inconnue est
+ * remplacée par son contenu.
+ */
+export function nettoyerHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  const nettoyer = (el: Element) => {
+    for (const enfant of [...el.children]) {
+      if (BALISES_RETIREES.has(enfant.tagName)) { enfant.remove(); continue; }
+      nettoyer(enfant);
+      if (!BALISES_GARDEES.has(enfant.tagName)) { enfant.replaceWith(...enfant.childNodes); continue; }
+      for (const attr of [...enfant.attributes]) {
+        const n = attr.name.toLowerCase();
+        const v = attr.value;
+        const garde = (n === 'style' && !/expression|url\s*\(|javascript:/i.test(v))
+          || ((n === 'face' || n === 'size' || n === 'color') && enfant.tagName === 'FONT')
+          || (n === 'href' && enfant.tagName === 'A' && /^(https?:|mailto:|tel:)/i.test(v.trim()));
+        if (!garde) enfant.removeAttribute(attr.name);
+      }
+    }
+  };
+  nettoyer(doc.body);
+  return doc.body.innerHTML;
+}
+
+/** HTML → texte brut (mailto, mobile) : un bloc ou un <br> = un saut de ligne. */
+export function htmlVersTexte(html: string): string {
+  const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
+  let texte = '';
+  const parcourir = (n: Node) => {
+    if (n.nodeType === Node.TEXT_NODE) { texte += n.textContent ?? ''; return; }
+    if (!(n instanceof Element)) return;
+    if (n.tagName === 'BR') { texte += '\n'; return; }
+    const bloc = /^(DIV|P|LI|BLOCKQUOTE|UL|OL)$/.test(n.tagName);
+    if (bloc && texte && !texte.endsWith('\n')) texte += '\n';
+    n.childNodes.forEach(parcourir);
+    if (bloc && !texte.endsWith('\n')) texte += '\n';
+  };
+  doc.body.childNodes.forEach(parcourir);
+  return texte.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+}
+
+/** Le mail en texte seul, sans repères d'image — pour mailto et le partage mobile. */
+export function texteDuMail(corps: string): string {
+  return texteSansImages(estHtmlMail(corps) ? htmlVersTexte(corps) : corps);
 }
 
 /* ── Les mails types de l'utilisateur ─────────────────────────────────────────
@@ -270,7 +346,7 @@ export function idImage(nom: string, pris: string[]): string {
 
 /** Le texte du mail sans ses repères d'image (envoi texte seul : mailto, mobile). */
 export function texteSansImages(corps: string): string {
-  return corps.replace(JETON_IMAGE, '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n');
+  return corps.replace(JETON_IMAGE, '').replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
 }
 
 /** Images réellement placées dans le texte. */
@@ -279,15 +355,27 @@ export function imagesUtilisees(corps: string, images: ImageMail[] = []): ImageM
   return images.filter(i => ids.has(i.id));
 }
 
-const echapper = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+function echapper(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 /**
- * Le texte en HTML, une ligne par paragraphe (la mise en forme des .eml
- * d'avant), les repères remplacés par leur image. `src` : `cid` pour le
- * .eml, `data` pour un aperçu dans le navigateur.
+ * Le texte en HTML, les repères remplacés par leur image. Texte brut : une
+ * ligne par paragraphe (la mise en forme des .eml d'avant). HTML mis en
+ * forme : nettoyé, dans la police et la taille de base d'Outlook. `src` :
+ * `cid` pour le .eml, `data` pour un aperçu dans le navigateur.
  */
 export function corpsEnHtml(corps: string, images: ImageMail[] = [], src: 'cid' | 'data' = 'cid'): string {
   const parId = new Map(images.map(i => [i.id, i]));
+  const balise = (img: ImageMail) =>
+    `<img src="${src === 'cid' ? `cid:${img.id}@crmpool` : img.dataUrl}" alt="${echapper(img.nom)}" width="${img.largeur}" style="width:${img.largeur}px;height:auto;border:0;vertical-align:middle">`;
+  if (estHtmlMail(corps)) {
+    const html = nettoyerHtml(corps).replace(JETON_IMAGE, (m, id: string) => {
+      const img = parId.get(id);
+      return img ? balise(img) : m;
+    });
+    return `<div style="font-family:${POLICE_MAIL};font-size:${TAILLE_MAIL}">${html}</div>`;
+  }
   return corps.split('\n').map(ligne => {
     if (ligne.trim() === '') return '<br>';
     let html = '';
@@ -295,9 +383,7 @@ export function corpsEnHtml(corps: string, images: ImageMail[] = [], src: 'cid' 
     for (const m of ligne.matchAll(JETON_IMAGE)) {
       html += echapper(ligne.slice(dernier, m.index));
       const img = parId.get(m[1]);
-      html += img
-        ? `<img src="${src === 'cid' ? `cid:${img.id}@crmpool` : img.dataUrl}" alt="${echapper(img.nom)}" width="${img.largeur}" style="width:${img.largeur}px;height:auto;border:0;vertical-align:middle">`
-        : echapper(m[0]);
+      html += img ? balise(img) : echapper(m[0]);
       dernier = (m.index ?? 0) + m[0].length;
     }
     html += echapper(ligne.slice(dernier));

@@ -15,7 +15,8 @@ import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToSubfolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import CommandeARPreview from '@/components/CommandeARPreview';
-import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteSansImages, type ImageMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, type ImageMail } from '@/lib/mailsTypes';
+import EditeurMail from '@/components/EditeurMail';
 
 const SUBFOLDER = 'Commandes Clients';
 
@@ -82,13 +83,13 @@ async function openEmlInOutlook(params: {
     const pdfBytes = Uint8Array.from(atob(params.pdfBase64), c => c.charCodeAt(0));
     const pdfFile = new File([pdfBytes], params.pdfFileName, { type: 'application/pdf' });
     if (navigator.canShare?.({ files: [pdfFile] })) {
-      try { await navigator.share({ title: params.subject, text: texteSansImages(params.body), files: [pdfFile] }); return; } catch { /* ignored */ }
+      try { await navigator.share({ title: params.subject, text: texteDuMail(params.body), files: [pdfFile] }); return; } catch { /* ignored */ }
     }
     const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' });
     const url = URL.createObjectURL(pdfBlob);
     const a = document.createElement('a'); a.href = url; a.download = params.pdfFileName; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    setTimeout(() => { window.location.href = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteSansImages(params.body))}`; }, 600);
+    setTimeout(() => { window.location.href = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteDuMail(params.body))}`; }, 600);
     return;
   }
   const blob = new Blob([params.emlContent], { type: 'message/rfc822' });
@@ -335,12 +336,17 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
               </div>
               <div>
                 <Label className="text-xs font-semibold text-muted-foreground">Corps du message</Label>
+                {/* Mail type mis en forme (Paramètres → Mails) : il se retouche avec sa mise en forme. */}
+                {estHtmlMail(body) ? (
+                  <EditeurMail value={body} onChange={setBody} minHeight={180} className="mt-1" />
+                ) : (
                 <Textarea
                   value={body}
                   onChange={e => setBody(e.target.value)}
                   rows={8}
                   className="mt-1 text-sm font-mono resize-none"
                 />
+                )}
               </div>
             </div>
 

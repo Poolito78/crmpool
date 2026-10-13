@@ -2,7 +2,8 @@
  * Paramètres → Mails : les textes proposés à l'envoi d'un devis, d'une
  * commande fournisseur, d'une facture, d'un AR de commande client.
  *
- * Un type à la fois : objet, corps, champs à insérer au curseur, images
+ * Un type à la fois : objet, corps mis en forme (police, taille, couleur,
+ * gras, italique — `EditeurMail`), champs à insérer au curseur, images
  * (logo, signature) placées par un repère `{img:…}`, aperçu rempli
  * d'exemples. « Texte d'origine » efface le réglage de l'utilisateur.
  * La logique (champs, `[[ ]]`, stockage) vit dans `mailsTypes.ts`.
@@ -13,9 +14,13 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import EditeurMail, { type EditeurMailRef } from '@/components/EditeurMail';
 import { cn } from '@/lib/utils';
-import { MAILS_DEFAUT, TYPES_MAIL, corpsEnHtml, idImage, jetonImage, lireImageMail, remplirMail, useMailsTypes, type ImageMail, type TypeMail } from '@/lib/mailsTypes';
+import { MAILS_DEFAUT, TYPES_MAIL, corpsEnHtml, estHtmlMail, idImage, jetonImage, lireImageMail, remplirMail, texteVersHtml, useMailsTypes, type ImageMail, type TypeMail } from '@/lib/mailsTypes';
+
+/* Un texte brut (texte d'origine, réglage d'avant la mise en forme) s'ouvre
+   dans l'éditeur converti en HTML, ligne à ligne. */
+const enHtml = (corps: string) => (estHtmlMail(corps) ? corps : texteVersHtml(corps));
 
 export default function MailsTypesPanel() {
   const { modele, estPersonnalise, enregistrer, reinitialiser, toutesImages, charge, version } = useMailsTypes();
@@ -28,18 +33,18 @@ export default function MailsTypesPanel() {
   // Dernier champ de saisie touché : c'est là qu'un champ cliqué s'insère.
   const [cible, setCible] = useState<'objet' | 'corps'>('corps');
   const objetRef = useRef<HTMLInputElement>(null);
-  const corpsRef = useRef<HTMLTextAreaElement>(null);
+  const editeurRef = useRef<EditeurMailRef>(null);
 
   const def = MAILS_DEFAUT[type];
   const enregistre = modele(type);
-  const modifie = objet !== enregistre.objet || corps !== enregistre.corps
+  const modifie = objet !== enregistre.objet || corps !== enHtml(enregistre.corps)
     || JSON.stringify(images) !== JSON.stringify(enregistre.images ?? []);
 
   // Le type choisi (ou la lecture des réglages) recharge les champs.
   useEffect(() => {
     const m = modele(type);
     setObjet(m.objet);
-    setCorps(m.corps);
+    setCorps(enHtml(m.corps));
     setImages(m.images ?? []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, version]);
@@ -52,13 +57,12 @@ export default function MailsTypesPanel() {
 
   function insererChamp(cle: string, dansLeTexte = false) {
     const jeton = dansLeTexte ? cle : `{${cle}}`;
-    const versObjet = cible === 'objet' && !dansLeTexte;
-    const el = versObjet ? objetRef.current : corpsRef.current;
-    const valeur = versObjet ? objet : corps;
-    const debut = el?.selectionStart ?? valeur.length;
-    const fin = el?.selectionEnd ?? valeur.length;
-    const suite = valeur.slice(0, debut) + jeton + valeur.slice(fin);
-    if (versObjet) setObjet(suite); else setCorps(suite);
+    // Le texte : au curseur de l'éditeur (une image n'a rien à faire dans l'objet).
+    if (cible === 'corps' || dansLeTexte) { editeurRef.current?.inserer(jeton); return; }
+    const el = objetRef.current;
+    const debut = el?.selectionStart ?? objet.length;
+    const fin = el?.selectionEnd ?? objet.length;
+    setObjet(objet.slice(0, debut) + jeton + objet.slice(fin));
     requestAnimationFrame(() => {
       el?.focus();
       el?.setSelectionRange(debut + jeton.length, debut + jeton.length);
@@ -105,7 +109,7 @@ export default function MailsTypesPanel() {
     if (err) { toast.error(`Impossible : ${err}`); return; }
     // Sans réglage enregistré, l'effet ne se relance pas forcément : on recharge à la main.
     setObjet(def.objet);
-    setCorps(def.corps);
+    setCorps(enHtml(def.corps));
     setImages([]);
     toast.success("Texte d'origine rétabli");
   }
@@ -151,8 +155,7 @@ export default function MailsTypesPanel() {
           </div>
           <div>
             <Label>Texte du mail</Label>
-            <Textarea ref={corpsRef} value={corps} onChange={e => setCorps(e.target.value)} onFocus={() => setCible('corps')}
-              rows={14} className="font-mono text-xs leading-relaxed" />
+            <EditeurMail ref={editeurRef} value={corps} onChange={setCorps} onFocus={() => setCible('corps')} />
           </div>
 
           {/* Champs */}
@@ -231,7 +234,7 @@ export default function MailsTypesPanel() {
           </div>
 
           <div className="flex justify-between gap-2">
-            <Button variant="outline" size="sm" onClick={texteOrigine} disabled={enCours || (!estPersonnalise(type) && objet === def.objet && corps === def.corps)}>
+            <Button variant="outline" size="sm" onClick={texteOrigine} disabled={enCours || (!estPersonnalise(type) && objet === def.objet && corps === enHtml(def.corps))}>
               <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Texte d'origine
             </Button>
             <Button size="sm" onClick={sauver} disabled={enCours || !modifie}>

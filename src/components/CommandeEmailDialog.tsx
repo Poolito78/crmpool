@@ -5,7 +5,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Paperclip } from 'lucide-react';
 import { type CommandeFournisseur, type CommandeClient, type Fournisseur, type Client, formatMontant, formatDate } from '@/lib/store';
-import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteSansImages, type ImageMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, type ImageMail } from '@/lib/mailsTypes';
+import EditeurMail from '@/components/EditeurMail';
 
 type EmailTarget =
   | { type: 'fournisseur'; commande: CommandeFournisseur; contact: Fournisseur; pdfBase64?: string; pdfFileName?: string }
@@ -89,7 +90,7 @@ function generateAndDownloadEml(params: {
   const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
   if (isMobile) {
     // Sur mobile : blob .eml non supporté → mailto ouvre Outlook mobile directement
-    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteSansImages(params.body))}`;
+    const mailto = `mailto:${encodeURIComponent(params.to)}?subject=${encodeURIComponent(params.subject)}&body=${encodeURIComponent(texteDuMail(params.body))}`;
     window.location.href = mailto;
     return;
   }
@@ -187,11 +188,16 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
           </div>
           <div>
             <Label>Corps du message</Label>
+            {/* Mail type mis en forme (Paramètres → Mails) : il se retouche avec sa mise en forme. */}
+            {estHtmlMail(body) ? (
+              <EditeurMail value={body} onChange={setBody} minHeight={260} />
+            ) : (
             <textarea
               className="w-full rounded-lg border border-input bg-background px-3 py-2 text-sm min-h-[280px] font-mono"
               value={body}
               onChange={e => setBody(e.target.value)}
             />
+            )}
             {/{img:[\w-]+}/.test(body) && (
               <p className="text-[11px] text-muted-foreground mt-1">Les repères <code>{'{img:…}'}</code> sont les images de votre mail type : elles partent dans le mail (texte seul sur mobile).</p>
             )}
