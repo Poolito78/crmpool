@@ -256,6 +256,8 @@ export interface PreviewOptions {
   showCoutChantier?: boolean;
   /** Coût chantier consommé de chaque ligne sous son Total HT. */
   showCoutLigne?: boolean;
+  /** Coût chantier de chaque groupe, sur son sous-total. */
+  showCoutGroupe?: boolean;
 }
 
 interface Props {
@@ -1001,6 +1003,7 @@ Restant à ta disposition pour tout complément d'information.`
                 { key: 'showKgRecap',    label: 'Récap. KG' },
                 { key: 'showCoutChantier', label: 'Coût chantier' },
                 { key: 'showCoutLigne',  label: 'Coût chantier par ligne' },
+                { key: 'showCoutGroupe', label: 'Coût chantier par groupe' },
                 { key: 'showLiens',      label: 'Fiches techniques' },
               ].map(({ key, label }) => (
                 <label key={key} className="flex items-center gap-1.5 text-xs cursor-pointer select-none">

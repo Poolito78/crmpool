@@ -150,8 +150,10 @@ interface Props {
   initialShowCoutChantier?: boolean;
   /** Coût chantier consommé de chaque ligne, entre parenthèses sous son Total HT. */
   initialShowCoutLigne?: boolean;
+  /** Coût chantier de chaque groupe, sur son sous-total et détaillé sous « Coût chantier ». */
+  initialShowCoutGroupe?: boolean;
   initialShowLiens?: boolean;
-  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean; showCoutLigne?: boolean; showLiens?: boolean }) => void;
+  onOptionsChange?: (opts: { showConso: boolean; showRemise: boolean; showComposants: boolean; showKgRecap: boolean; showCoutChantier: boolean; showCoutLigne?: boolean; showLiens?: boolean; showCoutGroupe?: boolean }) => void;
   onPrint?: () => void;
   lineImages?: Record<string, LineImg[]>;
   onSurfaceChange?: (ligneId: string, val: number) => void;
@@ -167,13 +169,14 @@ export function parseImgPct(v: unknown): number {
   const n = parseFloat(String(v)); return isNaN(n) ? 100 : n;
 }
 
-export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
+export default function DevisPreview({ devis, client, produits = [], onEdit, hideControls = false, initialShowConso = false, initialShowRemise = false, initialShowComposants = false, initialShowKgRecap = true, initialShowCoutChantier = false, initialShowCoutLigne = false, initialShowCoutGroupe = false, initialShowLiens = false, onOptionsChange, onPrint, lineImages = {}, onSurfaceChange, onImageTailleChange }: Props) {
   const [showConso, setShowConso] = useState(initialShowConso);
   const [showRemise, setShowRemise] = useState(initialShowRemise);
   const [showComposants, setShowComposants] = useState(initialShowComposants);
   const [showKgRecap, setShowKgRecap] = useState(initialShowKgRecap);
   const [showCoutChantier, setShowCoutChantier] = useState(initialShowCoutChantier);
   const [showCoutLigne, setShowCoutLigne] = useState(initialShowCoutLigne);
+  const [showCoutGroupe, setShowCoutGroupe] = useState(initialShowCoutGroupe);
   const [showLiens, setShowLiens] = useState(initialShowLiens);
   const { principaleDe, chargement: chargementImages } = useProduitImages();
   const [printing, setPrinting] = useState(false);
@@ -185,6 +188,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   // Ref mis à jour pendant le rendu de la table m²/conso — lu dans la section Totaux
   const coutChantierRef = useRef<number | null>(null);
   const coutChantierTotalRef = useRef<number>(0);
+  /* Coût chantier de chaque ligne, rempli par la table m²/conso au rendu (même calcul que
+     son total) ; vide sans elle, on retombe alors sur `coutChantierLigne`. */
+  const coutLigneMap = new Map<string, number>();
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // m² ou ml : au ml la surface est un linéaire, la conso celle de la fiche au ml (kg/ml).
   const uniteSurface = devis.uniteSurface;
@@ -221,6 +227,44 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   function coutLigneEl(cout: number) {
     if (!showCoutLigne || !(cout > 0)) return null;
     return <div className="text-[10px] font-normal text-muted-foreground whitespace-nowrap" title="Coût chantier consommé de la ligne">({formatMontant(cout)})</div>;
+  }
+
+  /**
+   * Coût chantier de chaque groupe du devis : la somme des coûts de ses lignes
+   * (ceux de la table m²/conso quand elle est affichée), rapportée à la plus
+   * grande surface de ses lignes, dans l'unité de celle-ci (sol en €/m²,
+   * joints en €/ml).
+   */
+  function coutsParGroupe() {
+    type G = { id: string; titre: string; lignes: typeof devis.lignes };
+    const groupes: G[] = [];
+    let cur: G | null = null;
+    for (const l of devis.lignes) {
+      if (l.type === 'groupe') { cur = { id: l.id, titre: noteEnTexte(l.description), lignes: [] }; groupes.push(cur); }
+      else if (l.type === 'soustotal') cur = null;
+      else if (cur && l.type !== 'texte') cur.lignes.push(l);
+    }
+    return groupes.map(g => {
+      let total = 0, surface = 0;
+      let unite = uniteL({});
+      for (const l of g.lignes) {
+        const s = getSurfaceLigne(l.id) || (uniteL(l) === (uniteSurface ?? 'm2') ? surfaceGlobale : 0);
+        total += coutLigneMap.get(l.id) ?? coutChantierLigne({ ...l, surfaceM2: s || undefined }, produits, surfaceGlobale, uniteSurface);
+        if (s > surface) { surface = s; unite = uniteL(l); }
+      }
+      return { id: g.id, titre: g.titre, total, surface: surface > 0 ? surface : null, unite, parUnite: total > 0 && surface > 0 ? Math.round(total / surface * 100) / 100 : null };
+    });
+  }
+  /** Coût chantier d'un groupe, devant le libellé de son sous-total (option « Coût / groupe »). */
+  function coutGroupeEl(gid: string | null | undefined) {
+    if (!showCoutGroupe || !gid) return null;
+    const g = coutsParGroupe().find(x => x.id === gid);
+    if (!g || !(g.total > 0)) return null;
+    return (
+      <span className="font-normal not-italic text-[10px] text-muted-foreground mr-3 whitespace-nowrap">
+        Coût chantier {formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2)} €/{libelleSurface(g.unite)}</>}
+      </span>
+    );
   }
 
   function getSurfaceLigne(ligneId: string): number {
@@ -583,7 +627,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="flex items-center gap-3 px-4 py-2.5 border-b border-border bg-card print:hidden flex-wrap sticky top-0 z-10">
           <div className="flex items-center gap-4 flex-wrap flex-1">
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
+              <input type="checkbox" checked={showConso} onChange={e => { setShowConso(e.target.checked); onOptionsChange?.({ showConso: e.target.checked, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
               {uS}/conso
             </label>
             {showConso && (
@@ -600,31 +644,36 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   {uS}
                 </label>
                 <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier, showCoutLigne }); }} className="rounded" />
+                  <input type="checkbox" checked={showKgRecap} onChange={e => { setShowKgRecap(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap: e.target.checked, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
                   Récap. KG
                 </label>
               </>
             )}
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked, showCoutLigne }); }} className="rounded" />
+              <input type="checkbox" checked={showCoutChantier} onChange={e => { setShowCoutChantier(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier: e.target.checked, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
               Coût chantier
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
                    title="Sous le Total HT de chaque ligne : le coût chantier consommé (surface × conso), entre parenthèses, en gris.">
-              <input type="checkbox" checked={showCoutLigne} onChange={e => { setShowCoutLigne(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne: e.target.checked }); }} className="rounded" />
+              <input type="checkbox" checked={showCoutLigne} onChange={e => { setShowCoutLigne(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne: e.target.checked, showLiens, showCoutGroupe }); }} className="rounded" />
               Coût / ligne
             </label>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
+                   title="Coût chantier de chaque groupe sur son sous-total (rapporté à la surface du groupe, en €/m² ou €/ml), et détaillé sous « Coût chantier ».">
+              <input type="checkbox" checked={showCoutGroupe} onChange={e => { setShowCoutGroupe(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe: e.target.checked }); }} className="rounded" />
+              Coût / groupe
+            </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
+              <input type="checkbox" checked={showRemise} onChange={e => { setShowRemise(e.target.checked); onOptionsChange?.({ showConso, showRemise: e.target.checked, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
               Remise
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors"
                    title="Ajoute en bas du devis les fiches techniques des articles. Les liens restent cliquables dans le PDF.">
-              <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens: e.target.checked }); }} className="rounded" />
+              <input type="checkbox" checked={showLiens} onChange={e => { setShowLiens(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants, showKgRecap, showCoutChantier, showCoutLigne, showLiens: e.target.checked, showCoutGroupe }); }} className="rounded" />
               Fiches techniques
             </label>
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
-              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier, showCoutLigne }); }} className="rounded" />
+              <input type="checkbox" checked={showComposants} onChange={e => { setShowComposants(e.target.checked); onOptionsChange?.({ showConso, showRemise, showComposants: e.target.checked, showKgRecap, showCoutChantier, showCoutLigne, showLiens, showCoutGroupe }); }} className="rounded" />
               Composants
             </label>
           </div>
@@ -894,8 +943,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             /* Vendu au m² (pavés d'un système) : la quantité EST la surface
                consommée, elle se compte à son prix, pas au kilo — même règle
                que `coutChantier` (odooSync.ts). */
+            const avant = sumCoutConsoHT;
             if (/^m(²|2)$/i.test((l.unite || '').trim())) {
               sumCoutConsoHT += m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
+              coutLigneMap.set(l.id, sumCoutConsoHT - avant);
               continue;
             }
             const surfLigne = getSurfaceLigne(l.id);
@@ -904,6 +955,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                ni dans les kg/m², ni dans le total KG. */
             if (uniteL(l) !== 'ml' && couvertureM2(prod)) {
               sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale, uniteSurface);
+              coutLigneMap.set(l.id, sumCoutConsoHT - avant);
               continue;
             }
             if (isComposite) {
@@ -932,6 +984,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 if (prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
               }
             }
+            coutLigneMap.set(l.id, sumCoutConsoHT - avant);
           }
           sumTotalKg = Math.round(sumTotalKg * 100) / 100;
           sumCondKg = Math.round(sumCondKg * 10) / 10;
@@ -1049,7 +1102,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                       const montant = gid ? (grpSub[gid] || 0) : 0;
                       return (
                         <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]">
-                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
+                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">{coutGroupeEl(gid)}Sous-total{titre ? ` — ${titre}` : ''}</td>
                           <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right">{formatMontant(montant)}</td>
                         </tr>
                       );
@@ -1293,7 +1346,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     const montant = gid ? (grpSubS[gid] || 0) : 0;
                     return (
                       <tr key={dl.id} className="bg-primary/[0.03] border-b-2 border-primary/20">
-                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">Sous-total{titre ? ` — ${titre}` : ''}</td>
+                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">{coutGroupeEl(gid)}Sous-total{titre ? ` — ${titre}` : ''}</td>
                         <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
                       </tr>
                     );
@@ -1445,6 +1498,20 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2)} €/{uS}</span>
               </div>
             )}
+            {showCoutGroupe && (() => {
+              const groupes = coutsParGroupe().filter(g => g.total > 0);
+              if (!groupes.length) return null;
+              return (
+                <div className="text-xs text-[#CC0000]/85 border-b border-[#CC0000]/30 pb-1 mb-1 space-y-0.5">
+                  {groupes.map(g => (
+                    <div key={g.id} className="flex justify-between gap-2">
+                      <span className="truncate">{g.titre || 'Groupe'}{g.surface ? <span className="text-[#CC0000]/60"> · {g.surface} {libelleSurface(g.unite)}</span> : null}</span>
+                      <span className="whitespace-nowrap">{formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2)} €/{libelleSurface(g.unite)}</>}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             <div className="flex justify-between"><span className="text-muted-foreground">Total HT</span><span>{formatMontant(totals.totalHT)}</span></div>
             {(devis.fraisPortHT || 0) > 0 && (
               <div className="flex justify-between"><span className="text-muted-foreground">dont frais de port HT</span><span>{formatMontant(devis.fraisPortHT!)}</span></div>

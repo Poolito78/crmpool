@@ -5648,7 +5648,7 @@ export default function Devis() {
       {previewDevis && (
         <Dialog open={!!previewDevis} onOpenChange={() => setPreviewDevis(null)}>
           <DialogContent className="max-w-[98vw] md:max-w-[960px] max-h-[95vh] overflow-y-auto p-0 bg-muted/30">
-            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} initialShowCoutChantier={previewOptions.showCoutChantier} initialShowCoutLigne={previewOptions.showCoutLigne} initialShowLiens={previewOptions.showLiens} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
+            <DevisPreview devis={previewDevis} client={clients.find(c => c.id === previewDevis.clientId)} produits={produits} lineImages={lineImages} onImageTailleChange={applyLineImageTaille} onEdit={() => { const d = previewDevis; setPreviewDevis(null); setEditingId(d.id); populateForm(d); setDialogOpen(true); }} onOptionsChange={setPreviewOptions} initialShowConso={previewDevis.modeCalcul === 'surface' || previewOptions.showConso} initialShowRemise={previewOptions.showRemise} initialShowComposants={previewOptions.showComposants} initialShowKgRecap={previewOptions.showKgRecap} initialShowCoutChantier={previewOptions.showCoutChantier} initialShowCoutLigne={previewOptions.showCoutLigne} initialShowCoutGroupe={previewOptions.showCoutGroupe} initialShowLiens={previewOptions.showLiens} onPrint={() => { const updated = { ...previewDevis, statut: 'envoyé' as const }; setPreviewDevis(updated); updateDevis(prev => prev.map(d => d.id === previewDevis.id ? updated : d)); toast.success('Statut mis à jour : Envoyé'); }} onSurfaceChange={(ligneId, val) => { setPreviewDevis(prev => { if (!prev) return prev; const updated = { ...prev, lignes: prev.lignes.map(l => l.id === ligneId ? { ...l, surfaceM2: val || undefined } : l) }; updateDevis(all => all.map(d => d.id === updated.id ? updated : d)); return updated; }); }} />
           </DialogContent>
         </Dialog>
       )}
@@ -5674,7 +5674,7 @@ export default function Devis() {
           aria-hidden="true"
         >
           <DevisPreview
-            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}-${previewOptions.showCoutChantier}-${previewOptions.showCoutLigne}`}
+            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}-${previewOptions.showCoutChantier}-${previewOptions.showCoutLigne}-${previewOptions.showCoutGroupe}`}
             devis={{ ...emailDevis, statut: 'envoyé' }}
             client={clients.find(c => c.id === emailDevis.clientId)}
             produits={produits}
@@ -5686,7 +5686,7 @@ export default function Devis() {
             initialShowKgRecap={previewOptions.showKgRecap}
             initialShowLiens={previewOptions.showLiens}
             initialShowCoutChantier={previewOptions.showCoutChantier}
-            initialShowCoutLigne={previewOptions.showCoutLigne}
+            initialShowCoutLigne={previewOptions.showCoutLigne} initialShowCoutGroupe={previewOptions.showCoutGroupe}
           />
         </div>
       )}

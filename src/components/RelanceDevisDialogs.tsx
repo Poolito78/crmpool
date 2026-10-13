@@ -168,7 +168,7 @@ export default function RelanceDevisDialogs({ devis, mode, onClose, ajouterActio
           aria-hidden="true"
         >
           <DevisPreview
-            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}-${previewOptions.showCoutChantier}-${previewOptions.showCoutLigne}`}
+            key={`${previewOptions.showConso}-${previewOptions.showRemise}-${previewOptions.showComposants}-${previewOptions.showKgRecap}-${previewOptions.showLiens}-${previewOptions.showCoutChantier}-${previewOptions.showCoutLigne}-${previewOptions.showCoutGroupe}`}
             devis={devis}
             client={client}
             produits={produits}
@@ -180,7 +180,7 @@ export default function RelanceDevisDialogs({ devis, mode, onClose, ajouterActio
             initialShowKgRecap={previewOptions.showKgRecap}
             initialShowLiens={previewOptions.showLiens}
             initialShowCoutChantier={previewOptions.showCoutChantier}
-            initialShowCoutLigne={previewOptions.showCoutLigne}
+            initialShowCoutLigne={previewOptions.showCoutLigne} initialShowCoutGroupe={previewOptions.showCoutGroupe}
           />
         </div>
       )}
