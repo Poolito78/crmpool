@@ -1,9 +1,17 @@
 /**
  * L'Agent mail : trier les mails non lus, repérer les demandes de devis.
  *
- * La lecture de la boîte vit dans `microsoftGraph.ts` ; ici, ce qui se teste
- * sans réseau — le texte envoyé au modèle, la lecture de sa réponse, et le
- * rapprochement de l'expéditeur avec le fichier clients.
+ * Deux sources, sans rien demander à Azure pour la première :
+ *  - les mails EXPORTÉS PAR OUTLOOK : la macro `outlook_macro/
+ *    ExporterMailsNonLus.bas` enregistre les non lus en .msg dans un dossier
+ *    OneDrive (`dossierMails.ts`) puis ouvre MonCRM sur `?agentMail=1` ; on
+ *    peut aussi glisser des mails d'Outlook dans la fenêtre ;
+ *  - en option, la connexion directe Microsoft 365 (`microsoftGraph.ts`), qui
+ *    exige une inscription d'application dans Entra ID.
+ *
+ * Ici, ce qui se teste sans réseau — en-têtes d'un .eml, texte envoyé au
+ * modèle, lecture de sa réponse, rapprochement de l'expéditeur avec le
+ * fichier clients.
  *
  * ⚠️ **L'AGENT NE CHIFFRE RIEN.** Il résume et classe ; « Proposer un devis »
  * télécharge le mail entier (.eml, pièces jointes comprises) et le confie à
@@ -43,6 +51,89 @@ export interface TriMail {
   /** Ce qui est demandé, une entrée par article ou prestation. */
   demandes: string[];
   delai?: string;
+}
+
+/** Un mail tel que l'agent le montre, quelle que soit sa source. */
+export interface MailAgent {
+  id: string;
+  sujet: string;
+  deNom: string;
+  deEmail: string;
+  /** ISO 8601. */
+  recuLe: string;
+  corps: string;
+  piecesJointes: string[];
+  source: 'outlook' | 'fichier';
+  /** Lien Outlook web (source `outlook`). */
+  lienWeb?: string;
+  /** Le .msg / .eml lui-même (source `fichier`). */
+  fichier?: File;
+  /** Lu dans le dossier d'export : peut y être rangé dans « Traites ». */
+  duDossier?: boolean;
+}
+
+export function estFichierMail(nom: string): boolean {
+  return /\.(msg|eml)$/i.test(nom);
+}
+
+/** Pièces jointes qui n'en sont pas : les images d'une signature Outlook. */
+export function pieceJointeUtile(nom: string): boolean {
+  return !/^(image|outlook-)\w*\.(png|jpe?g|gif|bmp)$/i.test(nom.trim());
+}
+
+/**
+ * La date de réception portée par le nom du fichier — la macro nomme
+ * « 20261013-0942 - Objet.msg » : la date du fichier, elle, est celle de
+ * l'export.
+ */
+export function dateDuNom(nom: string): string | undefined {
+  const m = /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})/.exec(nom);
+  if (!m) return undefined;
+  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+/** Décode les mots encodés RFC 2047 (« =?utf-8?B?…?= », « =?iso-8859-1?Q?…?= »). */
+export function decoderMotsEncodes(v: string): string {
+  return v
+    .replace(/(=\?[^?]+\?[BQ]\?[^?]*\?=)\s+(?==\?)/gi, '$1')
+    .replace(/=\?([^?]+)\?([BQ])\?([^?]*)\?=/gi, (tout, jeu: string, enc: string, txt: string) => {
+      try {
+        let octets: Uint8Array;
+        if (enc.toUpperCase() === 'B') {
+          octets = Uint8Array.from(atob(txt), c => c.charCodeAt(0));
+        } else {
+          const t = txt.replace(/_/g, ' ');
+          const res: number[] = [];
+          for (let i = 0; i < t.length; i++) {
+            if (t[i] === '=' && /^[0-9A-F]{2}$/i.test(t.slice(i + 1, i + 3))) { res.push(parseInt(t.slice(i + 1, i + 3), 16)); i += 2; }
+            else res.push(t.charCodeAt(i));
+          }
+          octets = Uint8Array.from(res);
+        }
+        return new TextDecoder(jeu.toLowerCase()).decode(octets);
+      } catch { return tout; }
+    });
+}
+
+/** Objet, expéditeur et date d'un .eml brut. */
+export function enteteEml(brut: string): { sujet: string; deNom: string; deEmail: string; date?: string } {
+  const fin = brut.search(/\r?\n\r?\n/);
+  const entete = (fin > 0 ? brut.slice(0, fin) : brut).replace(/\r?\n[ \t]+/g, ' ');
+  const champ = (nom: string) => {
+    const m = new RegExp(`^${nom}:[ \t]*(.*)$`, 'mi').exec(entete);
+    return m ? decoderMotsEncodes(m[1].trim()) : '';
+  };
+  const de = champ('From');
+  const email = (/<([^>]+@[^>]+)>/.exec(de)?.[1] || /[\w.+-]+@[\w.-]+/.exec(de)?.[0] || '').trim().toLowerCase();
+  const deNom = de.replace(/<[^>]*>/, '').replace(/^["'\s]+|["'\s]+$/g, '').trim();
+  const d = new Date(champ('Date'));
+  return {
+    sujet: champ('Subject'),
+    deNom: deNom && deNom.toLowerCase() !== email ? deNom : '',
+    deEmail: email,
+    date: isNaN(d.getTime()) ? undefined : d.toISOString(),
+  };
 }
 
 export interface MailATrier {

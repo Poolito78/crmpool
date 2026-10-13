@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri } from './agentMail';
+import {
+  corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
+  enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
+} from './agentMail';
 
 describe('corpsUtile', () => {
   it("coupe l'historique cité d'un fil", () => {
@@ -68,5 +71,37 @@ describe('invitationTri', () => {
     const texte = JSON.stringify(c.contents);
     expect(texte).toContain('id: m1');
     expect(texte).toContain('DCE.pdf');
+  });
+});
+
+describe('enteteEml', () => {
+  it('lit objet encodé, expéditeur et date', () => {
+    const brut = 'From: =?utf-8?Q?Jos=C3=A9_Martin?= <J.Martin@Reflex-Signalisation.fr>\r\n'
+      + 'Subject: =?utf-8?B?RGVtYW5kZSBkZSBwcml4?=\r\n =?utf-8?B?IHBhbm5lYXV4?=\r\n'
+      + 'Date: Mon, 12 Oct 2026 09:42:00 +0200\r\n\r\nBonjour';
+    const e = enteteEml(brut);
+    expect(e).toMatchObject({ sujet: 'Demande de prix panneaux', deNom: 'José Martin', deEmail: 'j.martin@reflex-signalisation.fr' });
+    expect(e.date).toBe('2026-10-12T07:42:00.000Z');
+  });
+  it('accepte une adresse seule', () => {
+    expect(enteteEml('From: a@b.fr\nSubject: Test\n\ncorps')).toMatchObject({ deNom: '', deEmail: 'a@b.fr', sujet: 'Test' });
+  });
+  it('décode le Q-encodage latin-1', () => {
+    expect(decoderMotsEncodes('=?iso-8859-1?Q?R=E9sine?=')).toBe('Résine');
+  });
+});
+
+describe('fichiers de mail', () => {
+  it('lit la date posée par la macro', () => {
+    expect(new Date(dateDuNom('20261013-0942 - Demande.msg')!).getHours()).toBe(9);
+    expect(dateDuNom('Demande.msg')).toBeUndefined();
+  });
+  it('reconnaît .msg et .eml', () => {
+    expect(estFichierMail('a.MSG')).toBe(true);
+    expect(estFichierMail('a.pdf')).toBe(false);
+  });
+  it('écarte les images de signature', () => {
+    expect(pieceJointeUtile('image001.png')).toBe(false);
+    expect(pieceJointeUtile('Plan chantier.pdf')).toBe(true);
   });
 });

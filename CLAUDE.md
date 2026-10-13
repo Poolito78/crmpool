@@ -157,7 +157,7 @@ explication.
 `relanceDevis` (relance mail/tél. d'un devis envoyé ; « Relancé » est un libellé, le statut reste `'envoyé'`) ·
 `assistantVocal` (phrase dite → commande ; une commande ne vaut que si elle se résout entièrement, sinon c'est de la dictée) ·
 `stockDisponible` (stock − commandes clients en cours ; page Stock et assistant vocal) ·
-`agentMail` + `microsoftGraph` (Agent mail : non lus Outlook par Graph, tri IA, « Proposer un devis » = .eml confié à l'analyse de document ; prérequis Entra ID SPA) ·
+`agentMail` + `dossierMails` (Agent mail : non lus exportés par la macro Outlook `ExporterMailsNonLus` ou glissés, tri IA, « Proposer un devis » = mail confié à l'analyse de document ; `microsoftGraph` = option Azure) ·
 `mailsTypes` (objet + texte des mails d'envoi devis / commande fournisseur / facture / AR, par utilisateur, Paramètres → Mails ; `[[ ]]` = passage retiré si un champ est vide) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·

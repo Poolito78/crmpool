@@ -1,4 +1,4 @@
-import { Outlet, useLocation, Link } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
@@ -221,6 +221,18 @@ export default function CRMLayout() {
   });
   const toggleCollapsed = () => setCollapsed(c => { const n = !c; try { localStorage.setItem('crm_sidebar_collapsed', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   const location = useLocation();
+  const navigate = useNavigate();
+  /* La macro Outlook « ExporterMailsNonLus » ouvre MonCRM sur `?agentMail=1` :
+     on ouvre l'Agent mail et l'on retire le paramètre, qu'un rechargement ne
+     rouvre pas la fenêtre. */
+  useEffect(() => {
+    const p = new URLSearchParams(location.search);
+    if (p.get('agentMail') !== '1') return;
+    setAgentMailOpen(true);
+    p.delete('agentMail');
+    const reste = p.toString();
+    navigate(location.pathname + (reste ? `?${reste}` : ''), { replace: true });
+  }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const { canAchat, canCrm, isAdmin, userId, session } = useCurrentUser();
   const { nameOf } = useCommercials();
   const currentName = nameOf(userId);
