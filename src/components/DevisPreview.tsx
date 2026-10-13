@@ -266,7 +266,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     if (!g || !(g.total > 0)) return null;
     return (
       <span className="font-normal not-italic text-[10px] text-muted-foreground mr-3 whitespace-nowrap">
-        Coût chantier {formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2)} €/{libelleSurface(g.unite)}</>}
+        Coût chantier {formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2).replace('.', ',')} €/{libelleSurface(g.unite)}</>}
       </span>
     );
   }
@@ -1518,24 +1518,37 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
         <div className="flex justify-between items-end mb-5">
           <div className="text-sm text-muted-foreground space-y-1">
           </div>
-          <div className="w-64 space-y-1 ml-auto">
+          <div className={`${showCoutGroupe ? 'w-72' : 'w-64'} space-y-1 ml-auto`}>
             {showCoutChantier && coutChantierRef.current != null && (
               <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
                 <span>Coût chantier</span>
-                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2)} €/{uS}</span>
+                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2).replace('.', ',')} €/{uS}</span>
               </div>
             )}
             {showCoutGroupe && (() => {
               const groupes = coutsParGroupe().filter(g => g.total > 0);
               if (!groupes.length) return null;
               return (
-                <div className="text-xs text-[#CC0000]/85 border-b border-[#CC0000]/30 pb-1 mb-1 space-y-0.5">
-                  {groupes.map(g => (
-                    <div key={g.id} className="flex justify-between gap-2">
-                      <span className="truncate">{g.titre || 'Groupe'}{g.surface ? <span className="text-[#CC0000]/60"> · {g.surface} {libelleSurface(g.unite)}</span> : null}</span>
-                      <span className="whitespace-nowrap">{formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2)} €/{libelleSurface(g.unite)}</>}</span>
-                    </div>
-                  ))}
+                /* Un petit tableau, sans troncature : le PDF (html2canvas) coupait à mi-hauteur
+                   le texte d'un `overflow: hidden`. Titre et surface sur deux lignes, montant
+                   et coût unitaire en regard ; un titre long passe à la ligne. */
+                <div className="border-b border-[#CC0000]/30 pb-1.5 mb-1">
+                  <table className="w-full text-[#CC0000]" style={{ borderCollapse: 'collapse', fontSize: '11px' }}>
+                    <tbody>
+                      {groupes.map(g => (
+                        <tr key={g.id}>
+                          <td style={{ padding: '2px 0', verticalAlign: 'top', lineHeight: 1.35 }}>
+                            {g.titre || 'Groupe'}
+                            {g.surface ? <><br /><span style={{ opacity: 0.65 }}>{g.surface} {libelleSurface(g.unite)}</span></> : null}
+                          </td>
+                          <td style={{ padding: '2px 0 2px 10px', verticalAlign: 'top', lineHeight: 1.35, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                            {formatMontant(g.total)}
+                            {g.parUnite != null && <><br /><span style={{ opacity: 0.65 }}>{g.parUnite.toFixed(2).replace('.', ',')} €/{libelleSurface(g.unite)}</span></>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               );
             })()}
