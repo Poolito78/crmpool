@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Mail, Send, Paperclip } from 'lucide-react';
 import { type CommandeFournisseur, type CommandeClient, type Fournisseur, type Client, formatMontant, formatDate } from '@/lib/store';
+import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
 
 type EmailTarget =
   | { type: 'fournisseur'; commande: CommandeFournisseur; contact: Fournisseur; pdfBase64?: string; pdfFileName?: string }
@@ -112,6 +113,8 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  // Objet et texte proposés : les mails types de l'utilisateur (Paramètres → Mails).
+  const { modele: modeleMail } = useMailsTypes();
 
   useEffect(() => {
     if (!target || !open) return;
@@ -120,49 +123,31 @@ export default function CommandeEmailDialog({ open, onOpenChange, target, onSent
       const { commande, contact } = target;
       const lignes = Array.isArray(commande.lignes) ? commande.lignes : [];
       setTo(contact.email || '');
-      setSubject(`Commande ${commande.numero}${contact.societe ? ` — ${contact.societe}` : ''}`);
-      setBody(
-`Bonjour${contact.nom ? ` ${contact.nom}` : ''},
-
-Veuillez trouver ci-joint notre commande ${commande.numero} d'un montant de ${formatMontant(commande.totalTTC)} TTC.
-
-Détail :
-${lignes.map(l => `- ${l.description} (Réf: ${l.reference}) × ${l.quantite} = ${formatMontant(l.prixAchat * l.quantite)}`).join('\n')}
-
-Total HT : ${formatMontant(commande.totalHT)}
-Transport : ${commande.fraisTransport > 0 ? formatMontant(commande.fraisTransport) : 'Franco'}
-Total TTC : ${formatMontant(commande.totalTTC)}
-
-Merci de confirmer la réception de cette commande et de nous communiquer le délai de livraison.
-
-Cordialement,
-[Votre nom]
-[Votre entreprise]`
-      );
+      const valeurs = {
+        destinataire: contact.nom, numero: commande.numero, societe: contact.societe,
+        detail: lignes.map(l => `- ${l.description} (Réf: ${l.reference}) × ${l.quantite} = ${formatMontant(l.prixAchat * l.quantite)}`).join('\n'),
+        montantHT: formatMontant(commande.totalHT),
+        transport: commande.fraisTransport > 0 ? formatMontant(commande.fraisTransport) : 'Franco',
+        montantTTC: formatMontant(commande.totalTTC),
+      };
+      const m = modeleMail('commande_fournisseur');
+      setSubject(remplirMail(m.objet, valeurs));
+      setBody(remplirMail(m.corps, valeurs));
     } else {
       const { commande, contact } = target;
       setTo(contact.email || '');
-      setSubject(`Facture ${commande.numero}${commande.referenceAffaire ? ` — Réf. ${commande.referenceAffaire}` : ''}${contact.societe ? ` — ${contact.societe}` : ''}`);
-      setBody(
-`Bonjour${contact.nom ? ` ${contact.nom}` : ''},
-
-Veuillez trouver ci-joint notre facture ${commande.numero} d'un montant de ${formatMontant(commande.totalTTC)} TTC.
-
-Détail :
-- Total HT : ${formatMontant(commande.totalHT)}
-- Total TVA : ${formatMontant(commande.totalTVA)}
-- Total TTC : ${formatMontant(commande.totalTTC)}
-${commande.fraisPortHT > 0 ? `- Frais de port : ${formatMontant(commande.fraisPortHT)}` : ''}
-${commande.dateEcheance ? `\nDate d'échéance de paiement : ${formatDate(commande.dateEcheance)}` : ''}
-
-Restant à votre disposition pour toute question.
-
-Cordialement,
-[Votre nom]
-[Votre entreprise]`
-      );
+      const valeurs = {
+        destinataire: contact.nom, numero: commande.numero, reference: commande.referenceAffaire, societe: contact.societe,
+        montantHT: formatMontant(commande.totalHT), montantTVA: formatMontant(commande.totalTVA),
+        montantTTC: formatMontant(commande.totalTTC),
+        fraisPort: commande.fraisPortHT > 0 ? formatMontant(commande.fraisPortHT) : '',
+        echeance: commande.dateEcheance ? formatDate(commande.dateEcheance) : '',
+      };
+      const m = modeleMail('facture');
+      setSubject(remplirMail(m.objet, valeurs));
+      setBody(remplirMail(m.corps, valeurs));
     }
-  }, [target, open]);
+  }, [target, open, modeleMail]);
 
   function handleSend() {
     const pdfBase64 = target?.pdfBase64;

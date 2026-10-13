@@ -15,6 +15,7 @@ import { toast } from 'sonner';
 import { generatePdfFromElement, writeFileToSubfolder, getStoredDirHandle, clearStoredDirHandle } from '@/lib/pdfFolder';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import CommandeARPreview from '@/components/CommandeARPreview';
+import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
 
 const SUBFOLDER = 'Commandes Clients';
 
@@ -121,6 +122,8 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
   const [showPreviewPanel, setShowPreviewPanel] = useState(false);
   const pdfBase64Ref = useRef<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  // Objet et texte proposés : le mail type de l'utilisateur (Paramètres → Mails).
+  const { modele: modeleMail } = useMailsTypes();
 
   // ── Init ─────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -132,27 +135,21 @@ export default function CommandeARDialog({ open, onOpenChange, commande, client,
 
     const totaux = calculerTotalDevis(commande.lignes, commande.fraisPortHT, 20);
     setTo(client?.email || '');
-    setSubject(`AR Commande ${commande.numero}${commande.referenceAffaire ? ` — ${commande.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}`);
-
-    const dateDep = dateDepart ? formatDate(dateDepart) : '';
-    const dateLiv = dateLivraison ? formatDate(dateLivraison) : '';
-    setBody(
-`Bonjour${client?.nom ? ` ${client.nom}` : ''},
-
-Nous vous confirmons la bonne réception de votre commande ${commande.numero}${commande.referenceAffaire ? ` (Réf. ${commande.referenceAffaire})` : ''} d'un montant de ${formatMontant(totaux.totalHT)} HT.
-${dateDep ? `\nDate de départ prévue : ${dateDep}` : ''}${dateLiv ? `\nDate de livraison prévue : ${dateLiv}` : ''}
-
-Restant à votre disposition pour tout complément d'information.
-
-Cordialement,
-ISOSIGN`
-    );
+    const valeurs = {
+      destinataire: client?.nom, numero: commande.numero, reference: commande.referenceAffaire, societe: client?.societe,
+      montantHT: formatMontant(totaux.totalHT),
+      dateDepart: dateDepart ? formatDate(dateDepart) : '',
+      dateLivraison: dateLivraison ? formatDate(dateLivraison) : '',
+    };
+    const m = modeleMail('ar_commande');
+    setSubject(remplirMail(m.objet, valeurs));
+    setBody(remplirMail(m.corps, valeurs));
 
     setPdfReady(false);
     pdfBase64Ref.current = null;
     // Génération auto après que le DOM soit rendu
     setTimeout(() => generatePdf(), 700);
-  }, [open, commande, client, dateDepart, dateLivraison]);
+  }, [open, commande, client, dateDepart, dateLivraison, modeleMail]);
 
   // ── Génération PDF ────────────────────────────────────────────────────────
   async function generatePdf() {

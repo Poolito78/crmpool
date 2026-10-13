@@ -5,6 +5,7 @@ import VeilleCorrectionPanel from '@/components/VeilleCorrectionPanel';
 import ClientsImportExport from '@/components/ClientsImportExport';
 import AdminAccessPanel from '@/components/AdminAccessPanel';
 import UsageStockagePanel from '@/components/UsageStockagePanel';
+import MailsTypesPanel from '@/components/MailsTypesPanel';
 import { useCurrentUser } from '@/hooks/useAuth';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
@@ -183,6 +184,8 @@ export default function Parametres() {
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="flex flex-wrap h-auto justify-start">
           {isAdmin && <TabsTrigger value="general">Général</TabsTrigger>}
+          {/* Chacun règle ses mails types (sa signature) : onglet ouvert à tous. */}
+          <TabsTrigger value="mails">Mails</TabsTrigger>
           <TabsTrigger value="dashboard">Tableau de bord</TabsTrigger>
           {isAdmin && <TabsTrigger value="entrepots">Entrepôts</TabsTrigger>}
           <TabsTrigger value="devis">Devis</TabsTrigger>
@@ -219,6 +222,10 @@ export default function Parametres() {
             </div>
           </div>
           </>)}
+        </TabsContent>
+
+        <TabsContent value="mails" className="space-y-6 mt-4">
+          <MailsTypesPanel />
         </TabsContent>
 
         <TabsContent value="entrepots" className="space-y-6 mt-4">

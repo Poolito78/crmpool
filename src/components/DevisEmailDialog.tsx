@@ -17,6 +17,7 @@ import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from 
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import logoIsofloor from '@/assets/logo-isofloor.png';
+import { useMailsTypes, remplirMail } from '@/lib/mailsTypes';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
    famille » : ceux attachés à la CATÉGORIE de l'article — homologation, fiche
@@ -353,6 +354,8 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
   const [to, setTo] = useState('');
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
+  // Objet et texte proposés : le mail type de l'utilisateur (Paramètres → Mails).
+  const { modele: modeleMail } = useMailsTypes();
   // Liens d'article proposés pour ce devis (fiche technique / photo / fiche
   // publique du CRM). `selectedLiensIds` dit lesquels partent dans le mail :
   // proposer les trois et n'en cocher que deux vaut mieux que d'en imposer un.
@@ -449,7 +452,13 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       ? [contactDevis.prenom, contactDevis.nom].filter(Boolean).join(' ') || client?.nom
       : client?.nom;
     setTo(contactDevis?.email?.trim() || client?.email || '');
-    const objet = `Devis ${devis.numero}${devis.referenceAffaire ? ` — ${devis.referenceAffaire}` : ''}${client?.societe ? ` — ${client.societe}` : ''}${devis.chantier?.trim() ? ` — ${devis.chantier.trim()}` : ''}`;
+    const valeursMail = {
+      destinataire: nomDestinataire, numero: devis.numero, reference: devis.referenceAffaire,
+      societe: client?.societe, chantier: devis.chantier, montantHT: formatMontant(totals.totalHT),
+      montantTTC: formatMontant(totals.totalTTC), validite: devis.dateValidite ? formatDate(devis.dateValidite) : '',
+    };
+    const mailType = modeleMail('devis');
+    const objet = remplirMail(mailType.objet, valeursMail);
     setSubject(relance ? `Relance — ${objet}` : objet);
 
     if (relance) {
@@ -462,21 +471,14 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
       setProchaine(relanceProposee(aujourdhui, devis.dateRealisation));
     } else
     // Corps textarea : texte pur, sans section fiches (les liens sont injectés en HTML dans le .eml)
-    setBody(
-`Bonjour${nomDestinataire ? ` ${nomDestinataire}` : ''},
-
-Suite à notre échange, tu trouveras ci-joint notre devis ${devis.numero}${devis.referenceAffaire ? ` (Réf. ${devis.referenceAffaire})` : ''} d'un montant de ${formatMontant(totals.totalHT)} HT.${devis.chantier?.trim() ? `\nChantier : ${devis.chantier.trim()}` : ''}
-Ce devis est valable jusqu'au ${formatDate(devis.dateValidite)}.
-
-Restant à ta disposition pour tout complément d'information.`
-    );
+    setBody(remplirMail(mailType.corps, valeursMail));
 
     if (pdfContainerRef?.current) {
       setPdfReady(false);
       pdfBase64Ref.current = null;
       setTimeout(() => generatePdf(), 600);
     }
-  }, [devis, client, open, produits, relance]);
+  }, [devis, client, open, produits, relance, modeleMail]);
 
   /* ── Liens d'article ──────────────────────────────────────────────────────
      On ne lit QUE les photos des articles du devis, pas la table entière : le
