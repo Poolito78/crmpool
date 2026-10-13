@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { coutChantier } from './odooSync';
+import { coutChantier, coutChantierParGroupe } from './odooSync';
 import { consoPourSurface, type Devis, type Produit } from './store';
 
 /* DEV-2026-112 (EMPREINTE SIGNA, 28/09/2026) : Pavés à coller 15x20, 4 m². */
@@ -55,5 +55,35 @@ describe('consommation au ml', () => {
     const { total, parM2 } = coutChantier(lignes, [mastic], 100, 'ml');
     expect(total).toBeCloseTo(200);
     expect(parM2).toBeCloseTo(2);
+  });
+});
+
+/* Sol au m² et joints au ml dans le même devis : chaque ligne a son unité, chaque groupe sa surface. */
+describe('unité par ligne et coût par groupe', () => {
+  const resine = { id: 'res', reference: 'RESINE', poids: 20, consommation: 0.5 } as Produit;
+  const mastic = { id: 'mas', reference: 'MASTIC', poids: 5, consommationMl: 0.25 } as Produit;
+  const lignes = [
+    { id: 'g1', type: 'groupe', description: 'Sol', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0 },
+    { id: '1', produitId: 'res', description: 'Résine', quantite: 3, unite: 'U', prixUnitaireHT: 100, tva: 20, remise: 0 },
+    { id: 's1', type: 'soustotal', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0 },
+    { id: 'g2', type: 'groupe', description: 'Joints', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0 },
+    { id: '2', produitId: 'mas', description: 'Mastic', quantite: 5, unite: 'U', prixUnitaireHT: 40, tva: 20, remise: 0, uniteSurface: 'ml', surfaceM2: 100 },
+  ] as Devis['lignes'];
+
+  it("ne prête pas la surface globale en m² à une ligne au ml", () => {
+    const sansLineaire = lignes.map(l => l.id === '2' ? { ...l, surfaceM2: undefined } : l);
+    // 120 m² × 0,5 kg/m² × 5 €/kg = 300 ; le mastic sans linéaire compte au conditionné (5 × 40)
+    expect(coutChantier(sansLineaire, [resine, mastic], 120, 'm2').total).toBeCloseTo(300 + 200);
+  });
+
+  it('rapporte chaque groupe à sa propre surface', () => {
+    const [sol, joints] = coutChantierParGroupe(lignes, [resine, mastic], 120, 'm2');
+    expect(sol).toMatchObject({ titre: 'Sol', surface: 120, unite: 'm2' });
+    expect(sol.total).toBeCloseTo(300);
+    expect(sol.parUnite).toBeCloseTo(2.5);
+    // 100 ml × 0,25 kg/ml × 8 €/kg = 200 € → 2 €/ml
+    expect(joints).toMatchObject({ titre: 'Joints', surface: 100, unite: 'ml' });
+    expect(joints.total).toBeCloseTo(200);
+    expect(joints.parUnite).toBeCloseTo(2);
   });
 });

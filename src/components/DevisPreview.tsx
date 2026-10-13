@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
-import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -189,6 +189,12 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   // m² ou ml : au ml la surface est un linéaire, la conso celle de la fiche au ml (kg/ml).
   const uniteSurface = devis.uniteSurface;
   const uS = libelleSurface(uniteSurface);
+  // Une ligne peut avoir sa propre unité (joints au ml sous un sol au m²).
+  const uniteL = (l: { uniteSurface?: 'm2' | 'ml' }) => uniteDeLigne(l, uniteSurface);
+  const uL = (l: { uniteSurface?: 'm2' | 'ml' }) => libelleSurface(uniteL(l));
+  // La conso d'une ligne dans l'autre unité que le devis porte son unité (« 0,25 /ml »).
+  const consoUniteEl = (l: { uniteSurface?: 'm2' | 'ml' }) => uniteL(l) !== (uniteSurface ?? 'm2')
+    ? <span className="text-[9px] text-muted-foreground"> /{uL(l)}</span> : null;
   // surfacesParLigne : overrides individuels seulement — {} par défaut → fallback sur surfaceGlobale
   const [surfacesParLigne, setSurfacesParLigne] = useState<Record<string, number>>({});
   // Images associées aux lignes (fetched depuis Supabase + merged avec lineImages prop)
@@ -232,7 +238,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     setSurfacesParLigne(prev => {
       const next = { ...prev };
       for (const l of devis.lignes) {
-        if (!next[l.id] && !l.surfaceM2) next[l.id] = val;
+        // Une ligne dans l'autre unité ne reçoit pas la surface globale.
+        if (!next[l.id] && !l.surfaceM2 && uniteL(l) === (uniteSurface ?? 'm2')) next[l.id] = val;
       }
       return next;
     });
@@ -254,10 +261,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
        l'aperçu, ligne par ligne ou par la surface globale. */
     const modifiee = surfacesParLigne[l.id] !== undefined && surfacesParLigne[l.id] !== (l.surfaceM2 || 0);
     if (!modifiee) return { ...l, surfaceM2: surface };
-    const consoSurface = consoPourSurface(prod, l.consommation || undefined, uniteSurface);
+    const consoSurface = consoPourSurface(prod, l.consommation || undefined, uniteL(l));
     if (consoSurface != null && prod) {
       // Math.ceil identique à calcQuantiteSurface dans Devis.tsx → totaux cohérents
-      const couverture = uniteSurface === 'ml' ? null : couvertureM2(prod);
+      const couverture = uniteL(l) === 'ml' ? null : couvertureM2(prod);
       const newQty = Math.ceil(surface * consoSurface / (couverture ?? prod.poids!) - 1e-9);
       return { ...l, surfaceM2: surface, quantite: newQty > 0 ? newQty : l.quantite };
     }
@@ -838,7 +845,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
           const allLines: LineData[] = lignesEffectives.map(l => {
             const prod = l.produitId ? produits.find(p => p.id === l.produitId) : null;
-            const conso = l.consommation || consoFiche(prod, uniteSurface) || 0;
+            const conso = l.consommation || consoFiche(prod, uniteL(l)) || 0;
             const t = calculerTotalLigne(l);
             const composants = prod?.composants;
             const isComposite = !!(composants && composants.length > 0);
@@ -895,13 +902,13 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
             /* Article consommé au m² (toile de verre) : son coût chantier est la
                part de rouleau réellement consommée, et ses m² ne sont pas des kg —
                ni dans les kg/m², ni dans le total KG. */
-            if (uniteSurface !== 'ml' && couvertureM2(prod)) {
+            if (uniteL(l) !== 'ml' && couvertureM2(prod)) {
               sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale, uniteSurface);
               continue;
             }
             if (isComposite) {
               if (conso > 0) {
-                sumConsoKgM2 += conso;
+                if (uniteL(l) === (uniteSurface ?? 'm2')) sumConsoKgM2 += conso;   // des kg/ml ne s'ajoutent pas à des kg/m²
                 const poidsParentRecap = prod?.poids || 0;
                 const totalKgRecap = surfLigne > 0 ? surfLigne * conso : 0;
                 if (poidsParentRecap > 0 && totalKgRecap > 0) {
@@ -913,7 +920,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
               }
             } else if (conso > 0) {
-              sumConsoKgM2 += conso;
+              if (uniteL(l) === (uniteSurface ?? 'm2')) sumConsoKgM2 += conso;   // des kg/ml ne s'ajoutent pas à des kg/m²
               const poidsP = prod?.poids || null;
               const totalKgP = surfLigne > 0 ? surfLigne * conso : null;
               if (totalKgP != null) {
@@ -929,7 +936,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           sumTotalKg = Math.round(sumTotalKg * 100) / 100;
           sumCondKg = Math.round(sumCondKg * 10) / 10;
           // refSurface : surface globale du preview en priorité, sinon max des surfaces des lignes
-          const surfacesLignes = allLines.map(ld => getSurfaceLigne(ld.l.id)).filter(s => s > 0);
+          const surfacesLignes = allLines.filter(ld => uniteL(ld.l) === (uniteSurface ?? 'm2')).map(ld => getSurfaceLigne(ld.l.id)).filter(s => s > 0);
           const maxLineSurface = surfacesLignes.length > 0 ? Math.max(...surfacesLignes) : 0;
           const refSurface = surfaceGlobale > 0 ? surfaceGlobale : maxLineSurface > 0 ? maxLineSurface : null;
           const coutChantierM2 = refSurface && sumCoutConsoHT > 0
@@ -1112,10 +1119,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {/* Surface m² sur sa propre ligne en dessous */}
                         {surfaceGlobale > 0 ? (
                           getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
-                            <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
+                            <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uL(l)}</span>
                           ) : null
                         ) : getSurfaceLigne(l.id) > 0 && (hideControls || pdfMode) ? (
-                          <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
+                          <span className="text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uL(l)}</span>
                         ) : (!hideControls && !pdfMode) ? (
                           <span className="print:hidden inline-flex items-center gap-1.5">
                             <input
@@ -1123,9 +1130,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               value={getSurfaceLigne(l.id) || ''}
                               onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                               className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                              placeholder={uS}
+                              placeholder={uL(l)}
                             />
-                            <span className="text-xs text-muted-foreground">{uS}</span>
+                            <span className="text-xs text-muted-foreground">{uL(l)}</span>
                           </span>
                         ) : null}
                         {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
@@ -1150,7 +1157,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const prixKgComp = poidsComp && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsComp * 100) / 100 : null;
                         return (
                           <>
-                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? fmt(conso) : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-medium">{conso > 0 ? <>{fmt(conso)}{consoUniteEl(l)}</> : ''}</td>
                             <td className="py-1.5 px-1 text-right">{totalKgConso != null ? fmt(totalKgConso, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsComp ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite || ''}</td>
@@ -1169,7 +1176,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const prixKg = poidsC && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsC * 100) / 100 : null;
                         return (
                           <>
-                            <td className="py-1.5 px-1 text-right">{conso > 0 ? fmt(conso) : ''}</td>
+                            <td className="py-1.5 px-1 text-right">{conso > 0 ? <>{fmt(conso)}{consoUniteEl(l)}</> : ''}</td>
                             <td className="py-1.5 px-1 text-right">{kg != null ? fmt(kg, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
                             <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite || ''}</td>
@@ -1354,10 +1361,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                           {/* Surface par ligne — affichée si différente du global, input si pas de global */}
                           {surfaceGlobale > 0 ? (
                             getSurfaceLigne(l.id) > 0 && getSurfaceLigne(l.id) !== surfaceGlobale ? (
-                              <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
+                              <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uL(l)}</span>
                             ) : null
                           ) : getSurfaceLigne(l.id) > 0 && (hideControls || pdfMode) ? (
-                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uS}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">{getSurfaceLigne(l.id)} {uL(l)}</span>
                           ) : (!hideControls && !pdfMode) ? (
                             <span className="ml-2 print:hidden inline-flex items-center gap-1.5">
                               <input
@@ -1365,9 +1372,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                                 value={getSurfaceLigne(l.id) || ''}
                                 onChange={e => setSurface(l.id, parseFloat(e.target.value) || 0)}
                                 className="w-12 text-right border border-border rounded px-1 py-0 text-xs font-normal text-foreground bg-background"
-                                placeholder={uS}
+                                placeholder={uL(l)}
                               />
-                              <span className="text-xs text-muted-foreground">{uS}</span>
+                              <span className="text-xs text-muted-foreground">{uL(l)}</span>
                             </span>
                           ) : null}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}

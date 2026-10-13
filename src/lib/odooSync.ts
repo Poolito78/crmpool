@@ -5,7 +5,7 @@
  */
 
 import type { Devis, Client, Produit, Contact, LigneDevis, UniteSurface } from './store';
-import { couvertureM2, consoFiche, libelleSurface } from './store';
+import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne } from './store';
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
@@ -191,14 +191,16 @@ export function m2Consommes(l: Pick<LigneDevis, 'quantite' | 'surfaceM2' | 'cons
  * devis annonçait bien moins pour le même chantier. Un seul calcul désormais,
  * celui de l'écran : surface × consommation × prix au kilo net pour un
  * article qui porte une consommation, prix conditionné net pour les autres.
- * Au ml (`unite` = 'ml'), la « surface » est un linéaire et la consommation
- * celle de la fiche au ml : le coût se rapporte alors au mètre linéaire.
+ * Au ml, la « surface » est un linéaire et la consommation celle de la
+ * fiche au ml. `uniteDevis` est l'unité du devis ; une ligne peut porter la
+ * sienne (`LigneDevis.uniteSurface`), et ne reprend alors la surface globale
+ * que si les deux unités concordent.
  */
 export function coutChantierLigne(
   l: LigneDevis,
   produits: Produit[],
   surfaceGlobaleM2: number,
-  unite?: UniteSurface,
+  uniteDevis?: UniteSurface,
 ): number {
   if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return 0;
   /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
@@ -211,8 +213,9 @@ export function coutChantierLigne(
     return m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
   }
   const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+  const unite = uniteDeLigne(l, uniteDevis);
   const conso = l.consommation || consoFiche(prod, unite) || 0;
-  const surfLigne = l.surfaceM2 || surfaceGlobaleM2;
+  const surfLigne = surfaceDeLigne(l, surfaceGlobaleM2, uniteDevis);
   const net = (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
   /* Article consommé au m² (toile de verre) : une unité couvre N m², le coût
      chantier est la part de rouleau consommée, pas le rouleau entier. */
@@ -232,11 +235,60 @@ export function coutChantier(
   unite?: UniteSurface,
 ): { total: number; parM2: number | null } {
   const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, unite), 0);
+  // Rapporté à l'unité du devis : les surfaces des lignes dans l'autre unité n'y entrent pas.
   const surfaceRef = surfaceGlobaleM2 > 0
     ? surfaceGlobaleM2
-    : Math.max(0, ...lignes.map(l => l.surfaceM2 || 0));
+    : Math.max(0, ...lignes.filter(l => uniteDeLigne(l, unite) === (unite ?? 'm2')).map(l => l.surfaceM2 || 0));
   const parM2 = total > 0 && surfaceRef > 0 ? Math.round(total / surfaceRef * 100) / 100 : null;
   return { total, parM2 };
+}
+
+/** Coût chantier d'un groupe du devis (en-tête « groupe » jusqu'au sous-total ou au groupe suivant). */
+export interface CoutChantierGroupe {
+  groupeId: string;
+  titre: string;
+  total: number;
+  /** Surface de référence du groupe : la plus grande de ses lignes, dans l'unité de celle-ci. */
+  surface: number | null;
+  unite: UniteSurface;
+  /** Coût par m² (ou par ml) du groupe, `null` sans surface. */
+  parUnite: number | null;
+}
+
+/**
+ * Le coût chantier groupe par groupe : un sol au m² et ses joints au ml ne
+ * se rapportent pas à la même surface. Chaque groupe se rapporte à SA
+ * surface — la plus grande de ses lignes (la sienne, sinon la globale si
+ * l'unité concorde) — et à l'unité de cette ligne. Les lignes hors groupe
+ * n'y figurent pas ; elles restent dans le total du devis.
+ */
+export function coutChantierParGroupe(
+  lignes: Devis['lignes'],
+  produits: Produit[],
+  surfaceGlobaleM2: number,
+  uniteDevis?: UniteSurface,
+): CoutChantierGroupe[] {
+  const groupes: { id: string; titre: string; lignes: LigneDevis[] }[] = [];
+  let cur: (typeof groupes)[number] | null = null;
+  for (const l of lignes) {
+    if (l.type === 'groupe') { cur = { id: l.id, titre: l.description, lignes: [] }; groupes.push(cur); }
+    else if (l.type === 'soustotal') cur = null;
+    else if (cur && l.type !== 'texte') cur.lignes.push(l);
+  }
+  return groupes.map(g => {
+    const total = g.lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, uniteDevis), 0);
+    let surface = 0;
+    let unite: UniteSurface = uniteDevis ?? 'm2';
+    for (const l of g.lignes) {
+      const s = surfaceDeLigne(l, surfaceGlobaleM2, uniteDevis);
+      if (s > surface) { surface = s; unite = uniteDeLigne(l, uniteDevis); }
+    }
+    return {
+      groupeId: g.id, titre: g.titre, total,
+      surface: surface > 0 ? surface : null, unite,
+      parUnite: total > 0 && surface > 0 ? Math.round(total / surface * 100) / 100 : null,
+    };
+  });
 }
 
 /** Construit le devis à transmettre au pont (prix nets déjà calculés). */

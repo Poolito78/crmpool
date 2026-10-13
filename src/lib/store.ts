@@ -527,7 +527,10 @@ export interface LigneDevis {
   prixUnitaireHT: number;
   tva: number;
   remise: number;
+  /** Surface de la ligne, dans SON unité (`uniteSurface`) : m² ou ml. */
   surfaceM2?: number;
+  /** m² ou ml pour cette ligne seule ; absent = l'unité du devis. La conso suit (kg/m² ou kg/ml). */
+  uniteSurface?: UniteSurface;
   consommation?: number;
   cellules?: number;
   note?: string;
@@ -2714,6 +2717,24 @@ export function couvertureM2(p?: Pick<Produit, 'consoUnite' | 'surfaceUniteM2'> 
  * deviner une largeur.
  */
 export type UniteSurface = 'm2' | 'ml';
+
+/** Unité d'une ligne : la sienne, sinon celle du devis. */
+export function uniteDeLigne(l: Pick<LigneDevis, 'uniteSurface'>, uniteDevis?: UniteSurface): UniteSurface {
+  return l.uniteSurface ?? uniteDevis ?? 'm2';
+}
+
+/**
+ * Surface d'une ligne : la sienne, sinon la surface globale — mais seulement
+ * si la ligne est dans l'unité du devis : des m² ne chiffrent pas un joint au ml.
+ */
+export function surfaceDeLigne(
+  l: Pick<LigneDevis, 'surfaceM2' | 'uniteSurface'>,
+  surfaceGlobale: number,
+  uniteDevis?: UniteSurface,
+): number {
+  if (l.surfaceM2) return l.surfaceM2;
+  return uniteDeLigne(l, uniteDevis) === (uniteDevis ?? 'm2') ? surfaceGlobale || 0 : 0;
+}
 
 /** « m² » ou « ml », pour les libellés. */
 export function libelleSurface(u?: UniteSurface): string {
