@@ -73,6 +73,8 @@ export default defineConfig(({ mode }) => ({
           /^\/anthropic/,
           /supabase\.co/,
           /^\/(ral|quartz|paillettes)\//,
+          // Retour de la connexion Microsoft (Agent mail) : jamais l'application.
+          /^\/auth-ms/,
         ],
         runtimeCaching: [
           {

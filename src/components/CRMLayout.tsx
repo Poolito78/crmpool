@@ -1,5 +1,5 @@
 import { Outlet, useLocation, Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch } from 'lucide-react';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -13,6 +13,8 @@ import { useCommercials } from '@/hooks/useCommercials';
  * barème plastique qu'il entraîne — partaient dans le paquet principal,
  * téléchargés par tout le monde à la première visite. */
 const AnalyseDocumentDialog = lazy(() => import('@/components/AnalyseDocumentDialog'));
+/* Agent mail : lit Outlook, chargé à la première ouverture seulement. */
+const AgentMailDialog = lazy(() => import('@/components/AgentMailDialog'));
 import { PageHeaderSlotTarget } from '@/components/PageHeaderSlot';
 import { CA_ODOO_URL } from '@/lib/caOdoo';
 import { ouvrirFenetre } from '@/lib/fenetres';
@@ -122,6 +124,7 @@ export default function CRMLayout() {
   const [analyseOpen, setAnalyseOpen] = useState(false);
   const analyseDejaOuvert = useRef(false);
   if (analyseOpen) analyseDejaOuvert.current = true;
+  const [agentMailOpen, setAgentMailOpen] = useState(false);
 
   /* Assistant vocal : allumé par le bouton du menu ou Alt+M, il écoute
      jusqu'à « stop ». Monté seulement allumé — le micro ne reste pas ouvert. */
@@ -442,6 +445,17 @@ export default function CRMLayout() {
             <ScanText className="w-5 h-5 shrink-0" />
             {!collapsed && 'Analyse de document'}
           </button>
+          <button
+            onClick={() => setAgentMailOpen(true)}
+            title="Agent mail : demandes de devis parmi les mails non lus"
+            className={cn(
+              'rounded-lg text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground transition-all duration-150',
+              collapsed ? 'flex items-center justify-center w-10 h-10 mx-auto' : 'flex items-center gap-3 px-3 py-2.5 w-full'
+            )}
+          >
+            <MailSearch className="w-5 h-5 shrink-0" />
+            {!collapsed && 'Agent mail'}
+          </button>
           <div className="pt-3 mt-3 border-t border-sidebar-border/50">
             <button
               onClick={() => setAssistantActif(a => !a)}
@@ -517,6 +531,13 @@ export default function CRMLayout() {
             <ScanText className="w-5 h-5 shrink-0" />
             Analyse de document
           </button>
+          <button
+            onClick={() => { setAgentMailOpen(true); setSidebarOpen(false); }}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full text-sidebar-foreground/70 hover:bg-sidebar-accent transition-colors"
+          >
+            <MailSearch className="w-5 h-5 shrink-0" />
+            Agent mail
+          </button>
           <div className="pt-3 mt-3 border-t border-sidebar-border/50">
             <button
               onClick={() => { setAssistantActif(a => !a); setSidebarOpen(false); }}
@@ -554,6 +575,16 @@ export default function CRMLayout() {
               <span className="sm:hidden">Analyser</span>
             </button>
           )}
+          {location.pathname === '/' && (
+            <button
+              onClick={() => setAgentMailOpen(true)}
+              title="Demandes de devis parmi les mails non lus"
+              className="shrink-0 inline-flex items-center gap-1.5 rounded-lg border border-primary/40 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors"
+            >
+              <MailSearch className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Agent mail</span>
+            </button>
+          )}
         </header>
 
         <main className="relative flex-1 flex flex-col min-h-0 px-4 md:px-6 pt-2 md:pt-2 pb-20 md:pb-6 overflow-x-hidden">
@@ -575,6 +606,20 @@ export default function CRMLayout() {
             }}
             initialFiles={fichiersDeposes.length ? fichiersDeposes : undefined}
             initialText={texteDepose || undefined}
+          />
+        </Suspense>
+      )}
+
+      {agentMailOpen && (
+        <Suspense fallback={null}>
+          <AgentMailDialog
+            open={agentMailOpen}
+            onOpenChange={setAgentMailOpen}
+            onProposerDevis={(fichier) => {
+              setTexteDepose('');
+              setFichiersDeposes([fichier]);
+              setAnalyseOpen(true);
+            }}
           />
         </Suspense>
       )}
