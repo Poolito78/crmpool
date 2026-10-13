@@ -17,7 +17,7 @@ import { liensDesProduits, copierLiens, type LienProduit, type CibleLien } from 
 import { liensDocumentsCategorie, dbToDocumentCategorie } from '@/lib/categorieDocuments';
 import { dbToSysteme, liensFichesSystemes, systemeEstObjet } from '@/lib/systemes';
 import logoIsofloor from '@/assets/logo-isofloor.png';
-import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, type ImageMail } from '@/lib/mailsTypes';
+import { useMailsTypes, remplirMail, corpsEnHtml, partieHtmlEml, imagesUtilisees, texteDuMail, estHtmlMail, placerDansHtml, placerDansTexte, type ImageMail } from '@/lib/mailsTypes';
 import EditeurMail from '@/components/EditeurMail';
 
 /* Nom de la pastille « tout cocher » par destination. « Documents de la
@@ -128,7 +128,9 @@ function generateEml(params: {
       ).join('')
     : '';
 
-  const fullHtml = `<html><body>${htmlBody}${ficheHtml}</body></html>`;
+  /* Le repère {fiches} du mail type place les liens (avant la signature) ;
+     sans lui, ils suivent le texte. */
+  const fullHtml = `<html><body>${placerDansHtml(htmlBody, 'fiches', ficheHtml) ?? htmlBody + ficheHtml}</body></html>`;
   lines.push(`--${boundary}`);
   lines.push(...partieHtmlEml(fullHtml, imagesPlacees, toQuotedPrintable));
 
@@ -180,7 +182,8 @@ async function openEmlInOutlook(params: {
     const ficheText = params.ficheLinks && params.ficheLinks.length > 0
       ? `\n\nFiches produit :\n${params.ficheLinks.map(f => `• ${f.label} : ${f.url}`).join('\n')}`
       : '';
-    const mobileBody = texteDuMail(params.body) + ficheText;
+    const texte = texteDuMail(params.body);
+    const mobileBody = placerDansTexte(texte, 'fiches', ficheText.trim() ? `\n${ficheText.trim()}\n` : '') ?? texte + ficheText;
 
     // Essayer Web Share API avec tous les fichiers (PDF + PJs) en pièces jointes
     try {
@@ -830,6 +833,9 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
             )}
             {/{img:[\w-]+}/.test(body) && (
               <p className="text-[11px] text-muted-foreground mt-1">Les repères <code>{'{img:…}'}</code> sont les images de votre mail type : elles partent dans le mail (texte seul sur mobile).</p>
+            )}
+            {body.includes('{fiches}') && (
+              <p className="text-[11px] text-muted-foreground mt-1"><code>{'{fiches}'}</code> : les liens des fiches cochées ci-dessous se placent là.</p>
             )}
           </div>
 

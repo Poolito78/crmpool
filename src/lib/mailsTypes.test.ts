@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MAILS_DEFAUT, remplirMail, corpsEnHtml, imagesUtilisees, partieHtmlEml, texteSansImages, idImage, nettoyerHtml, texteDuMail, texteVersHtml } from './mailsTypes';
+import { MAILS_DEFAUT, remplirMail, corpsEnHtml, imagesUtilisees, partieHtmlEml, texteSansImages, idImage, nettoyerHtml, texteDuMail, texteVersHtml, placerDansHtml, placerDansTexte } from './mailsTypes';
 
 describe('remplirMail', () => {
   it('retire un passage [[ ]] dont un champ est vide, garde les autres', () => {
@@ -106,5 +106,21 @@ describe('mail mis en forme (HTML)', () => {
 
   it("convertit un texte brut pour l'éditeur, ligne vide comprise", () => {
     expect(texteVersHtml('A & B\n\nC')).toBe('<div>A &amp; B</div><div><br></div><div>C</div>');
+  });
+});
+
+describe('emplacement des fiches produit', () => {
+  it('le paragraphe du repère cède sa place aux liens, avant la signature', () => {
+    const html = '<div>Restant à ta disposition.</div><div>{fiches}</div><div>François Mouhot</div>';
+    expect(placerDansHtml(html, 'fiches', '<p>LIENS</p>')).toBe('<div>Restant à ta disposition.</div><p>LIENS</p><div>François Mouhot</div>');
+  });
+
+  it('sans repère, rien n\'est placé (les liens suivent le texte)', () => {
+    expect(placerDansHtml('<div>x</div>', 'fiches', '<p>LIENS</p>')).toBeNull();
+  });
+
+  it('en texte seul, la ligne du repère devient le bloc', () => {
+    expect(placerDansTexte('Restant.\n{fiches}\nFrançois', 'fiches', '\nFiches produit :\n• A\n'))
+      .toBe('Restant.\n\nFiches produit :\n• A\n\nFrançois');
   });
 });

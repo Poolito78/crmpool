@@ -75,6 +75,9 @@ Restant à ta disposition pour tout complément d'information.`,
       montantHT: { libelle: 'Montant HT', exemple: '846,80 €' },
       montantTTC: { libelle: 'Montant TTC', exemple: '1 016,16 €' },
       validite: { libelle: 'Valable jusqu\'au', exemple: '12/11/2026' },
+      /* Pas une valeur : un emplacement. Les liens cochés à l'envoi s'y placent
+         (avant la signature, par exemple) ; sans lui, ils suivent le texte. */
+      fiches: { libelle: 'Fiches produit (liens cochés)', exemple: 'Fiches produit :\n• Fiche technique ISOFLOOR — FP_BAO_Mortar_ISOFLOOR.pdf' },
     },
   },
   commande_fournisseur: {
@@ -241,6 +244,25 @@ export function htmlVersTexte(html: string): string {
   };
   doc.body.childNodes.forEach(parcourir);
   return texte.replace(/\u00a0/g, ' ').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
+}
+
+/**
+ * Place un bloc à l'emplacement d'un repère `{cle}` (les fiches produit) :
+ * un paragraphe qui ne contient que le repère cède toute sa place. `null` si
+ * le texte n'a pas ce repère — le bloc suit alors le texte, comme avant.
+ */
+export function placerDansHtml(html: string, cle: string, bloc: string): string | null {
+  const jeton = `{${cle}}`;
+  if (!html.includes(jeton)) return null;
+  const seul = new RegExp(`<(p|div)\\b[^>]*>\\s*\\{${cle}\\}\\s*</\\1>`, 'g');
+  return html.replace(seul, bloc).split(jeton).join(bloc);
+}
+
+/** Même chose en texte seul (mobile) : la ligne du repère devient le bloc. */
+export function placerDansTexte(texte: string, cle: string, bloc: string): string | null {
+  const jeton = `{${cle}}`;
+  if (!texte.includes(jeton)) return null;
+  return texte.split(jeton).join(bloc).replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '');
 }
 
 /** Le mail en texte seul, sans repères d'image — pour mailto et le partage mobile. */
