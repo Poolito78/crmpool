@@ -1085,17 +1085,20 @@ export default function Devis() {
     const numero = prochainNumeroDevis(devis, undefined, numerosLiberes);
     const newId = generateId();
     const surf = opts.surf;
-    // Lignes du modèle (nouveaux ids) + lignes dictées, quantités/prix recalculés selon la surface
+    /* Lignes du modèle (nouveaux ids) + lignes dictées : quantités recalculées à la surface,
+       et TOUTE ligne d'article re-tarifée pour le client — le modèle porte des prix publics
+       (Gabarit BA0 à 561,86 € au lieu des 393,30 € de la remise ACCESSOIRES du client). */
+    const unite: UniteSurface = sysDevis.uniteSurface ?? 'm2';
     const applySurface = (l: LigneDevis): LigneDevis => {
-      if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
+      if (l.type && l.type !== 'ligne') return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
+      if (!prod) return l;
       // Une ligne du modèle dans l'autre unité garde sa quantité : la surface dictée ne la concerne pas.
-      if (prod && uniteDeLigne(l, sysDevis.uniteSurface) === (sysDevis.uniteSurface ?? 'm2') && consoPourSurface(prod, consoDeLigne(l, sysDevis.uniteSurface ?? 'm2'), sysDevis.uniteSurface) != null) {
-        const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, sysDevis.uniteSurface ?? 'm2'), undefined, sysDevis.uniteSurface ?? 'm2');
-        const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null);
-        return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
-      }
-      return l;
+      const quantite = surf > 0 && uniteDeLigne(l, sysDevis.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null
+        ? calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite)
+        : l.quantite;
+      const prix = getPrixLigne(prod, quantite, l.variantesChoisies, opts.client?.estRevendeur, opts.client?.niveauTarif ?? null, opts.client?.remisesParCategorie);
+      return { ...l, quantite, prixUnitaireHT: prix };
     };
     const lignes = [
       ...sysDevis.lignes.map(l => applySurface({ ...l, id: generateId() })),
@@ -1143,13 +1146,15 @@ export default function Devis() {
     const unite: UniteSurface = surfaceGlobaleM2 > 0 ? uniteSurface : (sys.uniteSurface ?? 'm2');
     const nouvelles = sys.lignes.map(l0 => {
       const l: LigneDevis = { ...l0, id: generateId() };
-      if (surf <= 0 || (l.type && l.type !== 'ligne')) return l;
+      if (l.type && l.type !== 'ligne') return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
-      if (prod && uniteDeLigne(l, sys.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null) {
-        const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite);
-        return { ...l, quantite, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
-      }
-      return l;
+      if (!prod) return l;
+      /* Toute ligne d'article prend le tarif du client du devis, pas le prix (public) du
+         modèle : seules les lignes chiffrées à la surface étaient re-tarifées. */
+      const quantite = surf > 0 && uniteDeLigne(l, sys.uniteSurface) === unite && consoPourSurface(prod, consoDeLigne(l, unite), unite) != null
+        ? calcQuantiteSurface(prod, surf, consoDeLigne(l, unite), undefined, unite)
+        : l.quantite;
+      return { ...l, quantite, prixUnitaireHT: getPrixLigne(prod, quantite, l.variantesChoisies, client?.estRevendeur) };
     });
     saveSnapshot();
     if (surf > 0 && !(surfaceGlobaleM2 > 0)) { setSurfaceGlobaleM2(surf); prevUniteSurfaceRef.current = unite; setUniteSurface(unite); setModeCalcul('surface'); }
@@ -1919,12 +1924,12 @@ export default function Devis() {
     };
   }
 
-  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif): number {
+  function getPrixLigne(produit: typeof produits[0], quantite: number, variantesChoisies?: Record<string, string>, isRevendeur?: boolean, niveau: NiveauTarif | '' | null = niveauTarif, remises?: Record<string, number>): number {
     // Une variante composée fixe le prix : somme de ses composants.
     const compo = varianteDeLigne(produit, variantesChoisies);
     // Sous-variantes ET prix forcés dans le détail (`__prix/…` de variantesChoisies).
     if (compo) return prixLigneCompo(compo, resoudrePrixComposant(isRevendeur, niveau), id => produitParId(produits, id), variantesChoisies);
-    const base = prixDeBase(produit, quantite, isRevendeur, niveau || null);
+    const base = prixDeBase(produit, quantite, isRevendeur, niveau || null, undefined, undefined, remises);
     const diff = getVarianteDiff(produit, variantesChoisies);
     return Math.round((base + diff) * 100) / 100;
   }
@@ -1944,6 +1949,8 @@ export default function Devis() {
     niveau: NiveauTarif | null = niveauTarif || null,
     grille: GrilleTarif | undefined = niveau ? grilles[niveau] : undefined,
     grilleR4: GrilleTarif | undefined = grilles.R4,
+    /** Remises par famille du client — celui du devis ouvert par défaut. */
+    remises: Record<string, number> | undefined = clients.find(c => c.id === clientId)?.remisesParCategorie,
   ): number {
     if (niveau) {
       const r = prixAuNiveau(produit, niveau, grille, grilleR4);
@@ -1951,7 +1958,7 @@ export default function Devis() {
     }
     /* ISOMARK / ISOFLOOR : la règle de l'analyse (remise client, sinon tarif
        applicateur), jamais le prix revendeur recopié d'Odoo — voir `prixGamme`. */
-    const gamme = prixGamme(produit, clients.find(c => c.id === clientId)?.remisesParCategorie);
+    const gamme = prixGamme(produit, remises);
     if (gamme) return gamme.prix;
     const palier = getPrixPourQuantite(produit, quantite);
     return isRevendeur ? palier.prixRevendeur : palier.prixHT;
@@ -3756,6 +3763,14 @@ export default function Devis() {
                             {NIVEAUX_TARIF.map(n => <SelectItem key={n} value={n}>{LIBELLE_NIVEAU[n]}</SelectItem>)}
                           </SelectContent>
                         </Select>
+                        {/* Re-tarife toutes les lignes d'article au niveau et aux remises du client
+                            (sans toucher aux remises de ligne) : les lignes reprises d'un modèle
+                            gardaient le prix public du modèle. */}
+                        <button type="button" className="mt-0.5 text-[11px] text-primary hover:underline"
+                          title="Recalcule le prix de toutes les lignes d'article au niveau choisi et aux remises client (ISOFLOOR, ACCESSOIRES…). Les prix saisis à la main sont remplacés."
+                          onClick={() => { saveSnapshot(); void appliquerNiveauTarif(niveauTarif, clientCourant?.estRevendeur); toast.success('Lignes re-tarifées'); }}>
+                          ↻ Re-tarifer les lignes
+                        </button>
                         {clientCourant && niveauFiche !== niveauTarif && (
                           <p className="mt-0.5 text-[11px] text-amber-600">
                             Fiche client : {niveauFiche || 'non défini'}
@@ -5959,7 +5974,8 @@ export default function Devis() {
               description: s.description || (prod ? designationProduit(prod) : '') || '',
               quantite: s.quantite || 1,
               unite: s.unite || prod?.unite || 'U',
-              prixUnitaireHT: s.prixUnitaireHT != null && s.prixUnitaireHT > 0 ? s.prixUnitaireHT : (prod?.prixHT ?? 0),
+              prixUnitaireHT: s.prixUnitaireHT != null && s.prixUnitaireHT > 0 ? s.prixUnitaireHT
+                : prod ? prixDeBase(prod, s.quantite || 1, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, undefined, undefined, matchedClient?.remisesParCategorie) : 0,
               tva: prod?.tva ?? 20,
               remise: s.remise || 0,
               note: s.note || undefined,
@@ -5990,7 +6006,7 @@ export default function Devis() {
             const prod = l.produitId ? produitParId(produits, l.produitId) : null;
             if (prod && consoPourSurface(prod, consoDeLigne(l, uniteSurface), uniteSurface) != null) {
               const quantite = calcQuantiteSurface(prod, surf, consoDeLigne(l, uniteSurface));
-              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur);
+              const prix = getPrixLigne(prod, quantite, l.variantesChoisies, matchedClient?.estRevendeur, matchedClient?.niveauTarif || null, matchedClient?.remisesParCategorie);
               return { ...l, quantite, ...(prix != null ? { prixUnitaireHT: prix } : {}) };
             }
             return l;
