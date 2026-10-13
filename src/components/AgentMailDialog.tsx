@@ -106,6 +106,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   /* Dossier d'export Outlook */
   const [nomDossier, setNomDossier] = useState<string | null>(null);
   const [dossierOuvert, setDossierOuvert] = useState<FileSystemDirectoryHandle | null>(null);
+  /** Bilan de la dernière lecture du dossier — « Relire » qui ne dit rien semble en panne. */
+  const [bilanDossier, setBilanDossier] = useState<{ n: number; heure: string } | null>(null);
 
   /* Microsoft 365 (option avancée) */
   const [avance, setAvance] = useState(false);
@@ -165,6 +167,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       setNomDossier(d.name);
       setLecture(true);
       const mailsDossier = await lireFichiers(await fichiersDuDossier(d), true);
+      setBilanDossier({ n: mailsDossier.length, heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) });
       setLecture(false);
       await integrer(mailsDossier, m => !!m.duDossier);
     } catch (e) { echec(e); } finally { setLecture(false); }
@@ -299,7 +302,18 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       <div className="rounded-lg border border-border p-3 text-xs space-y-2">
         <div className="flex items-center gap-1.5 font-medium text-sm"><FolderOpen className="w-4 h-4 text-primary" />Mails exportés par Outlook</div>
         {nomDossier ? (
-          <p className="text-muted-foreground">Dossier « <span className="text-foreground">{nomDossier}</span> »</p>
+          <>
+            <p className="text-muted-foreground">Dossier « <span className="text-foreground">{nomDossier}</span> »
+              {bilanDossier && <> · lu à {bilanDossier.heure} : <span className="text-foreground">{bilanDossier.n} mail{bilanDossier.n > 1 ? 's' : ''}</span></>}
+            </p>
+            {bilanDossier?.n === 0 && (
+              <p className="text-warning">
+                Aucun .msg dans ce dossier. La macro les enregistre dans
+                <span className="block font-mono text-[10px] mt-0.5">{DOSSIER_MAILS}</span>
+                Cliquez « Changer » et désignez ce dossier (ou « MonCRM »).
+              </p>
+            )}
+          </>
         ) : (
           <p className="text-muted-foreground">
             Lancez la macro Outlook <strong>ExporterMailsNonLus</strong>, puis choisissez le dossier

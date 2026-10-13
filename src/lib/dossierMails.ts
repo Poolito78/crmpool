@@ -94,10 +94,26 @@ export async function dossierMails(interactif: boolean, changer = false): Promis
     if (!interactif) return null;
   }
   if (!interactif) return null;
-  const choisi = await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
-    .showDirectoryPicker({ id: 'agent-mail', mode: 'readwrite', startIn: 'documents' });
+  const choisi = await resoudreDossier(await (window as typeof window & { showDirectoryPicker: ShowDirPicker })
+    .showDirectoryPicker({ id: 'agent-mail', mode: 'readwrite', startIn: 'documents' }));
   await garderHandle(choisi);
   return choisi;
+}
+
+/**
+ * Le dossier où sont VRAIMENT les mails : si l'on a désigné un parent
+ * (« Documents », « MonCRM »), on descend jusqu'à « Mails a traiter ».
+ */
+export async function resoudreDossier(dossier: FileSystemDirectoryHandle): Promise<FileSystemDirectoryHandle> {
+  const chemin = ['MonCRM', 'Mails a traiter'];
+  for (let depart = 0; depart < chemin.length; depart++) {
+    let d: FileSystemDirectoryHandle = dossier;
+    try {
+      for (const nom of chemin.slice(depart)) d = await d.getDirectoryHandle(nom);
+      return d;
+    } catch { /* ce chemin n'existe pas sous ce dossier */ }
+  }
+  return dossier;
 }
 
 /** Les .msg / .eml à la racine du dossier (pas dans `Traites`). */

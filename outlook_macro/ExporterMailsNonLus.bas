@@ -10,6 +10,9 @@
 '   3. Dans MonCRM, Agent mail > « Choisir le dossier » : designer
 '      Documents\MonCRM\Mails a traiter (cree par la macro au 1er lancement).
 '
+'  Exporte les mails NON LUS des 14 derniers jours, et aussi les mails
+'  DEJA LUS des 2 derniers jours (lus dans le volet de lecture, une demande
+'  de devis n'en reste pas moins a traiter). Reglages : JOURS_MAILS, JOURS_LUS.
 '  Les mails restent NON LUS dans Outlook. Un mail deja exporte (present
 '  dans le dossier ou dans son sous-dossier Traites) n'est pas reexporte.
 ' ============================================================
@@ -25,6 +28,7 @@ Sub ExporterMailsNonLus()
     ' dans le meme module, sans erreur de compilation.
     Const URL_AGENT_MAIL As String = "https://crmpool.vercel.app/?agentMail=1"
     Const JOURS_MAILS As Integer = 14      ' mails non lus des 14 derniers jours
+    Const JOURS_LUS As Integer = 2         ' mails deja lus des 2 derniers jours (0 = jamais)
 
     Dim dossier As String
     Dim boite   As Object
@@ -32,6 +36,8 @@ Sub ExporterMailsNonLus()
     Dim it      As Object
     Dim nom     As String
     Dim limite  As Date
+    Dim limiteLus As Date
+    Dim plusVieux As Date
     Dim n       As Long      ' exportes
     Dim deja    As Long      ' deja presents (dossier ou Traites)
     Dim echecs  As Long
@@ -42,12 +48,18 @@ Sub ExporterMailsNonLus()
     CreerDossierMail dossier & "Traites\"
 
     limite = Now - JOURS_MAILS
+    limiteLus = Date - JOURS_LUS + 1                                   ' minuit, il y a JOURS_LUS jours
     Set boite = Application.GetNamespace("MAPI").GetDefaultFolder(6)   ' olFolderInbox
-    Set liste = boite.Items.Restrict("[UnRead] = True")
+    plusVieux = IIf(limiteLus < limite, limiteLus, limite)
+    ' Du plus recent au plus ancien, et l'on s'arrete a la limite. (Pas de
+    ' Restrict sur la date : son format depend des reglages regionaux.)
+    Set liste = boite.Items
+    liste.Sort "[ReceivedTime]", True
 
     For Each it In liste
         If it.Class = 43 Then                                          ' olMail
-            If it.ReceivedTime >= limite Then
+            If it.ReceivedTime < plusVieux Then Exit For
+            If (it.UnRead And it.ReceivedTime >= limite) Or (JOURS_LUS > 0 And it.ReceivedTime >= limiteLus) Then
                 nom = Format(it.ReceivedTime, "yyyymmdd-hhnn") & " - " & NomFichierMail(it.Subject) & ".msg"
                 If Dir(dossier & nom) = "" And Dir(dossier & "Traites\" & nom) = "" Then
                     On Error Resume Next
@@ -75,7 +87,7 @@ Sub ExporterMailsNonLus()
         MsgBox n & " mail(s) exporte(s), " & echecs & " en echec." & vbCrLf & vbCrLf & _
                "Premier echec : " & erreur, vbExclamation, "Agent mail MonCRM"
     ElseIf n = 0 Then
-        MsgBox "Aucun nouveau mail non lu a exporter" & _
+        MsgBox "Aucun nouveau mail a exporter" & _
                IIf(deja > 0, " (" & deja & " deja dans MonCRM).", "."), vbInformation, "Agent mail MonCRM"
     End If
 
