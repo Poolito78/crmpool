@@ -25,6 +25,14 @@
  * « Cross-origin token redemption is permitted only for the 'Single-Page
  * Application' client-type ») : une URI déclarée en « Web » ne marche pas.
  *
+ * ⚠️ **SUR MOBILE (et en application installée), PAS DE FENÊTRE SURGISSANTE** :
+ * le navigateur l'ouvre dans un onglet dont on ne peut plus lire l'adresse.
+ * La connexion se fait alors PAR REDIRECTION de la page entière
+ * (`connecterParRedirection`) vers la MÊME URI de retour `/auth-ms.html`, qui
+ * renvoie sur `/?agentMail=1&ms=retour#code=…` ; `terminerConnexionRedirection`
+ * échange le code. L'état de l'échange (PKCE) attend dans le `localStorage`
+ * (`ms_graph_retour`, 15 min). Une seule URI à déclarer chez Microsoft.
+ *
  * ⚠️ **Le jeton de rafraîchissement d'une SPA vit 24 h** (règle Microsoft) :
  * au-delà, une nouvelle connexion par la fenêtre est demandée. Les jetons
  * sont rangés dans le `localStorage` de ce navigateur, comme le ferait MSAL.
@@ -121,23 +129,21 @@ async function demanderJeton(cfg: ConfigMicrosoft, corps: Record<string, string>
   } satisfies Jetons);
 }
 
-/**
- * Connexion par fenêtre surgissante. À appeler DANS le gestionnaire du clic :
- * la fenêtre s'ouvre avant tout `await`, sans quoi le navigateur la bloque.
- */
-export async function connecterMicrosoft(): Promise<void> {
-  const cfg = configMicrosoft();
-  if (!cfg) throw new Error("ID d'application Microsoft non renseigné");
-  const popup = window.open('', 'connexion-microsoft', 'width=520,height=700');
-  if (!popup) throw new Error('La fenêtre de connexion a été bloquée par le navigateur');
+const CLE_RETOUR = 'ms_graph_retour';
+const VALIDITE_RETOUR_MS = 15 * 60_000;
 
-  const verificateur = aleatoire(48);
-  const etat = aleatoire(16);
-  const redirect = uriRetour();
-  popup.location.href = `https://login.microsoftonline.com/${encodeURIComponent(cfg.tenant)}/oauth2/v2.0/authorize?` + new URLSearchParams({
+/** Mobile ou application installée : la fenêtre surgissante n'y est pas fiable. */
+export function preferRedirection(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || window.matchMedia?.('(display-mode: standalone)').matches === true;
+}
+
+async function urlAutorisation(cfg: ConfigMicrosoft, verificateur: string, etat: string): Promise<string> {
+  return `https://login.microsoftonline.com/${encodeURIComponent(cfg.tenant)}/oauth2/v2.0/authorize?` + new URLSearchParams({
     client_id: cfg.clientId,
     response_type: 'code',
-    redirect_uri: redirect,
+    redirect_uri: uriRetour(),
     response_mode: 'fragment',
     scope: SCOPES,
     state: etat,
@@ -145,6 +151,57 @@ export async function connecterMicrosoft(): Promise<void> {
     code_challenge_method: 'S256',
     prompt: 'select_account',
   });
+}
+
+/**
+ * Connexion par REDIRECTION de la page (mobile). Quitte l'application : au
+ * retour, `terminerConnexionRedirection` achève l'échange.
+ */
+export async function connecterParRedirection(): Promise<void> {
+  const cfg = configMicrosoft();
+  if (!cfg) throw new Error("ID d'application Microsoft non renseigné");
+  const verificateur = aleatoire(48);
+  const etat = aleatoire(16);
+  ecrireLocal(CLE_RETOUR, { verificateur, etat, le: Date.now() });
+  window.location.assign(await urlAutorisation(cfg, verificateur, etat));
+}
+
+/**
+ * Achève la connexion au retour de Microsoft. `fragment` est le `#code=…` de
+ * l'adresse. Lève une erreur lisible ; `false` si aucune connexion n'attendait.
+ */
+export async function terminerConnexionRedirection(fragment: string): Promise<boolean> {
+  const attente = lireLocal<{ verificateur: string; etat: string; le: number }>(CLE_RETOUR);
+  if (!attente) return false;
+  ecrireLocal(CLE_RETOUR, null);
+  const cfg = configMicrosoft();
+  if (!cfg) throw new Error("ID d'application Microsoft non renseigné");
+  const params = new URLSearchParams(fragment.replace(/^#/, ''));
+  if (params.get('error')) throw new Error(params.get('error_description') || params.get('error') || 'Connexion refusée');
+  if (Date.now() - attente.le > VALIDITE_RETOUR_MS) throw new Error('Connexion Microsoft trop longue : recommencez');
+  if (params.get('state') !== attente.etat) throw new Error('Réponse de connexion inattendue (état)');
+  const code = params.get('code');
+  if (!code) throw new Error('Aucun code de connexion reçu');
+  await demanderJeton(cfg, { grant_type: 'authorization_code', code, code_verifier: attente.verificateur, redirect_uri: uriRetour() });
+  return true;
+}
+
+/**
+ * Connexion par fenêtre surgissante. À appeler DANS le gestionnaire du clic :
+ * la fenêtre s'ouvre avant tout `await`, sans quoi le navigateur la bloque.
+ */
+export async function connecterMicrosoft(): Promise<void> {
+  const cfg = configMicrosoft();
+  if (!cfg) throw new Error("ID d'application Microsoft non renseigné");
+  if (preferRedirection()) { await connecterParRedirection(); return; }
+  ecrireLocal(CLE_RETOUR, null);
+  const popup = window.open('', 'connexion-microsoft', 'width=520,height=700');
+  if (!popup) throw new Error('La fenêtre de connexion a été bloquée par le navigateur');
+
+  const verificateur = aleatoire(48);
+  const etat = aleatoire(16);
+  const redirect = uriRetour();
+  popup.location.href = await urlAutorisation(cfg, verificateur, etat);
 
   /* La page de retour est sur NOTRE origine : tant que la fenêtre est chez
      Microsoft, lire son adresse lève une erreur — on attend qu'elle revienne. */

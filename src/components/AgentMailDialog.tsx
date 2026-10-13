@@ -110,7 +110,8 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [bilanDossier, setBilanDossier] = useState<{ n: number; heure: string } | null>(null);
 
   /* Microsoft 365 (option avancée) */
-  const [avance, setAvance] = useState(false);
+  /* Sans accès aux dossiers (mobile), la boîte Microsoft 365 est LA source : ouverte d'emblée. */
+  const [avance, setAvance] = useState(() => !dossierMailsDisponible());
   const [config, setConfig] = useState(configMicrosoft);
   const [connecte, setConnecte] = useState(estConnecte);
   const [compte, setCompte] = useState(memoire.compte);
@@ -331,7 +332,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             )}
           </div>
         ) : (
-          <p className="text-warning">Ce navigateur ne sait pas ouvrir un dossier : utilisez Chrome ou Edge.</p>
+          <p className="text-warning">Ce navigateur (mobile ?) ne sait pas ouvrir un dossier : connectez la boîte Microsoft 365 ci-dessous, ou utilisez Chrome / Edge sur ordinateur.</p>
         )}
       </div>
 
@@ -368,6 +369,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
               </button>
             </span>,
             autorisations déléguées <strong>Mail.ReadWrite</strong>, <strong>User.Read</strong>, <strong>offline_access</strong>.
+            {!config?.depuisEnv && <> L'ID saisi reste dans <strong>ce</strong> navigateur : à saisir une fois sur chaque appareil, ou à poser une fois pour tous dans Vercel (<span className="font-mono">VITE_MS_CLIENT_ID</span>, <span className="font-mono">VITE_MS_TENANT_ID</span>).</>}
           </p>
           {!config?.depuisEnv && (
             <div className="grid gap-2 sm:grid-cols-2">

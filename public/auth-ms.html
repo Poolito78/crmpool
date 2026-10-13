@@ -1,8 +1,12 @@
 <!doctype html>
 <!-- Page de retour de la connexion Microsoft (Agent mail, src/lib/microsoftGraph.ts).
      Volontairement vide : la fenêtre qui l'a ouverte lit le code dans l'adresse
-     puis la ferme. Charger l'application ici la ferait router sur une page inconnue. -->
+     puis la ferme. Charger l'application ici la ferait router sur une page inconnue.
+     MOBILE : quand une connexion PAR REDIRECTION attend (`ms_graph_retour`), la page
+     renvoie sur l'application avec le code (`#code=…`) — `terminerConnexionRedirection`.
+     Pas de test sur `window.opener` : Microsoft peut l'effacer. -->
 <html lang="fr">
 <head><meta charset="utf-8"><title>Connexion Microsoft</title></head>
+<script>try{if(localStorage.getItem('ms_graph_retour'))location.replace('/?agentMail=1&ms=retour'+location.hash)}catch(e){}</script>
 <body style="font-family:system-ui,sans-serif;color:#555;text-align:center;padding-top:3rem">Connexion en cours…</body>
 </html>

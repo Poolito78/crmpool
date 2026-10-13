@@ -21,6 +21,8 @@ import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
 import FenetresMenu from '@/components/FenetresMenu';
 import AssistantVocal from '@/components/AssistantVocal';
+import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
+import { toast } from 'sonner';
 
 // `external` : le lien sort de l'application (nouvel onglet) au lieu de router.
 // Un <Link> react-router sur une URL absolue produirait /https:/… — il faut un
@@ -228,10 +230,20 @@ export default function CRMLayout() {
   useEffect(() => {
     const p = new URLSearchParams(location.search);
     if (p.get('agentMail') !== '1') return;
-    setAgentMailOpen(true);
-    p.delete('agentMail');
+    const retourMicrosoft = p.get('ms') === 'retour';
+    const fragment = location.hash || window.location.hash;
+    p.delete('agentMail'); p.delete('ms');
     const reste = p.toString();
     navigate(location.pathname + (reste ? `?${reste}` : ''), { replace: true });
+    /* Retour de la connexion Microsoft par redirection (mobile) : l'échange du
+       code se termine AVANT d'ouvrir la fenêtre, qui lit alors la boîte. */
+    if (retourMicrosoft) {
+      terminerConnexionRedirection(fragment)
+        .catch((e: Error) => toast.error(e.message))
+        .finally(() => setAgentMailOpen(true));
+    } else {
+      setAgentMailOpen(true);
+    }
   }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
   const { canAchat, canCrm, isAdmin, userId, session } = useCurrentUser();
   const { nameOf } = useCommercials();
