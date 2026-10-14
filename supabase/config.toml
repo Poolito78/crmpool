@@ -19,3 +19,9 @@ verify_jwt = true
 # proprietaire de la cle — c'est exactement ce que la cle publique permettait.
 [functions.gemini]
 verify_jwt = true
+
+# Agent mail : reçoit les mails transférés, postés par Postmark Inbound, qui
+# n'a pas de session MonCRM. Protégé par la clé de l'adresse (+clé@) et, s'il
+# est posé, le secret AGENT_MAIL_SECRET (?s= dans l'URL du webhook).
+[functions.agent-mail-depot]
+verify_jwt = false

@@ -6,6 +6,10 @@
  *    ExporterMailsNonLus.bas` enregistre les non lus en .msg dans un dossier
  *    OneDrive (`dossierMails.ts`) puis ouvre MonCRM sur `?agentMail=1` ; on
  *    peut aussi glisser des mails d'Outlook dans la fenêtre ;
+ *  - les mails TRANSFÉRÉS depuis le mobile à l'adresse MonCRM (Postmark
+ *    Inbound → fonction `agent-mail-depot` → table `mails_agent`,
+ *    `mailsTransferes.ts`) : `mailTransfere` retrouve sous « De : … Objet : … »
+ *    l'expéditeur d'origine, sans quoi le client serait… le commercial ;
  *  - en option, la connexion directe Microsoft 365 (`microsoftGraph.ts`), qui
  *    exige une inscription d'application dans Entra ID.
  *
@@ -63,13 +67,15 @@ export interface MailAgent {
   recuLe: string;
   corps: string;
   piecesJointes: string[];
-  source: 'outlook' | 'fichier';
+  source: 'outlook' | 'fichier' | 'transfert';
   /** Lien Outlook web (source `outlook`). */
   lienWeb?: string;
   /** Le .msg / .eml lui-même (source `fichier`). */
   fichier?: File;
   /** Lu dans le dossier d'export : peut y être rangé dans « Traites ». */
   duDossier?: boolean;
+  /** Ligne de `mails_agent` (source `transfert`). */
+  ligneId?: string;
 }
 
 export function estFichierMail(nom: string): boolean {
@@ -274,4 +280,134 @@ export function numerosDevisCites(texte: string): string[] {
     vus.add(`DEV-${m[1]}-${m[2]}`);
   }
   return [...vus];
+}
+
+/* ── Le mail transféré ────────────────────────────────────────────────────── */
+
+const MOIS: [string, number][] = [
+  ['janv', 0], ['fevr', 1], ['mars', 2], ['avr', 3], ['mai', 4], ['juin', 5],
+  ['juil', 6], ['aout', 7], ['sep', 8], ['oct', 9], ['nov', 10], ['dec', 11],
+];
+
+/** « vendredi 9 octobre 2026 11:14 », « ven. 9 oct. 2026 à 11:14 », ou une date anglaise. */
+export function dateEnFrancais(v: string): string | undefined {
+  const t = v.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const m = /(\d{1,2})\s+([a-z]+)\.?\s+(\d{4})(?:\D+(\d{1,2})[:h](\d{2}))?/.exec(t);
+  const mois = m && MOIS.find(([p]) => m[2].startsWith(p));
+  if (m && mois) {
+    const d = new Date(+m[3], mois[1], +m[1], m[4] ? +m[4] : 0, m[5] ? +m[5] : 0);
+    if (!isNaN(d.getTime())) return d.toISOString();
+  }
+  const d = new Date(v.replace(/\s+à\s+/, ' '));
+  return isNaN(d.getTime()) ? undefined : d.toISOString();
+}
+
+/** « Yahia ARBANE <yarbane@applic-sol.fr> », « X [mailto:x@y.fr] », « x@y.fr ». */
+export function lireAdresse(v: string): { nom: string; email: string } {
+  const email = (/[<[](?:mailto:)?([^>\]\s]+@[^>\]\s]+)[>\]]/i.exec(v)?.[1]
+    || /[\w.+-]+@[\w-]+(\.[\w-]+)+/.exec(v)?.[0] || '').toLowerCase();
+  const nom = v.replace(/[<[][^>\]]*[>\]]/g, '').replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '')
+    .replace(/^["'\s*]+|["'\s*]+$/g, '').trim();
+  return { nom, email };
+}
+
+/** Lignes de transfert que le mobile ajoute, sans valeur pour l'analyse. */
+const BRUIT_TRANSFERT = /^(_{5,}|-{5,}.*|[- ]*(forwarded message|message (d'origine|transféré)|original message)[- ]*|(obtenir|get) outlook (pour|for) .*|envoy[ée] de mon .*|sent from my .*)$/i;
+
+export interface MailTransfereLu {
+  deNom: string;
+  deEmail: string;
+  sujet: string;
+  date?: string;
+  /** Ce que le commercial a écrit au-dessus du transfert. */
+  note: string;
+  /** Le message d'origine, sans son en-tête. */
+  corps: string;
+  /** Faux quand aucun en-tête de transfert n'a été reconnu. */
+  transfere: boolean;
+}
+
+const champTransfert = (l: string, noms: string) =>
+  new RegExp(`^\\s*\\*?(${noms})\\s*\\*?\\s*:\\s*\\*?\\s*(.*)$`, 'i').exec(l);
+
+/**
+ * Démêle un mail transféré : l'en-tête « De : … Envoyé : … Objet : … »
+ * (Outlook, mobile ou bureau, français ou anglais ; « From: … Date: …
+ * Subject: … » de Gmail) donne l'expéditeur, la date et l'objet D'ORIGINE.
+ * Sans en-tête reconnu, rien n'est deviné : le mail reste celui reçu.
+ */
+export function mailTransfere(texte: string, sujetRecu: string): MailTransfereLu {
+  const lignes = String(texte || '').replace(/\r/g, '').split('\n');
+  const sujetNet = String(sujetRecu || '').replace(/^\s*((tr|fwd?|fw|re|wg)\s*:\s*)+/i, '').trim();
+
+  for (let i = 0; i < lignes.length; i++) {
+    const de = champTransfert(lignes[i], 'de|from|von');
+    if (!de) continue;
+    /* Un en-tête, et pas une phrase qui commence par « De : » : l'objet ou
+       la date suivent à quelques lignes. */
+    let j = i + 1;
+    let sujet = '';
+    let date: string | undefined;
+    for (; j < Math.min(lignes.length, i + 9); j++) {
+      if (!lignes[j].trim()) break;
+      const o = champTransfert(lignes[j], 'objet|subject|betreff');
+      if (o) sujet = o[2].trim();
+      const d = champTransfert(lignes[j], 'envoy[ée]|sent|date|gesendet');
+      if (d) date = dateEnFrancais(d[2]);
+    }
+    if (!sujet && !date) continue;
+    const { nom, email } = lireAdresse(de[2]);
+    const note = lignes.slice(0, i).filter(l => !BRUIT_TRANSFERT.test(l.trim())).join('\n').trim();
+    return {
+      deNom: nom, deEmail: email, sujet: sujet || sujetNet, date, note,
+      corps: lignes.slice(j).join('\n').trim(),
+      transfere: true,
+    };
+  }
+  return { deNom: '', deEmail: '', sujet: sujetNet, note: '', corps: String(texte || '').trim(), transfere: false };
+}
+
+/* ── Un .eml pour l'analyse de document ───────────────────────────────────── */
+
+function base64Octets(octets: Uint8Array): string {
+  let s = '';
+  for (let i = 0; i < octets.length; i += 0x8000) s += String.fromCharCode(...octets.subarray(i, i + 0x8000));
+  return btoa(s).replace(/.{76}/g, '$&\r\n');
+}
+
+/**
+ * Un .eml reconstruit à partir d'un mail reçu en morceaux (texte + pièces).
+ * L'analyse de document sait tout faire d'un .eml — texte, PDF joints,
+ * signature — : on lui en donne un plutôt que de lui apprendre un format.
+ * L'expéditeur et l'objet d'origine sont AUSSI écrits en tête du texte, où
+ * l'analyse cherche le client.
+ */
+export function emlSynthetique(m: {
+  deNom: string; deEmail: string; sujet: string; date?: string; texte: string;
+  pieces: { nom: string; type: string; octets: Uint8Array }[];
+}): string {
+  const frontiere = `----=_MonCRM_${Math.random().toString(36).slice(2)}`;
+  const de = m.deEmail ? (m.deNom ? `"${m.deNom.replace(/"/g, '')}" <${m.deEmail}>` : m.deEmail) : m.deNom;
+  const entete = [de && `De : ${de}`, m.sujet && `Objet : ${m.sujet}`].filter(Boolean).join('\n');
+  const texte = [entete, m.texte].filter(Boolean).join('\n\n');
+  const date = m.date ? new Date(m.date) : new Date();
+  const parties = [
+    `--${frontiere}\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Octets(new TextEncoder().encode(texte))}`,
+    ...m.pieces.map(p => {
+      const nom = p.nom.replace(/["\r\n]/g, '');
+      return `--${frontiere}\r\nContent-Type: ${p.type || 'application/octet-stream'}; name="${nom}"\r\n`
+        + `Content-Disposition: attachment; filename="${nom}"\r\nContent-Transfer-Encoding: base64\r\n\r\n${base64Octets(p.octets)}`;
+    }),
+  ];
+  return [
+    `From: ${de || 'inconnu'}`,
+    `Subject: ${m.sujet.replace(/[\r\n]+/g, ' ')}`,
+    `Date: ${(isNaN(date.getTime()) ? new Date() : date).toUTCString()}`,
+    'MIME-Version: 1.0',
+    `Content-Type: multipart/mixed; boundary="${frontiere}"`,
+    '',
+    ...parties,
+    `--${frontiere}--`,
+    '',
+  ].join('\r\n');
 }

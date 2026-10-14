@@ -6,7 +6,9 @@
  * D'où viennent les mails, sans rien demander à Azure :
  *  - le DOSSIER où la macro Outlook `ExporterMailsNonLus` enregistre les non
  *    lus en .msg (`dossierMails.ts`) — la macro ouvre MonCRM sur cette fenêtre ;
- *  - les mails GLISSÉS depuis Outlook dans la fenêtre, ou choisis en .msg/.eml.
+ *  - les mails GLISSÉS depuis Outlook dans la fenêtre, ou choisis en .msg/.eml ;
+ *  - les mails TRANSFÉRÉS depuis le mobile à l'adresse MonCRM
+ *    (`mailsTransferes.ts`) — la seule source qui marche sur téléphone.
  * En option (« Avancé »), la connexion directe Microsoft 365 (`microsoftGraph.ts`),
  * qui exige une inscription d'application dans Entra ID.
  *
@@ -25,7 +27,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   Mail, Loader2, RefreshCw, FileText, ExternalLink, Check, EyeOff, Paperclip, LogOut, Copy, Sparkles,
-  FolderOpen, Upload, Archive, ChevronRight,
+  FolderOpen, Upload, Archive, ChevronRight, Smartphone,
 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -45,12 +47,16 @@ import {
 import {
   type MailAgent, type TriMail, CATEGORIE_MAIL, clientDuMail, estFichierMail, invitationTri, lireTri, numerosDevisCites,
 } from '@/lib/agentMail';
+import {
+  type AdresseAgent, type DonneesTransfert, adresseDeTransfert, classerMailTransfere, enregistrerAdresseAgent,
+  fichiersPourAnalyse, lireAdresseAgent, lireMailsTransferes,
+} from '@/lib/mailsTransferes';
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Ouvre l'analyse de document sur le mail. */
-  onProposerDevis: (fichier: File) => void;
+  /** Ouvre l'analyse de document sur le mail (et ses classeurs Excel). */
+  onProposerDevis: (fichiers: File[]) => void;
 }
 
 const CLE_TRAITES = 'agent_mail_traites';
@@ -108,6 +114,12 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const [dossierOuvert, setDossierOuvert] = useState<FileSystemDirectoryHandle | null>(null);
   /** Bilan de la dernière lecture du dossier — « Relire » qui ne dit rien semble en panne. */
   const [bilanDossier, setBilanDossier] = useState<{ n: number; heure: string } | null>(null);
+
+  /* Transfert depuis le mobile */
+  const [adresseAgent, setAdresseAgent] = useState<AdresseAgent | null>(null);
+  const [saisieAdresse, setSaisieAdresse] = useState('');
+  const [reglerAdresse, setReglerAdresse] = useState(false);
+  const [bilanTransferts, setBilanTransferts] = useState<{ n: number; heure: string } | null>(null);
 
   /* Microsoft 365 (option avancée) */
   /* Sans accès aux dossiers (mobile), la boîte Microsoft 365 est LA source : ouverte d'emblée. */
@@ -186,14 +198,41 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     } catch (e) { echec(e); } finally { setLecture(false); }
   }, [echec, integrer]);
 
-  /* À l'ouverture : relire le dossier (sans demander de droit) et la boîte
-     Microsoft 365 si elle est connectée. */
+  const lireTransferts = useCallback(async () => {
+    try {
+      const adresse = await lireAdresseAgent();
+      setAdresseAgent(adresse);
+      if (adresse) setSaisieAdresse(adresse.adresseEntree);
+      const liste = await lireMailsTransferes();
+      setBilanTransferts({ n: liste.length, heure: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) });
+      await integrer(liste, m => m.source === 'transfert');
+    } catch (e) {
+      /* Migration pas encore appliquée : la section le dira, sans bandeau rouge. */
+      const msg = (e as Error).message || '';
+      if (/agent_mail_cles|mails_agent|schema cache|does not exist/i.test(msg)) setAdresseAgent(null);
+      else echec(e);
+    }
+  }, [echec, integrer]);
+
+  /* À l'ouverture : les mails transférés, le dossier (sans demander de droit)
+     et la boîte Microsoft 365 si elle est connectée. */
   useEffect(() => {
     if (!open) return;
+    lireTransferts();
     nomDossierMails().then(setNomDossier);
     lireDossier(false);
     if (configMicrosoft() && estConnecte()) lireOutlook();
   }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const enregistrerAdresse = async () => {
+    const a = saisieAdresse.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(a)) { toast.error('Adresse de réception invalide'); return; }
+    try {
+      setAdresseAgent(await enregistrerAdresseAgent(a));
+      setReglerAdresse(false);
+      toast.success('Adresse MonCRM enregistrée');
+    } catch (e) { echec(e); }
+  };
 
   const ajouterFichiers = async (liste: FileList | File[]) => {
     const fichiers = Array.from(liste);
@@ -214,11 +253,15 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
   const proposerDevis = async (m: MailAgent) => {
     setEnCours(m.id);
     try {
-      let fichier: File;
+      let fichiers: File[];
       if (m.source === 'outlook') {
-        fichier = await fichierEml(m);
+        fichiers = [await fichierEml(m)];
+      } else if (m.source === 'transfert') {
+        fichiers = await fichiersPourAnalyse(m as MailAgent & { transfert: DonneesTransfert });
+        await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'traite');
+        setMails(memoire.mails.filter(x => x.id !== m.id));
       } else {
-        fichier = await copieEnMemoire(m.fichier!);
+        fichiers = [await copieEnMemoire(m.fichier!)];
         if (m.duDossier && dossierOuvert) {
           try {
             await rangerTraite(dossierOuvert, m.fichier!);
@@ -228,7 +271,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
       }
       setTraites(noterId(CLE_TRAITES, m.id));
       onOpenChange(false);
-      onProposerDevis(fichier);
+      onProposerDevis(fichiers);
     } catch (e) { echec(e); } finally { setEnCours(null); }
   };
 
@@ -236,13 +279,21 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
     setEnCours(m.id);
     try {
       if (m.source === 'outlook') await marquerLu(m.id);
+      else if (m.source === 'transfert') await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'traite');
       else if (m.duDossier && dossierOuvert) await rangerTraite(dossierOuvert, m.fichier!);
       else setEcartes(noterId(CLE_ECARTES, m.id));
       setMails(memoire.mails.filter(x => x.id !== m.id));
     } catch (e) { echec(e); } finally { setEnCours(null); }
   };
 
-  const ecarter = (m: MailAgent) => setEcartes(noterId(CLE_ECARTES, m.id));
+  const ecarter = async (m: MailAgent) => {
+    if (m.source !== 'transfert') { setEcartes(noterId(CLE_ECARTES, m.id)); return; }
+    /* Écarté en base : il disparaît aussi sur le téléphone. */
+    try {
+      await classerMailTransfere(m as MailAgent & { transfert: DonneesTransfert }, 'ecarte');
+      setMails(memoire.mails.filter(x => x.id !== m.id));
+    } catch (e) { echec(e); }
+  };
 
   const seConnecter = async () => {
     setErreur('');
@@ -298,9 +349,51 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
 
   /* ── Rendu ──────────────────────────────────────────────────────────────── */
 
+  const adresseComplete = adresseAgent ? adresseDeTransfert(adresseAgent.adresseEntree, adresseAgent.cle) : '';
+  const carteMobile = (
+    <div className="rounded-lg border border-border p-3 text-xs space-y-2">
+      <div className="flex items-center gap-1.5 font-medium text-sm">
+        <Smartphone className="w-4 h-4 text-primary" />Depuis le mobile : transférer à MonCRM
+        {adresseAgent && (
+          <Button size="sm" variant="ghost" className="ml-auto h-7 text-xs" onClick={lireTransferts} title="Relire les mails transférés">
+            <RefreshCw className="w-3.5 h-3.5 mr-1" />Relire
+          </Button>
+        )}
+      </div>
+      {adresseAgent && !reglerAdresse ? (
+        <>
+          <p className="text-muted-foreground">Dans Outlook mobile, <strong>Transférer</strong> la demande à :</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="rounded bg-muted px-2 py-1 font-mono text-[11px] text-foreground break-all">{adresseComplete}</span>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { navigator.clipboard?.writeText(adresseComplete); toast.success('Adresse copiée'); }}>
+              <Copy className="w-3.5 h-3.5 mr-1" />Copier
+            </Button>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setReglerAdresse(true)}>Modifier</Button>
+          </div>
+          {bilanTransferts && (
+            <p className="text-muted-foreground">Lu à {bilanTransferts.heure} : <span className="text-foreground">{bilanTransferts.n} mail{bilanTransferts.n > 1 ? 's' : ''} transféré{bilanTransferts.n > 1 ? 's' : ''}</span> à traiter</p>
+          )}
+        </>
+      ) : (
+        <>
+          <p className="text-muted-foreground">
+            Saisissez l'adresse de réception de votre service (Cloudflare Email Routing : « agent@votre-domaine.fr » ;
+            Postmark : « xxxx@inbound.postmarkapp.com »). MonCRM y ajoute votre clé personnelle.
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            <Input className="h-8 text-xs flex-1 min-w-[200px]" value={saisieAdresse} onChange={e => setSaisieAdresse(e.target.value)} placeholder="agent@votre-domaine.fr" />
+            <Button size="sm" className="h-8 text-xs" onClick={enregistrerAdresse}>Enregistrer</Button>
+            {adresseAgent && <Button size="sm" variant="ghost" className="h-8 text-xs" onClick={() => setReglerAdresse(false)}>Annuler</Button>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   const sources = (
     <div className="grid gap-2 sm:grid-cols-2">
-      <div className="rounded-lg border border-border p-3 text-xs space-y-2">
+      <div className="sm:col-span-2">{carteMobile}</div>
+      {dossierMailsDisponible() && <div className="rounded-lg border border-border p-3 text-xs space-y-2">
         <div className="flex items-center gap-1.5 font-medium text-sm"><FolderOpen className="w-4 h-4 text-primary" />Mails exportés par Outlook</div>
         {nomDossier ? (
           <>
@@ -321,20 +414,16 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
             <span className="block font-mono text-[10px] text-foreground mt-0.5">{DOSSIER_MAILS}</span>
           </p>
         )}
-        {dossierMailsDisponible() ? (
-          <div className="flex flex-wrap gap-1.5">
-            <Button size="sm" className="h-7 text-xs" disabled={lecture} onClick={() => lireDossier(true)}>
-              <RefreshCw className={cn('w-3.5 h-3.5 mr-1', lecture && 'animate-spin')} />
-              {nomDossier ? (dossierOuvert ? 'Relire' : 'Lire le dossier') : 'Choisir le dossier'}
-            </Button>
-            {nomDossier && (
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => lireDossier(true, true)}>Changer</Button>
-            )}
-          </div>
-        ) : (
-          <p className="text-warning">Ce navigateur (mobile ?) ne sait pas ouvrir un dossier : connectez la boîte Microsoft 365 ci-dessous, ou utilisez Chrome / Edge sur ordinateur.</p>
-        )}
-      </div>
+        <div className="flex flex-wrap gap-1.5">
+          <Button size="sm" className="h-7 text-xs" disabled={lecture} onClick={() => lireDossier(true)}>
+            <RefreshCw className={cn('w-3.5 h-3.5 mr-1', lecture && 'animate-spin')} />
+            {nomDossier ? (dossierOuvert ? 'Relire' : 'Lire le dossier') : 'Choisir le dossier'}
+          </Button>
+          {nomDossier && (
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => lireDossier(true, true)}>Changer</Button>
+          )}
+        </div>
+      </div>}
 
       <div
         className={cn('rounded-lg border-2 border-dashed p-3 text-xs flex flex-col items-center justify-center gap-1.5 text-center cursor-pointer transition-colors',
@@ -346,7 +435,7 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
         onDrop={e => { arreter(e); setSurvol(false); ajouterFichiers(e.dataTransfer.files); }}
       >
         <Upload className="w-5 h-5 text-primary" />
-        <span className="font-medium text-sm">Glissez des mails depuis Outlook</span>
+        <span className="font-medium text-sm">{dossierMailsDisponible() ? 'Glissez des mails depuis Outlook' : 'Ouvrir des mails .msg / .eml'}</span>
         <span className="text-muted-foreground">ou cliquez pour choisir des .msg / .eml</span>
         <input ref={inputRef} type="file" multiple accept=".msg,.eml,message/rfc822" className="hidden"
           onChange={e => { if (e.target.files) ajouterFichiers(e.target.files); e.target.value = ''; }} />
@@ -512,9 +601,9 @@ export default function AgentMailDialog({ open, onOpenChange, onProposerDevis }:
                       <a href={m.lienWeb} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" />Répondre dans Outlook</a>
                     </Button>
                   )}
-                  {(m.source === 'outlook' || m.duDossier) && (
+                  {(m.source === 'outlook' || m.source === 'transfert' || m.duDossier) && (
                     <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={occupe} onClick={() => ranger(m)}
-                      title={m.source === 'outlook' ? 'Marquer comme lu dans Outlook' : 'Ranger dans le sous-dossier « Traites »'}>
+                      title={m.source === 'outlook' ? 'Marquer comme lu dans Outlook' : m.source === 'transfert' ? 'Classer comme traité (sur tous les appareils)' : 'Ranger dans le sous-dossier « Traites »'}>
                       {m.source === 'outlook' ? <><Check className="w-3.5 h-3.5 mr-1" />Marquer lu</> : <><Archive className="w-3.5 h-3.5 mr-1" />Ranger (traité)</>}
                     </Button>
                   )}

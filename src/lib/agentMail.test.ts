@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
   enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
+  mailTransfere, dateEnFrancais, emlSynthetique,
 } from './agentMail';
 
 describe('corpsUtile', () => {
@@ -103,5 +104,58 @@ describe('fichiers de mail', () => {
   it('écarte les images de signature', () => {
     expect(pieceJointeUtile('image001.png')).toBe(false);
     expect(pieceJointeUtile('Plan chantier.pdf')).toBe(true);
+  });
+});
+
+describe('mailTransfere', () => {
+  it("retrouve l'expéditeur d'origine d'un transfert Outlook mobile", () => {
+    const texte = [
+      'A chiffrer pour lundi',
+      '',
+      'Obtenir Outlook pour Android<https://aka.ms/AAb9ysg>',
+      '________________________________',
+      'De : Yahia ARBANE <yarbane@applic-sol.fr>',
+      'Envoyé : vendredi 9 octobre 2026 11:14',
+      'À : François MOUHOT <f.mouhot@isosign.fr>',
+      'Objet : Demande de prix panneaux',
+      '',
+      'Bonjour,',
+      'Merci de chiffrer 10 AB4.',
+    ].join('\n');
+    const m = mailTransfere(texte, 'TR: Demande de prix panneaux');
+    expect(m).toMatchObject({
+      transfere: true, deNom: 'Yahia ARBANE', deEmail: 'yarbane@applic-sol.fr',
+      sujet: 'Demande de prix panneaux', note: 'A chiffrer pour lundi',
+      corps: 'Bonjour,\nMerci de chiffrer 10 AB4.',
+    });
+    expect(new Date(m.date!).getDate()).toBe(9);
+  });
+  it('lit le format anglais et mailto', () => {
+    const m = mailTransfere('From: Jean Dupont [mailto:jd@x.fr]\nSent: Friday, October 9, 2026 11:14 AM\nSubject: Prix\n\nCorps', 'FW: Prix');
+    expect(m).toMatchObject({ deEmail: 'jd@x.fr', deNom: 'Jean Dupont', sujet: 'Prix', corps: 'Corps' });
+  });
+  it("ne prend pas une phrase « De : » pour un en-tête", () => {
+    const m = mailTransfere('De : 10 à 20 panneaux selon le budget\n\nMerci', 'TR: Demande');
+    expect(m.transfere).toBe(false);
+    expect(m.sujet).toBe('Demande');
+  });
+});
+
+describe('dateEnFrancais', () => {
+  it('lit les formes abrégées', () => {
+    const d = new Date(dateEnFrancais('ven. 9 oct. 2026 à 11:14')!);
+    expect([d.getMonth(), d.getDate(), d.getHours(), d.getMinutes()]).toEqual([9, 9, 11, 14]);
+  });
+});
+
+describe('emlSynthetique', () => {
+  it("porte l'expéditeur, l'objet et les pièces", () => {
+    const eml = emlSynthetique({
+      deNom: 'Yahia ARBANE', deEmail: 'yarbane@applic-sol.fr', sujet: 'Demande de prix',
+      texte: 'Bonjour', pieces: [{ nom: 'plan.pdf', type: 'application/pdf', octets: new Uint8Array([37, 80, 68, 70]) }],
+    });
+    expect(enteteEml(eml)).toMatchObject({ deEmail: 'yarbane@applic-sol.fr', sujet: 'Demande de prix' });
+    expect(eml).toContain('filename="plan.pdf"');
+    expect(eml).toContain('JVBERg==');
   });
 });

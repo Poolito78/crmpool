@@ -639,9 +639,9 @@ export default function CRMLayout() {
           <AgentMailDialog
             open={agentMailOpen}
             onOpenChange={setAgentMailOpen}
-            onProposerDevis={(fichier) => {
+            onProposerDevis={(fichiers) => {
               setTexteDepose('');
-              setFichiersDeposes([fichier]);
+              setFichiersDeposes(fichiers);
               setAnalyseOpen(true);
             }}
           />
