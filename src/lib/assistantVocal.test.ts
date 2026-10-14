@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   interpreter, champNomme, optionsDesignees, texteAInserer, dateParlee, chercherDevis,
-  variantesReference, resteOriginal, phraseStock,
+  variantesReference, resteOriginal, phraseStock, reponse, commandeApprise, cleDePhrase,
 } from './assistantVocal';
 
 const LIBELLES_ACTION = ['Type', 'Titre *', "Objet de l'action...", 'Client / Prospect', 'Date planifiée', 'Date réalisée', 'Statut', 'Priorité', 'Description / Notes', "Détails de l'action..."];
@@ -49,6 +49,31 @@ describe('interpreter', () => {
     expect(interpreter('champ suivant')).toEqual({ kind: 'suivant' });
     expect(interpreter('clique sur envoyer')).toEqual({ kind: 'clic', cible: 'envoyer' });
     expect(interpreter('Rappeler le client pour le chantier')).toBeNull();
+  });
+});
+
+describe('ajouter et apprendre', () => {
+  it('« ajoute une ligne » vise le bouton « + Ligne », sans voler « nouvelle tâche » ni « nouvelle fenêtre »', () => {
+    expect(interpreter('ajouter une ligne')).toEqual({ kind: 'ajouter', objet: 'ligne' });
+    expect(interpreter('ajoute un groupe')).toEqual({ kind: 'ajouter', objet: 'groupe' });
+    expect(interpreter('nouvelle tâche')).toEqual({ kind: 'nouvelleAction', type: 'tache' });
+    expect(interpreter('nouvelle fenêtre devis')).toMatchObject({ kind: 'page', fenetre: true });
+  });
+
+  it('oui / non / terminé', () => {
+    expect(reponse('Oui')).toBe('oui');
+    expect(reponse("d'accord")).toBe('oui');
+    expect(reponse('non merci')).toBe('non');
+    expect(reponse('Terminé')).toBe('termine');
+    expect(reponse("c'est fait")).toBe('termine');
+    expect(reponse('ajouter une ligne')).toBeNull();
+  });
+
+  it('une commande apprise se retrouve sans articles ni accents', () => {
+    const apprise = { cle: cleDePhrase('Mets la remise'), dite: 'Mets la remise', etapes: [{ libelle: 'Remise', dansFenetre: true }], page: '/devis', creeLe: '' };
+    expect(commandeApprise('mets la remise', [apprise])).toBe(apprise);
+    expect(commandeApprise('mets remise client', [apprise])).toBeUndefined();
+    expect(interpreter('oublie la commande mets la remise')).toEqual({ kind: 'oublier', phrase: 'mets la remise' });
   });
 });
 

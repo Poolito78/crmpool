@@ -93,6 +93,8 @@ export type CommandeVocale =
   | { kind: 'suivant' }
   | { kind: 'precedent' }
   | { kind: 'clic'; cible: string }
+  | { kind: 'ajouter'; objet: string }
+  | { kind: 'oublier'; phrase: string }
   | { kind: 'valider' }
   | { kind: 'fermer' }
   | { kind: 'corriger' }
@@ -151,6 +153,13 @@ export function interpreter(phrase: string): CommandeVocale | null {
       if (objet && re.test(objet)) return client ? { kind: 'nouvelleAction', type, client } : { kind: 'nouvelleAction', type };
     }
   }
+  /* « ajoute une ligne », « insère un groupe » : le bouton « + Ligne »,
+     « Groupe », « Note »… de l'écran. Rien n'est créé ici — on clique. */
+  m = n.match(/^(?:ajoute|ajouter|ajoutez|insere|inserer|nouvelle|nouveau|nouvel)(?: une| un| des| la| le)? (?!fenetre )(.+)$/);
+  if (m) return { kind: 'ajouter', objet: m[1] };
+
+  m = n.match(/^(?:oublie|oublier|supprime|supprimer|efface|effacer) (?:la |cette )?commande (.+)$/);
+  if (m) return { kind: 'oublier', phrase: m[1] };
 
   // « ouvre le premier », « numéro 2 » — jamais « le 2 » seul, qui est une date
   m = n.match(/^(?:(?:ouvre|ouvrir|affiche|prends|prendre|choisis|choisir)(?: le| la)?(?: numero| resultat)?|numero|resultat) (premier|premiere|deuxieme|second|seconde|troisieme|quatrieme|cinquieme|sixieme|septieme|huitieme|\d)$/);
@@ -470,6 +479,49 @@ export function chercherDevis<T extends DevisCherche>(devis: T[], requete: strin
     })
     .sort(tri)
     .slice(0, limite);
+}
+
+// ── Apprentissage ───────────────────────────────────────────────────────
+
+/* Une phrase que l'assistant ne comprend pas peut lui être APPRISE : il
+ * propose, on répond « oui », on fait l'action à la souris, on dit
+ * « terminé », il relit ce qu'il a vu et ne retient qu'après un second
+ * « oui ». Une commande apprise est une suite de clics sur des boutons
+ * reconnus par leur TEXTE (jamais par leur position : l'écran bouge).
+ * Elle passe avant tout le reste — c'est l'utilisateur qui l'a voulue. */
+
+export interface EtapeApprise {
+  /** Texte du bouton cliqué, tel qu'affiché (« Ligne », « Envoyer »). */
+  libelle: string;
+  /** Le clic avait lieu dans une fenêtre (dialogue) ? */
+  dansFenetre: boolean;
+}
+
+export interface CommandeApprise {
+  /** Phrase normalisée, clé de comparaison. */
+  cle: string;
+  /** Phrase telle qu'elle a été dite. */
+  dite: string;
+  etapes: EtapeApprise[];
+  /** Page où elle a été apprise (pour dire où la rejouer). */
+  page: string;
+  creeLe: string;
+}
+
+export const cleDePhrase = (phrase: string) => sansArticles(normaliser(phrase));
+
+export function commandeApprise(phrase: string, apprises: CommandeApprise[]): CommandeApprise | undefined {
+  const k = cleDePhrase(phrase);
+  return k ? apprises.find(c => c.cle === k) : undefined;
+}
+
+/** « oui », « non », « terminé » — les réponses pendant un apprentissage. */
+export function reponse(phrase: string): 'oui' | 'non' | 'termine' | null {
+  const n = normaliser(phrase);
+  if (/^(?:oui|ouais|ok|okay|d accord|daccord|vas y|oui vas y|exact|exactement|c est ca|oui c est ca|bien sur|parfait|oui merci|valide|valider|enregistre|enregistrer|confirme|confirmer)$/.test(n)) return 'oui';
+  if (/^(?:non|non merci|pas du tout|laisse tomber|annule|annuler|non annule|surtout pas|abandonne|abandonner)$/.test(n)) return 'non';
+  if (/^(?:termine|terminer|terminee|c est fait|c est bon|fini|j ai fini|j ai termine|voila|c est tout|fin)$/.test(n)) return 'termine';
+  return null;
 }
 
 /** Phrase lue à voix haute pour un stock. Ne dit que ce qui est connu. */

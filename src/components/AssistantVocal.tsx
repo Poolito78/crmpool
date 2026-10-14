@@ -35,7 +35,8 @@ import { ouvrirFenetre } from '@/lib/fenetres';
 import {
   interpreter, champNomme, optionsDesignees, texteAInserer, dateParlee, nombreParle,
   chercherDevis, variantesReference, phraseStock, normaliser, resteOriginal,
-  type CommandeVocale, type DevisCherche,
+  commandeApprise, reponse, cleDePhrase,
+  type CommandeVocale, type DevisCherche, type CommandeApprise, type EtapeApprise,
 } from '@/lib/assistantVocal';
 
 interface Props {
@@ -47,6 +48,14 @@ interface Props {
 
 type Genre = 'texte' | 'ligne' | 'date' | 'nombre' | 'select' | 'riche' | 'boutons';
 interface Champ { libelle: string; el: HTMLElement; genre: Genre; boutons?: HTMLElement[] }
+
+/** proposer → (oui) enregistrer les clics → (terminé) confirmer → (oui) retenu. */
+type Apprentissage =
+  | { etape: 'proposer'; dite: string }
+  | { etape: 'enregistrer'; dite: string; etapes: EtapeApprise[] }
+  | { etape: 'confirmer'; dite: string; etapes: EtapeApprise[] };
+
+const CLE_APPRISES = 'assistant_vocal_commandes_apprises';
 
 type Resultats =
   | { kind: 'devis'; items: (DevisCherche & { statut: string })[] }
@@ -175,6 +184,17 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
   const historique = useRef<{ el: HTMLElement; avant: string; html: boolean }[]>([]);
   const parleRef = useRef(false);
   const controle = useRef<{ demarrer: () => void; couper: () => void } | null>(null);
+
+  /* Commandes apprises : rangées dans CE navigateur (localStorage). Les
+     perdre ne coûte qu'un nouvel apprentissage ; rien de métier n'y est. */
+  const [apprises, setApprises] = useState<CommandeApprise[]>(() => {
+    try { return JSON.parse(localStorage.getItem(CLE_APPRISES) || '[]'); } catch { return []; }
+  });
+  const sauverApprises = (liste: CommandeApprise[]) => {
+    setApprises(liste);
+    try { localStorage.setItem(CLE_APPRISES, JSON.stringify(liste)); } catch { /* stockage bloqué */ }
+  };
+  const [apprentissage, setApprentissage] = useState<Apprentissage | null>(null);
 
   const dire = useCallback((texte: string, ton: Ligne['ton'] = 'info') => {
     setJournal(j => [...j.slice(-3), { texte, ton }]);
@@ -320,6 +340,56 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
     if ((c.genre === 'texte' || c.genre === 'ligne' || c.genre === 'riche') && document.activeElement === c.el) return false;
     focaliser(c.el);
     return inserer(c.el, reste);
+  }
+
+  /** Un bouton visible dont le texte est EXACTEMENT `libelle` : fenêtre d'abord, puis la page. */
+  function trouverCliquable(libelle: string): HTMLElement | undefined {
+    const k = normaliser(libelle);
+    const dans = (racine: ParentNode) => Array.from(racine.querySelectorAll<HTMLElement>(SELECT_CLIQUABLES))
+      .filter(el => visible(el) && !panneauRef.current?.contains(el))
+      .find(el => normaliser(texteDe(el)) === k);
+    return dans(portee()) ?? dans(document);
+  }
+
+  /** Rejoue une commande apprise, clic après clic — le temps qu'un menu s'ouvre. */
+  async function rejouer(c: CommandeApprise) {
+    for (const e of c.etapes) {
+      let el: HTMLElement | undefined;
+      for (let essai = 0; essai < 15 && !el; essai++) {
+        el = trouverCliquable(e.libelle);
+        if (!el) await new Promise(r => setTimeout(r, 100));
+      }
+      if (!el) {
+        dire(`« ${e.libelle} » introuvable ici — « ${c.dite} » a été apprise sur ${c.page}`, 'erreur');
+        return;
+      }
+      if ((el as HTMLButtonElement).disabled) { dire(`« ${e.libelle} » est grisé`, 'erreur'); return; }
+      el.click();
+      await new Promise(r => setTimeout(r, 250));
+    }
+    dire(`✓ ${c.dite}`, 'ok');
+  }
+
+  /* « ajoute une ligne » : le bouton « + Ligne », « Ajouter une ligne »,
+     « Nouvelle ligne »… Entre plusieurs boutons du même nom, celui qui porte
+     un « + » (icône Plus) est le bouton d'ajout. */
+  function ajouter(objet: string): boolean {
+    const boutons = Array.from(portee().querySelectorAll<HTMLElement>(SELECT_CLIQUABLES))
+      .filter(el => visible(el) && !(el as HTMLButtonElement).disabled);
+    const textes = boutons.map(texteDe);
+    const indices = [
+      ...optionsDesignees(objet, textes),
+      ...optionsDesignees(`ajouter ${objet}`, textes),
+      ...optionsDesignees(`nouveau ${objet}`, textes),
+      ...optionsDesignees(`nouvelle ${objet}`, textes),
+    ];
+    if (!indices.length) return false;
+    const estAjout = (el: HTMLElement) => !!el.querySelector('svg.lucide-plus, svg.lucide-circle-plus, svg.lucide-plus-circle')
+      || /^\s*\+/.test(el.textContent || '') || /^(?:ajouter|nouveau|nouvelle)\b/.test(normaliser(texteDe(el)));
+    const b = boutons[indices.find(i => estAjout(boutons[i])) ?? indices[0]];
+    b.click();
+    dire(`✓ ${texteDe(b)}`, 'ok');
+    return true;
   }
 
   function cliquer(cible: string): boolean {
@@ -529,20 +599,101 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
         return essayerChamp(cmd.nom, !enSaisie);
       case 'clic':
         return cliquer(cmd.cible);
+      case 'ajouter':
+        return ajouter(cmd.objet);
+      case 'oublier': {
+        const c = commandeApprise(cmd.phrase, apprises);
+        if (!c) { dire(`Aucune commande apprise « ${cmd.phrase} »`, 'erreur'); return true; }
+        sauverApprises(apprises.filter(x => x !== c));
+        dire(`✓ « ${c.dite} » oubliée`, 'ok');
+        return true;
+      }
     }
   }
+
+  /** Les réponses pendant un apprentissage. `true` = la phrase est consommée. */
+  function repondreApprentissage(t: string): boolean {
+    const a = apprentissage;
+    if (!a) return false;
+    const r = reponse(t);
+    if (a.etape === 'proposer') {
+      if (r === 'oui') {
+        setApprentissage({ etape: 'enregistrer', dite: a.dite, etapes: [] });
+        dire('Montrez-moi : cliquez les boutons, puis dites « terminé ».', 'ok');
+        parler('Montrez-moi. Cliquez, puis dites terminé.');
+        return true;
+      }
+      if (r === 'non') { setApprentissage(null); dire("D'accord, rien n'est appris."); return true; }
+      setApprentissage(null); // on passe à autre chose
+      return false;
+    }
+    if (a.etape === 'enregistrer') {
+      if (r === 'non') { setApprentissage(null); dire('Apprentissage abandonné.'); return true; }
+      if (r === 'termine' || r === 'oui') {
+        if (!a.etapes.length) { dire('Aucun clic vu — cliquez un bouton, ou dites « annuler ».', 'erreur'); return true; }
+        setApprentissage({ etape: 'confirmer', dite: a.dite, etapes: a.etapes });
+        const suite = a.etapes.map(e => e.libelle).join(', puis ');
+        dire(`Retenir « ${a.dite} » = ${suite} ? Oui ou non.`);
+        parler(`Je retiens : ${a.dite}, égale ${suite}. Oui ou non ?`);
+        return true;
+      }
+      return false; // les autres phrases s'exécutent normalement pendant la démonstration
+    }
+    // confirmer
+    if (r === 'oui') {
+      const nouvelle: CommandeApprise = {
+        cle: cleDePhrase(a.dite), dite: a.dite, etapes: a.etapes,
+        page: location.pathname, creeLe: new Date().toISOString(),
+      };
+      sauverApprises([...apprises.filter(c => c.cle !== nouvelle.cle), nouvelle]);
+      setApprentissage(null);
+      dire(`✓ Appris : « ${a.dite} »`, 'ok');
+      parler("C'est noté.");
+      return true;
+    }
+    if (r === 'non') { setApprentissage(null); dire("Rien n'est retenu."); return true; }
+    dire('Dites « oui » pour retenir, « non » pour abandonner.', 'erreur');
+    return true;
+  }
+
+  // Pendant la démonstration, chaque clic hors du panneau est une étape.
+  const enregistre = apprentissage?.etape === 'enregistrer';
+  useEffect(() => {
+    if (!enregistre) return;
+    const surClic = (e: MouseEvent) => {
+      const cible = e.target as HTMLElement | null;
+      if (!cible || panneauRef.current?.contains(cible)) return;
+      const el = cible.closest<HTMLElement>(SELECT_CLIQUABLES);
+      if (!el) return;
+      const libelle = texteDe(el);
+      if (!libelle) { dire("Ce bouton n'a pas de nom : je ne saurai pas le retrouver.", 'erreur'); return; }
+      const etape: EtapeApprise = { libelle, dansFenetre: !!el.closest('[role="dialog"], [role="alertdialog"]') };
+      setApprentissage(a => (a?.etape === 'enregistrer' ? { ...a, etapes: [...a.etapes, etape] } : a));
+      dire(`● ${libelle}`, 'ok');
+    };
+    document.addEventListener('click', surClic, true);
+    return () => document.removeEventListener('click', surClic, true);
+  }, [enregistre, dire]);
 
   function traiter(phrase: string) {
     const t = phrase.trim();
     setInterim('');
     if (!t) return;
+    if (repondreApprentissage(t)) return;
+    // Ce qu'on lui a appris passe avant tout : c'est l'utilisateur qui l'a voulu.
+    const apprise = commandeApprise(t, apprises);
+    if (apprise) { void rejouer(apprise); return; }
     const cible = champActif(panneauRef.current);
     const enSaisie = !!cible && ['texte', 'ligne', 'riche'].includes(genreDe(cible));
     const cmd = interpreter(t);
     if (cmd && executer(cmd, enSaisie)) return;
     if (essayerChamp(t, false)) return;
     if (cible) { inserer(cible, t); return; }
-    dire(`« ${t} » — pas compris. Dites « aide ».`, 'erreur');
+    if (apprentissage?.etape === 'enregistrer') { dire(`« ${t} » — pas compris (démonstration en cours).`, 'erreur'); return; }
+    // Inconnue : on propose de l'apprendre.
+    setApprentissage({ etape: 'proposer', dite: t });
+    dire(`« ${t} » : je ne connais pas. Me l'apprendre ? Oui ou non.`, 'erreur');
+    parler("Je ne connais pas cette commande. Voulez-vous me l'apprendre ?");
   }
   const traiterRef = useRef(traiter);
   traiterRef.current = traiter;
@@ -652,6 +803,32 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
         <p className="italic text-muted-foreground min-h-[1rem]">{interim}</p>
       </div>
 
+      {apprentissage && (
+        <div className="border-t border-border px-3 py-2 bg-primary/5 space-y-1.5">
+          <p className="text-xs font-semibold">
+            {apprentissage.etape === 'proposer' && <>Apprendre « {apprentissage.dite} » ?</>}
+            {apprentissage.etape === 'enregistrer' && <>Démonstration de « {apprentissage.dite} » : cliquez, puis « terminé »</>}
+            {apprentissage.etape === 'confirmer' && <>Retenir « {apprentissage.dite} » ?</>}
+          </p>
+          {apprentissage.etape !== 'proposer' && (
+            <ol className="text-[11px] text-muted-foreground list-decimal pl-4">
+              {apprentissage.etapes.map((e, i) => <li key={i}>clic « {e.libelle} »{e.dansFenetre ? ' (fenêtre)' : ''}</li>)}
+              {!apprentissage.etapes.length && <li className="list-none -ml-4 italic">aucun clic pour l'instant</li>}
+            </ol>
+          )}
+          <div className="flex gap-1.5">
+            <button type="button" onClick={() => repondreApprentissage(apprentissage.etape === 'enregistrer' ? 'terminé' : 'oui')}
+              className="px-2 py-1 rounded-md text-[11px] font-semibold bg-primary text-primary-foreground hover:bg-primary/90">
+              {apprentissage.etape === 'enregistrer' ? 'Terminé' : 'Oui'}
+            </button>
+            <button type="button" onClick={() => repondreApprentissage('non')}
+              className="px-2 py-1 rounded-md text-[11px] font-semibold border border-border hover:bg-muted">
+              {apprentissage.etape === 'enregistrer' ? 'Annuler' : 'Non'}
+            </button>
+          </div>
+        </div>
+      )}
+
       {resultats && (
         <div className="border-t border-border max-h-64 overflow-y-auto">
           {resultats.kind === 'devis' && resultats.items.map((d, i) => (
@@ -708,6 +885,21 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
           <p><b className="text-foreground">Dictée</b> : parlez, le texte va dans le champ actif — « virgule », « à la ligne », « point final » ; « corrige » retire la dernière phrase, « efface tout » vide le champ</p>
           <p><b className="text-foreground">Fenêtre</b> : « valider » / « créer », « fermer », « clique sur Envoyer », « cherche Dupont »</p>
           <p><b className="text-foreground">Assistant</b> : « silence » / « parle », « stop » — raccourci Alt+M</p>
+          <p><b className="text-foreground">Ajouter</b> : « ajoute une ligne », « ajoute un groupe », « ajoute une note » — le bouton « + Ligne », « Groupe »…</p>
+          <p><b className="text-foreground">Apprendre</b> : une phrase inconnue → « oui », faites l'action à la souris, « terminé », « oui ». « Oublie la commande … » l'efface.</p>
+          {apprises.length > 0 && (
+            <div className="pt-1 border-t border-border/60">
+              <p className="font-semibold text-foreground mb-0.5">Commandes apprises</p>
+              {apprises.map(c => (
+                <div key={c.cle} className="flex items-center gap-1">
+                  <span className="flex-1 min-w-0 truncate" title={`Apprise sur ${c.page}`}>« {c.dite} » → {c.etapes.map(e => e.libelle).join(' › ')}</span>
+                  <button type="button" onClick={() => sauverApprises(apprises.filter(x => x !== c))} title="Oublier" className="p-0.5 rounded hover:bg-destructive/10 hover:text-destructive">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

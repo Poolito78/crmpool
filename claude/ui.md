@@ -27,7 +27,12 @@ devis » → `/devis?nouveau=1`, « cherche le devis 112 » → `?editDevis=`,
 « stock du produit KC1 » → `chercherProduits` + `quantitesReservees`, lu à
 voix haute). Les champs se trouvent **par leur libellé à l'écran** dans la
 fenêtre au premier plan (« aller au titre », « date planifiée demain »,
-« priorité haute ») ; le reste est dicté dans le champ actif. ⚠️ Le panneau
+« priorité haute ») ; le reste est dicté dans le champ actif. « Ajoute une
+ligne / un groupe » clique le bouton d'ajout (« + Ligne ») — l'assistant ne
+crée rien lui-même. Une phrase inconnue (sans champ actif) se propose à
+l'**apprentissage** : oui → clics enregistrés → « terminé » → oui ; rejouée
+ensuite par le texte des boutons, avant toute autre interprétation. Rangée
+en localStorage (`assistant_vocal_commandes_apprises`), donc par navigateur. ⚠️ Le panneau
 est hors du dialogue Radix : `pointerdown` arrêté, `mousedown` sans focus,
 sinon un clic fermerait la fenêtre.
 
