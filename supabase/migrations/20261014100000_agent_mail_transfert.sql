@@ -1,15 +1,17 @@
 -- Agent mail : « Transférer à MonCRM » depuis le mobile, sans Azure.
 --
--- Le mail transféré arrive chez un service de réception (Postmark Inbound),
--- qui le poste à la fonction Edge `agent-mail-depot`. L'adresse porte une
--- CLÉ propre à chaque utilisateur, après le « + » :
---   <boîte Postmark>+<clé>@inbound.postmarkapp.com
--- La fonction retrouve l'utilisateur par cette clé (Postmark la rend dans
--- `MailboxHash`), range les pièces jointes dans le seau privé `mails-agent`
--- et inscrit le mail dans `mails_agent`. L'Agent mail les lit, PC ou mobile.
+-- Le mail transféré arrive chez un service de réception — Cloudflare Email
+-- Routing (`agent@crm.isofloor.fr` → Worker `moncrm-agent-mail`, en place
+-- depuis le 14/10/2026) ou Postmark Inbound —, qui le poste à la fonction
+-- Edge `agent-mail-depot`. L'adresse porte une CLÉ propre à chaque
+-- utilisateur, après le « + » :
+--   agent+<clé>@crm.isofloor.fr
+-- La fonction retrouve l'utilisateur par cette clé, range les pièces jointes
+-- dans le seau privé `mails-agent` et inscrit le mail dans `mails_agent`.
+-- L'Agent mail les lit, PC ou mobile. Appliquée le 14/10/2026.
 
--- La clé de chaque utilisateur, et l'adresse de réception Postmark saisie
--- une fois (« xxxx@inbound.postmarkapp.com »).
+-- La clé de chaque utilisateur, et l'adresse de réception saisie une fois
+-- dans l'Agent mail (« agent@crm.isofloor.fr »).
 CREATE TABLE IF NOT EXISTS public.agent_mail_cles (
   user_id        uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   cle            text NOT NULL UNIQUE,
