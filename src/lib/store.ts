@@ -2200,6 +2200,8 @@ export function useStore() {
    * chargement n'était pas trouvé en mémoire, donc traité comme nouveau,
    * donc INSÉRÉ — et l'insertion se heurtait à la référence déjà présente.
    * Silencieusement. L'`upsert` écrit dans les deux cas. */
+  /** Dernière écriture partie pour chaque article : la relire avant qu'elle n'arrive donnait une fausse alerte. */
+  const ecrituresProduits = useRef(new Map<string, PromiseLike<unknown>>());
   const updateProduits = useCallback((fn: (prev: Produit[]) => Produit[]) => {
     setProduits(prev => {
       const next = dater(prev, fn(prev));
@@ -2222,10 +2224,10 @@ export function useStore() {
           updated.forEach(p => {
             const patch = colonnesModifiees(avant.get(p.id)!, p, userId);
             if (!Object.keys(patch).length) return;
-            supabase.from('produits')
+            ecrituresProduits.current.set(p.id, supabase.from('produits')
               .update(patch as any)
               .eq('id', p.id)
-              .then(signaler('modification'));
+              .then(signaler('modification')));
           });
         }
         if (removed.length) {
@@ -2388,7 +2390,17 @@ export function useStore() {
     });
   }, []);
 
-  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
+  /**
+   * Attend que la dernière écriture de cet article soit arrivée en base.
+   * `updateProduits` écrit en tâche de fond : une relecture « une seconde plus
+   * tard » pouvait passer AVANT l'écriture, et annoncer un prix refusé qui
+   * s'enregistrait l'instant d'après.
+   */
+  const attendreEcritureProduit = useCallback(async (id: string) => {
+    await ecrituresProduits.current.get(id);
+  }, []);
+
+  return { clients, fournisseurs, produits, produitsCharges, nbProduits, assurerProduits, devis, numerosLiberes, produitFournisseurs, commandesFournisseur, commandesClient, facturesClient, facturesFournisseur, updateClients, updateFournisseurs, updateProduits, attendreEcritureProduit, creerProduits, updateDevis, updateProduitFournisseurs, updateCommandesFournisseur, updateCommandesClient, updateFacturesClient, updateFacturesFournisseur, loading };
 }
 
 // ── Entrepôts DB mapping ────────────────────────────────────────────────────

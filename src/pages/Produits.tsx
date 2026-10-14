@@ -211,7 +211,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, produitsCharges, assurerProduits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { produits, produitsCharges, assurerProduits, updateProduits, attendreEcritureProduit, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, commandesClient, commandesFournisseur, clients } = useCRM();
   const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1240,13 +1240,20 @@ export default function Produits() {
        * « Produit modifié » s'affichait quoi qu'il arrive. Tant que rien ne
        * vérifiait, un prix pouvait repartir sans jamais arriver — c'est
        * précisément ce qui s'est produit, et personne ne pouvait le savoir
-       * avant de recharger la page. On relit donc la ligne une seconde plus
-       * tard : si le prix en base n'est pas celui qu'on a envoyé, on le dit,
-       * en rouge, avec les deux valeurs. */
+       * avant de recharger la page. On relit donc la ligne UNE FOIS SON
+       * ÉCRITURE ARRIVÉE (`attendreEcritureProduit`) : si le prix en base
+       * n'est pas celui qu'on a envoyé, on le dit, en rouge, avec les deux
+       * valeurs.
+       *
+       * ⚠️ Pas sur un minuteur seul : relue « 1,2 s plus tard », la base
+       * répondait parfois avant que l'écriture n'arrive, et l'alerte tombait
+       * sur un prix enregistré l'instant d'après. Le court délai ne sert qu'à
+       * laisser React lancer l'écriture (elle part du `setProduits`). */
       const idVerif = editing.id;
       const achatVoulu = form.prixAchat;
       toast.success('Produit modifié');
-      setTimeout(() => {
+      setTimeout(async () => {
+        await attendreEcritureProduit(idVerif);
         supabase.from('produits').select('prix_achat').eq('id', idVerif).maybeSingle()
           .then(({ data, error }) => {
             if (error || !data) return;
@@ -1258,7 +1265,7 @@ export default function Produits() {
               );
             }
           });
-      }, 1200);
+      }, 300);
     } else {
       const newId = generateId();
       const newProd = { ...form, id: newId, composants: composantsToSave || undefined, typeKit: isTypeKit, lignesKit: lignesKitToSave || undefined, typeOptions: isTypeOptions, lignesOptions: lignesOptionsToSave || undefined, typeVariantesCompo: isTypeVariantesCompo, variantesCompo: variantesCompoToSave || undefined, paliersPrix: paliersPrixToSave || undefined, variantes: variantesToSave || undefined, achatsHistorique: achatsToSaveOrNull || undefined, dateCreation: new Date().toISOString().split('T')[0] };
