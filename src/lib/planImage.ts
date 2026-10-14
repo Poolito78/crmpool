@@ -37,7 +37,19 @@ Règles :
 
 /** Pages par appel : assez pour amortir l'appel, assez peu pour garder l'image lisible. */
 const PAGES_PAR_APPEL = 3;
-const APPELS_SIMULTANES = 4;
+/**
+ * ⚠️ **LE QUOTA DE GEMINI SE COMPTE À LA MINUTE.** Quatre appels simultanés de
+ * trois pages en image épuisaient le quota au bout de 45 pages : les 16
+ * dernières pages du carnet NMP850 rendaient « 429 quota dépassé » et
+ * restaient « sans panneau », alors qu'elles étaient parfaitement lisibles.
+ * Deux appels à la fois, et un lot refusé pour quota attend puis recommence.
+ */
+const APPELS_SIMULTANES = 2;
+const ESSAIS_QUOTA = 5;
+const ATTENTE_QUOTA_MS = 20_000;
+
+const attendre = (ms: number) => new Promise(r => setTimeout(r, ms));
+const estQuota = (e: unknown) => /\b(429|503)\b|quota|RESOURCE_EXHAUSTED|high demand/i.test((e as Error)?.message || '');
 
 /** Certaines pages d'un PDF rendues en JPEG (base64, sans en-tête data:). */
 async function pagesEnJpeg(buffer: ArrayBuffer, pages: number[], echelle = 2.5): Promise<Map<number, string>> {
@@ -93,7 +105,7 @@ async function lireLot(images: string[]): Promise<AnnotationLue[][]> {
 export async function lireAnnotationsDesPages(
   buffer: ArrayBuffer,
   pages: number[],
-  progression?: (faites: number, total: number) => void,
+  progression?: (faites: number, total: number, attente?: number) => void,
 ): Promise<Map<number, AnnotationLue[]>> {
   const images = await pagesEnJpeg(buffer, pages);
   const ordre = pages.filter(p => images.has(p));
@@ -106,14 +118,23 @@ export async function lireAnnotationsDesPages(
   const ouvrier = async () => {
     while (suivant < lots.length) {
       const lot = lots[suivant++];
-      try {
-        const lus = await lireLot(lot.map(p => images.get(p)!));
-        /* Une réponse qui n'a pas une entrée par image ne dit pas laquelle
-           manque : on n'attribue rien plutôt que d'attribuer de travers. */
-        if (lus.length === lot.length) lot.forEach((p, k) => out.set(p, lus[k]));
-        else console.warn('[plan image] réponse incomplète pour les pages', lot.join(', '));
-      } catch (e) {
-        console.warn('[plan image]', lot.join(', '), (e as Error).message);
+      for (let essai = 1; essai <= ESSAIS_QUOTA; essai++) {
+        try {
+          const lus = await lireLot(lot.map(p => images.get(p)!));
+          /* Une réponse qui n'a pas une entrée par image ne dit pas laquelle
+             manque : on n'attribue rien plutôt que d'attribuer de travers. */
+          if (lus.length === lot.length) lot.forEach((p, k) => out.set(p, lus[k]));
+          else console.warn('[plan image] réponse incomplète pour les pages', lot.join(', '));
+          break;
+        } catch (e) {
+          if (!estQuota(e) || essai === ESSAIS_QUOTA) {
+            console.warn('[plan image]', lot.join(', '), (e as Error).message);
+            break;
+          }
+          const ms = ATTENTE_QUOTA_MS * essai;
+          progression?.(faites, ordre.length, Math.round(ms / 1000));
+          await attendre(ms);
+        }
       }
       faites += lot.length;
       progression?.(faites, ordre.length);

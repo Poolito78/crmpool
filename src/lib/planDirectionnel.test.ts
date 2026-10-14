@@ -368,6 +368,15 @@ ${PIED}`, 1)!;
     expect(fixationsEnsemble(avecMatNeuf(e), {})).toMatchObject({ reference: 'CO89SFP50.BRUT', quantite: 2 });
   });
 
+  it('mât neuf bisection (MD + Coulisseau MC) : MDREH, colliers sur le coulisseau Ø89', () => {
+    const e = lireEnsemble(PAGE_CAISSON.replace('MAT TRAV MC', 'MAT TRAV MD').replace('Coulisseau MB', 'Coulisseau MC'), 3)!;
+    const neuf = avecMatNeuf(e);
+    expect(fixationsEnsemble(neuf, {})).toMatchObject({ reference: 'CO89SFP50.BRUT', quantite: 2 });
+    const sup = supportsNeufs([neuf]);
+    expect(sup.map(s => s.designation)).toEqual(['MAT TRAV MD']);
+    expect(referenceSupport(sup[0])).toEqual({ reference: 'MDREH.2800.IS.BRUT' });
+  });
+
   it('une section illisible ou une hauteur hors table reste à vérifier', () => {
     const tube = lireEnsemble(PAGE_CAISSON.replace('MAT TRAV MC', 'CANDELABRE')
       .replace('Existant\nCoulisseau MB\nMt : 10 m.daN\nLg : 0.85 m\n', ''), 3)!;
@@ -456,6 +465,16 @@ describe('supports neufs', () => {
       .toEqual({ reference: 'MC.89.2800.IS.BRUT' });
     expect(referenceSupport({ designation: 'MAT TRAV MC', longueur: 2.42, longueurTotale: 2.77, rehausse: true, moment: 620 }))
       .toEqual({ raison: "moment 620 daN.m au-delà des 500 admissibles d'un MC : mât plus fort à choisir" });
+  });
+
+  it('rehaussé d’un type vendu en bisection : MxREH à la longueur hors tout', () => {
+    expect(referenceSupport({ designation: 'MAT TRAV MD', longueur: 2.42, longueurTotale: 2.92, rehausse: true, moment: 248 }))
+      .toEqual({ reference: 'MDREH.3000.IS.BRUT' });
+    expect(referenceSupport({ designation: 'MAT TRAV ME', longueur: 3, longueurTotale: 3.5, rehausse: true }))
+      .toEqual({ reference: 'MEREH.3500.IS.BRUT' });
+    // Non rehaussé : le mono, même pour un type vendu en bisection.
+    expect(referenceSupport({ designation: 'MAT TRAV MD', longueur: 3, rehausse: false }))
+      .toEqual({ reference: 'MD.114.3000.IS.BRUT' });
   });
 
   it('sans correspondance ou hors grille : à choisir', () => {

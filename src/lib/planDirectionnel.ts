@@ -756,6 +756,26 @@ export function matMonoNeuf(e: EnsemblePlan): boolean {
   return e.supports.some(s => !s.existant && estMatType(s));
 }
 
+/**
+ * Les types de mât qu'Odoo vend en BISECTION (mât rehaussé) : MDREH à MHREH,
+ * à la longueur hors tout (`MDREH.3000.IS.BRUT`). Pas de MCREH ni de MBREH.
+ */
+export const TYPES_BISECTION = new Set(['D', 'E', 'F', 'G', 'H']);
+
+const typeDeMat = (designation: string) => sansEspaces(designation).toUpperCase().match(TYPE_MAT)?.[2];
+
+/**
+ * ⚠️ **LE MÂT NEUF D'UN ENSEMBLE REHAUSSÉ EST UN BISECTION** (règle du chargé
+ * d'affaires, 14/10/2026) : « MAT TRAV MD + Coulisseau MC » se commande en
+ * MDREH, ME + MC en MEREH, MF + MC renf en MFREH — la lettre du mât de base.
+ * Les colliers vont sur le coulisseau, la plus petite section. Un type sans
+ * bisection chez Odoo (MC + MB) reste en mono de son type (MC.89).
+ */
+export function matBisectionNeuf(e: EnsemblePlan): boolean {
+  return e.supports.some(estCoulisseau) && e.supports.some(s =>
+    !s.existant && estMatType(s) && TYPES_BISECTION.has(typeDeMat(s.designation) ?? ''));
+}
+
 /** Le mât existant de l'ensemble pourrait-il être remplacé par un mât neuf de la grille ? */
 export function matRemplacable(e: EnsemblePlan): boolean {
   return e.supports.some(s => s.existant && estMatType(s));
@@ -769,10 +789,14 @@ export function matRemplacable(e: EnsemblePlan): boolean {
  */
 export function avecMatNeuf(e: EnsemblePlan): EnsemblePlan {
   if (!matRemplacable(e)) return e;
+  /* Bisection : le coulisseau fait partie du mât commandé — il reste
+     (non commandé à part) pour porter les colliers. */
+  const bisection = e.supports.some(estCoulisseau) && e.supports.some(s =>
+    estMatType(s) && TYPES_BISECTION.has(typeDeMat(s.designation) ?? ''));
   return {
     ...e,
-    supports: e.supports.filter(s => !estCoulisseau(s))
-      .map(s => (estMatType(s) ? { ...s, existant: false } : s)),
+    supports: e.supports.filter(s => bisection || !estCoulisseau(s))
+      .map(s => (estMatType(s) ? { ...s, existant: false } : estCoulisseau(s) ? { ...s, existant: true } : s)),
   };
 }
 
@@ -946,7 +970,10 @@ export function referenceSupport(
     if (s.moment !== undefined && s.moment > admissible) {
       return { raison: `moment ${s.moment} daN.m au-delà des ${admissible} admissibles d'un M${mat[2]} : mât plus fort à choisir` };
     }
-    famille = `M${mat[2]}.${DIAMETRE_TYPE[mat[2]]}`;
+    /* Mât rehaussé d'un type vendu en bisection : MDREH… (voir `matBisectionNeuf`). */
+    famille = s.rehausse && TYPES_BISECTION.has(mat[2])
+      ? `M${mat[2]}REH`
+      : `M${mat[2]}.${DIAMETRE_TYPE[mat[2]]}`;
   }
   if (!famille) return { raison: 'support neuf : article de mât à choisir' };
   const lg = s.longueurTotale ?? s.longueur;
@@ -967,7 +994,9 @@ export function designationSupport(s: LigneSupportPlan): string {
       : `Support IPN${cote} (au lieu de ${s.designation})`;
   }
   const mat = sansEspaces(s.designation).toUpperCase().match(TYPE_MAT);
-  const mono = mat && s.rehausse ? ' — mono, sans coulisseau' : '';
+  const mono = mat && s.rehausse
+    ? (TYPES_BISECTION.has(mat[2]) ? ` — bisection M${mat[2]}REH (mât rehaussé)` : ' — mono, sans coulisseau')
+    : '';
   const moment = mat && s.moment !== undefined && s.moment <= MOMENT_ADMISSIBLE[mat[2]]
     ? ` — moment ${s.moment} ≤ ${MOMENT_ADMISSIBLE[mat[2]]} daN.m` : '';
   return `${s.designation}${cote}${mono}${moment}`;
@@ -1128,8 +1157,9 @@ function fixationsProfil(
   const coulisseaux = e.supports.filter(estCoulisseau);
   const mats = e.supports.filter(s => !estCoulisseau(s));
   const nbSupports = mats.length || coulisseaux.length;
-  /* Mât mono neuf : il porte seul les panneaux, sur sa propre section. */
-  const porteurs = matMonoNeuf(e) ? mats : e.supports;
+  /* Mât mono neuf : il porte seul les panneaux, sur sa propre section. Un
+     bisection les porte sur son coulisseau, la plus petite section. */
+  const porteurs = matMonoNeuf(e) && !matBisectionNeuf(e) ? mats : e.supports;
   const sections = porteurs.map(s => sectionSupport(s.designation));
   /* Tous ronds : la plus petite section. Tous du même carré : ce carré.
      Mélange ou section illisible : on ne tranche pas. */

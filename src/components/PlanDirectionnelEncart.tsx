@@ -4,7 +4,7 @@ import { AlertTriangle, ExternalLink, Maximize2, Minimize2 } from 'lucide-react'
 import { Input } from '@/components/ui/input';
 import { formatMontant } from '@/lib/store';
 import {
-  bilanPlan, gammeProposee, aFabriquer, titreEnsemble, matRemplacable, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
+  bilanPlan, aLireSurImage, gammeProposee, aFabriquer, titreEnsemble, matRemplacable, LIBELLE_GAMME, TAUX_PAL_REFERENCE,
   type EnsemblePlan, type GammeDirectionnelle, type LigneDemandePlan, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
 
@@ -23,10 +23,13 @@ import {
  * ensemble par ensemble (`avecMatNeuf`).
  */
 export default function PlanDirectionnelEncart({
-  ensembles, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
+  ensembles, onRelire, relecture, gammes, onGamme, regroupement, onRegroupement, classe, onClasse,
   tauxPal, onTauxPal, lignes, prixLigne, niveau, matsNeufs, onMatsNeufs, onVoirLigne, designationLigne, onVoirPage,
 }: {
   ensembles: EnsemblePlan[];
+  /** Relit sur leur image les pages restées sans panneau (quota Gemini, réseau). */
+  onRelire?: () => void;
+  relecture?: boolean;
   gammes: Record<string, GammeDirectionnelle>;
   onGamme: (produitKadri: string, gamme: GammeDirectionnelle) => void;
   regroupement: RegroupementPlan;
@@ -133,6 +136,12 @@ export default function PlanDirectionnelEncart({
           <span>
             Aucun panneau lisible, à regarder sur le plan :{' '}
             {bilan.sansPanneau.map(s => `${s.ensemble} (p. ${s.page})`).join(', ')}.
+            {onRelire && ensembles.some(aLireSurImage) && (
+              <button type="button" disabled={relecture} onClick={onRelire}
+                className="ml-1.5 underline text-primary disabled:opacity-50">
+                {relecture ? 'relecture en cours…' : 'Relire ces pages sur le dessin'}
+              </button>
+            )}
           </span>
         </p>
       )}

@@ -1346,6 +1346,47 @@ const [contratOdoo, setContratOdoo] = useState<
     reconstruirePlan({ ...gammesKadri, [produit]: gamme }, regroupementPlan, classePlan),
   [reconstruirePlan, gammesKadri, regroupementPlan, classePlan]);
 
+  /**
+   * Les pages d'un plan Kadri dont le dessin est une IMAGE : leurs panneaux
+   * sont recopiés par Gemini (`planImage.ts`) puis contrôlés par la cote et la
+   * surface. Rend les ensembles complétés ; une page non lue reste sans
+   * panneau, et l'encart propose de la relire.
+   */
+  const lirePagesEnImage = useCallback(async (ensembles: EnsemblePlan[], fichier: Blob) => {
+    const surImage = ensembles.filter(aLireSurImage).map(e => e.page);
+    if (!surImage.length) return ensembles;
+    const attente = toast.loading(`Plan en image : lecture des panneaux de ${surImage.length} page(s)…`);
+    const lus = await lireAnnotationsDesPages(await fichier.arrayBuffer(), surImage,
+      (faites, total, pause) => toast.loading(pause
+        ? `Plan en image : ${faites}/${total} page(s) lue(s) — quota Gemini atteint, reprise dans ${pause} s…`
+        : `Plan en image : ${faites}/${total} page(s) lue(s)…`, { id: attente }));
+    toast.dismiss(attente);
+    const nonLues = surImage.length - lus.size;
+    if (nonLues) toast.warning(`${nonLues} page(s) du plan non lues : « Relire » dans l'encart du plan`);
+    else toast.success(`Plan en image : ${surImage.length} page(s) lue(s)`);
+    return ensembles.map(e => (lus.has(e.page) ? avecPanneauxLus(e, lus.get(e.page)!) : e));
+  }, []);
+
+  /** Relit les pages restées sans panneau (quota, réseau) et refait les lignes du plan. */
+  const [relecturePlan, setRelecturePlan] = useState(false);
+  const relirePlanImage = useCallback(async () => {
+    if (!planKadri?.fichier) return;
+    setRelecturePlan(true);
+    try {
+      const ensembles = await lirePagesEnImage(planKadri.ensembles, planKadri.fichier);
+      const g = planKadri.grille;
+      const lignes = lignesDuPlan(ensembles, gammesKadri,
+        g?.size ? (c: string) => g.has(c.toUpperCase()) : undefined, regroupementPlan, classePlan, matsNeufsPlan);
+      setPlanKadri({ ...planKadri, ensembles });
+      setChoixProduit({}); setChoixOdoo({}); setChoixOdooPlus({}); setRefusOdoo(new Set());
+      odooDOfficeRef.current = new Set();
+      setQuantiteManuelle({}); setPrixManuel({}); setLibelleManuel({});
+      setResult(prev => (prev ? { ...documentDuPlan(ensembles, lignes), typeDocument: prev.typeDocument } : prev));
+    } finally {
+      setRelecturePlan(false);
+    }
+  }, [planKadri, lirePagesEnImage, gammesKadri, regroupementPlan, classePlan, matsNeufsPlan, documentDuPlan]);
+
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
     pdfFile: File | null,
@@ -1409,19 +1450,7 @@ const [contratOdoo, setContratOdoo] = useState<
           /* DESSIN EN IMAGE : le cartouche annonce une surface, le texte ne
              porte aucun panneau. Les annotations se lisent sur l'image, puis
              repassent par les contrôles de cote et de surface. */
-          const surImage = ensembles.filter(aLireSurImage).map(e => e.page);
-          if (surImage.length) {
-            const attente = toast.loading(`Plan en image : lecture des panneaux de ${surImage.length} page(s)…`);
-            const lus = await lireAnnotationsDesPages(await planFile.arrayBuffer(), surImage,
-              (faites, total) => toast.loading(`Plan en image : ${faites}/${total} page(s) lue(s)…`, { id: attente }));
-            ensembles.forEach((e, k) => {
-              const l = lus.get(e.page);
-              if (l) ensembles[k] = avecPanneauxLus(e, l);
-            });
-            toast.dismiss(attente);
-            const nonLues = surImage.length - lus.size;
-            if (nonLues) toast.warning(`${nonLues} page(s) du plan non lues : à regarder sur le plan`);
-          }
+          ensembles.splice(0, ensembles.length, ...await lirePagesEnImage(ensembles, planFile));
           if (bons.length) {
             const lus: BonPourExecution[] = [];
             for (const b of bons) {
@@ -1483,7 +1512,7 @@ const [contratOdoo, setContratOdoo] = useState<
     } finally {
       setLoading(false);
     }
-  }, [apiKey, commandesFournisseur, documentDuPlan]);
+  }, [apiKey, commandesFournisseur, documentDuPlan, lirePagesEnImage]);
 
   /* ── traitement des fichiers pré-chargés depuis le dashboard ── */
   useEffect(() => {
@@ -5702,6 +5731,8 @@ const [contratOdoo, setContratOdoo] = useState<
                             {planKadri && (
                               <PlanDirectionnelEncart
                                 ensembles={planKadri.ensembles}
+                                onRelire={planKadri.fichier ? () => { void relirePlanImage(); } : undefined}
+                                relecture={relecturePlan}
                                 gammes={gammesKadri}
                                 onGamme={choisirGammeKadri}
                                 regroupement={regroupementPlan}
