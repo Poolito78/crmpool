@@ -1258,13 +1258,16 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         const unites = kg != null && poidsC ? Math.ceil(kg / poidsC) : null;
                         const condKg = unites != null && poidsC ? unites * poidsC : null;
                         const prixKg = poidsC && l.prixUnitaireHT ? Math.round(l.prixUnitaireHT * (1 - l.remise / 100) / poidsC * 100) / 100 : null;
+                        /* Ligne libre vendue AU KILO (granulat d'un mortier dosé) : sa quantité EST un poids —
+                           elle va dans la colonne KG, pas dans « Unité » où elle passait pour 280 contenants. */
+                        const auKg = !prod && /^kg$/i.test((l.unite || '').trim());
                         return (
                           <>
                             <td className="py-1.5 px-1 text-right">{conso > 0 ? <>{fmt(conso)}{consoUniteEl(l)}</> : ''}</td>
                             <td className="py-1.5 px-1 text-right">{kg != null ? fmt(kg, 2) : ''}</td>
                             <td className="py-1.5 px-1 text-right">{poidsC ?? ''}</td>
-                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{l.quantite || ''}</td>
-                            <td className="py-1.5 px-1 text-right">{poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
+                            <td className="py-1.5 px-1 text-right font-semibold text-primary">{auKg ? '' : l.quantite || ''}</td>
+                            <td className={`py-1.5 px-1 text-right${auKg ? ' font-semibold text-primary' : ''}`}>{auKg ? (l.quantite ? fmt(l.quantite, 2) : '') : poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
                             <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale, uniteSurface))}</td>
