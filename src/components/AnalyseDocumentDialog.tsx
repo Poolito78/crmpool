@@ -14,7 +14,7 @@ import { toast } from 'sonner';
 import { lireBonsPourExecution, pagesEnImages, ensemblesBpe, estTasmanPal, type BonPourExecution } from '@/lib/bonPourExecution';
 import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
-  estPlanKadri, lirePlanDirectionnel, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
+  estPlanKadri, lirePlanDirectionnel, aLireSurImage, avecPanneauxLus, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   TAUX_PAL_REFERENCE,
   type EnsemblePlan, type GammeDirectionnelle, type RegroupementPlan,
 } from '@/lib/planDirectionnel';
@@ -48,6 +48,7 @@ import { chantierDansTexte } from '@/lib/chantierDemande';
 import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
+import { lireAnnotationsDesPages } from '@/lib/planImage';
 import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, type MemoireArticle } from '@/lib/memoireArticles';
 import ComparaisonDevisRealise from '@/components/ComparaisonDevisRealise';
 import {
@@ -1405,6 +1406,22 @@ const [contratOdoo, setContratOdoo] = useState<
         }
         if (estPlanKadri(pages)) {
           const ensembles = lirePlanDirectionnel(pages);
+          /* DESSIN EN IMAGE : le cartouche annonce une surface, le texte ne
+             porte aucun panneau. Les annotations se lisent sur l'image, puis
+             repassent par les contrôles de cote et de surface. */
+          const surImage = ensembles.filter(aLireSurImage).map(e => e.page);
+          if (surImage.length) {
+            const attente = toast.loading(`Plan en image : lecture des panneaux de ${surImage.length} page(s)…`);
+            const lus = await lireAnnotationsDesPages(await planFile.arrayBuffer(), surImage,
+              (faites, total) => toast.loading(`Plan en image : ${faites}/${total} page(s) lue(s)…`, { id: attente }));
+            ensembles.forEach((e, k) => {
+              const l = lus.get(e.page);
+              if (l) ensembles[k] = avecPanneauxLus(e, l);
+            });
+            toast.dismiss(attente);
+            const nonLues = surImage.length - lus.size;
+            if (nonLues) toast.warning(`${nonLues} page(s) du plan non lues : à regarder sur le plan`);
+          }
           if (bons.length) {
             const lus: BonPourExecution[] = [];
             for (const b of bons) {

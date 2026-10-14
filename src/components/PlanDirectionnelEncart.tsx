@@ -110,6 +110,23 @@ export default function PlanDirectionnelEncart({
         et {bilan.supportsExistants} support(s) existant(s).
       </p>
 
+      {bilan.lusSurImage > 0 && (
+        <p className="text-muted-foreground">
+          Panneaux lus sur le dessin de {bilan.lusSurImage} page(s) (plan en image) : chaque cote est
+          contrôlée par sa surface, et chaque page par sa « Surface totale ».
+        </p>
+      )}
+
+      {bilan.surfaceAVerifier.length > 0 && (
+        <p className="flex items-start gap-1 text-warning">
+          <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
+          <span>
+            Surface lue différente de la « Surface totale » du plan — un panneau manque ou est mal lu, à vérifier :{' '}
+            {bilan.surfaceAVerifier.map(s => `${s.ensemble} (p. ${s.page})`).join(', ')}.
+          </span>
+        </p>
+      )}
+
       {bilan.sansPanneau.length > 0 && (
         <p className="flex items-start gap-1 text-warning">
           <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />

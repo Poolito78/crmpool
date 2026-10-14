@@ -90,6 +90,10 @@ export interface EnsemblePlan {
   embase: boolean;
   /** Panneaux venus d'un bon pour exécution : pas de plan, donc ni support ni brides. */
   sansSupport?: boolean;
+  /** « Surface totale 0,55 m² » du cartouche : la somme des panneaux de la page. */
+  surfaceTotale?: number;
+  /** Panneaux lus sur le DESSIN (image) faute de texte : voir `planImage.ts`. */
+  luSurImage?: boolean;
 }
 
 /** Un panneau que le chantier demande de fabriquer. */
@@ -115,7 +119,7 @@ const nombre = (s: string | undefined) => {
 };
 
 /** Le sort, lu sans espaces : « ExistantPoseDepose », « Pose », « ASupprimer ». */
-function sortDe(mots: string): SortPanneau {
+export function sortDe(mots: string): SortPanneau {
   const m = sansEspaces(mots).toLowerCase().replace(/é/g, 'e');
   if (/supprimer/.test(m)) return 'supprime';
   const depose = /depose/.test(m);
@@ -274,7 +278,65 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
     supports,
     /* « Socle d'ancrage avec em base » : pdf.js coupe aussi ce mot-là. */
     embase: /avecembase/i.test(sansEspaces(texte)),
+    surfaceTotale: nombre(sansEspaces(texte).match(/Surfacetotale([\d.,]+)m/i)?.[1]),
   };
+}
+
+/* ── Panneaux lus sur le dessin ─────────────────────────────────────────── */
+
+/**
+ * ⚠️ **CERTAINS CARNETS N'ONT PAS LEURS PANNEAUX EN TEXTE.** Sur NMP850 (plans
+ * de marché Demidoff), le dessin de chaque ensemble — panneaux, sorts,
+ * « D21 2200x250=0.550m² » — est une IMAGE collée dans la page : le texte du
+ * PDF ne porte que le cartouche et les supports. La lecture déterministe ne
+ * trouvait aucun panneau sur 64 pages et annonçait « 0 panneau à fabriquer ».
+ *
+ * Une page sans panneau lisible mais dont le cartouche annonce une surface
+ * est donc lue sur son image (`planImage.ts`). Ce que l'IA recopie repasse
+ * ensuite par les mêmes contrôles que le texte : `lireCotePanneau` exige que
+ * largeur × hauteur redonne la surface imprimée, et la somme des panneaux doit
+ * redonner la « Surface totale » du cartouche — sinon la page est signalée.
+ */
+export function aLireSurImage(e: EnsemblePlan): boolean {
+  return !e.panneaux.length && !e.sansSupport && (e.surfaceTotale ?? 0) > 0;
+}
+
+/** Un bloc d'annotation recopié du dessin : sort, cote, fond. */
+export interface AnnotationLue {
+  sort?: string;
+  cote?: string;
+  fond?: string;
+}
+
+/** Les annotations recopiées, en panneaux — celles dont la cote ne tombe pas juste sont écartées. */
+export function panneauxDesAnnotations(lus: AnnotationLue[]): PanneauPlan[] {
+  const out: PanneauPlan[] = [];
+  for (const a of lus) {
+    const cote = lireCotePanneau(String(a.cote || '').trim()
+      .replace(/(\d)\s*[×X]\s*(\d)/g, '$1x$2').replace(/m2$/i, 'm²'));
+    if (!cote) continue;
+    const sort = String(a.sort || '');
+    const fond = sansEspaces(String(a.fond || '')).match(MOTIF_FOND)?.[1];
+    out.push({
+      ...cote,
+      /* Sans sort recopié, on ne le tient pas pour une commande : comme en texte. */
+      sort: MOTIF_SORT.test(sansEspaces(sort)) ? sortDe(sort) : 'existant',
+      fond: fond ? fond[0].toUpperCase() + fond.slice(1).toLowerCase() : undefined,
+    });
+  }
+  return out;
+}
+
+/** L'ensemble complété des panneaux lus sur son dessin. */
+export function avecPanneauxLus(e: EnsemblePlan, lus: AnnotationLue[]): EnsemblePlan {
+  return { ...e, panneaux: panneauxDesAnnotations(lus), luSurImage: true };
+}
+
+/** La somme des panneaux lus ne redonne pas la surface du cartouche : un panneau manque ou est faux. */
+export function surfaceDiscordante(e: EnsemblePlan): boolean {
+  if (!e.luSurImage || e.surfaceTotale == null) return false;
+  const somme = e.panneaux.reduce((s, p) => s + p.surface, 0);
+  return Math.abs(somme - e.surfaceTotale) > 0.006;
 }
 
 /** Lit tout le carnet ; les pages qui ne sont pas des plans (garde) sont sautées. */
@@ -775,6 +837,11 @@ export function bilanPlan(ensembles: EnsemblePlan[]) {
     /** Ensembles dont aucun panneau n'a pu être lu (portique hors normes,
         page vide) : ils se regardent sur le plan. */
     sansPanneau: ensembles.filter(e => !e.panneaux.length)
+      .map(e => ({ ensemble: e.ensemble, page: e.page })),
+    /** Panneaux lus sur le dessin : nombre de pages concernées. */
+    lusSurImage: ensembles.filter(e => e.luSurImage).length,
+    /** Lus sur le dessin, mais leur somme ne redonne pas la « Surface totale ». */
+    surfaceAVerifier: ensembles.filter(e => e.panneaux.length && surfaceDiscordante(e))
       .map(e => ({ ensemble: e.ensemble, page: e.page })),
     /** Gammes Kadri rencontrées, dans l'ordre du carnet. */
     produits: [...new Set(ensembles.map(e => e.produit).filter(Boolean))],
