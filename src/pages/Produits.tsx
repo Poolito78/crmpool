@@ -208,7 +208,7 @@ function calcTauxMarque(prixVente: number, prixAchat: number) {
 }
 
 export default function Produits() {
-  const { produits, produitsCharges, assurerProduits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, updateDevis, commandesClient, commandesFournisseur, clients } = useCRM();
+  const { produits, produitsCharges, assurerProduits, updateProduits, fournisseurs, produitFournisseurs, updateProduitFournisseurs, devis, commandesClient, commandesFournisseur, clients } = useCRM();
   const { canAchat } = useCurrentUser();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -1220,16 +1220,18 @@ export default function Produits() {
       supabase.from('produits').update({ composants: composantsToSave as any, type_kit: isTypeKit, lignes_kit: lignesKitToSave as any, type_options: isTypeOptions, lignes_options: lignesOptionsToSave as any, type_variantes_compo: isTypeVariantesCompo, variantes_compo: variantesCompoToSave as any, paliers_prix: paliersPrixToSave as any, variantes: variantesToSave as any, achats_historique: achatsToSaveOrNull } as any).eq('id', editing.id).then(({ error }) => {
         if (error) console.error('Erreur sauvegarde composants/kit/paliers/variantes/achats:', error);
       });
-      updateDevis(prev => prev.map(d => ({
-        ...d,
-        lignes: d.lignes.map(l => l.produitId === editing.id ? {
-          ...l,
-          description: form.description,
-          prixUnitaireHT: form.prixHT,
-          tva: form.tva,
-          unite: form.unite,
-        } : l),
-      })));
+      /* ⚠️ **ENREGISTRER UN ARTICLE NE TOUCHE À AUCUN DEVIS.**
+       *
+       * Ce bloc recopiait le PRIX PUBLIC de la fiche (et la désignation du
+       * modèle) sur toutes les lignes de tous les devis qui portaient
+       * l'article — envoyés et acceptés compris, remise client effacée.
+       * DEV-2026-139 (TOP SIGNALISATION, 30 % sur ISOFLOOR) : créé à
+       * 85,28 €, repassé à 121,83 € six secondes après une retouche de la
+       * fiche FLOWFASTF1, puis envoyé au client à ce prix.
+       *
+       * Le prix d'une ligne dépend du client, du niveau et des remises : seul
+       * le devis sait le calculer (`prixDeBase`). Pour reporter une
+       * correction de prix, « ↻ Re-tarifer les lignes » dans le devis. */
       /* ON RELIT CE QU'ON VIENT D'ÉCRIRE.
        *
        * « Produit modifié » s'affichait quoi qu'il arrive. Tant que rien ne
