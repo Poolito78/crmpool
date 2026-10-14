@@ -1017,6 +1017,29 @@ function dbToProduit(r: any): Produit {
   };
 }
 
+/**
+ * Les seules colonnes qu'une modification d'article a changées.
+ *
+ * ⚠️ **UN ARTICLE NE SE RÉÉCRIT JAMAIS EN ENTIER.** La copie en mémoire peut
+ * dater : un autre onglet, un collègue, l'analyse de document ont pu modifier
+ * l'article depuis. Réécrire ses quarante colonnes pour en changer une
+ * reposait les anciennes valeurs par-dessus les nouvelles — une fiche
+ * technique ajoutée à FLOWFASTF1 depuis l'analyse disparaissait dès qu'un
+ * devis contenant l'article était ouvert ailleurs (la relecture du stock
+ * Odoo réenregistrait l'article entier, `fiche_url` vide compris). On n'envoie
+ * donc que ce qui diffère entre l'article avant et après la modification.
+ */
+export function colonnesModifiees(avant: Produit, apres: Produit, userId: string): Record<string, unknown> {
+  const a = produitToDb(avant, userId) as Record<string, unknown>;
+  const b = produitToDb(apres, userId) as Record<string, unknown>;
+  const patch: Record<string, unknown> = {};
+  for (const [cle, v] of Object.entries(b)) {
+    if (cle === 'id' || cle === 'user_id') continue;
+    if (!(cle in a) || JSON.stringify(a[cle]) !== JSON.stringify(v)) patch[cle] = v;
+  }
+  return patch;
+}
+
 function produitToDb(p: Produit, userId: string) {
   return {
     id: p.id,
@@ -2174,10 +2197,16 @@ export function useStore() {
             .then(signaler('ajout'));
         }
         if (updated.length) {
-          updated.forEach(p => supabase.from('produits')
-            .update(produitToDb(p, userId) as any)
-            .eq('id', p.id)
-            .then(signaler('modification')));
+          /* Les colonnes changées seulement : voir `colonnesModifiees`. */
+          const avant = new Map(prev.map(p => [p.id, p]));
+          updated.forEach(p => {
+            const patch = colonnesModifiees(avant.get(p.id)!, p, userId);
+            if (!Object.keys(patch).length) return;
+            supabase.from('produits')
+              .update(patch as any)
+              .eq('id', p.id)
+              .then(signaler('modification'));
+          });
         }
         if (removed.length) {
           supabase.from('produits').delete().in('id', removed.map(p => p.id))
