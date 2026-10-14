@@ -348,8 +348,11 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
 - ⚠️ **Le devis ne re-tarife plus un article ISOMARK / ISOFLOOR au prix
   revendeur de la fiche** (recopié d'Odoo, faux sur les pavés) : passer
   DEV-2026-114 en R4 remettait les pavés à 67,87 € et l'Eclipse à 141,99 €.
-  `prixDeBase` applique `prixGamme` (`remiseGammes.ts`) — remise client, sinon
-  tarif applicateur sur `prixTarif` —, la règle de l'analyse.
+  `prixDeBase` applique `prixGamme` (`remiseGammes.ts`), la règle de
+  l'analyse. ⚠️ **Revue le 14/10** : base = **prix public de la FICHE**, jamais
+  `prixTarif` ; remise saisie sur la fiche client → public − remise ; client
+  revendeur sans remise → remise de gamme ; sinon **prix public** (SPIE :
+  FLOWFASTF1 à 130,36 €, et non 79,22 € = 30 % d'un `prixTarif` de 113,17 €).
 - **Le port partait en [PORT] générique** depuis le devis ouvert :
   `preparerOdoo` reconstruisait le devis sans `fraisPortLibelle`. Corrigé.
 - **L'assistante de la fiche client suit le devis Odoo** (`odoo-devis`) :
@@ -364,9 +367,10 @@ POCHOIR à 19,20 €. Migration `20260928100000` :
   est divisé deux fois par 0,7 (96,96 € pour 47,50 € applicateur), > 300 m² à
   1,41 €, ECLIPSE25 à 202,84 € pour 99,50 €. Le tarif applicateur du
   15/07/2026 est rangé en **`prix_tarif` = tarif ÷ 0,7** (le public), que
-  `prixDetail` lit avant `prix_ht` et remise de 30 % (H2) — il l'emporte sur
-  le contrat Odoo quand ils diffèrent. `prix_ht` n'est pas touché (la synchro
-  Odoo le réécrit).
+  `prixDetail` lisait avant `prix_ht`. ⚠️ **Plus depuis le 14/10** : le prix
+  de la fiche fait foi, et les 9 fiches PAVPREF ont reçu leur `prix_tarif`
+  en `prix_ht`, daté du jour (migration `20261014160000`) — le prix le plus
+  récent l'emporte sur la synchro Odoo.
 - **Reconnaissance** : `rapprocherSysteme` compare des **radicaux** (« pavé »
   = « Pavés », « colle » = « coller ») et **le format choisit la variante**
   (« 15×20 », « 15 x 20 »).

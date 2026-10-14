@@ -158,18 +158,25 @@ describe('prix revendeur — la fiche client avant le tarif de gamme', () => {
 });
 
 describe('prixGamme', () => {
-  const pave = { prixHT: 96.96, prixTarif: 67.86, categorie: 'ISOMARK / H2', catalogue: 'ISOMARK' };
+  const f1 = { prixHT: 130.36, prixTarif: 113.17, categorie: 'ISOMARK / FLOORING / MMA', catalogue: 'ISOFLOOR' };
 
-  it('prend le tarif applicateur sur prixTarif, pas le public Odoo', () => {
-    expect(prixGamme(pave)?.prix).toBe(47.5);
+  it('client sans remise : null, il paie le prix public de la fiche', () => {
+    expect(prixGamme(f1)).toBeNull();
   });
 
-  it('la remise négociée du client passe avant la gamme', () => {
-    const r = prixGamme({ ...pave, categorie: 'ISOMARK / FLOORING / EPOXY' }, { EPOXY: 40 });
-    expect(r?.libelle).toBe('remise client EPOXY');
+  it('remise client sur le PUBLIC de la fiche, jamais sur prixTarif', () => {
+    const r = prixGamme(f1, { MMA: 30 });
+    expect(r?.prix).toBe(91.25);
+    expect(r?.libelle).toBe('remise client MMA');
+  });
+
+  it('revendeur sans remise saisie : remise de gamme sur le public', () => {
+    const r = prixGamme(f1, undefined, true);
+    expect(r?.prix).toBe(91.25);
+    expect(r?.libelle).toBe('ISOFLOOR');
   });
 
   it('rien hors ISOMARK / ISOFLOOR', () => {
-    expect(prixGamme({ prixHT: 50, categorie: 'SIGNALISATION POLICE', catalogue: 'ISOSIGN' })).toBeNull();
+    expect(prixGamme({ prixHT: 50, categorie: 'SIGNALISATION POLICE', catalogue: 'ISOSIGN' }, undefined, true)).toBeNull();
   });
 });

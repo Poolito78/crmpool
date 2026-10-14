@@ -68,7 +68,7 @@ import {
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { poidsDepuisLibelle } from '@/lib/transportGammes';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
-import { prixApplicateur, prixRevendeur, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
+import { prixApplicateur, prixRevendeur, prixGamme, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
@@ -2987,6 +2987,7 @@ const [contratOdoo, setContratOdoo] = useState<
        ISOMARK, ISOFLOOR à part. Les laisser dans le sac ISOSIGN leur faisait
        franchir un franco de 700 € qui ne les concerne pas. */
     const lignesGamme: LigneGamme[] = [];
+    const clientPort = clients.find(c => c.id === creerDevisClientId);
     result.lignes.forEach((l, i) => {
       const cle = `d${i}`;
       const odoo = choixOdoo[i];
@@ -2999,8 +3000,10 @@ const [contratOdoo, setContratOdoo] = useState<
       const niveau = niveauGamme(categorie, local?.catalogue);
       const gamme = niveau !== null || estGamme(local?.catalogue);
       if (gamme) {
-        const remise = prixApplicateur(odoo?.fiche ?? local?.prixTarif ?? local?.prixHT, categorie, local?.catalogue);
-        const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : (odoo?.contrat ?? 0));
+        // La règle du devis (`prixGamme`) : public de la fiche, remise client ou de gamme (revendeur).
+        const pub = odoo?.fiche ?? local?.prixHT;
+        const remise = prixGamme({ prixHT: pub, categorie, catalogue: local?.catalogue }, clientPort?.remisesParCategorie, clientPort?.estRevendeur);
+        const pu = prixManuel[cle] ?? (remise ? remise.prix : (odoo?.contrat ?? pub ?? 0));
         lignesGamme.push({ reference: ref, designation, quantite: qte,
                            montant: (Number(pu) || 0) * qte, niveau, adr: !!local?.adr,
                            poidsUnitaire: local?.poids && local.poids > 0 ? local.poids : undefined });
@@ -3025,8 +3028,8 @@ const [contratOdoo, setContratOdoo] = useState<
       if (!ref || articlePlastique(ref)) return;
       const categorie = p.categorie || '';
       const niveau = niveauGamme(categorie, p.catalogue);
-      const remise = prixApplicateur(p.prixTarif ?? p.prixHT, categorie, p.catalogue);
-      const pu = prixManuel[cle] ?? (remise && remise.remise > 0 ? remise.prix : p.prixHT ?? 0);
+      const remise = prixGamme(p, clientPort?.remisesParCategorie, clientPort?.estRevendeur);
+      const pu = prixManuel[cle] ?? (remise ? remise.prix : p.prixHT ?? 0);
       if (niveau !== null || estGamme(p.catalogue)) {
         lignesGamme.push({ reference: ref, designation: designationProduit(p), quantite: qte,
                            montant: (Number(pu) || 0) * qte, niveau, adr: !!p.adr,
@@ -3059,7 +3062,7 @@ const [contratOdoo, setContratOdoo] = useState<
       : null;
   }, [result, livraison.dpt, choixOdoo, produitDeLigne, quantiteManuelle, prixManuel,
       systemesDetectes, lignesSystemeDe, quantiteComposant, produits,
-      chiffrageDocument, produitDocument, quantiteDocument]);
+      chiffrageDocument, produitDocument, quantiteDocument, clients, creerDevisClientId]);
 
   /* Date de la dernière synchronisation réussie. Une grille périmée est
      indiscernable d'une grille à jour : il faut la montrer. */
@@ -3606,11 +3609,14 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Remise de gamme. Le catalogue ISOMARK/ISOFLOOR ne porte que le TARIF
        PUBLIC ; la remise applicateur se lit sur la catégorie Odoo de
        l'article — « ISOMARK / H1 » à 50 %, « ISOMARK / H2 » à 30 %, ISOFLOOR
-       à 30 %. Le champ `prix_tarif` est lui aussi public : sur les 157
-       articles qui en portent un, il égale le prix de la fiche au centime
-       près. Le retenir tel quel facturait l'applicateur au prix public. */
-    const gamme = estGamme(p.catalogue) || niveauGamme(p.categorie, p.catalogue)
-      ? prixApplicateur(p.prixTarif ?? p.prixHT, p.categorie, p.catalogue)
+       à 30 %.
+       ⚠️ Sur le PRIX PUBLIC DE LA FICHE, jamais `prixTarif`, et pour un
+       client REVENDEUR seulement (règle du 14/10/2026, `prixGamme`) : un
+       client sans remise saisie paie le public — FLOWFASTF1 à 130,36 €, pas
+       79,22 € (30 % d'un `prixTarif` de 113,17 €). */
+    const client = clients.find(c => c.id === creerDevisClientId);
+    const gamme = client?.estRevendeur && (estGamme(p.catalogue) || niveauGamme(p.categorie, p.catalogue))
+      ? prixApplicateur(p.prixHT, p.categorie, p.catalogue)
       : null;
     /* LA FICHE CLIENT PASSE AVANT LE TARIF DE GAMME.
      *
@@ -3623,7 +3629,6 @@ const [contratOdoo, setContratOdoo] = useState<
      * gamme remise `prixTarif` quand il existe — 244,80 € sur l'Hydraseal
      * DPM — là où le prix public est à 264,70 €. Le seau partait à 171,36 €
      * au lieu de 185,29 €, et le devis entier était faux de 13,93 €. */
-    const client = clients.find(c => c.id === creerDevisClientId);
     const negociee = prixRevendeur(p.prixHT, p.categorie, client?.remisesParCategorie);
     const remise = negociee ?? (gamme && gamme.remise > 0 ? gamme : null);
 
@@ -3718,7 +3723,8 @@ const [contratOdoo, setContratOdoo] = useState<
        chez Odoo au tarif de gamme, jamais à la remise de la fiche client. */
     const client = clients.find(c => c.id === creerDevisClientId);
     const negociee = prixRevendeur(odoo.fiche, odoo.categorie, client?.remisesParCategorie);
-    const gamme = prixApplicateur(odoo.fiche, odoo.categorie);
+    // Remise de gamme : client revendeur seulement (`prixGamme`), sinon le public.
+    const gamme = client?.estRevendeur ? prixApplicateur(odoo.fiche, odoo.categorie) : null;
     const remise = negociee ?? (gamme && gamme.remise > 0 ? gamme : null);
     if (remise) {
       return { retenu: remise.prix, contrat: odoo.contrat,
