@@ -4183,7 +4183,9 @@ export default function Devis() {
                         {/* LE SOUS-TOTAL DU GROUPE, en face de son titre (règle du 14/10/2026). */}
                         {(() => {
                           const cg = coutGroupes?.get(l.id);
-                          if (!cg || cg.total <= 0) return null;
+                          /* Sans surface (panneaux, mâts…), le coût chantier ne ferait que
+                             répéter le sous-total : seul le sous-total s'affiche. */
+                          if (!cg || cg.total <= 0 || cg.parUnite == null) return null;
                           return (
                             <span className="text-xs text-[#CC0000] whitespace-nowrap" title={cg.surface ? `Coût chantier du groupe, rapporté à ${cg.surface} ${libelleSurface(cg.unite)}` : 'Coût chantier du groupe (aucune surface)'}>
                               Coût chantier {formatMontant(cg.total)}{cg.parUnite != null && <> · {cg.parUnite.toFixed(2)} €/{libelleSurface(cg.unite)}</>}

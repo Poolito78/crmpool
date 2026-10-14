@@ -263,7 +263,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   function coutGroupeEl(gid: string | null | undefined) {
     if (!showCoutGroupe || !gid) return null;
     const g = coutsParGroupe().find(x => x.id === gid);
-    if (!g || !(g.total > 0)) return null;
+    /* Sans surface (signalisation verticale : panneaux, mâts, colliers), le
+       coût chantier ne serait que le sous-total répété : il ne s'affiche pas. */
+    if (!g || !(g.total > 0) || g.parUnite == null) return null;
     return (
       <span className="font-normal not-italic text-[10px] text-muted-foreground mr-3 whitespace-nowrap">
         Coût chantier {formatMontant(g.total)}{g.parUnite != null && <> · {g.parUnite.toFixed(2).replace('.', ',')} €/{libelleSurface(g.unite)}</>}
