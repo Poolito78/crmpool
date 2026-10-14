@@ -1215,6 +1215,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <span className="text-xs text-muted-foreground">{uL(l)}</span>
                           </span>
                         ) : null}
+                        {/* Mortier dosé selon l'épaisseur (dosageEpaisseur.ts) : l'épaisseur chiffrée s'imprime. */}
+                        {l.epaisseurMm ? (
+                          <div className="text-xs text-muted-foreground">Épaisseur : {String(l.epaisseurMm).replace('.', ',')} mm</div>
+                        ) : null}
                         {/* Note uniquement dans la cellule (images dans tr séparé ci-dessous) */}
                         {l.note && (() => {
                           const rsNote = getRalStyle(noteEnTexte(l.note!));
@@ -1456,6 +1460,9 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                               />
                               <span className="text-xs text-muted-foreground">{uL(l)}</span>
                             </span>
+                          ) : null}
+                          {l.epaisseurMm ? (
+                            <span className="ml-2 text-xs text-muted-foreground">ép. {String(l.epaisseurMm).replace('.', ',')} mm</span>
                           ) : null}
                           {prod?.descriptionDetaillee && <p className="text-xs text-muted-foreground mt-0.5" style={{ whiteSpace: 'pre-line' }}>{prod.descriptionDetaillee}</p>}
                           {/* Note et images : ligne compacte inline — data URLs html2canvas-safe */}
