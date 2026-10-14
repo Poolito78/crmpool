@@ -30,6 +30,58 @@ export function coupeSignature(texte: string): string {
   return m ? texte.slice(0, m.index) : texte;
 }
 
+/** Début d'un message cité dans un fil : séparateur, « Le … a écrit : ». */
+const DEBUT_CITATION = /^\s*(?:-{2,}\s*(?:message d'origine|original message|forwarded message|message transf[ée]r[ée])\s*-*|le .{6,120} a [ée]crit\s*:|on .{6,120} wrote\s*:)\s*$/i;
+const ENTETE_DE = /^\s*\*?(?:de|from)\s*\*?\s*:/i;
+const ENTETE_SUITE = /^\s*\*?(?:envoy[ée]|sent|date|objet|subject|[àa]|to|cc)\s*\*?\s*:/i;
+
+/**
+ * Les messages d'un fil, du plus récent au plus ancien.
+ *
+ * Un mail transféré ou une réponse porte sous la signature les échanges
+ * précédents (« De : … Envoyé : … Objet : … ») — et c'est souvent LÀ que le
+ * client a listé les produits : « pouvez-vous chiffrer la demande ci-dessous ?
+ * Cordialement » au-dessus, le détail en dessous. Chaque message commence à
+ * son en-tête ; les marques de citation « > » sont retirées.
+ */
+export function decouperFil(texte: string): string[] {
+  const lignes = String(texte || '').replace(/\r/g, '').split('\n').map(l => l.replace(/^(?:\s*>)+\s?/, ''));
+  const debuts = [0];
+  for (let i = 1; i < lignes.length; i++) {
+    if (DEBUT_CITATION.test(lignes[i])) { debuts.push(i); continue; }
+    /* Un « De : » n'ouvre un message que s'il est suivi d'un autre champ
+       d'en-tête — sinon c'est une phrase (« De : 10 à 20 panneaux »). */
+    if (ENTETE_DE.test(lignes[i]) && lignes.slice(i + 1, i + 5).some(l => ENTETE_SUITE.test(l))
+      && !(debuts.length && i - debuts[debuts.length - 1] <= 1 && DEBUT_CITATION.test(lignes[i - 1]))) {
+      debuts.push(i);
+    }
+  }
+  return debuts
+    .map((d, k) => lignes.slice(d, debuts[k + 1] ?? lignes.length).join('\n').trim())
+    .filter(Boolean);
+}
+
+/**
+ * La signature retirée de CHAQUE message du fil, et non du seul premier.
+ *
+ * `coupeSignature` sur le fil entier coupait au premier « Cordialement » : la
+ * réponse du commercial survivait, la demande du client en dessous disparaissait.
+ * `max` borne le texte rendu ; les messages les plus anciens tombent d'abord.
+ */
+export function coupeSignatures(texte: string, max = 12000): string {
+  const morceaux: string[] = [];
+  let total = 0;
+  for (const [i, m] of decouperFil(texte).entries()) {
+    const net = coupeSignature(m).trim();
+    if (!net) continue;
+    const bloc = i === 0 ? net : `--- Message précédent ---\n${net}`;
+    if (total + bloc.length > max && morceaux.length) break;
+    morceaux.push(bloc);
+    total += bloc.length;
+  }
+  return morceaux.join('\n\n');
+}
+
 /* ============================================================
    INDICES D'IDENTIFICATION DU CLIENT
 ============================================================ */

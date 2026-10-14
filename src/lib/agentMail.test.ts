@@ -2,8 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   corpsUtile, lireTri, clientDuMail, numerosDevisCites, invitationTri,
   enteteEml, decoderMotsEncodes, dateDuNom, estFichierMail, pieceJointeUtile,
-  mailTransfere, dateEnFrancais, emlSynthetique,
+  mailTransfere, dateEnFrancais, emlSynthetique, corpsEtFil,
 } from './agentMail';
+import { decouperFil, coupeSignatures } from './chiffrage';
 
 describe('corpsUtile', () => {
   it("coupe l'historique cité d'un fil", () => {
@@ -157,5 +158,48 @@ describe('emlSynthetique', () => {
     expect(enteteEml(eml)).toMatchObject({ deEmail: 'yarbane@applic-sol.fr', sujet: 'Demande de prix' });
     expect(eml).toContain('filename="plan.pdf"');
     expect(eml).toContain('JVBERg==');
+  });
+});
+
+describe('le fil des échanges précédents', () => {
+  const fil = [
+    'Bonjour François,',
+    'Peux-tu chiffrer la demande ci-dessous ?',
+    'Cordialement',
+    'Emmanuelle DIEVAL',
+    'Tél. 06 12 34 56 78',
+    '',
+    'De : Yahia ARBANE <yarbane@applic-sol.fr>',
+    'Envoyé : vendredi 9 octobre 2026 11:14',
+    'À : Emmanuelle DIEVAL <e.dieval@isosign.fr>',
+    'Objet : Panneaux dynamiques',
+    '',
+    'Bonjour,',
+    'Merci de nous chiffrer 12 panneaux AB4 700 et 6 supports 80x40 de 3 m.',
+    'Cordialement',
+    'Yahia ARBANE',
+    '77550 LIMOGES-FOURCHES',
+  ].join('\n');
+
+  it('decouperFil sépare le dernier message du précédent', () => {
+    const m = decouperFil(fil);
+    expect(m).toHaveLength(2);
+    expect(m[1]).toMatch(/^De : Yahia ARBANE/);
+  });
+  it('coupeSignatures garde les produits du message précédent, sans les signatures', () => {
+    const t = coupeSignatures(fil);
+    expect(t).toContain('12 panneaux AB4 700');
+    expect(t).toContain('--- Message précédent ---');
+    expect(t).not.toContain('06 12 34 56 78');
+    expect(t).not.toContain('77550');
+  });
+  it("l'invitation au tri porte les échanges précédents", () => {
+    const lignes = corpsEtFil(fil);
+    expect(lignes.join('\n')).toContain('Échanges précédents :');
+    expect(lignes.join('\n')).toContain('6 supports 80x40');
+  });
+  it('les marques de citation « > » sont retirées', () => {
+    const m = decouperFil('Ok\n\nLe 9 oct. 2026 à 11:14, Jean <j@x.fr> a écrit :\n> 10 AB4\n> merci');
+    expect(m[1]).toContain('10 AB4\nmerci');
   });
 });

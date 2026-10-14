@@ -33,7 +33,7 @@
 
 import type { CorpsGemini } from './modelesIA';
 import { clientsParPersonne, type ClientAvecContacts } from './rapprochementClient';
-import { societeDepuisEmail } from './chiffrage';
+import { coupeSignature, decouperFil, societeDepuisEmail } from './chiffrage';
 
 export type CategorieMail = 'demande_devis' | 'suite_devis' | 'commande' | 'autre';
 
@@ -179,8 +179,30 @@ Pour CHAQUE mail fourni, rends un objet JSON :
 - "chantier" : le chantier ou la ville des travaux s'ils sont cités ;
 - "demandes" : liste courte de ce qui est demandé, avec quantités et dimensions telles qu'écrites (ex. "12 panneaux AB4 700", "350 m² Flowfast 319") — vide si rien ;
 - "delai" : date ou délai souhaité s'il est cité.
+Un mail peut porter sous « Échanges précédents » le fil qui l'a précédé (mail transféré, réponse « voir ci-dessous ») : c'est souvent là que le client liste les produits et les quantités. Relève-les dans "demandes" et tiens-en compte dans le résumé et la catégorie ; le dernier message reste celui qui dit ce qu'on attend (chiffrer, relancer, commander).
 N'invente rien : une information absente du mail est omise. Les noms de pièces jointes (plan, DCE, bordereau, DPGF…) comptent comme indices de demande de devis.
 Réponds UNIQUEMENT par un tableau JSON, un objet par mail, dans l'ordre reçu.`;
+
+/**
+ * Le dernier message, puis le fil qui le précède — sans les signatures, dont
+ * les numéros passent pour des quantités. Le fil n'était pas envoyé : sur une
+ * demande transférée « à chiffrer, voir ci-dessous », le résumé ne voyait
+ * que cette phrase et jamais les produits.
+ */
+export function corpsEtFil(corps: string, maxDernier = 2500, maxFil = 4000): string[] {
+  const [dernier = '', ...precedents] = decouperFil(corps);
+  const res = [coupeSignature(dernier).replace(/\n{3,}/g, '\n\n').trim().slice(0, maxDernier)];
+  let fil = '';
+  for (const p of precedents) {
+    const net = coupeSignature(p).replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+    if (!net) continue;
+    const reste = maxFil - fil.length;
+    if (reste <= 0) break;
+    fil += (fil ? '\n---\n' : '') + net.slice(0, reste);
+  }
+  if (fil) res.push('', 'Échanges précédents :', fil);
+  return res;
+}
 
 export function invitationTri(mails: MailATrier[]): CorpsGemini {
   const texte = mails.map(m => [
@@ -189,7 +211,7 @@ export function invitationTri(mails: MailATrier[]): CorpsGemini {
     `Objet : ${m.sujet}`,
     m.piecesJointes.length ? `Pièces jointes : ${m.piecesJointes.join(', ')}` : '',
     '',
-    corpsUtile(m.corps),
+    ...corpsEtFil(m.corps),
   ].filter(l => l !== '').join('\n')).join('\n\n');
   return {
     systemInstruction: { parts: [{ text: CONSIGNE }] },

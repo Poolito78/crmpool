@@ -23,7 +23,7 @@ import ClasserDocumentFournisseur from '@/components/ClasserDocumentFournisseur'
 import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
-  coupeSignature, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
+  coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
 } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
@@ -1573,8 +1573,11 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Même traitement que le Chiffrage : la signature est retirée avant
        l'analyse. Elle est pleine de nombres — téléphone, code postal, numéro
        de TVA — que l'IA prend volontiers pour des quantités. Le corps du
-       message conserve, lui, l'agence de livraison quand elle y est citée. */
-    if (emailTexte) emailTexte = coupeSignature(emailTexte);
+       message conserve, lui, l'agence de livraison quand elle y est citée.
+       ⚠️ Signature retirée de CHAQUE message du fil (`coupeSignatures`) : couper
+       au premier « Cordialement » jetait les échanges précédents — souvent ceux
+       où le client liste les produits (mail transféré, réponse « voir ci-dessous »). */
+    if (emailTexte) emailTexte = coupeSignatures(emailTexte);
 
     /* Un dépôt s'AJOUTE à ce qui est déjà dans la zone (PDF et texte), il ne
        le remplace pas : on ne lance alors pas l'analyse d'office, l'utilisateur
