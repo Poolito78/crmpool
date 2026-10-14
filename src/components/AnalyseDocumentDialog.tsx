@@ -3637,8 +3637,32 @@ const [contratOdoo, setContratOdoo] = useState<
    * pas avant sa ligne, et l'appeler plus haut ferait disparaître l'écran.
    */
   const prixOdoo = useCallback((odoo: TrouvailleOdoo) => {
+    /* LE PRIX LE PLUS RÉCENT L'EMPORTE — sur la ligne comme sur la fiche.
+     *
+     * L'article retenu chez Odoo entre au catalogue (`enregistrerArticleOdoo`),
+     * qui ne remplace un prix local que par une fiche Odoo plus récente. La
+     * ligne, elle, se chiffrait toujours sur la fiche Odoo : un prix corrigé
+     * ici après la dernière retouche Odoo restait au catalogue mais pas au
+     * devis. L'article local daté plus tard qu'Odoo se chiffre donc comme un
+     * article local (`prixDetail` : remise client, gamme, contrat). Sans date
+     * d'un côté, Odoo fait foi — c'est la source. */
+    const ref = String(odoo.reference || '').trim().toUpperCase();
+    const local = ref ? produits.find(p =>
+      String(p.referenceOdoo || p.reference).toUpperCase() === ref) : undefined;
+    const majOdoo = odoo.maj ? new Date(odoo.maj.replace(' ', 'T') + 'Z').getTime() : NaN;
+    const majLocale = local?.prixVenteMaj ? new Date(local.prixVenteMaj).getTime() : NaN;
+    if (local && (local.prixHT || 0) > SEUIL_PRIX_FACTICE
+        && !isNaN(majOdoo) && !isNaN(majLocale) && majLocale > majOdoo) {
+      return prixDetail(local);
+    }
+
+    /* La remise négociée du client passe avant le tarif de gamme — la règle
+       de `prixDetail`. L'oublier ici chiffrait un article ISOFLOOR retenu
+       chez Odoo au tarif de gamme, jamais à la remise de la fiche client. */
+    const client = clients.find(c => c.id === creerDevisClientId);
+    const negociee = prixRevendeur(odoo.fiche, odoo.categorie, client?.remisesParCategorie);
     const gamme = prixApplicateur(odoo.fiche, odoo.categorie);
-    const remise = gamme && gamme.remise > 0 ? gamme : null;
+    const remise = negociee ?? (gamme && gamme.remise > 0 ? gamme : null);
     if (remise) {
       return { retenu: remise.prix, contrat: odoo.contrat,
                catalogue: remise.public,
@@ -3665,7 +3689,7 @@ const [contratOdoo, setContratOdoo] = useState<
     return { retenu: odoo.contrat ?? 0, contrat: odoo.contrat,
              catalogue: odoo.fiche, source: 'contrat' as any,
              remise: null as PrixGamme | null };
-  }, [niveauForce, grillesNiveau]);
+  }, [niveauForce, grillesNiveau, produits, prixDetail, clients, creerDevisClientId]);
 
   /** Prix effectivement appliqué, correction manuelle comprise. */
   const prixDe = useCallback((
