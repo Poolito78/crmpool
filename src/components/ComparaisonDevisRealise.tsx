@@ -20,8 +20,9 @@ import { formatMontant } from '@/lib/store';
 import type { DocumentAnalysis } from '@/lib/analyseDocument';
 import { produitParReference } from '@/lib/indexProduits';
 import { retenirArticle } from '@/lib/memoireArticles';
+import { retenirPrix } from '@/lib/memoirePrix';
 import {
-  comparerDevis, comparerParReference, correctionsApprises, devisCandidats, rapportEcarts,
+  comparerDevis, comparerParReference, prixAApprendre, substitutionsApprises, tauxPalDeLOffre, correctionsApprises, devisCandidats, rapportEcarts,
   rapportParReference, resumerEcarts, type EcartDevis, type EcartReference,
 } from '@/lib/comparaisonDevis';
 
@@ -117,6 +118,28 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
       }, 'devis_realise');
       if (erreur) erreurs.push(erreur); else retenues++;
     }
+    /* ⚠️ UN DEVIS ISSU D'UN PLAN N'A PAS DE DEMANDE CLIENT : l'apprentissage
+       ligne à ligne n'y retenait RIEN, et les mêmes écarts revenaient au
+       chiffrage suivant. La comparaison par référence apprend donc aussi :
+       - la référence que l'offre a remplacée (D3…ST → D3…, options ôtées),
+         pour toute demande qui la reprend ;
+       - le prix pratiqué pour CE client (SFGAB168 35,30 € au lieu des 8,25 €
+         du contrat), et le taux PAL de l'offre (PMSD ÷ m² des D3). */
+    const parRef = comparerParReference(analyse.lignes || [], choisi, produits);
+    const substitutions = substitutionsApprises(parRef);
+    for (const sub of substitutions) {
+      const erreur = await retenirArticle(sub.de, {
+        produitId: produitParReference(produits, sub.vers)?.id,
+        reference: sub.vers,
+        designation: sub.designation,
+      }, 'devis_realise');
+      if (erreur) erreurs.push(erreur); else retenues++;
+    }
+    const prix = [...prixAApprendre(parRef), ...tauxPalDeLOffre(analyse.lignes || [])];
+    if (prix.length) {
+      const erreur = await retenirPrix(choisi.clientId, prix, analyse.numeroDocument);
+      if (erreur) erreurs.push(erreur);
+    }
     const { error } = await supabase.from('ecarts_devis' as never).insert({
       devis_id: choisi.id,
       devis_numero: choisi.numero,
@@ -130,8 +153,9 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
     if (erreurs.length) {
       toast.error('Apprentissage incomplet', { description: [...new Set(erreurs)].join(' — ') });
     } else {
-      toast.success(`${retenues} correction(s) d’article retenue(s)`, {
-        description: 'La même demande proposera désormais l’article du devis réalisé. Relevé des écarts enregistré.',
+      toast.success(`${retenues} correction(s) d’article et ${prix.length} prix retenu(s)`, {
+        description: `Le prochain chiffrage de ${nomClient(choisi.clientId) || 'ce client'} reprend les articles et les prix de l’offre${
+          prix.length ? ` (${prix.map(p => `${p.reference} ${formatMontant(p.prix)}`).join(', ')})` : ''}. Relevé des écarts enregistré.`,
       });
     }
   }

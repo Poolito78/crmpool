@@ -442,3 +442,63 @@ export function rapportParReference(
   }
   return lignes.join('\n');
 }
+
+/* ── Ce que la comparaison par référence apprend ─────────────────────────── */
+
+/** La référence sans ses segments d'option (R kit rail, P pieds, ST face simple). */
+export const sansOptions = (r: string) =>
+  r.toUpperCase().split('.').filter(s => !/^(R|P|ST)$/.test(s)).join('.');
+
+/**
+ * Les références que l'offre a REMPLACÉES : présente au CRM seulement d'un
+ * côté, à l'offre seulement de l'autre, et identiques une fois les options
+ * ôtées — D3.2200.2100.C2.ST.IS.BRUT (CRM) → D3.2200.2100.C2.IS.BRUT
+ * (AF039468). C'est la même pièce sous une autre écriture : le CRM la reprend.
+ * Jamais deux références d'articles différents.
+ */
+export function substitutionsApprises(ecarts: EcartReference[]): { de: string; vers: string; designation: string }[] {
+  const crm = ecarts.filter(e => e.type === 'en_trop');
+  const offre = ecarts.filter(e => e.type === 'manquant');
+  const out: { de: string; vers: string; designation: string }[] = [];
+  for (const c of crm) {
+    const o = offre.filter(x => sansOptions(x.cle) === sansOptions(c.cle) && x.cle !== c.cle);
+    if (o.length === 1) out.push({ de: c.cle, vers: o[0].cle, designation: o[0].designation });
+  }
+  return out;
+}
+
+/** Les prix unitaires que l'offre a pratiqués quand ils diffèrent du CRM. */
+export function prixAApprendre(ecarts: EcartReference[]): { reference: string; prix: number }[] {
+  return ecarts
+    .filter(e => e.prix && e.qteRealise > 0 && e.cle !== 'PORT')
+    .map(e => ({ reference: e.cle, prix: e.montantRealise / e.qteRealise }));
+}
+
+/**
+ * Le taux PAL au m² d'une offre : ses lignes PMSD (« PAL m2 - C2 »), qui
+ * portent le prix des panneaux Tasman cotés 0 € sous leur référence D3,
+ * rapportées à la surface de ces D3 (lue dans la référence : D3.2200.2100 =
+ * 4,62 m²). AF039468 : 2 × 761,28 € pour 2 × 4,62 m² = 164,78 €/m². Par
+ * classe (`PMSD.C2`). Rien quand l'offre n'en porte pas.
+ */
+export function tauxPalDeLOffre(realise: LigneAnalysee[]): { reference: string; prix: number }[] {
+  const parClasse = new Map<string, { montant: number; surface: number }>();
+  const acc = (c: string) => {
+    let a = parClasse.get(c);
+    if (!a) { a = { montant: 0, surface: 0 }; parClasse.set(c, a); }
+    return a;
+  };
+  for (const l of realise) {
+    const ref = referenceDeLigne(l.reference, l.description) ?? '';
+    const q = Number(l.quantite) || 0;
+    const d3 = ref.match(/^D3\.(\d+)\.(\d+)\.C(\d)\b/);
+    if (d3) { acc(d3[3]).surface += q * (Number(d3[1]) * Number(d3[2])) / 1e6; continue; }
+    if (/^PMSD\b/.test(ref)) {
+      const c = (ref.match(/\.C(\d)/) ?? `${l.description}`.match(/\bC(\d)\b/))?.[1];
+      if (c) acc(c).montant += q * (l.prixUnitaireHT ?? 0);
+    }
+  }
+  return [...parClasse.entries()]
+    .filter(([, a]) => a.montant > 0 && a.surface > 0)
+    .map(([c, a]) => ({ reference: `PMSD.C${c}`, prix: a.montant / a.surface }));
+}

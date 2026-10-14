@@ -50,7 +50,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { lireAnnotationsDesPages } from '@/lib/planImage';
 import { lireDevisOdoo } from '@/lib/devisOdooPdf';
-import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, type MemoireArticle } from '@/lib/memoireArticles';
+import { prixAppris, useMemoirePrix } from '@/lib/memoirePrix';
+import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, souvenirDe, type MemoireArticle } from '@/lib/memoireArticles';
 import ComparaisonDevisRealise from '@/components/ComparaisonDevisRealise';
 import {
   useSystemes, declinerSysteme, kitsPour, chiffrerZones, libelleUnite,
@@ -232,6 +233,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Les corrections d'article déjà faites sur la même demande : elles se
      rappellent avant le rapprochement automatique. Voir `memoireArticles.ts`. */
   const { souvenir } = useMemoireArticles();
+  /* Prix pratiqués appris des offres comparées (`memoirePrix.ts`) : la version
+     relance les calculs de prix quand on en apprend de nouveaux. */
+  const versionPrixAppris = useMemoirePrix();
 
 
   /* ── état analyse ── */
@@ -1314,7 +1318,13 @@ const [contratOdoo, setContratOdoo] = useState<
     const sections = [...new Set(ensembles.map(e => e.section).filter(Boolean))];
     return {
       typeDocument: 'demande_devis',
-      lignes: lignes.map(l => ({ reference: l.reference, description: l.description, quantite: l.quantite })),
+      /* Une référence qu'une offre envoyée a remplacée (D3…ST.IS.BRUT → D3…IS.BRUT,
+         AF039468) part sous la référence de l'offre : `substitutionsApprises`. */
+      lignes: lignes.map(l => {
+        const memo = l.reference ? souvenirDe(l.reference) : undefined;
+        const reference = memo?.origine === 'devis_realise' ? memo.reference : l.reference;
+        return { reference, description: l.description, quantite: l.quantite };
+      }),
       notes: `Plan de signalisation directionnelle (Kadri) — ${b.ensembles} ensembles, `
         + `${b.panneaux.neuf + b.panneaux.remplace} panneaux à fabriquer`
         + (sections.length ? ` · ${sections.join(', ')}` : ''),
@@ -3892,12 +3902,29 @@ const [contratOdoo, setContratOdoo] = useState<
     const code = codificationPal(t.classe);
     const contrat = code ? grillesNiveau[niveauRemise]?.get(code)?.prix : undefined;
     const reference = t.classe ? TAUX_PAL_REFERENCE[t.classe] : undefined;
-    /* Saisi > référence du chargé d'affaires > contrat cadre. */
+    /* Le taux PAL qu'une offre envoyée à CE client a pratiqué (PMSD ÷ m²). */
+    const appris = t.classe ? prixAppris(creerDevisClientId, `PMSD.C${t.classe}`) : undefined;
+    /* Saisi > appris d'une offre > référence du chargé d'affaires > contrat cadre. */
     const [taux, origine] = tauxPal ? [tauxPal, 'saisi']
+      : appris ? [appris.prix, `appris de ${appris.numeroOffre ?? 'l’offre'}`]
       : reference ? [reference, 'référence']
         : contrat ? [contrat, `contrat ${niveauRemise}`] : [undefined, ''];
     return taux ? { prix: Math.round(taux * t.surface * 100) / 100, taux, surface: t.surface, origine } : null;
-  }, [planKadri, lignesPlan, grillesNiveau, niveauRemise, tauxPal]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKadri, lignesPlan, grillesNiveau, niveauRemise, tauxPal, creerDevisClientId, versionPrixAppris]);
+
+  /**
+   * Le prix qu'une offre envoyée à CE client a pratiqué pour la référence de
+   * la ligne — avant le contrat (SFGAB168 : 35,30 € dans AF039468, 8,25 € au
+   * contrat PROMO AGILIS). Voir `memoirePrix.ts`.
+   */
+  const prixApprisDeLigne = useCallback((i: number) => {
+    const ref = choixOdoo[i]?.reference
+      || (planKadri ? String(result?.lignes?.[i]?.reference || '') : '')
+      || (() => { const p = produitDeLigne(i); return p ? (p.referenceOdoo || p.reference) : ''; })();
+    return prixAppris(creerDevisClientId, ref);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [choixOdoo, planKadri, result, produitDeLigne, creerDevisClientId, versionPrixAppris]);
 
   const puDeLigne = useCallback((i: number) => {
     const cle = `d${i}`;
@@ -3906,13 +3933,15 @@ const [contratOdoo, setContratOdoo] = useState<
        D3 est trouvée chez Odoo — elle y est cotée 0 €. */
     const pal = prixPal(i);
     if (pal) return prixManuel[cle] ?? pal.prix;
+    const appris = prixApprisDeLigne(i);
+    if (appris) return prixManuel[cle] ?? appris.prix;
     if (odoo) return prixManuel[cle] ?? prixOdoo(odoo).retenu;
     const p = produitDeLigne(i);
     /* Ligne de plan qu'Odoo ne connaît pas (encore) : la grille du niveau
        la tarife sous sa référence. Ni référence ni grille → 0, à vérifier. */
     if (planKadri && !p) return prixManuel[cle] ?? prixGrillePlan(i)?.prix ?? 0;
     return prixDe(p, undefined, cle);
-  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan, prixPal]);
+  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan, prixPal, prixApprisDeLigne]);
 
   /** Ce que pèse une ligne système : la somme de ses composants. */
   const totalSystemeDe = useCallback((i: number, quantite?: number | null) =>
@@ -6334,6 +6363,8 @@ const [contratOdoo, setContratOdoo] = useState<
                                         <div className="text-[11px] text-muted-foreground">
                                           {prixManuel[cle] !== undefined
                                             ? 'prix saisi à la main'
+                                            : !pal && prixApprisDeLigne(i)
+                                              ? <span className="text-primary">prix appris de {prixApprisDeLigne(i)!.numeroOffre ?? 'l’offre'} (offre envoyée à ce client)</span>
                                             : pal
                                               ? `PAL ${pal.taux.toLocaleString('fr-FR')} €/m² × ${pal.surface.toLocaleString('fr-FR')} m² (${pal.origine})`
                                             : grillePlan

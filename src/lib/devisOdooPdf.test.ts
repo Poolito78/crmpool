@@ -91,3 +91,39 @@ describe('comparaison par référence', () => {
     expect(e[0].cle).toBe('REVPBPU');
   });
 });
+
+import { prixAApprendre, substitutionsApprises, tauxPalDeLOffre } from './comparaisonDevis';
+
+describe('ce que la comparaison par référence apprend (AF039468 / DEV-2026-145)', () => {
+  const offre = [
+    { reference: 'D3.2200.2100.C2.IS.BRUT', description: 'PAL', quantite: 1, prixUnitaireHT: 0 },
+    { reference: 'PMSD', description: 'PAL m2 - C2', quantite: 1, prixUnitaireHT: 761.284 },
+    { reference: 'D3.2200.2100.C2.IS.BRUT', description: 'PAL', quantite: 1, prixUnitaireHT: 0 },
+    { reference: 'PMSD', description: 'PAL m2 - C2', quantite: 1, prixUnitaireHT: 761.284 },
+    { reference: 'SFGAB168', description: 'GABARIT 168', quantite: 1, prixUnitaireHT: 35.3 },
+  ];
+  const devis: Devis = {
+    id: 'd', numero: 'DEV-2026-145', clientId: 'agilis', dateCreation: '', dateValidite: '', statut: 'brouillon',
+    lignes: [
+      { id: 'a', referenceOdoo: 'D3.2200.2100.C2.ST.IS.BRUT', description: 'Tasman', quantite: 2, unite: 'u', prixUnitaireHT: 646.8, tva: 20, remise: 0 },
+      { id: 'b', referenceOdoo: 'SFGAB168', description: 'Gabarit', quantite: 1, unite: 'u', prixUnitaireHT: 8.25, tva: 20, remise: 0 },
+    ],
+  };
+  const e = comparerParReference(offre, devis, []);
+
+  it('la référence remplacée, options ôtées — jamais un autre article', () => {
+    expect(substitutionsApprises(e)).toEqual([
+      { de: 'D3.2200.2100.C2.ST.IS.BRUT', vers: 'D3.2200.2100.C2.IS.BRUT', designation: 'PAL' },
+    ]);
+  });
+
+  it('le prix pratiqué quand il diffère du CRM', () => {
+    expect(prixAApprendre(e)).toEqual([{ reference: 'SFGAB168', prix: 35.3 }]);
+  });
+
+  it('le taux PAL : PMSD rapporté aux m² des D3', () => {
+    const [t] = tauxPalDeLOffre(offre);
+    expect(t.reference).toBe('PMSD.C2');
+    expect(Math.round(t.prix * 4.62 * 100) / 100).toBe(761.28);
+  });
+});
