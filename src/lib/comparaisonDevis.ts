@@ -336,3 +336,109 @@ export function devisCandidats(
     .sort((a, b) => b.s - a.s || b.d.dateCreation.localeCompare(a.d.dateCreation))
     .map(x => x.d);
 }
+
+/* ── Par référence ────────────────────────────────────────────────────────── */
+
+/**
+ * La même comparaison, CUMULÉE PAR RÉFÉRENCE.
+ *
+ * Sur une offre de 631 lignes (AF039468, 61 ensembles), l'appariement ligne à
+ * ligne noie l'essentiel : soixante colliers CO89SFP50 se répondent deux à
+ * deux, au hasard de l'ordre. Ce qui compte pour corriger le CRM, c'est le
+ * bilan par article — « le CRM chiffre 48 MC.89 mono, l'offre 31 MC.89 et 17
+ * MDREH » — et le montant que chaque écart pèse. Trié par écart de montant.
+ */
+export interface EcartReference {
+  /** Référence, ou « PORT », ou la désignation quand la ligne n'a pas de référence. */
+  cle: string;
+  designation: string;
+  qteRealise: number;
+  qteCrm: number;
+  montantRealise: number;
+  montantCrm: number;
+  type: 'identique' | 'ecart' | 'manquant' | 'en_trop';
+  quantite?: boolean;
+  prix?: boolean;
+}
+
+export function comparerParReference(
+  realise: LigneAnalysee[],
+  devis: Devis,
+  produits: Produit[],
+): EcartReference[] {
+  const parCle = new Map<string, EcartReference & { vuR: boolean; vuC: boolean }>();
+  const entree = (cle: string, designation: string) => {
+    let e = parCle.get(cle);
+    if (!e) {
+      e = { cle, designation, qteRealise: 0, qteCrm: 0, montantRealise: 0, montantCrm: 0,
+        type: 'identique', vuR: false, vuC: false };
+      parCle.set(cle, e);
+    }
+    return e;
+  };
+  const sansRef = (d: string) => motsDe(d).join(' ').toUpperCase();
+
+  for (const l of realise) {
+    const ref = referenceDeLigne(l.reference, l.description);
+    const desc = (l.description || '').replace(/^\s*\[[^\]]+\]\s*/, '');
+    const q = Number(l.quantite) || 0;
+    if (!q && !l.prixUnitaireHT) continue;
+    const e = entree(estPort(ref, desc) ? 'PORT' : ref || sansRef(desc), desc);
+    e.vuR = true;
+    e.qteRealise += q;
+    e.montantRealise += (l.prixUnitaireHT ?? 0) * q;
+  }
+  for (const c of cotesCrm(devis, produits)) {
+    const p = produitParId(produits, c.produitId);
+    /* La référence sous laquelle le réalisé la cite : Odoo d'abord. */
+    const cle = c.id === 'port' || estPort(c.reference, c.description) ? 'PORT'
+      : [...referencesCrm(c, produits)].find(r => parCle.has(r))
+        ?? (c.reference || p?.reference?.toUpperCase() || sansRef(c.description));
+    const e = entree(cle, c.description);
+    e.vuC = true;
+    e.qteCrm += c.quantite;
+    e.montantCrm += c.pu * c.quantite;
+  }
+
+  const out: EcartReference[] = [];
+  for (const { vuR, vuC, ...e } of parCle.values()) {
+    e.montantRealise = Math.round(e.montantRealise * 100) / 100;
+    e.montantCrm = Math.round(e.montantCrm * 100) / 100;
+    if (!vuC) e.type = 'manquant';
+    else if (!vuR) e.type = 'en_trop';
+    else {
+      if (ecartQuantite(e.qteRealise, e.qteCrm)) e.quantite = true;
+      const puR = e.qteRealise ? e.montantRealise / e.qteRealise : undefined;
+      const puC = e.qteCrm ? e.montantCrm / e.qteCrm : undefined;
+      if (ecartPrix(puR, puC)) e.prix = true;
+      if (e.quantite || e.prix) e.type = 'ecart';
+    }
+    out.push(e);
+  }
+  return out.sort((a, b) =>
+    Math.abs(b.montantRealise - b.montantCrm) - Math.abs(a.montantRealise - a.montantCrm));
+}
+
+/** Le relevé par référence, en texte à copier. */
+export function rapportParReference(
+  ecarts: EcartReference[],
+  meta: { devisCrm: string; devisRealise?: string; client?: string },
+): string {
+  const tR = ecarts.reduce((s, e) => s + e.montantRealise, 0);
+  const tC = ecarts.reduce((s, e) => s + e.montantCrm, 0);
+  const lignes = [
+    `Comparaison par référence : offre ${meta.devisRealise || '(sans numéro)'} ↔ chiffrage CRM ${meta.devisCrm}`
+      + (meta.client ? ` — ${meta.client}` : ''),
+    `Total HT offre ${eur(Math.round(tR * 100) / 100)} / CRM ${eur(Math.round(tC * 100) / 100)}`,
+    '',
+  ];
+  for (const e of ecarts) {
+    if (e.type === 'identique') continue;
+    const quoi = e.type === 'manquant' ? 'ABSENT DU CRM'
+      : e.type === 'en_trop' ? 'ABSENT DE L’OFFRE'
+      : [e.quantite && 'quantité', e.prix && 'prix'].filter(Boolean).join(' + ').toUpperCase();
+    lignes.push(`- ${quoi} : ${e.cle} — ${e.designation} — offre ${e.qteRealise} pour ${eur(e.montantRealise)}`
+      + ` / CRM ${e.qteCrm} pour ${eur(e.montantCrm)}`);
+  }
+  return lignes.join('\n');
+}

@@ -377,6 +377,11 @@ ${PIED}`, 1)!;
     expect(referenceSupport(sup[0])).toEqual({ reference: 'MDREH.2800.IS.BRUT' });
   });
 
+  it('MF + Coulisseau MC renf : MFREH, colliers sur la section haute du produit Odoo (Ø114)', () => {
+    const e = lireEnsemble(PAGE_CAISSON.replace('MAT TRAV MC', 'MAT TRAV MF').replace('Coulisseau MB', 'Coulisseau M Crenf'), 3)!;
+    expect(fixationsEnsemble(avecMatNeuf(e), {})).toMatchObject({ reference: 'CO114SFP50.BRUT', quantite: 2 });
+  });
+
   it('une section illisible ou une hauteur hors table reste à vérifier', () => {
     const tube = lireEnsemble(PAGE_CAISSON.replace('MAT TRAV MC', 'CANDELABRE')
       .replace('Existant\nCoulisseau MB\nMt : 10 m.daN\nLg : 0.85 m\n', ''), 3)!;

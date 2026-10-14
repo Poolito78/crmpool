@@ -165,7 +165,8 @@ explication.
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·
 `parseEml` / `parseMsgPdf` / `parseExcel` · `exportExcel` · `historique` ·
 `memoireArticles` (demande → article corrigé, rappelé avant le rapprochement) ·
-`comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts, apprentissage) ·
+`comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts ligne à ligne ou par référence, apprentissage) ·
+`devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
 `concurrents` · `ralColors`
 
 ## Supabase

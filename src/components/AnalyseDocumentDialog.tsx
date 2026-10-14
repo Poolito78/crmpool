@@ -49,6 +49,7 @@ import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fix
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
 import { lireAnnotationsDesPages } from '@/lib/planImage';
+import { lireDevisOdoo } from '@/lib/devisOdooPdf';
 import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, type MemoireArticle } from '@/lib/memoireArticles';
 import ComparaisonDevisRealise from '@/components/ComparaisonDevisRealise';
 import {
@@ -1445,7 +1446,24 @@ const [contratOdoo, setContratOdoo] = useState<
             bons = lus.filter(x => x !== plan && x.pg.every(t => t.replace(/\s/g, '').length < 40)).map(x => x.s);
           }
         }
-        if (estPlanKadri(pages)) {
+        /* NOTRE OFFRE DE PRIX (devis Odoo AF…), seule ou jointe à un mail :
+           elle se lit sans IA et se compare au devis du CRM. Cherchée avant le
+           plan Kadri — le mail qui la transmet joint souvent le plan refait
+           par ISOSIGN, qui passerait sinon pour une demande. */
+        const offre = await (async () => {
+          const sources = pdfsCtx.length > 1
+            ? await Promise.all(pdfsCtx.map(x => extrairePagesPDF(x.buffer).catch(() => [] as string[])))
+            : [pages];
+          for (const pg of sources) {
+            const o = lireDevisOdoo(pg);
+            if (o?.lignes.length) return o;
+          }
+          return null;
+        })();
+        if (offre) {
+          analysis = { ...offre, notes: texteCtx.trim() ? texteCtx.trim().slice(0, 1500) : offre.notes };
+          toast.success(`Offre de prix ${offre.numeroDocument ?? ''} lue : ${offre.lignes.length} lignes — à comparer au devis du CRM`);
+        } else if (estPlanKadri(pages)) {
           const ensembles = lirePlanDirectionnel(pages);
           /* DESSIN EN IMAGE : le cartouche annonce une surface, le texte ne
              porte aucun panneau. Les annotations se lisent sur l'image, puis
@@ -2158,7 +2176,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
   const systemesDetectes = useMemo(() => {
     const m = new Map<number, RapprochementSysteme>();
-    if (!systemes.length) return m;
+    if (!systemes.length || result?.typeDocument === 'offre_prix') return m;
     (result?.lignes || []).forEach((l, i) => {
       const manuel = systemeManuel[i];
       if (manuel === SANS_SYSTEME) return;
@@ -2196,7 +2214,7 @@ const [contratOdoo, setContratOdoo] = useState<
    */
   const systemeDocument = useMemo(() => {
     const lignes = result?.lignes || [];
-    if (!systemes.length || !lignes.length) return null;
+    if (!systemes.length || !lignes.length || result?.typeDocument === 'offre_prix') return null;
     const corps = [texte, result?.notes, ...lignes.map((l, i) => texteDemande(l, i))]
       .filter(Boolean).join('\n');
     const rap = rapprocherSysteme(corps, systemes);
@@ -2262,6 +2280,9 @@ const [contratOdoo, setContratOdoo] = useState<
 
   const rapprochements = useMemo(() => {
     const m = new Map<number, ReturnType<typeof rapprocherArticle>>();
+    /* Une offre de prix porte ses références : elle se compare, elle ne se
+       rapproche pas — 631 lignes contre 22 700 articles figeraient l'écran. */
+    if (result?.typeDocument === 'offre_prix') return m;
     (result?.lignes || []).forEach((l, i) => {
       /* Une ligne système ne cherche pas d'article : la balayer contre les
          22 634 références ne produirait qu'un faux candidat à écarter. */
@@ -3301,8 +3322,9 @@ const [contratOdoo, setContratOdoo] = useState<
        aucune référence, et laisserait pourtant le contrat à l'écran s'il y a
        un système à chiffrer. On interroge donc Odoo dès qu'il y a de quoi
        reconnaître le client ET quelque chose à tarifer, système compris. */
-    const aTarifer = referencesDuDevis.length || aChercher.length
-      || systemesDetectes.size || systemeDocument;
+    /* Une offre de prix est déjà tarifée : on ne la redemande pas à Odoo. */
+    const aTarifer = result?.typeDocument !== 'offre_prix' && (referencesDuDevis.length || aChercher.length
+      || systemesDetectes.size || systemeDocument);
     if (!critere || !aTarifer) {
       /* L'écran est vidé : la demande précédente n'est plus « appliquée ».
          Sans cet oubli, y revenir — retirer un article puis le remettre —
@@ -5185,8 +5207,8 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
 
                 {/* ═══ DEVIS RÉALISÉ : comparé au chiffrage du CRM ═══ */}
-                {result.typeDocument === 'devis_client' && (
-                  <ComparaisonDevisRealise analyse={result} clientId={creerDevisClientId} texte={texte} />
+                {(result.typeDocument === 'devis_client' || result.typeDocument === 'offre_prix') && (
+                  <ComparaisonDevisRealise analyse={result} clientId={creerDevisClientId || creerCCClientId} texte={texte} />
                 )}
 
                 {/* ═══ ACTION : créer devis ═══ */}

@@ -21,8 +21,8 @@ import type { DocumentAnalysis } from '@/lib/analyseDocument';
 import { produitParReference } from '@/lib/indexProduits';
 import { retenirArticle } from '@/lib/memoireArticles';
 import {
-  comparerDevis, correctionsApprises, devisCandidats, rapportEcarts, resumerEcarts,
-  type EcartDevis,
+  comparerDevis, comparerParReference, correctionsApprises, devisCandidats, rapportEcarts,
+  rapportParReference, resumerEcarts, type EcartDevis, type EcartReference,
 } from '@/lib/comparaisonDevis';
 
 interface Props {
@@ -47,12 +47,22 @@ function libelleEcart(e: EcartDevis): string {
   return [e.article && 'article', e.quantite && 'quantité', e.prix && 'prix'].filter(Boolean).join(' + ');
 }
 
+function libelleReference(e: EcartReference): string {
+  if (e.type === 'identique') return 'identique';
+  if (e.type === 'manquant') return 'absent du CRM';
+  if (e.type === 'en_trop') return 'absent de l’offre';
+  return [e.quantite && 'quantité', e.prix && 'prix'].filter(Boolean).join(' + ');
+}
+
 export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Props) {
   const { devis, produits, clients } = useCRM();
   const [devisId, setDevisId] = useState('');
   const [masquerIdentiques, setMasquerIdentiques] = useState(true);
   const [enCours, setEnCours] = useState(false);
   const [appris, setAppris] = useState(false);
+  /* Une grosse offre se lit par référence ; une petite, ligne à ligne. */
+  const [vue, setVue] = useState<'reference' | 'ligne'>(
+    (analyse.lignes?.length ?? 0) > 40 ? 'reference' : 'ligne');
 
   const candidats = useMemo(() => {
     const proposes = devisCandidats(devis, {
@@ -76,17 +86,23 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
     [choisi, analyse, produits],
   );
   const resume = useMemo(() => resumerEcarts(ecarts), [ecarts]);
+  const ecartsRef = useMemo(
+    () => (choisi && vue === 'reference' ? comparerParReference(analyse.lignes || [], choisi, produits) : []),
+    [choisi, analyse, produits, vue],
+  );
   const corrections = useMemo(() => correctionsApprises(ecarts), [ecarts]);
   const nomClient = (id?: string) => {
     const c = clients.find(x => x.id === id);
     return c ? c.societe || c.nom : '';
   };
 
-  const rapport = () => rapportEcarts(ecarts, {
+  const meta = () => ({
     devisCrm: choisi?.numero || '',
     devisRealise: analyse.numeroDocument,
     client: nomClient(choisi?.clientId),
   });
+  const rapport = () => rapportEcarts(ecarts, meta());
+  const rapportAffiche = () => (vue === 'reference' ? rapportParReference(ecartsRef, meta()) : rapport());
 
   async function apprendre() {
     if (!choisi) return;
@@ -121,7 +137,7 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
   }
 
   function copier() {
-    void navigator.clipboard.writeText(rapport()).then(
+    void navigator.clipboard.writeText(rapportAffiche()).then(
       () => toast.success('Rapport des écarts copié'),
       () => toast.error('Copie refusée par le navigateur'),
     );
@@ -139,7 +155,7 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
         <div>
           <p className="text-sm font-semibold">Comparer au chiffrage du CRM</p>
           <p className="text-[11px] text-muted-foreground">
-            Ce devis réalisé face au devis du CRM : ce que le commercial a corrigé, le CRM l’apprend.
+            L’offre réellement envoyée face au devis du CRM : ce que le commercial a corrigé, le CRM l’apprend.
           </p>
         </div>
       </div>
@@ -170,12 +186,47 @@ export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Pr
             </span>
           </div>
 
-          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-            <input type="checkbox" checked={masquerIdentiques} onChange={e => setMasquerIdentiques(e.target.checked)} />
-            Masquer les lignes identiques
-          </label>
+          <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+            <span className="inline-flex rounded border border-border overflow-hidden">
+              {(['reference', 'ligne'] as const).map(v => (
+                <button key={v} type="button" onClick={() => setVue(v)}
+                  className={`px-2 py-0.5 ${vue === v ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
+                  {v === 'reference' ? 'Par référence' : 'Ligne à ligne'}
+                </button>
+              ))}
+            </span>
+            <label className="flex items-center gap-1.5">
+              <input type="checkbox" checked={masquerIdentiques} onChange={e => setMasquerIdentiques(e.target.checked)} />
+              Masquer les identiques
+            </label>
+          </div>
 
-          {visibles.length ? (
+          {vue === 'reference' ? (
+            <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+              <table className="w-full text-[11px]">
+                <thead className="sticky top-0 bg-card">
+                  <tr className="text-left text-muted-foreground border-b border-border">
+                    <th className="py-1 pr-2 font-medium">Écart</th>
+                    <th className="py-1 pr-2 font-medium">Article</th>
+                    <th className="py-1 pr-2 font-medium text-right">Offre</th>
+                    <th className="py-1 pr-2 font-medium text-right">CRM</th>
+                    <th className="py-1 font-medium text-right">Δ HT</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ecartsRef.filter(e => !masquerIdentiques || e.type !== 'identique').map(e => (
+                    <tr key={e.cle} className="border-b border-border/50 align-top">
+                      <td className={`py-1 pr-2 font-medium whitespace-nowrap ${STYLE[e.type]}`}>{libelleReference(e)}</td>
+                      <td className="py-1 pr-2"><span className="font-mono">{e.cle}</span> <span className="text-muted-foreground">{e.designation}</span></td>
+                      <td className="py-1 pr-2 text-right whitespace-nowrap">{e.qteRealise} · {formatMontant(e.montantRealise)}</td>
+                      <td className="py-1 pr-2 text-right whitespace-nowrap">{e.qteCrm} · {formatMontant(e.montantCrm)}</td>
+                      <td className="py-1 text-right whitespace-nowrap font-medium">{formatMontant(e.montantRealise - e.montantCrm)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : visibles.length ? (
             <div className="overflow-x-auto">
               <table className="w-full text-[11px]">
                 <thead>

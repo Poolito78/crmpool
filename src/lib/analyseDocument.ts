@@ -29,6 +29,13 @@ export type TypeDocument =
    * ressemble en tout point à un devis fournisseur.
    */
   | 'devis_concurrent'
+  /**
+   * NOTRE offre de prix telle qu'elle est partie (devis Odoo AF…), ou un
+   * devis à réaliser : elle ne crée rien, elle se COMPARE au devis du CRM
+   * qu'elle reprend pour en tirer les écarts (`comparaisonDevis.ts`). Lue
+   * sans IA quand c'est un PDF Odoo (`devisOdooPdf.ts`).
+   */
+  | 'offre_prix'
   | 'autre';
 
 export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }> = {
@@ -41,6 +48,7 @@ export const TYPE_LABELS: Record<TypeDocument, { label: string; color: string }>
   demande_devis:        { label: 'Demande de devis',      color: 'bg-primary/10 text-primary' },
   devis_fournisseur:    { label: 'Devis fournisseur',     color: 'bg-info/10 text-info' },
   devis_concurrent:     { label: 'Devis concurrent',      color: 'bg-destructive/10 text-destructive' },
+  offre_prix:           { label: 'Offre de prix (à comparer au CRM)', color: 'bg-warning/10 text-warning' },
   autre:                { label: 'Autre document',        color: 'bg-muted text-muted-foreground' },
 };
 
@@ -56,6 +64,8 @@ export interface LigneAnalysee {
   unite?: string;
   prixUnitaireHT?: number;
   tva?: number;
+  /** Le groupe qui porte la ligne dans une offre Odoo (« AF039468/0001 »). */
+  groupe?: string;
 }
 
 export interface DocumentAnalysis {

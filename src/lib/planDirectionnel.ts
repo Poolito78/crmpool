@@ -765,6 +765,16 @@ export const TYPES_BISECTION = new Set(['D', 'E', 'F', 'G', 'H']);
 const typeDeMat = (designation: string) => sansEspaces(designation).toUpperCase().match(TYPE_MAT)?.[2];
 
 /**
+ * La section HAUTE d'un mât bisection, celle qui porte les colliers — lue
+ * dans les désignations Odoo (« MAT MD 114 REH 89 », « MAT ME 114 REH 89 »,
+ * « MAT MF 140 REH 114 », « MAT MG 168 REH 140 », offre AF039468). Ce n'est
+ * pas toujours le coulisseau que Kadri dessine : « MF + Coulisseau MC renf »
+ * part en MFREH, colliers Ø114 (150 CO114SFP50 dans l'offre). Type absent de
+ * la table : le coulisseau du plan fait foi.
+ */
+export const SECTION_HAUTE_BISECTION: Record<string, number> = { D: 89, E: 89, F: 114, G: 140 };
+
+/**
  * ⚠️ **LE MÂT NEUF D'UN ENSEMBLE REHAUSSÉ EST UN BISECTION** (règle du chargé
  * d'affaires, 14/10/2026) : « MAT TRAV MD + Coulisseau MC » se commande en
  * MDREH, ME + MC en MEREH, MF + MC renf en MFREH — la lettre du mât de base.
@@ -1160,7 +1170,11 @@ function fixationsProfil(
   /* Mât mono neuf : il porte seul les panneaux, sur sa propre section. Un
      bisection les porte sur son coulisseau, la plus petite section. */
   const porteurs = matMonoNeuf(e) && !matBisectionNeuf(e) ? mats : e.supports;
-  const sections = porteurs.map(s => sectionSupport(s.designation));
+  const typeReh = matBisectionNeuf(e)
+    ? e.supports.map(s => typeDeMat(s.designation)).find(t => !!t && TYPES_BISECTION.has(t))
+    : undefined;
+  const hauteReh = typeReh ? SECTION_HAUTE_BISECTION[typeReh] : undefined;
+  const sections = porteurs.map(s => (hauteReh ? { rond: hauteReh } : sectionSupport(s.designation)));
   /* Tous ronds : la plus petite section. Tous du même carré : ce carré.
      Mélange ou section illisible : on ne tranche pas. */
   const ronds = sections.filter((x): x is { rond: number } => !!x && 'rond' in x);
