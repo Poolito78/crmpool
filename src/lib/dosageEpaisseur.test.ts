@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  calculerDosage, consommationsParPalier, kgGranulat, lireDosage, palierPour, usageEpaisseur,
+  calculerDosage, consommationsParPalier, copierLignes, kgGranulat, lireDosage, palierPour, usageEpaisseur,
   type DosageEpaisseur,
 } from './dosageEpaisseur';
 
@@ -89,5 +89,17 @@ describe('lireDosage', () => {
     expect(lireDosage({ kgM2ParMm: 0, paliers: F1.paliers })).toBeUndefined();
     expect(lireDosage({ kgM2ParMm: 2, paliers: [] })).toBeUndefined();
     expect(lireDosage(null)).toBeUndefined();
+  });
+});
+
+describe('copierLignes', () => {
+  it('renumérote et garde le granulat rattaché à son mortier', () => {
+    let n = 0;
+    const out = copierLignes([
+      { id: 'm', description: 'F1' },
+      { id: 'g', description: 'sable', granulatDe: { ligneId: 'm', libelle: 'Sable de quartz 2-8 mm' } },
+    ], () => `n${++n}`);
+    expect(out.map(l => l.id)).toEqual(['n1', 'n2']);
+    expect(out[1].granulatDe).toEqual({ ligneId: 'n1', libelle: 'Sable de quartz 2-8 mm' });
   });
 });

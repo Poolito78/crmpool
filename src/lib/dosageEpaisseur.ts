@@ -155,3 +155,20 @@ export function consommationsParPalier(d: DosageEpaisseur, kitKg: number): { val
     return [{ valeur: c.consoKitKgM2, usage: `Épaisseur ${n(p.epaisseurMinMm)} mm${charge}` }];
   });
 }
+
+/**
+ * Copie des lignes sous de NOUVEAUX identifiants (devis dupliqué, modèle de
+ * système repris) en gardant le rattachement d'un granulat à SON mortier :
+ * sans cela, `granulatDe.ligneId` désignerait la ligne du devis d'origine et
+ * le granulat ne suivrait plus les kits.
+ */
+export function copierLignes<L extends { id: string; granulatDe?: { ligneId: string; libelle: string } }>(
+  lignes: L[], nouvelId: () => string,
+): L[] {
+  const ids = new Map(lignes.map(l => [l.id, nouvelId()]));
+  return lignes.map(l => ({
+    ...l,
+    id: ids.get(l.id)!,
+    ...(l.granulatDe ? { granulatDe: { ...l.granulatDe, ligneId: ids.get(l.granulatDe.ligneId) ?? l.granulatDe.ligneId } } : {}),
+  }));
+}

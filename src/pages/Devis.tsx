@@ -42,7 +42,7 @@ import {
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
 import EpaisseurInput from '@/components/EpaisseurInput';
 import {
-  calculerDosage, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  calculerDosage, copierLignes, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
   type AjoutDosage,
 } from '@/lib/dosageEpaisseur';
 import {
@@ -1085,7 +1085,7 @@ export default function Devis() {
       dateCreation: new Date().toISOString().split('T')[0],
       dateValidite: new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
       statut: 'brouillon',
-      lignes: d.lignes.map(l => ({ ...l, id: generateId() })),
+      lignes: copierLignes(d.lignes, generateId),
     };
     updateDevis(prev => [...prev, newDevis]);
     const n = await copyDevisPiecesJointes(d.id, newId);
@@ -1113,7 +1113,7 @@ export default function Devis() {
       return { ...l, quantite, prixUnitaireHT: prix };
     };
     const lignes = [
-      ...sysDevis.lignes.map(l => applySurface({ ...l, id: generateId() })),
+      ...copierLignes(sysDevis.lignes, generateId).map(applySurface),
       ...opts.dictees.map(applySurface),
     ];
     const newDevis: DevisType = {
@@ -1156,8 +1156,7 @@ export default function Devis() {
     const surf = surfaceGlobaleM2 > 0 ? surfaceGlobaleM2 : (sys.surfaceGlobaleM2 || 0);
     // La surface du devis garde son unité ; reprise du modèle, elle prend la sienne.
     const unite: UniteSurface = surfaceGlobaleM2 > 0 ? uniteSurface : (sys.uniteSurface ?? 'm2');
-    const nouvelles = sys.lignes.map(l0 => {
-      const l: LigneDevis = { ...l0, id: generateId() };
+    const nouvelles = copierLignes(sys.lignes, generateId).map(l => {
       if (l.type && l.type !== 'ligne') return l;
       const prod = l.produitId ? produitParId(produits, l.produitId) : null;
       if (!prod) return l;
