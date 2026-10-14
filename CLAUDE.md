@@ -163,6 +163,8 @@ explication.
 `produitImages` · `journalPrix` · `prixAchatFournisseur` · `devisFournisseur` ·
 `odooSync` · `pdfFolder` · `analyseDocument` / `analyseTransport` ·
 `parseEml` / `parseMsgPdf` / `parseExcel` · `exportExcel` · `historique` ·
+`memoireArticles` (demande → article corrigé, rappelé avant le rapprochement) ·
+`comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts, apprentissage) ·
 `concurrents` · `ralColors`
 
 ## Supabase

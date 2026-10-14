@@ -28,7 +28,7 @@ import {
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
 import { appliquerAccompagnements, type LigneChiffrage } from '@/lib/chiffrage';
-import { produitParId } from '@/lib/indexProduits';
+import { produitParId, produitParReference } from '@/lib/indexProduits';
 import { rattacherContact, type ContactSource } from '@/lib/contactAffaire';
 import { cleAppelOdoo, type CorpsAppelOdoo } from '@/lib/appelOdoo';
 import { extraireImages, lireSignature, type ContactSignature } from '@/lib/lireSignature';
@@ -48,6 +48,8 @@ import { chantierDansTexte } from '@/lib/chantierDemande';
 import { compterBrides, fixationsPour, fixationDeSection, fixationsP50, type Fixations } from '@/lib/bridesDevis';
 import { Checkbox } from '@/components/ui/checkbox';
 import { tagACandidat, ajouterTag, oublierTag, useProduitTags, vocabulaireCatalogue } from '@/lib/produitTags';
+import { useMemoireArticles, produitDeMemoire, retenirArticle, oublierDemande, type MemoireArticle } from '@/lib/memoireArticles';
+import ComparaisonDevisRealise from '@/components/ComparaisonDevisRealise';
 import {
   useSystemes, declinerSysteme, kitsPour, chiffrerZones, libelleUnite,
   type Systeme, type LigneSysteme, type ZoneSysteme, type LigneChiffreeSysteme,
@@ -225,6 +227,9 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   /* Les mots du client déjà retenus sur un article : on n'apprend pas deux
      fois le même, et la recherche d'article les voit. */
   const { tagsDe, parProduit: tagsParProduit } = useProduitTags();
+  /* Les corrections d'article déjà faites sur la même demande : elles se
+     rappellent avant le rapprochement automatique. Voir `memoireArticles.ts`. */
+  const { souvenir } = useMemoireArticles();
 
 
   /* ── état analyse ── */
@@ -2052,9 +2057,21 @@ const [contratOdoo, setContratOdoo] = useState<
     id: string,
   ) => {
     setChoixProduit(prev => ({ ...prev, [i]: id }));
-    if (!id) return;
+    const demande = texteDemande(ligne, i);
+    if (!id) {
+      /* Vider le choix : la demande n'a plus d'article désigné, son souvenir
+         non plus — sinon il le remettrait à la demande suivante. */
+      void oublierDemande(demande);
+      return;
+    }
     const p = produitParId(produits, id);
     if (!p) return;
+    /* LA DEMANDE ENTIÈRE SE RETIENT, même quand aucun mot n'est un tag :
+       « AK3 700 C2 » n'apprend aucun synonyme, mais la correction doit
+       valoir pour la demande suivante identique. Voir `memoireArticles.ts`. */
+    void retenirArticle(demande, {
+      produitId: p.id, reference: p.referenceOdoo || p.reference, designation: designationProduit(p),
+    }).then(erreur => { if (erreur) toast.error('Correction non mémorisée', { description: erreur }); });
     const candidat = tagACandidat(texteDemande(ligne, i), p, tagsDe(p.id), vocabulaireCatalogue(produits));
     if (!candidat) return;
 
@@ -2720,22 +2737,49 @@ const [contratOdoo, setContratOdoo] = useState<
      l'écran : les règles métier ne s'appliquaient qu'aux propositions Odoo.
      Voir `varianteSelonDemande`. Un choix fait à la main n'est jamais
      corrigé. */
+  /**
+   * LA CORRECTION DÉJÀ FAITE SUR LA MÊME DEMANDE.
+   *
+   * Le commercial a corrigé l'article de « panneau AK3 » au devis d'avant :
+   * la même demande retient d'office l'article qu'il a choisi, avant tout
+   * rapprochement. Ni ligne système (chiffrée par ses composants) ni ligne de
+   * plan (résolue par sa référence de grille). Voir `memoireArticles.ts`.
+   */
+  const memoireDeLigne = useMemo(() => {
+    const m = new Map<number, MemoireArticle>();
+    if (planKadri) return m;
+    (result?.lignes || []).forEach((l, i) => {
+      if (estLigneSysteme(i)) return;
+      const s = souvenir(texteDemande(l, i));
+      if (s) m.set(i, s);
+    });
+    return m;
+  }, [result, souvenir, texteDemande, estLigneSysteme, planKadri]);
+
   const varianteDOffice = useMemo(() => {
     const m = new Map<number, typeof produits[number]>();
     (result?.lignes || []).forEach((l, i) => {
-      const auto = rapprochements.get(i)?.meilleur;
+      /* Le souvenir passe devant le rapprochement, mais reste un choix
+         D'OFFICE : il suit la classe et la gamme de l'écran comme le reste. */
+      const memo = memoireDeLigne.get(i);
+      /* Un souvenir hors du catalogue local désigne un article Odoo : le
+         voisin local du rapprochement ne le remplace pas. */
+      const auto = memo ? produitDeMemoire(memo, produits) : rapprochements.get(i)?.meilleur;
       if (!auto) return;
       const code = (auto.reference || '').split('.')[0].trim().toUpperCase();
       m.set(i, varianteSelonDemande(auto, produitsParCode.get(code) ?? [], texteRechercheOdoo(l, i)));
     });
     return m;
-  }, [result, rapprochements, produitsParCode, texteRechercheOdoo]);
+  }, [result, rapprochements, produitsParCode, texteRechercheOdoo, memoireDeLigne, produits]);
 
   const produitDeLigne = useCallback((i: number) => {
     const choisi = choixProduit[i];
     if (choisi) return produitParId(produits, choisi);
+    /* Souvenir d'un article Odoo absent du catalogue : il est retenu par la
+       sélection Odoo (fiche lue à code exact), pas par un voisin local. */
+    if (memoireDeLigne.has(i) && !varianteDOffice.has(i)) return undefined;
     return varianteDOffice.get(i) ?? rapprochements.get(i)?.meilleur;
-  }, [choixProduit, produits, rapprochements, varianteDOffice]);
+  }, [choixProduit, produits, rapprochements, varianteDOffice, memoireDeLigne]);
 
   /* ── Devis fournisseur ─────────────────────────────────────────────────── */
 
@@ -3101,8 +3145,12 @@ const [contratOdoo, setContratOdoo] = useState<
       const p = produits.find(x => x.id === a.produitId);
       if (p) refs.add(p.referenceOdoo || p.reference);
     }
+    /* L'article Odoo qu'un souvenir désigne, lu par son code. */
+    for (const memo of memoireDeLigne.values()) {
+      if (!produitDeMemoire(memo, produits)) refs.add(memo.reference.trim().toUpperCase());
+    }
     return [...refs];
-  }, [result, accompagnements, produits, produitDeLigne, systemesDetectes, systemeDocument]);
+  }, [result, accompagnements, produits, produitDeLigne, systemesDetectes, systemeDocument, memoireDeLigne]);
 
   useEffect(() => {
     /* Devis d'un CONCURRENT : le partenaire du document est le concurrent, pas
@@ -3488,6 +3536,15 @@ const [contratOdoo, setContratOdoo] = useState<
            variante D3 voisine d'un Tasman qu'Odoo n'a pas créé — se propose,
            sans plus : un D3.1900.1500 ne vaut pas un 4151 × 2550. */
         if (planKadri && !fichesOdoo[String(l.reference || '').trim().toUpperCase()]) return;
+        /* LE SOUVENIR D'UN ARTICLE ODOO : la correction faite au devis
+           d'avant, lue par son code — elle passe devant la recherche. */
+        const memo = memoireDeLigne.get(i);
+        const ficheMemo = memo && fichesOdoo[memo.reference.trim().toUpperCase()];
+        if (ficheMemo) {
+          odooDOfficeRef.current.add(i);
+          if (n[i]?.reference !== ficheMemo.reference) { n[i] = ficheMemo; change = true; }
+          return;
+        }
         /* Même ordre qu'à l'affichage : la fiche lue par référence exacte
            d'abord, la recherche par mots ensuite. */
         const brute = String(l.reference || '').trim().toUpperCase();
@@ -3527,7 +3584,7 @@ const [contratOdoo, setContratOdoo] = useState<
       return change ? n : prev;
     });
   }, [trouvaillesOdoo, fichesOdoo, result, refusOdoo, produitDeLigne, texteRechercheOdoo,
-      estLigneSysteme, texteDemande, planKadri]);
+      estLigneSysteme, texteDemande, planKadri, memoireDeLigne]);
 
   /**
    * Prix d'un article : celui du contrat, celui du catalogue, et le retenu.
@@ -4120,7 +4177,19 @@ const [contratOdoo, setContratOdoo] = useState<
         quantite: 0, unite: '', prixUnitaireHT: 0, tva: 0, remise: 0,
       }];
     };
-    const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => [...enteteDuPlan(i), ...((): LigneDevis[] => {
+    /* LA DEMANDE DU CLIENT SUIT SA LIGNE, sans s'afficher : comparé plus tard
+       au devis réellement envoyé, c'est elle qui dira quel article cette
+       demande voulait dire (`comparaisonDevis.ts`). Sur la première ligne
+       d'article seulement — les options d'ensemble ne sont pas la demande.
+       Ni système ni plan : ils ne se résolvent pas en un article. */
+    const avecDemande = (i: number, l: { reference?: string; description?: string }, ls: LigneDevis[]): LigneDevis[] => {
+      if (planKadri || estLigneSysteme(i)) return ls;
+      const k = ls.findIndex(x => x.type !== 'groupe' && x.type !== 'soustotal' && x.type !== 'texte');
+      if (k < 0) return ls;
+      const demande = texteDemande(l, i);
+      return demande ? ls.map((x, j) => (j === k ? { ...x, demandeClient: demande } : x)) : ls;
+    };
+    const lignes: LigneDevis[] = (result?.lignes ?? []).flatMap((l, i) => [...enteteDuPlan(i), ...avecDemande(i, l, ((): LigneDevis[] => {
       const cle = `d${i}`;
       if (systemeDocument?.zones.has(i)) {
         /* Une zone ne part pas seule : la première porte le bloc entier. Sans
@@ -4226,7 +4295,7 @@ const [contratOdoo, setContratOdoo] = useState<
         remise: 0,
         note: noteDuPlan(i),
       }, ...lignesOptionsEnsemble(i, l)];
-    })()]);
+    })())]);
     // Les articles ajoutés par les règles suivent les articles demandés.
     for (const a of accompagnements) {
       const p = produits.find(x => x.id === a.produitId);
@@ -5061,6 +5130,11 @@ const [contratOdoo, setContratOdoo] = useState<
                       <PlusCircle className="w-4 h-4 mr-2" />{showCreerCF ? 'Confirmer la création' : 'Créer la commande reçue'}
                     </Button>
                   </div>
+                )}
+
+                {/* ═══ DEVIS RÉALISÉ : comparé au chiffrage du CRM ═══ */}
+                {result.typeDocument === 'devis_client' && (
+                  <ComparaisonDevisRealise analyse={result} clientId={creerDevisClientId} texte={texte} />
                 )}
 
                 {/* ═══ ACTION : créer devis ═══ */}
@@ -6210,6 +6284,32 @@ const [contratOdoo, setContratOdoo] = useState<
                                       onSelect={(id) => choisirArticle(i, l, id)}
                                     />
                                   )}
+                                  {/* Le souvenir d'une correction faite sur la
+                                      même demande : il se voit, et s'oublie. */}
+                                  {!sysRap && !choixProduit[i] && memoireDeLigne.get(i) && (() => {
+                                    const memo = memoireDeLigne.get(i)!;
+                                    const applique = retenu
+                                      ? (retenu.referenceOdoo || retenu.reference).toUpperCase() === memo.reference.toUpperCase()
+                                        || retenu.id === memo.produitId
+                                      : choixOdoo[i]?.reference?.toUpperCase() === memo.reference.toUpperCase();
+                                    return (
+                                      <p className="text-[11px] text-primary flex flex-wrap items-baseline gap-x-1.5">
+                                        <span>
+                                          {applique ? 'Retenu de mémoire' : 'En mémoire'} :{' '}
+                                          <span className="font-mono">{memo.reference}</span>
+                                          {' — '}{memo.origine === 'devis_realise' ? 'corrigé d’après un devis réalisé' : 'choisi à la main'}
+                                          {' le '}{new Date(memo.updatedAt).toLocaleDateString('fr-FR')}
+                                          {memo.nb > 1 ? ` (${memo.nb} fois)` : ''}
+                                          {!applique && ' — variante ajustée à la classe/gamme de l’écran ou article non trouvé'}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          className="underline text-muted-foreground hover:text-destructive"
+                                          onClick={() => { void oublierDemande(texteDemande(l, i)); }}
+                                        >oublier</button>
+                                      </p>
+                                    );
+                                  })()}
                                   {/* Cet avertissement ne parle que du catalogue
                                       LOCAL. Depuis qu'un article Odoo peut être
                                       retenu d'office, l'afficher à côté de
@@ -6692,6 +6792,13 @@ const [contratOdoo, setContratOdoo] = useState<
                                               type="button"
                                               onClick={() => {
                                                 const retire = choixOdoo[i]?.reference === t.reference;
+                                                /* Le clic se retient pour la demande suivante
+                                                   identique ; le retrait l'oublie. */
+                                                if (retire) void oublierDemande(demandeTexte);
+                                                else void retenirArticle(demandeTexte, {
+                                                  produitId: produitParReference(produits, t.reference)?.id,
+                                                  reference: t.reference, designation: t.designation,
+                                                }).then(erreur => { if (erreur) toast.error('Correction non mémorisée', { description: erreur }); });
                                                 // Cliqué : le choix ne suit plus l'écran.
                                                 odooDOfficeRef.current.delete(i);
                                                 setChoixOdoo(prev => {

@@ -1,0 +1,246 @@
+/**
+ * Encart de l'analyse de document : le devis RÉALISÉ (importé, type
+ * `devis_client`) confronté au devis du CRM qu'il reprend.
+ *
+ * Ce que le commercial a corrigé avant d'envoyer — un article, une quantité,
+ * une ligne oubliée — s'affiche ligne à ligne. « Apprendre de ce devis »
+ * retient les corrections d'article dans la mémoire de l'analyseur
+ * (`memoireArticles.ts`) et garde le relevé (`ecarts_devis`) ; « Copier le
+ * rapport » donne le texte à transmettre pour corriger les règles du CRM,
+ * ce que la mémoire ne sait pas apprendre seule. Voir `comparaisonDevis.ts`.
+ */
+import { useMemo, useState } from 'react';
+import { toast } from 'sonner';
+import { GitCompare, Copy, Brain } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useCRM } from '@/lib/StoreContext';
+import { supabase } from '@/integrations/supabase/client';
+import { formatMontant } from '@/lib/store';
+import type { DocumentAnalysis } from '@/lib/analyseDocument';
+import { produitParReference } from '@/lib/indexProduits';
+import { retenirArticle } from '@/lib/memoireArticles';
+import {
+  comparerDevis, correctionsApprises, devisCandidats, rapportEcarts, resumerEcarts,
+  type EcartDevis,
+} from '@/lib/comparaisonDevis';
+
+interface Props {
+  analyse: DocumentAnalysis;
+  /** Le client retenu à l'écran pour ce document. */
+  clientId?: string;
+  /** Le texte du document : il cite parfois le numéro du devis du CRM. */
+  texte?: string;
+}
+
+const STYLE: Record<string, string> = {
+  identique: 'text-muted-foreground',
+  ecart: 'text-warning',
+  manquant: 'text-destructive',
+  en_trop: 'text-destructive',
+};
+
+function libelleEcart(e: EcartDevis): string {
+  if (e.type === 'identique') return 'identique';
+  if (e.type === 'manquant') return 'oubli du CRM';
+  if (e.type === 'en_trop') return 'en trop au CRM';
+  return [e.article && 'article', e.quantite && 'quantité', e.prix && 'prix'].filter(Boolean).join(' + ');
+}
+
+export default function ComparaisonDevisRealise({ analyse, clientId, texte }: Props) {
+  const { devis, produits, clients } = useCRM();
+  const [devisId, setDevisId] = useState('');
+  const [masquerIdentiques, setMasquerIdentiques] = useState(true);
+  const [enCours, setEnCours] = useState(false);
+  const [appris, setAppris] = useState(false);
+
+  const candidats = useMemo(() => {
+    const proposes = devisCandidats(devis, {
+      numero: analyse.numeroDocument,
+      referenceAffaire: analyse.referencePartenaire,
+      clientId,
+      texte,
+    });
+    /* Rien de reconnu : les plus récents, pour choisir à la main. */
+    return (proposes.length ? proposes : [...devis].sort((a, b) => b.dateCreation.localeCompare(a.dateCreation)))
+      .slice(0, 30);
+  }, [devis, analyse, clientId, texte]);
+
+  /* Le plus probable d'office ; le choix de l'écran ensuite. */
+  const choisi = devis.find(d => d.id === devisId) ?? (devisCandidats(devis, {
+    numero: analyse.numeroDocument, referenceAffaire: analyse.referencePartenaire, clientId, texte,
+  })[0]);
+
+  const ecarts = useMemo(
+    () => (choisi ? comparerDevis(analyse.lignes || [], choisi, produits) : []),
+    [choisi, analyse, produits],
+  );
+  const resume = useMemo(() => resumerEcarts(ecarts), [ecarts]);
+  const corrections = useMemo(() => correctionsApprises(ecarts), [ecarts]);
+  const nomClient = (id?: string) => {
+    const c = clients.find(x => x.id === id);
+    return c ? c.societe || c.nom : '';
+  };
+
+  const rapport = () => rapportEcarts(ecarts, {
+    devisCrm: choisi?.numero || '',
+    devisRealise: analyse.numeroDocument,
+    client: nomClient(choisi?.clientId),
+  });
+
+  async function apprendre() {
+    if (!choisi) return;
+    setEnCours(true);
+    let retenues = 0;
+    const erreurs: string[] = [];
+    for (const c of corrections) {
+      const erreur = await retenirArticle(c.demande, {
+        produitId: produitParReference(produits, c.reference)?.id,
+        reference: c.reference,
+        designation: c.designation,
+      }, 'devis_realise');
+      if (erreur) erreurs.push(erreur); else retenues++;
+    }
+    const { error } = await supabase.from('ecarts_devis' as never).insert({
+      devis_id: choisi.id,
+      devis_numero: choisi.numero,
+      numero_realise: analyse.numeroDocument || null,
+      ecarts: ecarts.filter(e => e.type !== 'identique'),
+      resume: rapport(),
+    } as never);
+    if (error) erreurs.push(error.message);
+    setEnCours(false);
+    setAppris(true);
+    if (erreurs.length) {
+      toast.error('Apprentissage incomplet', { description: [...new Set(erreurs)].join(' — ') });
+    } else {
+      toast.success(`${retenues} correction(s) d’article retenue(s)`, {
+        description: 'La même demande proposera désormais l’article du devis réalisé. Relevé des écarts enregistré.',
+      });
+    }
+  }
+
+  function copier() {
+    void navigator.clipboard.writeText(rapport()).then(
+      () => toast.success('Rapport des écarts copié'),
+      () => toast.error('Copie refusée par le navigateur'),
+    );
+  }
+
+  const visibles = masquerIdentiques ? ecarts.filter(e => e.type !== 'identique') : ecarts;
+  const sansDemande = ecarts.filter(e => e.article && !e.crm?.demandeClient).length;
+
+  return (
+    <div className="rounded-xl border border-warning/40 bg-warning/5 p-3 sm:p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 rounded-lg bg-warning/15 flex items-center justify-center shrink-0">
+          <GitCompare className="w-4 h-4 text-warning" />
+        </div>
+        <div>
+          <p className="text-sm font-semibold">Comparer au chiffrage du CRM</p>
+          <p className="text-[11px] text-muted-foreground">
+            Ce devis réalisé face au devis du CRM : ce que le commercial a corrigé, le CRM l’apprend.
+          </p>
+        </div>
+      </div>
+
+      <Select value={choisi?.id ?? ''} onValueChange={v => { setDevisId(v); setAppris(false); }}>
+        <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Devis du CRM à comparer…" /></SelectTrigger>
+        <SelectContent>
+          {candidats.map(d => (
+            <SelectItem key={d.id} value={d.id}>
+              {d.numero} — {nomClient(d.clientId) || 'sans client'}
+              {d.referenceAffaire ? ` — ${d.referenceAffaire}` : ''} ({d.dateCreation})
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      {choisi && (
+        <>
+          <div className="flex flex-wrap gap-1.5 text-[11px]">
+            <span className="rounded bg-muted px-1.5 py-0.5">{resume.identiques} identique(s)</span>
+            <span className="rounded bg-warning/15 px-1.5 py-0.5">{resume.articles} article(s)</span>
+            <span className="rounded bg-warning/15 px-1.5 py-0.5">{resume.quantites} quantité(s)</span>
+            <span className="rounded bg-warning/15 px-1.5 py-0.5">{resume.prix} prix</span>
+            <span className="rounded bg-destructive/10 px-1.5 py-0.5">{resume.manquants} oubli(s) du CRM</span>
+            <span className="rounded bg-destructive/10 px-1.5 py-0.5">{resume.enTrop} en trop</span>
+            <span className="rounded bg-muted px-1.5 py-0.5">
+              HT réalisé {formatMontant(resume.totalRealise)} / CRM {formatMontant(resume.totalCrm)}
+            </span>
+          </div>
+
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <input type="checkbox" checked={masquerIdentiques} onChange={e => setMasquerIdentiques(e.target.checked)} />
+            Masquer les lignes identiques
+          </label>
+
+          {visibles.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[11px]">
+                <thead>
+                  <tr className="text-left text-muted-foreground border-b border-border">
+                    <th className="py-1 pr-2 font-medium">Écart</th>
+                    <th className="py-1 pr-2 font-medium">Devis réalisé</th>
+                    <th className="py-1 font-medium">Chiffrage CRM</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibles.map((e, k) => (
+                    <tr key={k} className="border-b border-border/50 align-top">
+                      <td className={`py-1 pr-2 font-medium whitespace-nowrap ${STYLE[e.type]}`}>{libelleEcart(e)}</td>
+                      <td className="py-1 pr-2">
+                        {e.realise ? (
+                          <>
+                            {e.realise.reference && <span className="font-mono">{e.realise.reference} </span>}
+                            <span>{e.realise.description}</span>
+                            <span className={`block ${e.quantite || e.prix ? 'font-medium' : 'text-muted-foreground'}`}>
+                              × {e.realise.quantite}{e.realise.pu != null ? ` à ${formatMontant(e.realise.pu)}` : ''}
+                            </span>
+                          </>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                      <td className="py-1">
+                        {e.crm ? (
+                          <>
+                            {e.crm.reference && <span className="font-mono">{e.crm.reference} </span>}
+                            <span>{e.crm.description}</span>
+                            <span className="block text-muted-foreground">
+                              × {e.crm.quantite} à {formatMontant(e.crm.pu)}
+                            </span>
+                            {e.crm.demandeClient && (
+                              <span className="block text-muted-foreground italic">demande : « {e.crm.demandeClient} »</span>
+                            )}
+                          </>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="text-[11px] text-success">Aucun écart : le chiffrage du CRM est celui du devis réalisé.</p>
+          )}
+
+          {sansDemande > 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              {sansDemande} correction(s) d’article sans demande d’origine (devis créé avant le 14/10/2026 ou
+              ligne saisie à la main) : relevées dans le rapport, pas apprises.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => { void apprendre(); }} disabled={enCours || appris || !ecarts.length}>
+              <Brain className="w-4 h-4 mr-1.5" />
+              {appris ? 'Appris' : `Apprendre de ce devis${corrections.length ? ` (${corrections.length} correction(s))` : ''}`}
+            </Button>
+            <Button size="sm" variant="outline" onClick={copier} disabled={!ecarts.length}>
+              <Copy className="w-4 h-4 mr-1.5" />Copier le rapport
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}

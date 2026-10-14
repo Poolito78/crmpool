@@ -86,6 +86,11 @@ const MOTS_VIDES = new Set([
   'total', 'ht', 'ttc', 'tva', 'euro', 'euros', 'remise', 'unite', 'unites',
 ]);
 
+/** Liaison, politesse ou vocabulaire du bon de commande — voir `MOTS_VIDES`. */
+export function estMotVide(mot: string): boolean {
+  return MOTS_VIDES.has(sansAccents(mot.toLowerCase()));
+}
+
 /** Unités et conditionnements : ils qualifient la quantité, pas l'article. */
 const UNITES = new Set([
   'm', 'm2', 'm²', 'm3', 'm³', 'ml', 'mm', 'cm', 'km', 'kg', 'g', 'l', 'cl',

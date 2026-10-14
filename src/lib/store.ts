@@ -552,6 +552,14 @@ export interface LigneDevis {
    */
   referenceOdoo?: string;
   /**
+   * La demande du client d'où vient la ligne, telle que l'analyse de document
+   * l'a lue (« panneau AK3 », « plot PVC ») — jamais affichée : la ligne
+   * porte la désignation de l'article. Elle permet, quand le devis réalisé
+   * est comparé au chiffrage (`comparaisonDevis.ts`), d'apprendre quel
+   * article cette demande voulait dire (`memoireArticles.ts`).
+   */
+  demandeClient?: string;
+  /**
    * La gamme d'une ligne SANS article — « ISOFLOOR » pour le SNL Concrete
    * d'un système résine. Elle choisit l'article de négoce chez Odoo
    * (`codeNegoce`, `odooSync.ts`) ; une ligne avec article prend la gamme

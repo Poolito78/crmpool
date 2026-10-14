@@ -133,6 +133,32 @@ export function produitParId(produits: Produit[], id?: string | null) {
   return tableIdentifiants(produits).get(id);
 }
 
+const cacheReference = new WeakMap<readonly Produit[], Map<string, Produit>>();
+
+/**
+ * Retrouve un article par sa référence MonCRM ou sa référence Odoo, sans
+ * balayer le catalogue — casse et espaces de bord ignorés. La référence
+ * MonCRM l'emporte quand les deux désignent des articles différents.
+ */
+export function produitParReference(produits: Produit[], ref?: string | null) {
+  const cle = String(ref || '').trim().toUpperCase();
+  if (!cle) return undefined;
+  let table = cacheReference.get(produits);
+  if (!table) {
+    table = new Map<string, Produit>();
+    for (const p of produits) {
+      const odoo = String(p.referenceOdoo || '').trim().toUpperCase();
+      if (odoo && !table.has(odoo)) table.set(odoo, p);
+    }
+    for (const p of produits) {
+      const r = String(p.reference || '').trim().toUpperCase();
+      if (r) table.set(r, p);
+    }
+    cacheReference.set(produits, table);
+  }
+  return table.get(cle);
+}
+
 /**
  * Cherche dans le catalogue et renvoie au plus `limite` résultats.
  *

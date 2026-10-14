@@ -152,6 +152,15 @@ Extraction des lignes d'une demande de devis :
 - « reference » reste null quand le client n'en donne pas.
 - « prixUnitaireHT » reste null : c'est le tarif du client qui décidera.
 
+Extraction des lignes d'un devis ÉMIS (devis_client) — il sera comparé ligne à
+ligne au chiffrage du CRM :
+- « reference » = le code article, souvent entre crochets en tête de la
+  désignation (« [AK3.700.C2.BTR.IS.BRUT] Panneau… ») ; « description » = la
+  désignation sans ce code.
+- « prixUnitaireHT » = le prix unitaire HT NET, remise de ligne déduite.
+- Les frais de port sont une ligne comme une autre.
+- Les titres de section, notes et sous-totaux ne sont pas des lignes.
+
 Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
 
 /**
