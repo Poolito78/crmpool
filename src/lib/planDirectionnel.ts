@@ -122,6 +122,9 @@ const nombre = (s: string | undefined) => {
 export function sortDe(mots: string): SortPanneau {
   const m = sansEspaces(mots).toLowerCase().replace(/é/g, 'e');
   if (/supprimer/.test(m)) return 'supprime';
+  /* Kadri 9.6.5 : « Nouvelles normes » au-dessus d'un panneau à fabriquer
+     (plan ISOSIGN AF039468, 201 panneaux, tous chiffrés dans l'offre). */
+  if (/nouvellesnormes/.test(m)) return 'neuf';
   const depose = /depose/.test(m);
   /* « Pose » seul, pas celui qu'on lit dans « Depose ». */
   const pose = /(^|[^e])pose/.test(m.replace(/depose/g, '|'));
@@ -146,7 +149,17 @@ function cartouche(lignes: string[]) {
   if (i >= 0 && /^(Fixations|Accessoires|Entourage)$/i.test(lignes[i + 1] || '')) {
     let k = i + 1;
     while (/^(Fixations|Accessoires|Entourage)$/i.test(lignes[k] || '')) k++;
-    const [dossier = '', section = '', ensemble = '', produit = '', sup = ''] = lignes.slice(k, k + 5);
+    const v = lignes.slice(k, k + 6);
+    /* Kadri 9.6.5 (plan ISOSIGN AF039468) ajoute le NOM de l'ensemble après
+       son numéro : « AF039468 / AF039468 / 0003 / DEM2-42 / LAPEROUSE P50
+       CL2 / MÂT ANCRÉ COULISSEAU ». La gamme se repère à sa classe ou à son
+       nom ; ce qui la précède est dossier, section et ensemble. */
+    const ip = v.findIndex((x, j) => j >= 3 && /\bCL\s*[123]\b|TASMAN|LAP[EÉ]ROUSE|VASCO|URVILLE|CAISSON|CHAMPLAIN/i.test(x));
+    if (ip === 4) {
+      const [dossier = '', , numero = '', nom = '', produit = '', sup = ''] = v;
+      return { dossier, section: numero, ensemble: nom || numero, produit, support: sup.split(/\s{2,}/)[0].trim() };
+    }
+    const [dossier = '', section = '', ensemble = '', produit = '', sup = ''] = v;
     return { dossier, section, ensemble, produit, support: sup.split(/\s{2,}/)[0].trim() };
   }
   /* La ligne du support porte parfois, collée, l'adresse du concepteur :
@@ -169,7 +182,9 @@ function cartouche(lignes: string[]) {
  * surface que Kadri imprime à côté : « D212200x400=0.880 » ne se coupe
  * qu'en D21 + 2200, seule découpe dont 2200 × 400 donne 0,880 m².
  */
-const sansEspaces = (s: string) => s.replace(/\s+/g, '');
+/* Les accents tombent aussi : Kadri 9.6.5 écrit « MÂT ANCRÉ MD », qu'aucun
+   motif de support ne reconnaissait (plan ISOSIGN AF039468). */
+const sansEspaces = (s: string) => s.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/\s+/g, '');
 
 /* « D21 », « D42b1 », mais aussi « Dc43 » (cartouche touristique),
    « EB_20 » (agglomération) et « plaque » (sans code), tels que Kadri les
@@ -203,7 +218,7 @@ export function lireCotePanneau(ligne: string): Omit<PanneauPlan, 'sort' | 'fond
   return null;
 }
 
-const MOTIF_SORT = /^(?:Existant|Pose|D[ée]pose|ASupprimer)+$/i;
+const MOTIF_SORT = /^(?:Existant|Pose|D[ée]pose|ASupprimer|NouvellesNormes)+$/i;
 const MOTIF_FOND = /^(Blanc|Vert|Bleu|Jaune|Noir|Rouge|Marron|Orange|Gris|Brun|Violet)/i;
 const MOTIF_SUPPORT =
   /^(MAT(TRAV|ANCRE)|TUBE|Coulisseau|CANDELABRE|IPN|IALU|HEA|PORTIQUE|POTENCE|POTELET)/i;
@@ -742,7 +757,7 @@ export interface LigneSupportPlan {
 }
 
 /** « MAT TRAV MC », « MAT ANCRE MD » : un mât alu d'un type de la grille. */
-const TYPE_MAT = /^MAT(TRAV|ANCRE)M([B-F])$/;
+const TYPE_MAT = /^MAT(TRAV|ANCRE)M([B-G])$/;
 const estMatType = (s: SupportPlan) => TYPE_MAT.test(sansEspaces(s.designation).toUpperCase());
 
 /**
@@ -974,6 +989,10 @@ export function referenceSupport(
   const t = sansEspaces(s.designation).toUpperCase();
   let famille: string | null = null;
   if (t === 'TUBEGALVMC80') famille = 'SG80802';
+  /* « TUBE ROND TUB60 » → SG60.<L>.IS.BRUT, « SUPPORT ACIER GALVA Ø60 »
+     (offre AF039468 : SG60.2500.IS.BRUT pour 2,50 m). */
+  const tub = t.match(/^TUBERONDTUB(\d{2,3})$/);
+  if (tub) famille = `SG${tub[1]}`;
   const mat = t.match(TYPE_MAT);
   if (mat) {
     const admissible = MOMENT_ADMISSIBLE[mat[2]];
@@ -1073,7 +1092,8 @@ export function railsLaperouse(hauteur: number): number | null {
 }
 
 /** Diamètre des mâts selon leur type : MB.76, MC.89, MD.114, ME.114, MF.140. */
-const DIAMETRE_TYPE: Record<string, number> = { A: 60, B: 76, C: 89, D: 114, E: 114, F: 140 };
+/* G : « MAT MG 168 REH 140 » (offre AF039468). */
+const DIAMETRE_TYPE: Record<string, number> = { A: 60, B: 76, C: 89, D: 114, E: 114, F: 140, G: 168 };
 
 export type SectionSupport = { rond: number } | { carre: [number, number] };
 
@@ -1092,8 +1112,11 @@ export function sectionSupport(designation: string): SectionSupport | null {
   if (/^MC80$/.test(type) && /^TUBEGALV/i.test(sansEspaces(designation))) return { carre: [80, 80] };
   const carre = type.match(/^(\d{2,3})X(\d{2,3})$/);
   if (carre) return { carre: [Number(carre[1]), Number(carre[2])] };
-  const lettre = type.match(/^M([A-F])(RENF|_G)?$/);
+  const lettre = type.match(/^M([A-G])(RENF|_G)?$/);
   if (lettre) return { rond: DIAMETRE_TYPE[lettre[1]] };
+  /* « TUBE ROND TUB60 » : tube acier galva Ø60 (SG60, offre AF039468). */
+  const tub = type.match(/^TUB(\d{2,3})$/);
+  if (tub) return { rond: Number(tub[1]) };
   const nombre = type.match(/^(\d{2,3})(E|D|G|ALU)?$/);
   if (nombre) return { rond: Number(nombre[1]) };
   return null;
