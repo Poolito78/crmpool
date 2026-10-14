@@ -157,6 +157,7 @@ explication.
 `relanceDevis` (relance mail/tél. d'un devis envoyé ; « Relancé » est un libellé, le statut reste `'envoyé'`) ·
 `assistantVocal` (phrase dite → commande ; une commande ne vaut que si elle se résout entièrement, sinon c'est de la dictée) ·
 `stockDisponible` (stock − commandes clients en cours ; page Stock et assistant vocal) ·
+`dosageEpaisseur` (F1 Mortar : épaisseur saisie sur la ligne → conso du kit au palier de la fiche, granulats à cocher, quantité = kits × kg/kit) ·
 `agentMail` + `dossierMails` + `mailsTransferes` (Agent mail : non lus exportés par la macro Outlook `ExporterMailsNonLus`, glissés, ou TRANSFÉRÉS du mobile à l'adresse MonCRM → fonction `agent-mail-depot` ; tri IA, « Proposer un devis » = mail confié à l'analyse de document ; `microsoftGraph` = option Azure) ·
 `mailsTypes` (objet + texte des mails d'envoi devis / commande fournisseur / facture / AR, par utilisateur, Paramètres → Mails ; `[[ ]]` = passage retiré si un champ est vide) ·
 `chantierDemande` · `contactAffaire` · `liensProduit` · `categorieDocuments` ·

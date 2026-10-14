@@ -13,6 +13,8 @@ import OptionsArticleEditor from '@/components/OptionsArticleEditor';
 import BoutonsOrdre from '@/components/BoutonsOrdre';
 import { deplacer } from '@/lib/ordre';
 import VariantesCompoEditor from '@/components/VariantesCompoEditor';
+import DosageEpaisseurEditor from '@/components/DosageEpaisseurEditor';
+import type { DosageEpaisseur } from '@/lib/dosageEpaisseur';
 import type { VarianteCompo } from '@/lib/variantesCompo';
 import FichesSystemesArticle from '@/components/FichesSystemesArticle';
 import { useSystemes, liensFichesSystemes, enregistrerFicheSysteme } from '@/lib/systemes';
@@ -158,6 +160,7 @@ const emptyProduit = {
   consommationMl: undefined as number | undefined,
   notes: undefined as string | undefined,
   consommations: undefined as ConsoUsage[] | undefined,
+  dosageEpaisseur: undefined as DosageEpaisseur | undefined,
   surfaceUniteM2: undefined as number | undefined,
   fichesSupplementaires: undefined as FicheTechnique[] | undefined,
   ficheType: undefined as TypeFiche | undefined,
@@ -1076,7 +1079,7 @@ export default function Produits() {
     }
     const prixRevendeur = calcPrixRevendeurFromCoeff(prixAchat, p.coefficient);
     const prixHT = calcPrixPublicFromRevendeur(prixRevendeur, p.remiseRevendeur);
-    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined });
+    setForm({ reference: p.reference, referenceOdoo: p.referenceOdoo || '', origine: origineProduit(p), description: p.description, descriptionDetaillee: p.descriptionDetaillee || '', prixAchatMaj: p.prixAchatMaj || '', prixVenteMaj: p.prixVenteMaj || '', prixAchat, coefficient: p.coefficient, prixHT, coeffRevendeur: p.coeffRevendeur, remiseRevendeur: p.remiseRevendeur, prixRevendeur, tva: p.tva, unite: p.unite, poids: p.poids || 0, consommation: p.consommation || 0, stock: p.stock, stockMin: p.stockMin, fournisseurId: p.fournisseurId || '', categorie: p.categorie || '', ficheUrl: p.ficheUrl || '', ficheLinkLabel: p.ficheLinkLabel || '', ficheType: p.ficheType, fichesSupplementaires: p.fichesSupplementaires ? [...p.fichesSupplementaires] : undefined, paliersPrix: p.paliersPrix || [], proprietaire: p.proprietaire ?? 'isosign', proprietaireFournisseurId: p.proprietaireFournisseurId || '', disponibleVente: p.disponibleVente ?? true, adr: p.adr, consoUnite: p.consoUnite, consommationMl: p.consommationMl, surfaceUniteM2: p.surfaceUniteM2, notes: p.notes, consommations: p.consommations ? p.consommations.map(c => ({ ...c })) : undefined, dosageEpaisseur: p.dosageEpaisseur ? structuredClone(p.dosageEpaisseur) : undefined });
     setComposants(comps);
     setComposantSearches(comps.map(c => { const pr = produits.find(x => x.id === c.produitId); return pr ? `${pr.reference} — ${pr.description}` : ''; }));
     setComposantOpenIdx(null);
@@ -2602,6 +2605,10 @@ export default function Produits() {
                 </div>
               ))}
             </div>
+            {/* Mortier chargé selon l'épaisseur (Flowfast F1 Mortar) : le devis en tire la conso du kit et propose les granulats. */}
+            <DosageEpaisseurEditor value={form.dosageEpaisseur} kitKg={form.poids || undefined}
+              onChange={d => setForm(p => ({ ...p, dosageEpaisseur: d }))}
+              onConsommations={c => setForm(p => ({ ...p, consommations: c }))} />
             {/* Article consommé au m² (toile de verre…) : une unité de vente couvre N m², le devis en déduit la quantité à la surface. */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <div>

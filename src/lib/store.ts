@@ -3,6 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { estTypeFiche, type TypeFiche } from './liensProduit';
 import type { VarianteCompo } from './variantesCompo';
+import { lireDosage, type DosageEpaisseur } from './dosageEpaisseur';
 import { cederLaMain } from './prioriteLecture';
 import {
   lireCacheCatalogue, ecrireCacheCatalogue, lireDeltaCatalogue, appliquerDelta, curseurDe,
@@ -281,6 +282,8 @@ export interface Produit {
   surfaceUniteM2?: number;
   /** Autres consommations, chacune avec son usage — proposées au choix sur la ligne de devis. */
   consommations?: ConsoUsage[];
+  /** Mortier dosé selon l'épaisseur (Flowfast F1 Mortar) : conso par mm et granulats par kit (`dosageEpaisseur.ts`). */
+  dosageEpaisseur?: DosageEpaisseur;
   stock: number;
   stockMin: number;
   fournisseurId?: string;
@@ -575,6 +578,20 @@ export interface LigneDevis {
   qteMode?: 'surface' | 'chantier' | 'manuel';
   /** Usage de la consommation retenue sur la ligne, quand elle vient de la liste de l'article (« Primaire »). */
   consoUsage?: string;
+  /**
+   * Ligne d'un mortier dosé selon l'épaisseur (`Produit.dosageEpaisseur`) :
+   * l'épaisseur du chantier, en mm. Elle fixe la conso du kit et les
+   * granulats à ajouter (`dosageEpaisseur.ts`).
+   */
+  epaisseurMm?: number;
+  /** Granulats du mélange que l'utilisateur a décochés (par libellé) : on ne les repropose pas d'office. */
+  granulatsExclus?: string[];
+  /**
+   * Ligne de GRANULAT d'un mortier dosé : la ligne du mortier (`ligneId`) et
+   * le granulat du tableau (`libelle`). Sa quantité suit les kits de la ligne
+   * du mortier × le dosage par kit du palier.
+   */
+  granulatDe?: { ligneId: string; libelle: string };
   /**
    * Ligne de CATALYSEUR (CATALYST2) : température du chantier, en °C, parmi
    * celles du tableau ISOFLOOR (`catalyseur.ts`). Absente = 20 °C. La quantité
@@ -940,6 +957,7 @@ const COLONNES_LOURDES: [string, keyof Produit][] = [
   ['lignes_options', 'lignesOptions'], ['variantes_compo', 'variantesCompo'],
   ['paliers_prix', 'paliersPrix'], ['achats_historique', 'achatsHistorique'],
   ['fiches_supplementaires', 'fichesSupplementaires'], ['consommations', 'consommations'],
+  ['dosage_epaisseur', 'dosageEpaisseur'],
 ];
 
 /** Garde la valeur en mémoire des colonnes lourdes absentes du message reçu. */
@@ -976,6 +994,7 @@ function dbToProduit(r: any): Produit {
     consommationMl: r.consommation_ml != null ? Number(r.consommation_ml) : undefined,
     notes: r.notes || undefined,
     consommations: Array.isArray(r.consommations) && r.consommations.length ? r.consommations : undefined,
+    dosageEpaisseur: lireDosage(r.dosage_epaisseur),
     surfaceUniteM2: r.surface_unite_m2 != null ? Number(r.surface_unite_m2) : undefined,
     stock: Number(r.stock) || 0,
     stockMin: Number(r.stock_min) || 0,
@@ -1068,6 +1087,7 @@ function produitToDb(p: Produit, userId: string) {
     /* Seulement si la fiche porte des notes (ou vient d'en vider) : sans la colonne, PostgREST rejetterait la ligne. */
     ...(p.consommations !== undefined ? { consommations: p.consommations.filter(c => c.valeur > 0).length ? p.consommations.filter(c => c.valeur > 0) : null } : {}),
     ...(p.notes !== undefined ? { notes: p.notes.trim() ? p.notes : null } : {}),
+    ...(p.dosageEpaisseur !== undefined ? { dosage_epaisseur: p.dosageEpaisseur.paliers.length ? p.dosageEpaisseur : null } : {}),
     ...(p.consoUnite !== undefined || p.surfaceUniteM2 ? { conso_unite: p.consoUnite ?? 'kg', surface_unite_m2: p.surfaceUniteM2 ?? null } : {}),
     ...(p.consommationMl !== undefined ? { consommation_ml: p.consommationMl > 0 ? p.consommationMl : null } : {}),
     stock: p.stock,

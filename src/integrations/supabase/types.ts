@@ -1738,6 +1738,7 @@ export type Database = {
           conso_unite: string | null
           consommation: number | null
           consommations: Json | null
+          dosage_epaisseur: Json | null
           created_at: string
           date_creation: string
           description: string
@@ -1799,6 +1800,7 @@ export type Database = {
           conso_unite?: string | null
           consommation?: number | null
           consommations?: Json | null
+          dosage_epaisseur?: Json | null
           created_at?: string
           date_creation?: string
           description?: string
@@ -1860,6 +1862,7 @@ export type Database = {
           conso_unite?: string | null
           consommation?: number | null
           consommations?: Json | null
+          dosage_epaisseur?: Json | null
           created_at?: string
           date_creation?: string
           description?: string

@@ -40,6 +40,11 @@ import {
   TEMPERATURES_CATALYSE, TEMPERATURE_PAR_DEFAUT,
 } from '@/lib/catalyseur';
 import VarianteCompoDialog from '@/components/VarianteCompoDialog';
+import EpaisseurInput from '@/components/EpaisseurInput';
+import {
+  calculerDosage, epaisseurMinimale, kgGranulat, libelleGranulat, libelleGranulatAuto, palierPour, quantiteGranulat, usageEpaisseur,
+  type AjoutDosage,
+} from '@/lib/dosageEpaisseur';
 import {
   CLE_COMPO, achatVarianteCompo, designationAvecVariante, prixVarianteCompo, valeursVisibles, sansClesInternes,
   varianteDeLigne, type VarianteCompo,
@@ -1228,6 +1233,117 @@ export default function Devis() {
     if (change) setLignes(suivantes);
   }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /* LES GRANULATS D'UN MORTIER DOSÉ SUIVENT SES KITS (dosageEpaisseur.ts) :
+     kits de la ligne du mortier × kg par kit du mélange de son épaisseur. Une
+     quantité forcée à la main (`qteMode: 'manuel'`) n'est plus réécrite. */
+  useEffect(() => {
+    let change = false;
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    const suivantes = lignes.map(l => {
+      if (!l.granulatDe || l.qteMode === 'manuel') return l;
+      const a = ajoutDeGranulat(lignes, l);
+      const parent = lignes.find(x => x.id === l.granulatDe!.ligneId);
+      if (!a || !parent) return l;
+      const art = l.produitId ? produitParId(produits, l.produitId) : undefined;
+      const q = quantiteGranulat(parent.quantite, a, art?.poids);
+      if (q === l.quantite) return l;
+      change = true;
+      return { ...l, quantite: q, ...(art && q > 0 ? { prixUnitaireHT: getPrixLigne(art, q, l.variantesChoisies, estRev) } : {}) };
+    });
+    if (change) setLignes(suivantes);
+  }, [lignes, produits]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** Le granulat du tableau que porte cette ligne, au mélange de l'épaisseur de son mortier. */
+  function ajoutDeGranulat(ls: LigneDevis[], l: LigneDevis): AjoutDosage | undefined {
+    const parent = l.granulatDe ? ls.find(x => x.id === l.granulatDe!.ligneId) : undefined;
+    const d = parent?.produitId ? produitParId(produits, parent.produitId)?.dosageEpaisseur : undefined;
+    if (!d || !parent?.epaisseurMm) return undefined;
+    return palierPour(d, parent.epaisseurMm)?.ajouts.find(a => a.libelle === l.granulatDe!.libelle);
+  }
+
+  /** Une ligne de granulat sous un mortier : l'article s'il est désigné, sinon ligne libre en kg, prix à saisir. */
+  function ligneGranulat(parent: LigneDevis, a: AjoutDosage, epaisseurMm: number): LigneDevis {
+    const art = a.produitId ? produitParId(produits, a.produitId) : undefined;
+    const quantite = quantiteGranulat(parent.quantite, a, art?.poids);
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    return {
+      id: generateId(),
+      ...(art ? { produitId: art.id } : { gamme: 'ISOFLOOR' }),
+      description: art ? designationProduit(art) : libelleGranulat(a, epaisseurMm),
+      quantite,
+      unite: art ? art.unite : 'kg',
+      prixUnitaireHT: art ? getPrixLigne(art, quantite, undefined, estRev) : 0,
+      tva: 20,
+      remise: 0,
+      granulatDe: { ligneId: parent.id, libelle: a.libelle },
+    };
+  }
+
+  /**
+   * L'ÉPAISSEUR DU MORTIER change : conso du kit au mélange de cette épaisseur
+   * (quantité recalculée à la surface), granulats que ce mélange ne demande
+   * plus retirés, ceux qu'il demande ajoutés sous la ligne — sauf ceux que
+   * l'on a décochés. Un granulat qui reste (le 2-8 de 25 à 50 mm) garde sa
+   * ligne et son prix ; seuls sa quantité et son libellé automatique suivent.
+   */
+  function changerEpaisseur(id: string, epaisseurMm: number | undefined) {
+    saveSnapshot();
+    const estRev = clients.find(c => c.id === clientId)?.estRevendeur;
+    setLignes(prev => {
+      const l = prev.find(x => x.id === id);
+      const mortier = l?.produitId ? produitParId(produits, l.produitId) : undefined;
+      const d = mortier?.dosageEpaisseur;
+      if (!l || !mortier || !d) return prev;
+      const calc = epaisseurMm ? calculerDosage(d, mortier.poids, epaisseurMm) : null;
+      let parent: LigneDevis = { ...l, epaisseurMm };
+      if (calc) {
+        parent = { ...parent, consommation: calc.consoKitKgM2, consoUsage: usageEpaisseur(calc) };
+        const surface = surfaceL(l);
+        // La conso est au m² : une ligne au ml la garde, sans recalcul (comme `appliquerConso`).
+        if (uniteL(l) === 'm2' && surface > 0) {
+          const quantite = calcQuantiteSurface(mortier, surface, calc.consoKitKgM2, l.unite, 'm2');
+          parent = { ...parent, quantite, prixUnitaireHT: getPrixLigne(mortier, quantite, l.variantesChoisies, estRev), ...(l.qteMode === 'manuel' ? { qteMode: 'surface' as const } : {}) };
+        }
+      }
+      const ajouts = calc?.ajouts ?? [];
+      const exclus = new Set(l.granulatsExclus ?? []);
+      const lies = (x: LigneDevis) => x.granulatDe?.ligneId === id;
+      let out = prev
+        .filter(x => !lies(x) || ajouts.some(a => a.libelle === x.granulatDe!.libelle))
+        .map(x => {
+          if (x.id === id) return parent;
+          const a = lies(x) ? ajouts.find(y => y.libelle === x.granulatDe!.libelle) : undefined;
+          return a && epaisseurMm && libelleGranulatAuto(x.description, a) ? { ...x, description: libelleGranulat(a, epaisseurMm) } : x;
+        });
+      const manquants = ajouts.filter(a => !exclus.has(a.libelle) && !out.some(x => lies(x) && x.granulatDe!.libelle === a.libelle));
+      if (manquants.length && epaisseurMm) {
+        const nouvelles = manquants.map(a => ligneGranulat(parent, a, epaisseurMm));
+        const dernier = out.reduce((k, x, i) => (x.id === id || lies(x) ? i : k), -1);
+        out = [...out.slice(0, dernier + 1), ...nouvelles, ...out.slice(dernier + 1)];
+      }
+      return recalcChantier(out);
+    });
+  }
+
+  /** Coche / décoche un granulat du mélange : la ligne entre ou sort du devis, le choix est retenu sur le mortier. */
+  function basculerGranulat(id: string, a: AjoutDosage, coche: boolean) {
+    saveSnapshot();
+    setLignes(prev => {
+      const l = prev.find(x => x.id === id);
+      if (!l?.epaisseurMm) return prev;
+      const exclus = new Set(l.granulatsExclus ?? []);
+      if (coche) exclus.delete(a.libelle); else exclus.add(a.libelle);
+      const parent = { ...l, granulatsExclus: exclus.size ? [...exclus] : undefined };
+      let out = prev.map(x => (x.id === id ? parent : x));
+      const lie = (x: LigneDevis) => x.granulatDe?.ligneId === id && x.granulatDe.libelle === a.libelle;
+      if (!coche) return out.filter(x => !lie(x));
+      if (out.some(lie)) return out;
+      const dernier = out.reduce((k, x, i) => (x.id === id || x.granulatDe?.ligneId === id ? i : k), -1);
+      out = [...out.slice(0, dernier + 1), ligneGranulat(parent, a, l.epaisseurMm), ...out.slice(dernier + 1)];
+      return out;
+    });
+  }
+
   /**
    * UN SEUL BESOIN DE CATALYSEUR POUR TOUT LE DEVIS, réparti entre ses
    * conditionnements (sac 2 kg, sac 400 g, dose 150 g : `repartirCatalyseur`).
@@ -1760,7 +1876,8 @@ export default function Devis() {
 
   function removeLigne(id: string) {
     saveSnapshot();
-    setLignes(prev => prev.filter(l => l.id !== id));
+    // Les granulats d'un mortier dosé sont sa charge : ils partent avec lui.
+    setLignes(prev => prev.filter(l => l.id !== id && l.granulatDe?.ligneId !== id));
   }
 
   function moveLigne(id: string, direction: 'up' | 'down') {
@@ -4146,6 +4263,18 @@ export default function Devis() {
                       </div>
                     ) : null;
 
+                    /* MORTIER DOSÉ SELON L'ÉPAISSEUR (Flowfast F1 Mortar, dosageEpaisseur.ts) :
+                       l'épaisseur fixe la conso du kit et les granulats proposés sous la ligne. */
+                    const dosage = prod?.dosageEpaisseur;
+                    const calcDosage = dosage && l.epaisseurMm ? calculerDosage(dosage, prod?.poids, l.epaisseurMm) : null;
+                    const epaisseurEl = dosage ? (
+                      <div className="shrink-0 w-[96px]">
+                        <span className="text-xs truncate block text-muted-foreground">Épaisseur mm</span>
+                        <EpaisseurInput value={l.epaisseurMm} onCommit={mm => changerEpaisseur(l.id, mm)} className="h-8 text-sm"
+                          title={`Épaisseur du mortier : elle fixe la conso du kit (${String(dosage.kgM2ParMm).replace('.', ',')} kg/m² par mm de mélange) et les granulats à ajouter, d'après le tableau de la fiche. Minimum ${epaisseurMinimale(dosage)} mm.`} />
+                      </div>
+                    ) : null;
+
                     // Sélecteurs de variantes (rendus inline en cartes, en sous-ligne en tableau)
                     /* LES TEINTES DES COMPOSANTS, TOUJOURS VISIBLES. Le pigment d'un kit (PIGMENTKG…)
                        porte les 220 RAL, l'article de la ligne (319R) aucun : sans ce sélecteur, une
@@ -4354,6 +4483,8 @@ export default function Devis() {
                                   updateLigne(l.id, 'quantite', e.target.value === '' ? 0 : parseFloat(e.target.value));
                                   // Catalyseur forcé à la main : le calcul à la température ne le réécrit plus.
                                   if (estCata) updateLigne(l.id, 'catalyseManuelle', true);
+                                  // Granulat forcé à la main : il ne suit plus les kits du mortier.
+                                  if (l.granulatDe) updateLigne(l.id, 'qteMode', 'manuel');
                                   // Saisie forcée sur une ligne chiffrée à la surface : on le retient, le besoin chantier des autres lignes en tient compte.
                                   if (hasAutoCalc) setLignes(prev => recalcChantier(prev.map(li => li.id === l.id ? { ...li, qteMode: 'manuel' as const } : li)));
                                 }} className="h-8 text-sm" title={hasAutoCalc ? 'Quantité modifiable : la forcer passe la ligne en « Qté manuel » ; cliquer sur le libellé la recalcule.' : undefined} />,
@@ -4433,6 +4564,7 @@ export default function Devis() {
                                   <div className="flex-1 min-w-[120px]"><Label className="text-xs">Description</Label>{cell.description}</div>
                                   {variantEls}
                                   {temperatureEl}
+                                  {epaisseurEl}
                                   {TABLE_LIGNE_COLS.filter(c => c.key !== 'ref' && c.key !== 'description' && c.key !== 'total' && colVisible(c)).map(c => (
                                     <div key={c.key} style={{ width: c.key === 'conso' && (colConsoMl || uniteLigne !== 'ml') && (prod?.consommations?.length ?? 0) > 0 ? c.width + 24 : c.key === 'surface' && !colLineaire ? c.width + 28 : c.width }} className="shrink-0">
                                       {c.key === 'qte' && estCata ? (
@@ -4461,8 +4593,8 @@ export default function Devis() {
                               );
                             })()}
                             {/* Variantes en sous-ligne (mode tableau) */}
-                            {lignesView === 'tableau' && (variantEls || temperatureEl) && (
-                              <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}{temperatureEl}</div>
+                            {lignesView === 'tableau' && (variantEls || temperatureEl || epaisseurEl) && (
+                              <div className="mt-1 pl-10 flex flex-wrap items-end gap-1">{variantEls}{temperatureEl}{epaisseurEl}</div>
                             )}
                             {/* Note */}
                             <div className="mt-1 pl-9">
@@ -4513,8 +4645,62 @@ export default function Devis() {
                               />
                             )}
                             {/* Infos marges, stock Odoo, teinte */}
-                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0) && (
+                            {((canAchat && (tauxMarque !== null || coeff !== null)) || prixKg !== null || kgReel !== null || !!prod || teintesLigne.length > 0 || !!l.granulatDe) && (
                               <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 pl-9 flex-wrap">
+                                {/* Mortier dosé : le mélange de l'épaisseur, et ses granulats à cocher. */}
+                                {dosage && (!l.epaisseurMm ? (
+                                  <span className="text-amber-600">Épaisseur à saisir : la conso du kit et les granulats en dépendent (tableau de la fiche)</span>
+                                ) : !calcDosage ? (
+                                  <span className="text-amber-600">
+                                    {!(prod?.poids && prod.poids > 0)
+                                      ? 'Poids du kit absent de la fiche article : conso non calculée — à vérifier'
+                                      : `${String(l.epaisseurMm).replace('.', ',')} mm : sous l'épaisseur minimale de la fiche (${epaisseurMinimale(dosage)} mm)`}
+                                  </span>
+                                ) : (
+                                  <>
+                                    <span className="font-medium text-foreground"
+                                      title={`${String(dosage.kgM2ParMm).replace('.', ',')} kg/m²/mm × ${String(l.epaisseurMm).replace('.', ',')} mm = ${String(calcDosage.kgM2Melange).replace('.', ',')} kg/m² de mélange, dont la part du kit (${prod?.poids} kg sur ${(prod?.poids ?? 0) + calcDosage.palier.ajouts.reduce((s, x) => s + x.kgParKit, 0)} kg)${dosage.source ? `
+${dosage.source}` : ''}`}>
+                                      Mélange {calcDosage.palier.epaisseurMinMm} mm : {String(calcDosage.consoKitKgM2).replace('.', ',')} kg/m² de kit
+                                      {l.consommation != null && Math.abs(l.consommation - calcDosage.consoKitKgM2) > 0.001 && (
+                                        <span className="text-orange-500 font-normal"> (conso. de la ligne retouchée : {String(l.consommation).replace('.', ',')})</span>
+                                      )}
+                                    </span>
+                                    {calcDosage.ajouts.length === 0 && <span>kit seul, sans granulat</span>}
+                                    {calcDosage.ajouts.map(a => {
+                                      const present = lignes.some(x => x.granulatDe?.ligneId === l.id && x.granulatDe.libelle === a.libelle);
+                                      return (
+                                        <label key={a.libelle} className="inline-flex items-center gap-1 cursor-pointer"
+                                          title={present ? 'Décocher : la ligne du granulat sort du devis' : 'Cocher : ajoute la ligne du granulat sous le mortier'}>
+                                          <input type="checkbox" checked={present} onChange={e => basculerGranulat(l.id, a, e.target.checked)} className="rounded" />
+                                          <span className={present ? 'text-foreground' : ''}>{a.libelle}</span>
+                                          <span className="tabular-nums">{String(a.kgParKit).replace('.', ',')} kg/kit × {l.quantite || 0} = {String(kgGranulat(l.quantite, a.kgParKit)).replace('.', ',')} kg</span>
+                                        </label>
+                                      );
+                                    })}
+                                  </>
+                                ))}
+                                {l.granulatDe && (() => {
+                                  const parent = lignes.find(x => x.id === l.granulatDe!.ligneId);
+                                  const a = ajoutDeGranulat(lignes, l);
+                                  return (
+                                    <>
+                                      {!parent || !a ? (
+                                        <span className="text-amber-600">Granulat d'un mortier absent ou hors de son mélange : quantité à vérifier</span>
+                                      ) : l.qteMode === 'manuel' ? (
+                                        <button type="button" onClick={() => updateLigne(l.id, 'qteMode', undefined)} className="text-orange-500 hover:underline"
+                                          title="Cliquer pour revenir au calcul : kits du mortier × dosage par kit">
+                                          Quantité forcée à la main — recalculer ({String(kgGranulat(parent.quantite, a.kgParKit)).replace('.', ',')} kg)
+                                        </button>
+                                      ) : (
+                                        <span>Suit les kits de la ligne #{ligneNums[parent.id]} : {parent.quantite || 0} × {String(a.kgParKit).replace('.', ',')} kg</span>
+                                      )}
+                                      {!l.produitId && !(l.prixUnitaireHT > 0) && (
+                                        <span className="text-amber-600">Pas d'article au catalogue : prix à saisir</span>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                                 {compoLigne && (
                                   <button type="button" onClick={() => updateLigne(l.id, 'detailCompo', l.detailCompo ? undefined : true)}
                                     className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
