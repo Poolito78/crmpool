@@ -1122,18 +1122,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   return devis.lignes.map((dl, idx) => {
                     // groupe → skip (handled by showHeader below)
                     if (dl.type === 'groupe') return null;
-                    // soustotal → render subtotal row
-                    if (dl.type === 'soustotal') {
-                      const gid = subGrpId[dl.id];
-                      const titre = gid ? grpTitles[gid] : '';
-                      const montant = gid ? (grpSub[gid] || 0) : 0;
-                      return (
-                        <tr key={dl.id} className="bg-[#CC0000]/5 border-b-2 border-[#CC0000]">
-                          <td colSpan={8} className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right italic">{coutGroupeEl(gid)}Sous-total{titre ? ` — ${titre}` : ''}</td>
-                          <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right">{formatMontant(montant)}</td>
-                        </tr>
-                      );
-                    }
+                    /* LE SOUS-TOTAL EST SUR LA LIGNE DU GROUPE, à droite de son titre
+                       (règle du 14/10/2026) : le marqueur de fin de groupe ne
+                       s'imprime plus. */
+                    if (dl.type === 'soustotal') return null;
                     // texte → render text-only row
                     if (dl.type === 'texte') {
                       const timgs = (texteImageDataUrls[dl.id] || []).filter(Boolean);
@@ -1157,7 +1149,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   <Fragment key={l.id}>
                     {showHeader && (
                       <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
-                        <td colSpan={9} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
+                        <td colSpan={8} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitles[myGrp!]}</td>
+                        <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{coutGroupeEl(myGrp)}{formatMontant(grpSub[myGrp!] || 0)}</td>
                       </tr>
                     )}
                     {/* Ligne produit principal */}
@@ -1374,17 +1367,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 // Iterate devis.lignes to preserve order and show texte rows
                 return devis.lignes.map((dl) => {
                   if (dl.type === 'groupe') return null;
-                  if (dl.type === 'soustotal') {
-                    const gid = subGrpIdS[dl.id];
-                    const titre = gid ? grpTitlesS[gid] : '';
-                    const montant = gid ? (grpSubS[gid] || 0) : 0;
-                    return (
-                      <tr key={dl.id} className="bg-primary/[0.03] border-b-2 border-primary/20">
-                        <td colSpan={colSpan - 1} className="py-1.5 px-2 text-xs font-bold text-primary text-right italic">{coutGroupeEl(gid)}Sous-total{titre ? ` — ${titre}` : ''}</td>
-                        <td className="py-1.5 px-2 text-xs font-bold text-primary text-right">{formatMontant(montant)}</td>
-                      </tr>
-                    );
-                  }
+                  /* Sous-total sur la ligne du groupe : voir plus haut. */
+                  if (dl.type === 'soustotal') return null;
                   if (dl.type === 'texte') {
                     const timgs = (texteImageDataUrls[dl.id] || []).filter(Boolean);
                     return (dl.description || timgs.length > 0) ? (
@@ -1413,7 +1397,8 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                     <Fragment key={l.id}>
                       {showHeaderS && (
                         <tr className="bg-primary/[0.03] border-t border-[#CC0000]" data-pdf-no-break-after="true">
-                          <td colSpan={colSpan} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
+                          <td colSpan={colSpan - 1} className="py-1.5 px-2 font-bold text-xs text-[#CC0000] uppercase tracking-wide">{grpTitlesS[myGrpS!]}</td>
+                          <td className="py-1.5 px-2 text-xs font-bold text-[#CC0000] text-right whitespace-nowrap">{coutGroupeEl(myGrpS)}{formatMontant(grpSubS[myGrpS!] || 0)}</td>
                         </tr>
                       )}
                       <tr className="border-b border-border">

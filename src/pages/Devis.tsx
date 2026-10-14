@@ -4094,19 +4094,11 @@ export default function Devis() {
                             ${dragOverId === l.id && draggedId !== l.id ? 'border-primary border-2 shadow-md bg-primary/5' : draggedId === l.id ? '' : 'bg-primary/5 border-primary/20'}`}>
                           <input type="checkbox" checked={selectedLignes.has(l.id)} onChange={() => toggleLigneSelection(l.id)} onClick={e => e.stopPropagation()} title="Sélectionner pour déplacer en groupe" className="shrink-0 rounded border-input accent-primary cursor-pointer" />
                           <GripVertical className="w-4 h-4 text-primary/30 shrink-0" />
-                          <span className="flex-1 text-sm font-semibold text-primary italic">
-                            Sous-total{titre ? ` — ${titre}` : ''}
+                          {/* Le montant est sur la ligne du groupe : ce marqueur ne fait
+                              que clore le groupe. */}
+                          <span className="flex-1 text-xs text-primary/70 italic" title={`Sous-total ${formatMontant(montant)} HT, affiché sur la ligne du groupe`}>
+                            Fin du groupe{titre ? ` — ${titre}` : ''}
                           </span>
-                          {(() => {
-                            const cg = gid ? coutGroupes?.get(gid) : undefined;
-                            if (!cg || cg.total <= 0) return null;
-                            return (
-                              <span className="text-xs text-[#CC0000] whitespace-nowrap" title={cg.surface ? `Coût chantier du groupe, rapporté à ${cg.surface} ${libelleSurface(cg.unite)}` : 'Coût chantier du groupe (aucune surface)'}>
-                                Coût chantier {formatMontant(cg.total)}{cg.parUnite != null && <> · {cg.parUnite.toFixed(2)} €/{libelleSurface(cg.unite)}</>}
-                              </span>
-                            );
-                          })()}
-                          <span className="text-sm font-bold text-primary">{formatMontant(montant)} HT</span>
                           <button onClick={() => removeLigne(l.id)} className="text-destructive hover:text-destructive/80 ml-1"><Trash2 className="w-3.5 h-3.5" /></button>
                         </div>
                       );
@@ -4188,6 +4180,17 @@ export default function Devis() {
                           autoFocus={l.id === newLigneId}
                           onFocus={e => { if (l.id === newLigneId) { e.target.select(); setNewLigneId(null); } }}
                           className="flex-1 font-semibold text-sm bg-transparent border-none outline-none text-primary placeholder:text-primary/50" placeholder="Titre du groupe…" />
+                        {/* LE SOUS-TOTAL DU GROUPE, en face de son titre (règle du 14/10/2026). */}
+                        {(() => {
+                          const cg = coutGroupes?.get(l.id);
+                          if (!cg || cg.total <= 0) return null;
+                          return (
+                            <span className="text-xs text-[#CC0000] whitespace-nowrap" title={cg.surface ? `Coût chantier du groupe, rapporté à ${cg.surface} ${libelleSurface(cg.unite)}` : 'Coût chantier du groupe (aucune surface)'}>
+                              Coût chantier {formatMontant(cg.total)}{cg.parUnite != null && <> · {cg.parUnite.toFixed(2)} €/{libelleSurface(cg.unite)}</>}
+                            </span>
+                          );
+                        })()}
+                        <span className="text-sm font-bold text-primary whitespace-nowrap" title="Sous-total du groupe">{formatMontant(grpSub[l.id] || 0)} HT</span>
                         <div className="flex items-center gap-1">
                           <button onClick={() => moveLigne(l.id, 'up')} disabled={i === 0} className="text-primary/60 hover:text-primary disabled:opacity-30"><ArrowUp className="w-3.5 h-3.5" /></button>
                           <button onClick={() => moveLigne(l.id, 'down')} disabled={i === lignes.length - 1} className="text-primary/60 hover:text-primary disabled:opacity-30"><ArrowDown className="w-3.5 h-3.5" /></button>
