@@ -1,6 +1,6 @@
 import { Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { LayoutDashboard, Users, Package, Truck, FileText, Menu, X, BarChart3, LogOut, ShoppingCart, Calculator, ClipboardList, ScanText, History, Receipt, Target, ChevronDown, ChevronRight, TrendingUp, TrendingDown, Settings, PanelLeftClose, PanelLeftOpen, Eye, Warehouse, ShieldCheck, FileSearch, ExternalLink, Mic, MailSearch } from 'lucide-react';
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from 'react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { useCurrentUser } from '@/hooks/useAuth';
@@ -21,7 +21,7 @@ import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
 import FenetresMenu from '@/components/FenetresMenu';
 import AssistantVocal from '@/components/AssistantVocal';
-import { AssistantVocalContext, type AssistantVocalCtx, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
+import { AssistantVocalContext, type AssistantVocalCtx, type CaptureDictee, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
 import { toast } from 'sonner';
 
@@ -136,7 +136,7 @@ export default function CRMLayout() {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && e.code === 'KeyM') {
         e.preventDefault();
-        setAssistantActif(a => !a);
+        basculerRef.current();
       }
     };
     window.addEventListener('keydown', onKey);
@@ -145,11 +145,43 @@ export default function CRMLayout() {
   /* Les pages allument l'assistant et lui prêtent leur dictée métier par ce
      contexte (`useAssistantVocal`) : un seul micro pour toute l'application. */
   const dicteeRef = useRef<GestionnaireDictee | null>(null);
+  /* Une zone de dialogue qui capte la dictée (bouton micro d'un dialogue).
+     `allumeeParCapture` : l'assistant était éteint, la capture finie l'éteint. */
+  const captureRef = useRef<CaptureDictee | null>(null);
+  const allumeeParCapture = useRef(false);
+  const [capture, setCapture] = useState<string | null>(null);
+  const arreterAssistant = useCallback(() => {
+    captureRef.current = null;
+    allumeeParCapture.current = false;
+    setCapture(null);
+    setAssistantActif(false);
+  }, []);
+  const liberer = useCallback((id: string) => {
+    if (captureRef.current?.id !== id) return;
+    captureRef.current = null;
+    setCapture(null);
+    if (allumeeParCapture.current) { allumeeParCapture.current = false; setAssistantActif(false); }
+  }, []);
+  const capturer = useCallback((c: CaptureDictee) => {
+    captureRef.current = c;
+    setCapture(c.id);
+    setAssistantActif(a => {
+      if (!a) allumeeParCapture.current = true;
+      return true;
+    });
+  }, []);
+  const basculer = useCallback(() => {
+    setAssistantActif(a => {
+      if (a) { captureRef.current = null; allumeeParCapture.current = false; setCapture(null); }
+      return !a;
+    });
+  }, []);
+  const basculerRef = useRef(basculer);
+  basculerRef.current = basculer;
+  const confierDictee = useCallback((g: GestionnaireDictee | null) => { dicteeRef.current = g; }, []);
   const assistantCtx = useMemo<AssistantVocalCtx>(() => ({
-    actif: assistantActif,
-    basculer: () => setAssistantActif(a => !a),
-    confierDictee: g => { dicteeRef.current = g; },
-  }), [assistantActif]);
+    actif: assistantActif, basculer, confierDictee, capture, capturer, liberer,
+  }), [assistantActif, basculer, confierDictee, capture, capturer, liberer]);
 
   /* ── Glisser-déposer d'un document, sur TOUTE l'application ─────────────
    *
@@ -492,7 +524,7 @@ export default function CRMLayout() {
           </button>
           <div className="pt-3 mt-3 border-t border-sidebar-border/50">
             <button
-              onClick={() => setAssistantActif(a => !a)}
+              onClick={basculer}
               title={assistantActif ? "Arrêter l'assistant vocal (Alt+M)" : 'Assistant vocal (Alt+M)'}
               className={cn(
                 'rounded-lg text-sm font-medium transition-all duration-150',
@@ -574,7 +606,7 @@ export default function CRMLayout() {
           </button>
           <div className="pt-3 mt-3 border-t border-sidebar-border/50">
             <button
-              onClick={() => { setAssistantActif(a => !a); setSidebarOpen(false); }}
+              onClick={() => { basculer(); setSidebarOpen(false); }}
               className={cn(
                 'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium w-full transition-colors',
                 assistantActif ? 'bg-destructive/15 text-destructive' : 'text-sidebar-foreground/70 hover:bg-sidebar-accent'
@@ -660,10 +692,12 @@ export default function CRMLayout() {
 
       {assistantActif && (
         <AssistantVocal
-          onArret={() => setAssistantActif(false)}
+          onArret={arreterAssistant}
           ouvrirAnalyse={() => setAnalyseOpen(true)}
           pageAutorisee={pageAutorisee}
           dicteeContextuelle={() => dicteeRef.current}
+          captureDictee={() => captureRef.current}
+          finCapture={() => { if (captureRef.current) liberer(captureRef.current.id); }}
         />
       )}
 

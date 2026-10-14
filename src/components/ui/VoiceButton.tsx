@@ -1,24 +1,27 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect, useId } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { useAssistantVocal } from '@/hooks/useAssistantVocal';
 
 interface Props {
   /** Appelé avec le texte transcrit à chaque phrase reconnue */
   onTranscript: (text: string) => void;
-  /** Langue de reconnaissance (défaut : fr-FR) */
+  /** Langue de reconnaissance (défaut : fr-FR) — dictée autonome seulement */
   lang?: string;
   className?: string;
   size?: 'sm' | 'default';
   /** N'affiche que l'icône micro (pas de texte « Dicter »/« Stop ») */
   iconOnly?: boolean;
+  /** Ce que l'assistant vocal annonce : « Dictée dans … ». */
+  cible?: string;
 }
 
 // Le typage de la Web Speech API vit dans src/types/web-speech.d.ts : il
 // déclarait ici `Window` sans déclarer `SpeechRecognition`, si bien que le
 // type de retour restait inconnu et que `results` retombait sur `unknown`.
 
-/** Hook de dictée vocale réutilisable (Web Speech API). */
+/** Hook de dictée vocale autonome (Web Speech API) — hors de l'assistant vocal. */
 export function useVoiceDictation(onTranscript: (text: string) => void, lang = 'fr-FR') {
   const [listening, setListening] = useState(false);
   const recogRef = useRef<SpeechRecognition | null>(null);
@@ -71,16 +74,36 @@ export function useVoiceDictation(onTranscript: (text: string) => void, lang = '
   return { listening, toggle, stop, supported };
 }
 
-export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm', iconOnly = false }: Props) {
-  const { listening, toggle, supported } = useVoiceDictation(onTranscript, lang);
+/* UN SEUL MICRO : dans l'application, ce bouton emprunte celui de l'assistant
+ * vocal (`useAssistantVocal().capturer`) au lieu d'ouvrir une seconde
+ * reconnaissance qui se battrait avec lui. Toute la dictée va à cette zone
+ * jusqu'au second clic ou « fin de dictée ». Hors de l'application (pas
+ * d'assistant monté), il retombe sur sa dictée autonome. */
+export default function VoiceButton({ onTranscript, lang = 'fr-FR', className = '', size = 'sm', iconOnly = false, cible = 'la zone de texte' }: Props) {
+  const assistant = useAssistantVocal();
+  const autonome = useVoiceDictation(onTranscript, lang);
+  const id = useId();
+  const onTranscriptRef = useRef(onTranscript);
+  onTranscriptRef.current = onTranscript;
+  const liberer = assistant?.liberer;
+  // Le dialogue se ferme : la dictée ne doit pas continuer vers une zone disparue.
+  useEffect(() => () => liberer?.(id), [liberer, id]);
 
-  if (!supported) return null;
+  if (!autonome.supported) return null;
+
+  const listening = assistant ? assistant.capture === id : autonome.listening;
+  const toggle = assistant
+    ? () => (listening
+        ? assistant.liberer(id)
+        : assistant.capturer({ id, libelle: cible, onTexte: t => onTranscriptRef.current(t) }))
+    : autonome.toggle;
 
   return (
     <Button
       type="button"
       variant={listening ? 'default' : 'outline'}
       size={iconOnly ? 'icon' : size}
+      onMouseDown={e => e.preventDefault()}
       onClick={toggle}
       title={listening ? 'Arrêter la dictée' : 'Dicter vocalement'}
       className={`gap-1.5 shrink-0 ${listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''} ${className}`}

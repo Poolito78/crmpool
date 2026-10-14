@@ -170,7 +170,7 @@ export default function DevisVoiceAssistantDialog({ open, onOpenChange, produits
               <p className="text-xs font-medium text-muted-foreground">
                 Dictez <span className="text-muted-foreground/70">ou collez un email client</span> : client, chantier, surface (m²), système et produits avec quantités.
               </p>
-              <VoiceButton onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + normalizeTerms(t))} />
+              <VoiceButton cible="le devis vocal" onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + normalizeTerms(t))} />
             </div>
             <textarea
               value={transcript}

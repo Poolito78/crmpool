@@ -432,7 +432,7 @@ export default function DevisAssistantDialog({ open, onOpenChange, devisContext,
               className="h-9 text-sm"
               disabled={loading}
             />
-            <VoiceButton iconOnly className="h-9 w-9" onTranscript={t => setInput(prev => (prev ? prev.trim() + ' ' : '') + t)} />
+            <VoiceButton iconOnly className="h-9 w-9" cible="la question à l'assistant IA" onTranscript={t => setInput(prev => (prev ? prev.trim() + ' ' : '') + t)} />
             <Button onClick={send} disabled={loading || (!input.trim() && !attachedFile)} size="sm" className="h-9 px-3">
               <Send className="w-4 h-4" />
             </Button>

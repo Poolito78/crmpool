@@ -111,7 +111,7 @@ export default function VeilleVoiceDialog({ open, onOpenChange, concurrents, cat
               <p className="text-xs font-medium text-muted-foreground">
                 Dictez : concurrent, produit, prix (avec unité), quantité, client source, informateur…
               </p>
-              <VoiceButton onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + t)} />
+              <VoiceButton cible="la saisie de veille" onTranscript={t => setTranscript(prev => (prev ? prev.trim() + ' ' : '') + t)} />
             </div>
             <textarea
               value={transcript}

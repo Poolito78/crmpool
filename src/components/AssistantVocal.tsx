@@ -32,7 +32,7 @@ import { designationProduit, type Produit } from '@/lib/store';
 import { chercherProduits } from '@/lib/indexProduits';
 import { quantitesReservees } from '@/lib/stockDisponible';
 import { ouvrirFenetre } from '@/lib/fenetres';
-import type { GestionnaireDictee } from '@/hooks/useAssistantVocal';
+import type { CaptureDictee, GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import {
   interpreter, champNomme, optionsDesignees, texteAInserer, dateParlee, nombreParle,
   chercherDevis, variantesReference, phraseStock, normaliser, resteOriginal,
@@ -47,6 +47,9 @@ interface Props {
   pageAutorisee: (path: string) => boolean;
   /** Aiguillage de dictée prêté par la page ouverte (`useAssistantVocal`). */
   dicteeContextuelle?: () => GestionnaireDictee | null;
+  /** Zone de dialogue qui capte toute la dictée (bouton micro), `null` sinon. */
+  captureDictee?: () => CaptureDictee | null;
+  finCapture?: () => void;
 }
 
 type Genre = 'texte' | 'ligne' | 'date' | 'nombre' | 'select' | 'riche' | 'boutons';
@@ -169,7 +172,7 @@ function champActif(panneau: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee, dicteeContextuelle }: Props) {
+export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee, dicteeContextuelle, captureDictee, finCapture }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const { clients, devis, produits, produitsCharges, commandesClient } = useCRM();
@@ -682,6 +685,19 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee, 
     const t = phrase.trim();
     setInterim('');
     if (!t) return;
+    /* Une zone capte la dictée : tout lui revient, sans interprétation —
+       sauf ce qui y met fin. « stop » ne coupe alors que la capture. */
+    const cap = captureDictee?.();
+    if (cap) {
+      if (interpreter(t)?.kind === 'stop' || /^(?:fin de (?:la )?dictee|arrete la dictee|termine la dictee|fin dictee)$/.test(normaliser(t))) {
+        finCapture?.();
+        dire(`✓ Fin de la dictée dans ${cap.libelle}`, 'ok');
+        return;
+      }
+      cap.onTexte(t);
+      dire(`✎ ${t}`, 'dicte');
+      return;
+    }
     if (repondreApprentissage(t)) return;
     // Ce qu'on lui a appris passe avant tout : c'est l'utilisateur qui l'a voulu.
     const apprise = commandeApprise(t, apprises);
@@ -807,6 +823,13 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee, 
         ))}
         <p className="italic text-muted-foreground min-h-[1rem]">{interim}</p>
       </div>
+
+      {captureDictee?.() && (
+        <div className="border-t border-border px-3 py-2 bg-destructive/5 flex items-center gap-2">
+          <p className="flex-1 text-xs"><b>Dictée dans {captureDictee()!.libelle}</b> — dites « fin de dictée »</p>
+          <button type="button" onClick={() => finCapture?.()} className="px-2 py-1 rounded-md text-[11px] font-semibold border border-border hover:bg-muted">Terminer</button>
+        </div>
+      )}
 
       {apprentissage && (
         <div className="border-t border-border px-3 py-2 bg-primary/5 space-y-1.5">

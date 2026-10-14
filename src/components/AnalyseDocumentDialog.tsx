@@ -4627,6 +4627,7 @@ const [contratOdoo, setContratOdoo] = useState<
                   />
                   <div className="absolute top-0 right-0">
                     <VoiceButton
+                      cible="le texte à analyser"
                       onTranscript={t => setTexte(prev => prev ? prev + ' ' + t : t)}
                     />
                   </div>

@@ -37,7 +37,12 @@ en localStorage (`assistant_vocal_commandes_apprises`), donc par navigateur.
 l'assistant (`useAssistantVocal().basculer`) au lieu d'ouvrir sa propre
 reconnaissance ; la page prête sa dictée métier (`confierDictee`) — libellé
 de ligne → article du catalogue, surface, adresse de livraison — appelée
-avant la dictée ordinaire quand le champ actif porte `data-voice`. ⚠️ Le panneau
+avant la dictée ordinaire quand le champ actif porte `data-voice`. Les
+`VoiceButton` des dialogues (analyse de document, assistant IA, devis vocal,
+veille vocale) **capturent** le micro de l'assistant (`capturer` / `liberer`,
+prop `cible` = ce que le panneau annonce) : toute la dictée va à leur zone,
+sans interprétation, jusqu'au second clic, « fin de dictée » ou « stop ».
+Allumé par la capture, l'assistant s'éteint avec elle. ⚠️ Le panneau
 est hors du dialogue Radix : `pointerdown` arrêté, `mousedown` sans focus,
 sinon un clic fermerait la fenêtre.
 
