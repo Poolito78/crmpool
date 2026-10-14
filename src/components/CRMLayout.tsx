@@ -21,6 +21,7 @@ import { ouvrirFenetre } from '@/lib/fenetres';
 import { useFenetres } from '@/hooks/useFenetres';
 import FenetresMenu from '@/components/FenetresMenu';
 import AssistantVocal from '@/components/AssistantVocal';
+import { AssistantVocalContext, type AssistantVocalCtx, type GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import { terminerConnexionRedirection } from '@/lib/microsoftGraph';
 import { toast } from 'sonner';
 
@@ -141,6 +142,14 @@ export default function CRMLayout() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+  /* Les pages allument l'assistant et lui prêtent leur dictée métier par ce
+     contexte (`useAssistantVocal`) : un seul micro pour toute l'application. */
+  const dicteeRef = useRef<GestionnaireDictee | null>(null);
+  const assistantCtx = useMemo<AssistantVocalCtx>(() => ({
+    actif: assistantActif,
+    basculer: () => setAssistantActif(a => !a),
+    confierDictee: g => { dicteeRef.current = g; },
+  }), [assistantActif]);
 
   /* ── Glisser-déposer d'un document, sur TOUTE l'application ─────────────
    *
@@ -412,6 +421,7 @@ export default function CRMLayout() {
   );
 
   return (
+    <AssistantVocalContext.Provider value={assistantCtx}>
     <div
       className="h-screen overflow-hidden flex bg-background"
       onDragEnter={depotDragEnter}
@@ -653,6 +663,7 @@ export default function CRMLayout() {
           onArret={() => setAssistantActif(false)}
           ouvrirAnalyse={() => setAnalyseOpen(true)}
           pageAutorisee={pageAutorisee}
+          dicteeContextuelle={() => dicteeRef.current}
         />
       )}
 
@@ -676,5 +687,6 @@ export default function CRMLayout() {
         })}
       </nav>
     </div>
+    </AssistantVocalContext.Provider>
   );
 }

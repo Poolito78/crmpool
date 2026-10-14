@@ -51,7 +51,7 @@ import { DELAI_REGLEMENT_OPTIONS } from '@/pages/Clients';
 import CommandeFournisseurDialog from '@/components/CommandeFournisseurDialog';
 import DevisAssistantDialog from '@/components/DevisAssistantDialog';
 import DevisVoiceAssistantDialog, { type VoiceDevis } from '@/components/DevisVoiceAssistantDialog';
-import { useVoiceDictation } from '@/components/ui/VoiceButton';
+import { useAssistantVocal } from '@/hooks/useAssistantVocal';
 import DevisChatter from '@/components/DevisChatter';
 import DevisArchiveDialog from '@/components/DevisArchiveDialog';
 import CRMActionDialog from '@/components/CRMActionDialog';
@@ -211,69 +211,70 @@ export default function Devis() {
   const [lineImages, setLineImages] = useState<Record<string, { url: string; name: string; taille?: number }[]>>({});
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [voiceAssistantOpen, setVoiceAssistantOpen] = useState(false);
-  // Dictée contextuelle : mémorise le dernier champ focalisé pour y router la transcription
-  type VoiceField =
-    | { kind: 'systeme' | 'chantier' | 'surface' | 'adresse' }
-    | { kind: 'ligne-desc' | 'ligne-qte'; id: string };
-  const voiceTargetRef = useRef<VoiceField | null>(null);
-  const onVoiceFocusCapture = (e: React.FocusEvent) => {
-    const el = e.target as HTMLElement;
-    const v = el?.dataset?.voice;
-    if (!v) return;
-    if (v === 'ligne-desc' || v === 'ligne-qte') voiceTargetRef.current = { kind: v, id: el.dataset.ligneId || '' };
-    else if (v === 'systeme' || v === 'chantier' || v === 'surface' || v === 'adresse') voiceTargetRef.current = { kind: v };
-  };
-  const routeVoiceTranscript = (text: string) => {
-    const t = voiceTargetRef.current;
-    const clean = text.trim();
-    if (!clean) return;
-    if (!t) { toast.info('Cliquez d\'abord dans un champ à dicter (ligne, système, chantier, adresse ou surface).'); return; }
+  /* Dictée métier, prêtée à l'assistant vocal (`useAssistantVocal`) : il n'y
+     a qu'un micro, celui de l'assistant. Le champ visé est celui qui a le
+     focus (`data-voice`). Ce que ce gestionnaire ne traite pas (`false`) est
+     écrit par la dictée ordinaire de l'assistant, au curseur. */
+  const assistantVocal = useAssistantVocal();
+  const dicteeDevis = (texte: string, cible: HTMLElement | null): boolean => {
+    const v = cible?.dataset?.voice;
+    const clean = texte.trim();
+    if (!v || !clean) return false;
     const parseNum = (s: string) => { const n = parseFloat(s.replace(',', '.').replace(/[^\d.]/g, '')); return isNaN(n) ? null : n; };
-    switch (t.kind) {
-      case 'systeme': setSysteme(clean); toast.success('Système dicté'); break;
-      /* Dicter « chantier » remplit le champ CHANTIER — il portait jusqu'ici
-         dans la référence d'affaire, faute de champ dédié. */
-      case 'chantier': setChantier(clean); toast.success('Chantier dicté'); break;
-      case 'surface': { const n = parseNum(clean); if (n != null) { setSurfaceGlobaleM2(n); setModeCalcul('surface'); toast.success(`Surface : ${n} ${libelleSurface(uniteSurface)}`); } else toast.error('Surface non comprise'); break; }
+    switch (v) {
+      case 'surface': {
+        const n = parseNum(clean);
+        if (n == null) { toast.error('Surface non comprise'); return true; }
+        setSurfaceGlobaleM2(n); setModeCalcul('surface');
+        toast.success(`Surface : ${n} ${libelleSurface(uniteSurface)}`);
+        return true;
+      }
       case 'adresse': {
         const cl = clients.find(c => c.id === clientId);
         const q = clean.toLowerCase();
         const a = cl?.adressesLivraison?.find(ad => [ad.libelle, ad.ville, ad.adresse, ad.codePostal].filter(Boolean).some(f => f!.toLowerCase().includes(q) || q.includes(f!.toLowerCase())));
         if (a) { setAdresseLivraisonId(a.id); toast.success(`Adresse : ${a.libelle}`); } else toast.error('Adresse de livraison non trouvée');
-        break;
+        return true;
       }
       case 'ligne-desc': {
-        // Cherche d'abord une correspondance dans le catalogue produits (réf. ou description)
+        /* Un libellé dicté sur une ligne d'ARTICLE encore vide d'article
+           cherche d'abord l'article au catalogue. Une ligne qui a déjà son
+           article, une note ou un groupe reçoit le texte tel quel : on ne
+           remplace pas un article par une phrase dictée. */
+        const ligne = lignes.find(l => l.id === cible?.dataset.ligneId);
+        if (!ligne || ligne.produitId || ligne.type === 'groupe' || ligne.type === 'soustotal' || ligne.type === 'texte') return false;
         const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
         const q = norm(clean);
         const qTokens = q.split(' ').filter(w => w.length > 1);
         let best: { p: Produit; score: number } | null = null;
         for (const p of produits) {
           const ref = norm(p.reference || '');
-          const desc = norm(p.description || '');
+          const desc = norm(designationProduit(p));
           let score = 0;
           if (ref && (ref === q || ref.includes(q) || q.includes(ref))) score += 3;
           if (desc && (desc === q || desc.includes(q) || q.includes(desc))) score += 3;
-          // score par mots communs avec la description
+          // score par mots communs avec la désignation
           if (qTokens.length > 0) {
             const hits = qTokens.filter(w => desc.includes(w) || ref.includes(w)).length;
             score += hits / qTokens.length * 2;
           }
           if (score > (best?.score ?? 0)) best = { p, score };
         }
-        if (best && best.score >= 2) {
-          selectProduit(t.id, best.p.id);
-          toast.success(`Produit reconnu : ${best.p.reference || best.p.description}`);
-        } else {
-          updateLigne(t.id, 'description', clean);
-          toast.success('Description dictée (aucun produit du catalogue reconnu)');
-        }
-        break;
+        if (!best || best.score < 2) return false;
+        selectProduit(ligne.id, best.p.id);
+        toast.success(`Produit reconnu : ${best.p.reference || designationProduit(best.p)}`);
+        return true;
       }
-      case 'ligne-qte': { const n = parseNum(clean); if (n != null) { updateLigne(t.id, 'quantite', n); toast.success(`Quantité : ${n}`); } else toast.error('Quantité non comprise'); break; }
     }
+    return false;
   };
-  const headerVoice = useVoiceDictation(routeVoiceTranscript);
+  const dicteeDevisRef = useRef(dicteeDevis);
+  dicteeDevisRef.current = dicteeDevis;
+  useEffect(() => {
+    if (!assistantVocal) return;
+    assistantVocal.confierDictee((t, cible) => dicteeDevisRef.current(t, cible));
+    return () => assistantVocal.confierDictee(null);
+  }, [assistantVocal?.confierDictee]); // eslint-disable-line react-hooks/exhaustive-deps
   const [kitPickerOpen, setKitPickerOpen] = useState(false);
   const [kitSearch, setKitSearch] = useState('');
   const kitPickerRef = useRef<HTMLDivElement>(null);
@@ -3321,7 +3322,7 @@ export default function Devis() {
         if (!open) { closeDevisDialog(); return; }
         setDialogOpen(open);
       }}>
-        <DialogContent mobileFullscreen onFocusCapture={onVoiceFocusCapture} className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
+        <DialogContent mobileFullscreen className="sm:w-[92vw] sm:max-w-[92vw] sm:max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader className="shrink-0">
             <div className="flex items-center justify-between gap-2 pr-8">
               <DialogTitle className="truncate text-base sm:text-lg">
@@ -3331,15 +3332,15 @@ export default function Devis() {
                 </>) : 'Nouveau devis'}
               </DialogTitle>
               <div className="flex items-center gap-1.5 shrink-0">
-                {headerVoice.supported && (
+                {assistantVocal && (
                   <div className="flex items-center shrink-0">
-                    {/* Dictée en clic direct (sans menu) → le champ ciblé garde le focus */}
+                    {/* L'assistant vocal (Alt+M). Clic sans prise de focus : le champ ciblé le garde. */}
                     <Button
-                      variant="outline" size="icon" title={headerVoice.listening ? 'Arrêter la dictée' : 'Dicter le champ sélectionné'}
-                      onMouseDown={e => e.preventDefault()} onClick={() => headerVoice.toggle()}
-                      className={`rounded-r-none border-r-0 ${headerVoice.listening ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''}`}
+                      variant="outline" size="icon" title={assistantVocal.actif ? "Arrêter l'assistant vocal (Alt+M)" : 'Assistant vocal : dicter le champ sélectionné, commandes (Alt+M)'}
+                      onMouseDown={e => e.preventDefault()} onClick={() => assistantVocal.basculer()}
+                      className={`rounded-r-none border-r-0 ${assistantVocal.actif ? 'bg-destructive hover:bg-destructive/90 text-white border-destructive animate-pulse' : ''}`}
                     >
-                      {headerVoice.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+                      {assistantVocal.actif ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>

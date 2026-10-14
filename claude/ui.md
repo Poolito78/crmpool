@@ -32,7 +32,12 @@ ligne / un groupe » clique le bouton d'ajout (« + Ligne ») — l'assistant ne
 crée rien lui-même. Une phrase inconnue (sans champ actif) se propose à
 l'**apprentissage** : oui → clics enregistrés → « terminé » → oui ; rejouée
 ensuite par le texte des boutons, avant toute autre interprétation. Rangée
-en localStorage (`assistant_vocal_commandes_apprises`), donc par navigateur. ⚠️ Le panneau
+en localStorage (`assistant_vocal_commandes_apprises`), donc par navigateur.
+⚠️ **UN SEUL MICRO.** Le bouton micro de l'en-tête du devis allume
+l'assistant (`useAssistantVocal().basculer`) au lieu d'ouvrir sa propre
+reconnaissance ; la page prête sa dictée métier (`confierDictee`) — libellé
+de ligne → article du catalogue, surface, adresse de livraison — appelée
+avant la dictée ordinaire quand le champ actif porte `data-voice`. ⚠️ Le panneau
 est hors du dialogue Radix : `pointerdown` arrêté, `mousedown` sans focus,
 sinon un clic fermerait la fenêtre.
 

@@ -32,6 +32,7 @@ import { designationProduit, type Produit } from '@/lib/store';
 import { chercherProduits } from '@/lib/indexProduits';
 import { quantitesReservees } from '@/lib/stockDisponible';
 import { ouvrirFenetre } from '@/lib/fenetres';
+import type { GestionnaireDictee } from '@/hooks/useAssistantVocal';
 import {
   interpreter, champNomme, optionsDesignees, texteAInserer, dateParlee, nombreParle,
   chercherDevis, variantesReference, phraseStock, normaliser, resteOriginal,
@@ -44,6 +45,8 @@ interface Props {
   ouvrirAnalyse: () => void;
   /** Droits de l'utilisateur : une page masquée du menu ne s'ouvre pas à la voix. */
   pageAutorisee: (path: string) => boolean;
+  /** Aiguillage de dictée prêté par la page ouverte (`useAssistantVocal`). */
+  dicteeContextuelle?: () => GestionnaireDictee | null;
 }
 
 type Genre = 'texte' | 'ligne' | 'date' | 'nombre' | 'select' | 'riche' | 'boutons';
@@ -166,7 +169,7 @@ function champActif(panneau: HTMLElement | null): HTMLElement | null {
   return null;
 }
 
-export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }: Props) {
+export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee, dicteeContextuelle }: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const { clients, devis, produits, produitsCharges, commandesClient } = useCRM();
@@ -687,6 +690,8 @@ export default function AssistantVocal({ onArret, ouvrirAnalyse, pageAutorisee }
     const enSaisie = !!cible && ['texte', 'ligne', 'riche'].includes(genreDe(cible));
     const cmd = interpreter(t);
     if (cmd && executer(cmd, enSaisie)) return;
+    // La page sait mieux que nous ce que veut dire un libellé de ligne dicté.
+    if (cible && dicteeContextuelle?.()?.(t, cible)) { dire(`✎ ${t}`, 'dicte'); return; }
     if (essayerChamp(t, false)) return;
     if (cible) { inserer(cible, t); return; }
     if (apprentissage?.etape === 'enregistrer') { dire(`« ${t} » — pas compris (démonstration en cours).`, 'erreur'); return; }
