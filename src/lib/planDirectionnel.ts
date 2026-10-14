@@ -57,6 +57,8 @@ export interface PanneauPlan {
   sort: SortPanneau;
   /** Film de fond : « Blanc 3290 », « Vert 3277 »… */
   fond?: string;
+  /** Panneau de la face ARRIÈRE d'un ensemble dos à dos (voir `regrouperDosADos`). */
+  face?: 'arriere';
 }
 
 export interface SupportPlan {
@@ -292,7 +294,9 @@ export function lireEnsemble(texte: string, page: number): EnsemblePlan | null {
     panneaux,
     supports,
     /* « Socle d'ancrage avec em base » : pdf.js coupe aussi ce mot-là. */
-    embase: /avecembase/i.test(sansEspaces(texte)),
+    /* Kadri 9.6.5 écrit « Embase oui » (plan ISOSIGN AF039468) : sans cela
+       aucun ancrage ne partait — 58 embases, tiges et gabarits manquaient. */
+    embase: /avecembase|embaseoui/i.test(sansEspaces(texte)),
     surfaceTotale: nombre(sansEspaces(texte).match(/Surfacetotale([\d.,]+)m/i)?.[1]),
   };
 }
@@ -361,6 +365,44 @@ export function lirePlanDirectionnel(pages: string[]): EnsemblePlan[] {
     const e = lireEnsemble(t, i + 1);
     if (e) out.push(e);
   });
+  return regrouperDosADos(out);
+}
+
+const FACE = /\s*\((avant|arri[eè]re)\)\s*/i;
+
+/**
+ * LES ENSEMBLES DOS À DOS : un mât, des panneaux sur ses deux faces.
+ *
+ * Kadri en fait deux pages — « 0030 (avant) » et « 0030 (arrière) », même
+ * ensemble NIC-106, même « MÂT ANCRÉ MB » dessiné deux fois. Lues comme deux
+ * ensembles, elles commandaient deux mâts, deux embases et des colliers
+ * simple face des deux côtés. L'offre AF039468 en fait UN ensemble : un mât,
+ * un ancrage, et des colliers DOUBLE face (CO76DFP50) qui tiennent les deux
+ * panneaux. La page arrière rejoint donc la page avant : ses panneaux s'y
+ * ajoutent (marqués `face: 'arriere'`), ses supports ne comptent pas.
+ */
+export function regrouperDosADos(ensembles: EnsemblePlan[]): EnsemblePlan[] {
+  const cle = (e: EnsemblePlan) => `${e.section.replace(FACE, '')}|${e.ensemble.replace(FACE, '')}`;
+  const face = (e: EnsemblePlan) => (`${e.section} ${e.ensemble}`.match(FACE)?.[1] ?? '').toLowerCase();
+  const avants = new Map<string, number>();
+  const out: EnsemblePlan[] = [];
+  for (const e of ensembles) {
+    const f = face(e);
+    if (f === 'avant') { avants.set(cle(e), out.length); out.push(e); continue; }
+    const i = f ? avants.get(cle(e)) : undefined;
+    if (f && i !== undefined) {
+      const a = out[i];
+      out[i] = {
+        ...a,
+        section: a.section.replace(FACE, ''),
+        ensemble: a.ensemble.replace(FACE, ''),
+        panneaux: [...a.panneaux, ...e.panneaux.map(p => ({ ...p, face: 'arriere' as const }))],
+        surfaceTotale: a.surfaceTotale != null && e.surfaceTotale != null ? a.surfaceTotale + e.surfaceTotale : undefined,
+      };
+      continue;
+    }
+    out.push(e);
+  }
   return out;
 }
 
@@ -1085,8 +1127,11 @@ export type RegroupementPlan = 'ensemble' | 'reference';
  * devine pas un nombre de rails.
  */
 export function railsLaperouse(hauteur: number): number | null {
-  if ([150, 200, 250, 300, 400, 500, 600].includes(hauteur)) return 2;
-  if (hauteur === 750 || hauteur === 900) return 3;
+  if ([150, 200, 250, 300, 400, 500].includes(hauteur)) return 2;
+  /* 600 : 3 rails (règle du chargé d'affaires, 14/10/2026, offre AF039468 :
+     D43 1600x600 sur 2 tubes Ø60 = 6 CO60SFP50), et non 2 comme le disait
+     la table relevée au catalogue. */
+  if (hauteur === 600 || hauteur === 750 || hauteur === 900) return 3;
   if (hauteur === 1200) return 4;
   return null;
 }
@@ -1184,8 +1229,17 @@ function fixationsProfil(
   precisionRails = '',
 ): LigneFixation {
   const railsParPanneau = panneaux.map(railsDe);
-  const rails = railsParPanneau.reduce<number>((t, r) => t + (r ?? 0), 0);
+  const somme = (face: boolean) => railsParPanneau
+    .reduce<number>((t, r, i) => t + ((panneaux[i].face === 'arriere') === face ? (r ?? 0) : 0), 0);
   const horsTable = panneaux.filter((_, i) => railsParPanneau[i] === null);
+  /* DOS À DOS : un collier DOUBLE face tient un rail de chaque côté
+     (`regrouperDosADos`). Les deux faces doivent porter autant de rails ;
+     sinon le compte reste à établir plutôt que deviné. */
+  const railsAvant = somme(false);
+  const railsArriere = somme(true);
+  const dosADos = railsArriere > 0 || panneaux.some(p => p.face === 'arriere');
+  const rails = dosADos ? railsAvant : railsAvant + railsArriere;
+  const faces = dosADos ? 'DF' : 'SF';
 
   const coulisseaux = e.supports.filter(estCoulisseau);
   const mats = e.supports.filter(s => !estCoulisseau(s));
@@ -1216,7 +1270,9 @@ function fixationsProfil(
   const porteur = porteurSection?.designation ?? '';
 
   let aVerifier: string | null = null;
-  if (horsTable.length) {
+  if (dosADos && railsAvant !== railsArriere && !horsTable.length) {
+    aVerifier = `dos à dos : ${railsAvant} rail(s) devant, ${railsArriere} derrière — colliers double face à établir`;
+  } else if (horsTable.length) {
     aVerifier = `rails inconnus pour ${horsTable.map(p => `${p.code} ${p.largeur}x${p.hauteur}`).join(', ')}`
       + (precisionRails || ' — hauteur absente de la table');
   } else if (!nbSupports) {
@@ -1230,9 +1286,10 @@ function fixationsProfil(
   }
 
   const reference = 'rond' in section
-    ? `CO${section.rond}SF${profil}.BRUT` : `BR${section.carre[0]}${section.carre[1]}SF${profil}.BRUT`;
+    ? `CO${section.rond}${faces}${profil}.BRUT` : `BR${section.carre[0]}${section.carre[1]}${faces}${profil}.BRUT`;
+  const libelleFace = faces === 'DF' ? 'double face' : 'simple face';
   const nom = 'rond' in section
-    ? `Collier Ø${section.rond} simple face ${profil}` : `Bride ${section.carre[0]}x${section.carre[1]} simple face ${profil}`;
+    ? `Collier Ø${section.rond} ${libelleFace} ${profil}` : `Bride ${section.carre[0]}x${section.carre[1]} ${libelleFace} ${profil}`;
   if (existe && !existe(reference)) {
     return { reference: null, quantite, description: `${nom} — ${detail} (${porteur})`,
       aVerifier: `${reference} absent de la grille` };

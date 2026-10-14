@@ -316,7 +316,8 @@ describe('chiffrage par ensemble', () => {
 
 describe('fixations des panneaux P50', () => {
   it('les rails se lisent dans la table Lapérouse, jamais devinés', () => {
-    expect([150, 250, 600, 750, 900, 1200].map(railsLaperouse)).toEqual([2, 2, 2, 3, 3, 4]);
+    /* 600 : 3 rails (règle du 14/10/2026, offre AF039468). */
+    expect([150, 250, 600, 750, 900, 1200].map(railsLaperouse)).toEqual([2, 2, 3, 3, 3, 4]);
     expect(railsLaperouse(175)).toBeNull();
     expect(railsLaperouse(1000)).toBeNull();
   });
@@ -651,5 +652,50 @@ Signal 'Projet et Patrimoine' V 9.6.5 © Kadri Signal 2022 01/10/2026 10:20:04`;
     expect(ref('IPN3.5000.BRUT')).toEqual([2]);
     expect(ref('IPN3.4300.BRUT')).toEqual([2]);
     expect(l.filter(x => x.reference === 'BR.PAL.H10X60.BRUT').map(x => x.quantite)).toEqual([20, 18]);
+  });
+});
+
+/* Kadri 9.6.5, plan ISOSIGN AF039468 : cartouche à numéro + nom, « Embase oui »,
+   « Nouvelles normes », pages (avant) / (arrière) d'un même ensemble. */
+const page965 = (numero: string, nom: string, cote: string) => `Plan avec Détails
+Surface totale 0,40 m²
+Hauteur de base 100 mm
+Fixations
+Accessoires
+Entourage
+AF039468
+AF039468
+${numero}
+${nom}
+LAPEROUSE P50 CL2
+MÂT ANCRÉ MONOLITHIQ 
+Embase oui
+Nouvelles normes
+${cote}
+Blanc 3870
+MÂT ANCRÉ MB
+Mt : 120 m.daN
+Lg : 2.80 m
+Signal 'Projet et Patrimoine' V 9.6.5 © Kadri Signal 2022`;
+
+describe('Kadri 9.6.5 (plan ISOSIGN AF039468)', () => {
+  it('lit gamme, panneau neuf, mât accentué et embase', () => {
+    const [e] = lirePlanDirectionnel([page965('0006', 'DEM1-52', 'D21 1600x250=0.400m²')]);
+    expect(e).toMatchObject({ ensemble: 'DEM1-52', section: '0006', produit: 'LAPEROUSE P50 CL2', classe: 2, embase: true });
+    expect(e.panneaux[0]).toMatchObject({ code: 'D21', largeur: 1600, sort: 'neuf' });
+    expect(e.supports.map(s => s.designation)).toEqual(['MÂT ANCRÉ MB']);
+    expect(ancragesEnsemble(e).map(a => a.reference)).toEqual(['EMBASE.76', 'TIGE.76.M14.400', 'SFGAB60.140']);
+  });
+
+  it('dos à dos : un mât, un ancrage, colliers double face', () => {
+    const e = lirePlanDirectionnel([
+      page965('0030 (avant)', 'NIC-106', 'D21 1600x250=0.400m²'),
+      page965('0030 (arrière)', 'NIC-106', 'D21 1600x250=0.400m²'),
+    ]);
+    expect(e).toHaveLength(1);
+    expect(e[0].panneaux).toHaveLength(2);
+    expect(supportsNeufs(e)).toMatchObject([{ quantite: 1 }]);
+    expect(ancragesEnsemble(e[0])).toHaveLength(3);
+    expect(fixationsEnsemble(e[0], {})).toMatchObject({ reference: 'CO76DFP50.BRUT', quantite: 2 });
   });
 });
