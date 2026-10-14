@@ -1523,7 +1523,10 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
               </div>
             )}
             {showCoutGroupe && (() => {
-              const groupes = coutsParGroupe().filter(g => g.total > 0);
+              /* Seulement les groupes à surface (€/m², €/ml) : sur un devis de
+                 panneaux, ce tableau ne faisait que répéter, au bas du devis, les
+                 sous-totaux déjà portés par chaque ensemble. */
+              const groupes = coutsParGroupe().filter(g => g.total > 0 && g.parUnite != null);
               if (!groupes.length) return null;
               return (
                 /* Un petit tableau, sans troncature : le PDF (html2canvas) coupait à mi-hauteur
