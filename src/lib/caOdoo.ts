@@ -266,9 +266,9 @@ function construire(payload: CaPayload): CaOdooData {
   const { a26, a25, proj } = ventiler(rows);
 
   // ISOSIGN regroupe la signalisation verticale, le STI et le RTE : c'est le
-  // périmètre ISOSIGN au sens commercial. STI et RTE s'affichent chacun en
-  // sous-ligne « dont », comme ISOFLOOR sous ISOMARK — ce qui reste après eux
-  // est la signalisation verticale elle-même.
+  // périmètre ISOSIGN au sens commercial. La signalisation verticale, le STI
+  // et le RTE s'affichent chacun en sous-ligne « dont », comme ISOFLOOR sous
+  // ISOMARK — les trois font ISOSIGN, aucun ne s'y ajoute.
   const marques: CaMarque[] = [
     {
       key: 'isomark',
@@ -287,6 +287,9 @@ function construire(payload: CaPayload): CaOdooData {
       ca25: a25.isosign_sv + a25.sti + a25.rte,
       projection: proj.isosign_sv + proj.sti + proj.rte,
       donts: [
+        // La signalisation verticale = ISOSIGN sans STI ni RTE (transport et
+        // lignes hors catégorie compris, comme dans le calcul officiel).
+        { key: 'sv', label: 'dont signalisation verticale (hors STI et RTE)', ca26: a26.isosign_sv, ca25: a25.isosign_sv, projection: proj.isosign_sv },
         { key: 'sti', label: 'dont STI (gamme plastique)', ca26: a26.sti, ca25: a25.sti, projection: proj.sti },
         { key: 'rte', label: 'dont RTE', ca26: a26.rte, ca25: a25.rte, projection: proj.rte },
       ],

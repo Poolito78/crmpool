@@ -804,8 +804,7 @@ export default function CaOdooPanel() {
               sous-catégorie « FLOORING » (résine ISOFLOOR). ISOSIGN regroupe la signalisation verticale,
               le transport et les lignes hors catégorie, la gamme plastique STI et le RTE. Les sous-lignes
               « dont … » sont <b className="text-foreground">déjà comprises</b> dans le total de leur
-              marque — ne pas les additionner : ce qui reste d'ISOSIGN une fois STI et RTE retirés est la
-              signalisation verticale elle-même.
+              marque — ne pas les additionner : signalisation verticale + STI + RTE = ISOSIGN.
             </p>
             <p>
               <b className="text-foreground">Projection.</b> Calculée par client : CA 2026 à date + reste à

@@ -10,7 +10,7 @@ import type { CaOdooData, CaMois, CaFlooringQuartz } from '@/lib/caOdoo';
 //
 // ⚠️ ON NE RECALCULE RIEN. Les montants sont ceux du jeu publié par
 // `ca-refresh` ; seuls les cumuls de colonnes sont refaits, par simple somme
-// des lignes affichées. Un « dont » (ISOFLOOR, STI, RTE) est DÉJÀ COMPRIS dans
+// des lignes affichées. Un « dont » (ISOFLOOR, verticale, STI, RTE) est DÉJÀ COMPRIS dans
 // sa marque : il a sa colonne, il ne s'additionne jamais au total.
 //
 // Les montants partent en NOMBRES (format « # ##0,00 € »), jamais en texte :
