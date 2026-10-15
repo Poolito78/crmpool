@@ -1,7 +1,7 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, Fragment } from 'react';
 import { useCRM } from '@/lib/StoreContext';
 import { generateId, formatMontant, calculerDateEcheance, type Fournisseur } from '@/lib/store';
-import { Plus, Search, Edit2, Trash2, Upload, Download, Mail, FolderOpen } from 'lucide-react';
+import { Plus, Search, Edit2, Trash2, Upload, Mail, FolderOpen, Filter, X, ChevronUp, ChevronDown, ChevronsUpDown } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { exportToExcel } from '@/lib/exportExcel';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,43 @@ import DocumentsFournisseurDialog, { DocumentsFournisseurPanel } from '@/compone
 import { useNombreDocumentsFournisseur } from '@/lib/gedFournisseur';
 import TransportFournisseurPanel from '@/components/TransportFournisseurPanel';
 import EmailToContactDialog, { type ExtractedContact } from '@/components/EmailToContactDialog';
+import { useTableColumns } from '@/hooks/useTableColumns';
+import ColResizeHandle from '@/components/ColResizeHandle';
+import PageHeaderSlot from '@/components/PageHeaderSlot';
+import TableGearMenu from '@/components/TableGearMenu';
+import FilterSuggestInput from '@/components/FilterSuggestInput';
+import FilterChoiceInput, { parseChoiceFilter } from '@/components/FilterChoiceInput';
+
+// Colonnes du tableau (convention vues tableau, claude/ui.md) : chaque colonne
+// se trie depuis son en-tête et se filtre par son icône. Le délai de règlement
+// se compare sans casse — la base porte « 45j FDM » comme « 45J FDM ».
+type FournColKey = 'societe' | 'contact' | 'email' | 'telephone' | 'ville' | 'delai' | 'encours';
+const FOURN_COLS: { key: FournColKey; label: string; align: 'left' | 'right' }[] = [
+  { key: 'societe', label: 'Société', align: 'left' },
+  { key: 'contact', label: 'Contact', align: 'left' },
+  { key: 'email', label: 'Email', align: 'left' },
+  { key: 'telephone', label: 'Téléphone', align: 'left' },
+  { key: 'ville', label: 'Ville', align: 'left' },
+  { key: 'delai', label: 'Délai règlement', align: 'left' },
+  { key: 'encours', label: 'Encours / Échéance', align: 'right' },
+];
+const ENCOURS_OPTIONS = [
+  { value: '', label: 'Tous' },
+  { value: 'du', label: 'Avec encours' },
+  { value: 'echu', label: 'Échu' },
+  { value: 'aucun', label: 'Sans encours' },
+];
+const cleDelai = (d?: string) => (d || '').trim().toUpperCase();
+
+function texteColonne(f: Fournisseur, key: Exclude<FournColKey, 'encours' | 'delai'>): string {
+  switch (key) {
+    case 'societe': return f.societe || '';
+    case 'contact': return f.nom || '';
+    case 'email': return f.email || '';
+    case 'telephone': return [f.telephone, f.telephoneMobile].filter(Boolean).join(' ');
+    case 'ville': return f.ville || '';
+  }
+}
 
 const emptyFournisseur: Omit<Fournisseur, 'id' | 'dateCreation'> = {
   nom: '', email: '', telephone: '', telephoneMobile: '', adresse: '', ville: '', codePostal: '', societe: '', notes: '', francoPort: 0, coutTransport: 0, delaiReglement: '45j FDM', estStockiste: false, delaiExpedition: 0,
@@ -88,9 +125,124 @@ export default function Fournisseurs() {
   const [importMapping, setImportMapping] = useState<Record<string, string>>({});
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
 
-  const filtered = fournisseurs.filter(f =>
-    [f.nom, f.email, f.societe, f.telephone].some(v => v?.toLowerCase().includes(search.toLowerCase()))
-  );
+  const fCols = useTableColumns<FournColKey>('fournisseurs_table', FOURN_COLS.map(c => c.key));
+  const [visCols, setVisCols] = useState<Set<FournColKey>>(() => {
+    try { const s = localStorage.getItem('fournisseurs_visible'); if (s) return new Set(JSON.parse(s) as FournColKey[]); } catch { /* ignore */ }
+    return new Set(FOURN_COLS.map(c => c.key));
+  });
+  function toggleVisCol(k: FournColKey) { setVisCols(prev => { const n = new Set(prev); if (n.has(k)) n.delete(k); else n.add(k); try { localStorage.setItem('fournisseurs_visible', JSON.stringify([...n])); } catch { /* ignore */ } return n; }); }
+  const [colFilters, setColFilters] = useState<Partial<Record<FournColKey, string>>>({});
+  const [openFilterCols, setOpenFilterCols] = useState<Set<FournColKey>>(new Set());
+  const [sortCol, setSortCol] = useState<FournColKey | null>(null);
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  function setColFilter(k: FournColKey, v: string) {
+    setColFilters(prev => { const n = { ...prev }; if (v) n[k] = v; else delete n[k]; return n; });
+  }
+  function toggleFilterCol(col: FournColKey) {
+    setOpenFilterCols(prev => { const n = new Set(prev); if (n.has(col)) { n.delete(col); setColFilter(col, ''); } else n.add(col); return n; });
+  }
+  // Fermé sans valeur → la colonne se replie sur l'icône seule. Lu par une ref :
+  // un choix suivi de la fermeture du menu arrive avant le nouveau rendu.
+  const colFiltersRef = useRef(colFilters);
+  colFiltersRef.current = colFilters;
+  function closeFilterIfEmpty(col: FournColKey) {
+    setTimeout(() => {
+      if (colFiltersRef.current[col]) return;
+      setOpenFilterCols(prev => { const n = new Set(prev); n.delete(col); return n; });
+    }, 0);
+  }
+  function clearAllFilters() { setColFilters({}); setOpenFilterCols(new Set()); }
+  function toggleSort(col: FournColKey) {
+    if (sortCol === col) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortCol(col); setSortDir('asc'); }
+  }
+
+  // Montant dû et part échue, lus une fois par fournisseur (filtre, tri, affichage)
+  const etatEncours = useMemo(() => {
+    const now = new Date();
+    const map: Record<string, { montant: number; depasse: number; prochaine?: Date }> = {};
+    for (const [id, e] of Object.entries(encoursDuParFournisseur)) {
+      const futures = e.echeances.filter(x => x.date >= now).sort((a, b) => a.date.getTime() - b.date.getTime());
+      map[id] = {
+        montant: e.montant,
+        depasse: e.echeances.filter(x => x.date < now).reduce((s, x) => s + x.montant, 0),
+        prochaine: futures[0]?.date,
+      };
+    }
+    return map;
+  }, [encoursDuParFournisseur]);
+
+  const suggestions = useMemo(() => {
+    const distinct = (key: Exclude<FournColKey, 'encours' | 'delai'>) =>
+      Array.from(new Set(fournisseurs.map(f => texteColonne(f, key).trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'fr'));
+    return { societe: distinct('societe'), contact: distinct('contact'), email: distinct('email'), telephone: distinct('telephone'), ville: distinct('ville') };
+  }, [fournisseurs]);
+  const delaiOptions = useMemo(() => {
+    const vus = new Map<string, string>();
+    fournisseurs.forEach(f => { const k = cleDelai(f.delaiReglement); if (k && !vus.has(k)) vus.set(k, f.delaiReglement!.trim()); });
+    return [{ value: '', label: 'Tous' }, ...[...vus.entries()].sort((a, b) => a[0].localeCompare(b[0], 'fr')).map(([value, label]) => ({ value, label }))];
+  }, [fournisseurs]);
+
+  const filtered = useMemo(() => {
+    const s = search.trim().toLowerCase();
+    return fournisseurs.filter(f => {
+      if (s && ![f.nom, f.email, f.societe, f.telephone, f.telephoneMobile, f.ville].some(v => v?.toLowerCase().includes(s))) return false;
+      for (const [k, v] of Object.entries(colFilters) as [FournColKey, string][]) {
+        if (!v) continue;
+        if (k === 'delai') {
+          const { mode, only, excluded } = parseChoiceFilter(v);
+          const d = cleDelai(f.delaiReglement);
+          if (mode === 'only' && d !== only) return false;
+          if (mode === 'exclude' && excluded.includes(d)) return false;
+        } else if (k === 'encours') {
+          const e = etatEncours[f.id];
+          if (v === 'du' && !(e?.montant > 0)) return false;
+          if (v === 'echu' && !(e?.depasse > 0)) return false;
+          if (v === 'aucun' && e?.montant > 0) return false;
+        } else if (!texteColonne(f, k).toLowerCase().includes(v.toLowerCase())) return false;
+      }
+      return true;
+    });
+  }, [fournisseurs, search, colFilters, etatEncours]);
+
+  // Tri : les cases vides restent en bas, quel que soit le sens
+  const sortedFiltered = useMemo(() => {
+    if (!sortCol) return filtered;
+    const sens = sortDir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      if (sortCol === 'encours') return sens * ((etatEncours[a.id]?.montant || 0) - (etatEncours[b.id]?.montant || 0));
+      const va = sortCol === 'delai' ? (a.delaiReglement || '').trim() : texteColonne(a, sortCol).trim();
+      const vb = sortCol === 'delai' ? (b.delaiReglement || '').trim() : texteColonne(b, sortCol).trim();
+      if (!va || !vb) return va ? -1 : vb ? 1 : 0;
+      return sens * va.localeCompare(vb, 'fr', { sensitivity: 'base', numeric: true });
+    });
+  }, [filtered, sortCol, sortDir, etatEncours]);
+
+  function chipText(k: FournColKey, v: string): string {
+    if (k === 'encours') return ENCOURS_OPTIONS.find(o => o.value === v)?.label || v;
+    if (k === 'delai') {
+      const { mode, only, excluded } = parseChoiceFilter(v);
+      const lib = (x: string) => delaiOptions.find(o => o.value === x)?.label || x;
+      return mode === 'exclude' ? `Sauf ${excluded.map(lib).join(', ')}` : lib(only);
+    }
+    return v;
+  }
+
+  function renderFilter(k: FournColKey) {
+    switch (k) {
+      case 'delai':
+        return <FilterChoiceInput value={colFilters.delai || ''} onChange={v => setColFilter('delai', v)} options={delaiOptions} excludable onClose={() => closeFilterIfEmpty('delai')} />;
+      case 'encours':
+        return <FilterChoiceInput value={colFilters.encours || ''} onChange={v => setColFilter('encours', v)} options={ENCOURS_OPTIONS} onClose={() => closeFilterIfEmpty('encours')} />;
+      default:
+        return <FilterSuggestInput value={colFilters[k] || ''} onChange={v => setColFilter(k, v)} suggestions={suggestions[k]} placeholder={`${FOURN_COLS.find(c => c.key === k)?.label}…`} onClose={() => closeFilterIfEmpty(k)} />;
+    }
+  }
+
+  function exportFournisseurs() {
+    exportToExcel(sortedFiltered.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code postal': f.codePostal, 'Délai règlement': f.delaiReglement || '', 'Franco port': f.francoPort, 'Coût transport': f.coutTransport, Notes: f.notes || '' })), 'fournisseurs', 'Fournisseurs');
+  }
 
   const excelColumns = useMemo(() => {
     if (!importPreview || importPreview.length === 0) return [];
@@ -257,52 +409,87 @@ export default function Fournisseurs() {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col flex-1 min-h-0 gap-4">
       <input type="file" ref={fileInputRef} accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileUpload} />
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="relative w-full sm:w-72">
+      <PageHeaderSlot>
+        <div className="relative w-40 sm:w-56 md:w-72">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Rechercher..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9 h-9" />
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 mr-2" /> Importer</Button>
-          <Button variant="outline" onClick={() => exportToExcel(fournisseurs.map(f => ({ Nom: f.nom, Société: f.societe, Email: f.email, Téléphone: f.telephone, Adresse: f.adresse, Ville: f.ville, 'Code postal': f.codePostal, 'Franco port': f.francoPort, 'Coût transport': f.coutTransport, Notes: f.notes || '' })), 'fournisseurs', 'Fournisseurs')}><Download className="w-4 h-4 mr-2" /> Exporter</Button>
-          <Button onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 mr-2" /> Nouveau fournisseur</Button>
+        <div className="ml-auto flex flex-wrap gap-2 items-center">
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()}><Upload className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Importer</span></Button>
+          <Button size="sm" onClick={openNew} className="shrink-0"><Plus className="w-4 h-4 sm:mr-2" /> <span className="hidden sm:inline">Nouveau fournisseur</span><span className="sm:hidden">Nouveau</span></Button>
         </div>
-      </div>
+      </PageHeaderSlot>
 
-      <div className="hidden md:block bg-card rounded-xl border border-border overflow-hidden">
+      <div className="hidden md:flex md:flex-col flex-1 min-h-0 bg-card rounded-xl border border-border overflow-hidden">
+        {Object.values(colFilters).some(v => v) && (
+          <div className="px-4 py-2 border-b border-border flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-muted-foreground">Filtres actifs :</span>
+            {(Object.entries(colFilters).filter(([, v]) => v) as [FournColKey, string][]).map(([k, v]) => (
+              <span key={k} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full flex items-center gap-1">
+                {FOURN_COLS.find(c => c.key === k)?.label} : {chipText(k, v)}
+                <button onClick={() => setColFilter(k, '')}><X className="w-3 h-3" /></button>
+              </span>
+            ))}
+            <button onClick={clearAllFilters} className="ml-auto text-xs text-muted-foreground hover:text-foreground flex items-center gap-0.5"><X className="w-3 h-3" /> Effacer</button>
+          </div>
+        )}
+        <div className="flex-1 min-h-0 overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50">
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Société</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Contact</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Email</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Téléphone</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Ville</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground">Délai règlement</th>
-              <th className="text-right px-4 py-3 font-medium text-muted-foreground">Encours / Échéance</th>
-              <th className="px-4 py-3"></th>
+              {fCols.ordered(FOURN_COLS, k => visCols.has(k)).map(({ key, label, align }) => {
+                const hasFilter = !!colFilters[key];
+                const isFilterOpen = openFilterCols.has(key);
+                const SortIcon = sortCol === key ? (sortDir === 'asc' ? ChevronUp : ChevronDown) : ChevronsUpDown;
+                const isDragOver = fCols.dragOverKey === key && fCols.dragKey !== key;
+                return (
+                  <th key={key} {...fCols.thProps(key)} style={fCols.widthStyle(key)} className={`relative px-4 py-2 font-medium text-muted-foreground select-none whitespace-nowrap cursor-grab active:cursor-grabbing sticky top-0 z-10 ${align === 'right' ? 'text-right' : 'text-left'} ${isDragOver ? 'bg-primary/10' : fCols.dragKey === key ? 'bg-muted opacity-40' : 'bg-muted'}`}>
+                    {isDragOver && <span className="absolute top-0 left-0 h-full w-0.5 bg-primary z-20" />}
+                    <div className={`flex items-center gap-0.5 ${align === 'right' ? 'justify-end' : ''} ${fCols.widthStyle(key) ? 'overflow-hidden' : ''}`}>
+                      <button className="flex items-center gap-1 hover:text-foreground cursor-pointer min-w-0" onClick={() => toggleSort(key)} title={sortCol === key ? (sortDir === 'asc' ? 'Tri croissant' : 'Tri décroissant') : 'Trier'}>
+                        {align === 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === key ? 'text-primary' : 'opacity-40'}`} />}
+                        <span className="truncate">{label}</span>
+                        {align !== 'right' && <SortIcon className={`w-3.5 h-3.5 shrink-0 ${sortCol === key ? 'text-primary' : 'opacity-40'}`} />}
+                      </button>
+                      {isFilterOpen ? (
+                        <span className="font-normal inline-flex items-center gap-0.5 min-w-0" onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()} draggable={false}>
+                          {renderFilter(key)}
+                          <button onClick={() => toggleFilterCol(key)} title="Fermer le filtre" className="p-0.5 rounded hover:bg-muted/80 text-muted-foreground/60 shrink-0"><X className="w-3 h-3" /></button>
+                        </span>
+                      ) : (
+                        <button onClick={() => toggleFilterCol(key)} title="Filtrer" className={`p-0.5 rounded hover:bg-muted/80 transition-colors shrink-0 ${hasFilter ? 'text-primary' : 'text-muted-foreground/25 hover:text-muted-foreground/60'}`}>
+                          <Filter className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <ColResizeHandle {...fCols.resizeHandleProps(key)} />
+                  </th>
+                );
+              })}
+              <th className="px-2 py-2 text-right sticky top-0 z-10 bg-muted whitespace-nowrap">
+                <TableGearMenu cols={FOURN_COLS} visible={visCols} onToggle={toggleVisCol} onExport={exportFournisseurs} />
+              </th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map(f => {
-              const encours = encoursDuParFournisseur[f.id];
+            {sortedFiltered.map(f => {
+              const encours = etatEncours[f.id];
               const montantDu = encours?.montant || 0;
-              const now = new Date();
-              const echeancesDepassees = encours?.echeances.filter(e => e.date < now) || [];
-              const montantDepasse = echeancesDepassees.reduce((s, e) => s + e.montant, 0);
-              const prochainesEcheances = encours?.echeances.filter(e => e.date >= now).sort((a, b) => a.date.getTime() - b.date.getTime()) || [];
-              const prochaineDate = prochainesEcheances[0]?.date;
-              return (
-                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(f)}>
-                  <td className="px-4 py-3 font-medium">{f.societe}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{f.nom}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{f.email}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{f.telephone}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{f.ville}</td>
-                  <td className="px-4 py-3 text-muted-foreground text-sm">{f.delaiReglement || '—'}</td>
-                  <td className="px-4 py-3 text-right">
+              const montantDepasse = encours?.depasse || 0;
+              const prochaineDate = encours?.prochaine;
+              const renderF = (key: FournColKey) => {
+                const ws = fCols.widthStyle(key);
+                const trunc = ws ? ' truncate' : '';
+                switch (key) {
+                  case 'societe': return <td style={ws} className={`px-4 py-3 font-medium${trunc}`}>{f.societe}</td>;
+                  case 'contact': return <td style={ws} className={`px-4 py-3 text-muted-foreground${trunc}`}>{f.nom}</td>;
+                  case 'email': return <td style={ws} className={`px-4 py-3 text-muted-foreground${trunc}`}>{f.email}</td>;
+                  case 'telephone': return <td style={ws} className={`px-4 py-3 text-muted-foreground${trunc}`}>{f.telephone}</td>;
+                  case 'ville': return <td style={ws} className={`px-4 py-3 text-muted-foreground${trunc}`}>{f.ville}</td>;
+                  case 'delai': return <td style={ws} className={`px-4 py-3 text-muted-foreground text-sm${trunc}`}>{f.delaiReglement || '—'}</td>;
+                  case 'encours': return <td style={ws} className="px-4 py-3 text-right">
                     {montantDu > 0 ? (
                       <div>
                         <span className="font-medium">{formatMontant(montantDu)}</span>
@@ -318,7 +505,12 @@ export default function Fournisseurs() {
                         )}
                       </div>
                     ) : <span className="text-muted-foreground">—</span>}
-                  </td>
+                  </td>;
+                }
+              };
+              return (
+                <tr key={f.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => openEdit(f)}>
+                  {fCols.ordered(FOURN_COLS, k => visCols.has(k)).map(col => <Fragment key={col.key}>{renderF(col.key)}</Fragment>)}
                   <td className="px-4 py-3">
                     <div className="flex gap-1 justify-end">
                       <button onClick={e => { e.stopPropagation(); setDocsFournisseur(f); }} className="relative p-1.5 rounded-md hover:bg-muted" title="Documents">
@@ -336,11 +528,12 @@ export default function Fournisseurs() {
             })}
           </tbody>
         </table>
-        {filtered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun fournisseur</p>}
+        {sortedFiltered.length === 0 && <p className="text-center py-8 text-muted-foreground">Aucun fournisseur</p>}
+        </div>
       </div>
 
-      <div className="md:hidden space-y-3">
-        {filtered.map(f => (
+      <div className="md:hidden flex-1 min-h-0 overflow-y-auto space-y-3">
+        {sortedFiltered.map(f => (
           <div key={f.id} className="bg-card rounded-xl border border-border p-4 cursor-pointer" onClick={() => openEdit(f)}>
             <div className="flex justify-between items-start">
               <div><p className="font-medium">{f.societe}</p><p className="text-sm text-muted-foreground">{f.nom}</p></div>
