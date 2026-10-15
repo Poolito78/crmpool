@@ -1,4 +1,5 @@
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
+import { niveauGamme, REMISE_GAMME } from './remiseGammes';
 
 /**
  * Reprise des prix d'ACHAT depuis un document fournisseur.
@@ -308,6 +309,14 @@ export function articleDepuisLigne(args: {
   produits: Produit[];
   horodate: string;
   aujourdhui: string;
+  /**
+   * Prix public et remise revendeur arrêtés à l'import (règles de la
+   * catégorie, retouchées à la main). Absent : le prix public suit le
+   * coefficient mesuré, s'il est fiable, et rien n'est remisé.
+   */
+  vente?: { prixHT: number; remiseRevendeur: number };
+  /** Référence de la même fiche chez Odoo, quand elle y existe ou y est créée. */
+  referenceOdoo?: string;
 }): Produit {
   const designation = (args.designation || '').trim();
   const reference = (args.reference || '').trim()
@@ -316,19 +325,29 @@ export function articleDepuisLigne(args: {
     || 'NOUVEAU';
   const categorie = (args.categorie || '').trim() || undefined;
   const coefficient = categorie ? coefficientVente(args.produits, categorie) : null;
+  const vente = args.vente
+    ? prixVenteArticle({ prixAchat: args.prixAchat, ...args.vente })
+    : {
+        prixHT: prixVenteDepuisAchat(args.prixAchat, coefficient) ?? 0,
+        coefficient: 1, coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
+      };
   return {
     id: args.id,
     reference,
     description: designation,
-    prixAchat: args.prixAchat, coefficient: 1,
-    prixHT: prixVenteDepuisAchat(args.prixAchat, coefficient) ?? 0,
-    coeffRevendeur: 1, remiseRevendeur: 0, prixRevendeur: 0,
+    prixAchat: args.prixAchat,
+    ...vente,
     tva: args.tva ?? 20, unite: 'u', stock: 0, stockMin: 0,
+    /* Les deux prix sont DATÉS : le plus récent l'emporte à la synchro Odoo,
+       et un prix posé à l'import ne doit pas céder à une fiche Odoo plus
+       ancienne. */
     prixAchatMaj: args.horodate,
+    ...(vente.prixHT > 0 ? { prixVenteMaj: args.horodate } : {}),
     dateCreation: args.aujourdhui,
     origine: 'crm',
     ...(categorie ? { categorie } : {}),
     ...(args.fournisseurId ? { fournisseurId: args.fournisseurId } : {}),
+    ...(args.referenceOdoo ? { referenceOdoo: args.referenceOdoo } : {}),
   };
 }
 
@@ -470,4 +489,84 @@ export function appliquerPrix(args: {
   }
 
   return { liens, produits, nbLiens, nbArticles: versArticle.size };
+}
+
+/* ── Les règles de vente d'un article créé ───────────────────────────────── */
+
+/**
+ * La remise revendeur d'une catégorie, et d'où elle vient.
+ *
+ * Un article créé depuis un devis fournisseur prend les règles de sa famille
+ * (demande du 15/10/2026) — affichées à l'import et modifiables. Dans l'ordre :
+ *   1. la remise de GAMME (ISOMARK H1 50 %, H2 30 %, ISOFLOOR 30 %), qui se
+ *      lit sur la catégorie (`remiseGammes.ts`) ;
+ *   2. la remise MESURÉE sur les articles de la catégorie (médiane), comme
+ *      le coefficient — au moins cinq articles, sinon elle ne dit rien ;
+ *   3. rien : l'appelant prend le défaut de la fiche article (30 %) et le dit.
+ */
+export function remiseRevendeurCategorie(
+  produits: Produit[],
+  categorie?: string,
+): { remise: number; origine: string } | null {
+  const niveau = niveauGamme(categorie);
+  if (niveau) {
+    return { remise: Math.round(REMISE_GAMME[niveau] * 100), origine: `remise de gamme ${niveau}` };
+  }
+  for (const cat of categoriesCandidates(categorie)) {
+    const cible = cat.toUpperCase();
+    const remises = produits
+      .filter(p => (p.categorie || '').trim().toUpperCase() === cible && (p.prixHT ?? 0) > 0)
+      .map(p => Number(p.remiseRevendeur))
+      .filter(r => Number.isFinite(r) && r >= 0 && r < 100)
+      .sort((a, b) => a - b);
+    if (remises.length < EFFECTIF_MIN) continue;
+    return {
+      remise: Math.round(quantile(remises, 0.5) * 100) / 100,
+      origine: `médiane de ${remises.length} articles « ${cat} »`,
+    };
+  }
+  return null;
+}
+
+/**
+ * Les prix de vente d'un article créé, à partir du prix PUBLIC retenu.
+ *
+ * Même règle que la fiche article (`Produits.tsx`) : prix revendeur = public
+ * × (1 − remise), et le `coefficient` stocké est revendeur ÷ achat.
+ */
+export function prixVenteArticle(args: {
+  prixAchat: number;
+  prixHT: number;
+  remiseRevendeur: number;
+}): { prixHT: number; prixRevendeur: number; coefficient: number; coeffRevendeur: number; remiseRevendeur: number } {
+  const prixHT = Math.round((args.prixHT || 0) * 100) / 100;
+  const remise = Math.min(Math.max(args.remiseRevendeur || 0, 0), 99.99);
+  const prixRevendeur = Math.round(prixHT * (1 - remise / 100) * 100) / 100;
+  const coefficient = args.prixAchat > 0 && prixRevendeur > 0
+    ? Math.round(prixRevendeur / args.prixAchat * 10000) / 10000
+    : 1;
+  return { prixHT, prixRevendeur, coefficient, coeffRevendeur: coefficient, remiseRevendeur: remise };
+}
+
+/**
+ * La catégorie la plus portée par les articles de ce fournisseur.
+ *
+ * Un fournisseur de résines vend des résines : c'est la proposition par
+ * défaut d'un article qu'il nous fait connaître — à corriger à l'import.
+ * Rien quand il n'a aucun article catégorisé.
+ */
+export function categorieDuFournisseur(
+  fournisseurId: string | undefined,
+  produits: Produit[],
+  liens: ProduitFournisseur[],
+): string | undefined {
+  if (!fournisseurId) return undefined;
+  const ids = new Set(liens.filter(l => l.fournisseurId === fournisseurId).map(l => l.produitId));
+  const compte = new Map<string, number>();
+  for (const p of produits) {
+    if (!(ids.has(p.id) || p.fournisseurId === fournisseurId)) continue;
+    const c = (p.categorie || '').trim();
+    if (c) compte.set(c, (compte.get(c) ?? 0) + 1);
+  }
+  return [...compte.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
 }

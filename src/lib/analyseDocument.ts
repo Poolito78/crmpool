@@ -171,6 +171,14 @@ ligne au chiffrage du CRM :
 - Les frais de port sont une ligne comme une autre.
 - Les titres de section, notes et sous-totaux ne sont pas des lignes.
 
+Extraction des lignes d'un devis REÇU (devis_fournisseur) — ses prix seront
+repris comme prix d'ACHAT :
+- « reference » = le code article DU FOURNISSEUR tel qu'il l'écrit ;
+  « description » = sa désignation, conditionnement compris (« fût 25 kg »).
+- « prixUnitaireHT » = le prix unitaire HT NET, remise de ligne déduite.
+- Les frais de port, d'emballage ou de transport ne sont pas des articles :
+  ne les mets pas en lignes, signale-les dans « notes ».
+
 Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
 
 /**
@@ -319,12 +327,30 @@ ${texte}` }] }],
   }
 }
 
+/**
+ * Le type choisi par l'utilisateur AVANT l'analyse fait foi : le modèle n'a
+ * plus à le deviner — un devis reçu adressé à « ISOSIGN SAS » passait pour
+ * un devis client — et reçoit la consigne d'extraire selon ce type.
+ */
 export async function analyserDocument(
   input:
     | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
     | { type: 'text'; texte: string },
   apiKey: string,
-  openrouterKey?: string
+  openrouterKey?: string,
+  typeImpose?: TypeDocument,
+): Promise<DocumentAnalysis> {
+  const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose);
+  return typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse;
+}
+
+async function analyserSansType(
+  input:
+    | { type: 'pdf'; buffer: ArrayBuffer; texteSupplementaire?: string }
+    | { type: 'text'; texte: string },
+  apiKey: string,
+  openrouterKey?: string,
+  typeImpose?: TypeDocument,
 ): Promise<DocumentAnalysis> {
   let texte: string;
   if (input.type === 'pdf') {
@@ -334,6 +360,11 @@ export async function analyserDocument(
       : tronquer(textePDF, 6000);
   } else {
     texte = tronquer(input.texte, 6000);
+  }
+  if (typeImpose) {
+    texte = `TYPE IMPOSÉ PAR L'UTILISATEUR : ${typeImpose} (${TYPE_LABELS[typeImpose].label}). `
+      + `Ne reclasse pas le document : « typeDocument » vaut ${typeImpose}, et les champs `
+      + `s'extraient selon les règles de ce type.\n\n${texte}`;
   }
 
   // 1. Essayer Groq openai/gpt-oss-20b (remplace llama-3.1-8b-instant, déprécié le

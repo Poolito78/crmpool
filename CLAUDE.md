@@ -167,6 +167,7 @@ explication.
 `memoireArticles` (demande → article corrigé, rappelé avant le rapprochement) ·
 `comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts ligne à ligne ou par référence, apprentissage) ·
 `devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
+`odooAchat` (devis fournisseur : article Odoo retrouvé par code ou créé sous la référence MonCRM — jamais de prix écrit dans Odoo) ·
 `concurrents` · `ralColors`
 
 ## Supabase
@@ -187,7 +188,7 @@ s'exécutent dans un **terminal**, jamais dans l'éditeur SQL.
 **Edge Functions** (`supabase/functions/*`) : déployer avec
 `.\deploy-function.ps1 <nom>` (ou `-All`). Fonctions : `extract-client`,
 `extract-contact`, `analyze-email`, `ai-calculator`, `devis-assistant`,
-`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`.
+`send-devis-email`, `odoo-prix`, `gemini`, `agent-mail-depot`, `odoo-achat`.
 
 **Diagnostic « ça ne persiste pas »** : les `updateXxx` écrivent en
 fire-and-forget. Un upsert qui envoie une colonne inexistante reçoit un 400 et

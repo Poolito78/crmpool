@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   prixConditionnement, rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
+  remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -324,5 +325,47 @@ describe('prixConditionnement', () => {
 
   it('ne touche à rien sans preuve', () => {
     expect(prixConditionnement(3.15, eclipse, { designation: 'Colle Eclipse', quantite: 7 })).toBe(3.15);
+  });
+});
+
+describe('règles de vente d’un article créé depuis un devis fournisseur', () => {
+  it('la remise de gamme passe avant la mesure', () => {
+    expect(remiseRevendeurCategorie([], 'ISOMARK / H1')).toEqual({ remise: 50, origine: 'remise de gamme H1' });
+    expect(remiseRevendeurCategorie([], 'EPOXY')?.remise).toBe(30);
+  });
+
+  it('mesure la remise sur cinq articles au moins, sinon s’abstient', () => {
+    const cat = (r: number, i: number) => produit({ id: `m${i}`, categorie: 'MATS', prixHT: 10, remiseRevendeur: r });
+    expect(remiseRevendeurCategorie([25, 25, 25, 25].map(cat), 'MATS')).toBeNull();
+    const r = remiseRevendeurCategorie([20, 25, 25, 25, 40].map(cat), 'MATS');
+    expect(r?.remise).toBe(25);
+    expect(r?.origine).toContain('5 articles');
+  });
+
+  it('prix revendeur = public × (1 − remise), coefficient = revendeur ÷ achat', () => {
+    expect(prixVenteArticle({ prixAchat: 10, prixHT: 40, remiseRevendeur: 30 }))
+      .toEqual({ prixHT: 40, prixRevendeur: 28, coefficient: 2.8, coeffRevendeur: 2.8, remiseRevendeur: 30 });
+  });
+
+  it('articleDepuisLigne porte les prix arrêtés à l’import, datés', () => {
+    const p = articleDepuisLigne({
+      id: 'n', designation: 'Bordure', prixAchat: 10, produits: [],
+      horodate: '2026-10-15T10:00:00Z', aujourdhui: '2026-10-15',
+      vente: { prixHT: 40, remiseRevendeur: 30 }, referenceOdoo: 'BORD-GG',
+    });
+    expect(p.prixHT).toBe(40);
+    expect(p.prixRevendeur).toBe(28);
+    expect(p.prixVenteMaj).toBe('2026-10-15T10:00:00Z');
+    expect(p.referenceOdoo).toBe('BORD-GG');
+  });
+
+  it('propose la catégorie la plus portée par les articles du fournisseur', () => {
+    const produits = [
+      produit({ id: 'a', categorie: 'EPOXY' }), produit({ id: 'b', categorie: 'EPOXY' }),
+      produit({ id: 'c', categorie: 'MMA', fournisseurId: 'f1' }), produit({ id: 'd', categorie: 'PU' }),
+    ];
+    const liens = [lien({ produitId: 'a', fournisseurId: 'f1' }), lien({ produitId: 'b', fournisseurId: 'f1' })];
+    expect(categorieDuFournisseur('f1', produits, liens)).toBe('EPOXY');
+    expect(categorieDuFournisseur('f2', produits, liens)).toBeUndefined();
   });
 });

@@ -415,6 +415,24 @@ bord (`/crm?tab=relances`).
 ⚠️ **« Relancé » N'EST PAS UN STATUT** : `statut` reste `'envoyé'`, sinon les
 devis relancés sortiraient de tous les comptes de devis en cours.
 
+## Devis fournisseur : type choisi d'avance, articles Odoo (15 oct.)
+
+- **« Document à traiter »** au-dessus d'« Analyser » (`typeImpose`) : vide =
+  détection par l'IA ; un type choisi est imposé au modèle
+  (`analyserDocument(…, typeImpose)`) et court-circuite l'offre Odoo et le
+  plan Kadri s'ils ne sont pas de ce type. Le bloc « fiche technique » se
+  masque dès qu'un type est choisi.
+- **Odoo dans le panneau devis fournisseur** (`odooAchat.ts`, fonction
+  `odoo-achat`) : article retenu d'office seulement s'il est lu par un code,
+  propositions par les mots, case « Créer dans Odoo » — cochée d'office quand
+  l'article est créé dans MonCRM. ⚠️ **Jamais de prix écrit dans Odoo** : les
+  prix restent dans MonCRM, le plus récent l'emporte.
+- **Fiche de l'article créé modifiable** (référence, désignation, catégorie,
+  prix public, remise revendeur) : catégorie habituelle du fournisseur,
+  coefficient mesuré (si fiable), remise de gamme ou de famille.
+- ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-achat`. Sans elle, l'écran
+  dit « Odoo n'a pas répondu » et seul MonCRM est rapproché.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du
