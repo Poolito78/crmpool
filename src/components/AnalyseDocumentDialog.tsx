@@ -80,6 +80,10 @@ import {
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import {
+  signaturesEmetteur, souvenirDocument, retenirDocument, emetteurDuTexte, typeDansLeSens, sensDuType,
+  type MemoireDocument,
+} from '@/lib/memoireDocuments';
+import {
   chercherArticlesOdooAchat, creerArticlesOdoo, odooIdDuFournisseur, codesOdooDe, referenceOdooProposee,
   type ArticleOdooAchat, type RechercheAchatOdoo,
 } from '@/lib/odooAchat';
@@ -385,6 +389,11 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
      règle s'applique : 2,10 m, ou la hauteur du panneau en pose basse. */
   const [hauteurSousPanneau, setHauteurSousPanneau] = useState<Record<string, number>>({});
   const analyseTexteRef = useRef<string>(''); // texte utilisé lors de la dernière analyse
+  /* Signatures de l'émetteur du dernier document (SIREN, domaine) et ce que
+     la mémoire en sait : c'est sous elles qu'une correction s'apprend. */
+  const signaturesRef = useRef<string[]>([]);
+  const souvenirRef = useRef<MemoireDocument | undefined>(undefined);
+  const texteSourceRef = useRef('');
 
   /**
    * CELUI QUI ÉCRIT, prêt à être inscrit au fichier client.
@@ -821,6 +830,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dfVersLien, setDfVersLien] = useState<Record<number, boolean>>({});
   /** Lignes dont le prix ira aussi sur le PRIX D'ACHAT de la fiche article. */
   const [dfVersArticle, setDfVersArticle] = useState<Record<number, boolean>>({});
+  /**
+   * Lignes dont le PRIX CONSEILLÉ du fournisseur (prix brut avant remise)
+   * devient le prix public de l'article existant. Décoché d'office : c'est le
+   * prix que voient les clients. Un article créé le prend, lui, par sa fiche.
+   */
+  const [dfVersPublic, setDfVersPublic] = useState<Record<number, boolean>>({});
   /** Lignes hors catalogue dont on veut créer l'article. */
   const [dfCreer, setDfCreer] = useState<Record<number, boolean>>({});
   const [dfEnCours, setDfEnCours] = useState(false);
@@ -1033,7 +1048,11 @@ const [contratOdoo, setContratOdoo] = useState<
   useEffect(() => {
     if (!result || !isDevisFourn(result.typeDocument)) return;
     const nom = nomDuFournisseur(result);
-    const trouve = rapprocherFournisseur(nom, fournisseurs);
+    /* Le fournisseur retenu pour cet émetteur la dernière fois passe avant
+       la ressemblance des noms. */
+    const memorise = souvenirRef.current?.fournisseurId
+      ? fournisseurs.find(f => f.id === souvenirRef.current!.fournisseurId) : undefined;
+    const trouve = memorise ?? rapprocherFournisseur(nom, fournisseurs);
     setDfFournisseurId(prev => prev || trouve?.id || '');
     /* PAS RECONNU : ON VA VOIR CHEZ ODOO, SANS ATTENDRE QU'ON LE DEMANDE.
        Le fichier partenaires en sait plus que notre liste de fournisseurs —
@@ -1438,6 +1457,50 @@ const [contratOdoo, setContratOdoo] = useState<
     }
   }, [planKadri, lirePagesEnImage, gammesKadri, regroupementPlan, classePlan, matsNeufsPlan, documentDuPlan]);
 
+  /**
+   * Ce que la mémoire sait de l'émetteur du document, lu par ses signatures
+   * (SIREN, domaine). Rend l'indice à donner au modèle ; garde signatures et
+   * souvenir pour corriger la réponse puis apprendre des corrections.
+   */
+  async function rappelerEmetteur(texteSource: string): Promise<string | undefined> {
+    const signatures = signaturesEmetteur(texteSource);
+    signaturesRef.current = signatures;
+    texteSourceRef.current = texteSource;
+    const souvenir = await souvenirDocument(signatures).catch(() => undefined);
+    souvenirRef.current = souvenir;
+    if (!souvenir) return undefined;
+    const qui = souvenir.nom ? ` (« ${souvenir.nom} »)` : '';
+    return souvenir.sens === 'fournisseur'
+      ? `MÉMOIRE DES CORRECTIONS : l'émetteur de ce document${qui} est un FOURNISSEUR d'ISOSIGN — `
+        + `il nous vend, ses prix sont des prix d'ACHAT, et « nomPartenaire » est ce fournisseur.`
+      : `MÉMOIRE DES CORRECTIONS : l'émetteur de ce document${qui} est un CLIENT d'ISOSIGN — il nous achète.`;
+  }
+
+  /**
+   * La réponse du modèle remise d'aplomb par la mémoire et l'en-tête :
+   *  - un émetteur connu comme fournisseur ne fait pas un « devis client »
+   *    (`typeDansLeSens`) — sauf type choisi à la main, qui fait foi ;
+   *  - ISOSIGN n'est jamais le partenaire d'un document fournisseur : le nom
+   *    retenu en mémoire, sinon la raison sociale de l'en-tête.
+   */
+  function redresserAnalyse(a: DocumentAnalysis, impose?: TypeDocument): DocumentAnalysis {
+    const souvenir = souvenirRef.current;
+    let typeDocument = a.typeDocument;
+    if (!impose && souvenir) {
+      const redresse = typeDansLeSens(typeDocument, souvenir.sens);
+      if (redresse !== typeDocument) {
+        toast.info(`${TYPE_LABELS[redresse].label} : retenu d'après vos corrections précédentes`
+          + (souvenir.nom ? ` (${souvenir.nom})` : ''));
+        typeDocument = redresse;
+      }
+    }
+    let nomPartenaire = a.nomPartenaire;
+    if (sensDuType(typeDocument) === 'fournisseur' && (!nomPartenaire?.trim() || /\bisosign\b/i.test(nomPartenaire))) {
+      nomPartenaire = souvenir?.nom || emetteurDuTexte(texteSourceRef.current) || undefined;
+    }
+    return { ...a, typeDocument, nomPartenaire };
+  }
+
   /* ── cœur de l'analyse (données en paramètre pour appel immédiat après drop) ── */
   const lancerAnalyse = useCallback(async (
     pdfFile: File | null,
@@ -1467,12 +1530,13 @@ const [contratOdoo, setContratOdoo] = useState<
     setOdooMuet(null);
     setClientsProposes([]);
     setDfFournisseurId(''); setDfPrix({});
-    setDfVersLien({}); setDfVersArticle({}); setDfCreer({});
+    setDfVersLien({}); setDfVersArticle({}); setDfCreer({}); setDfVersPublic({});
     setDfFiche({}); setDfOdoo(null); setDfOdooEtat(''); setDfOdooChoix({}); setDfOdooCreer({}); setDfOdooPartenaire(undefined);
     dfTouche.current = false;
     chercheFaitePour.current = null;
     setOdooCible(null); setOdooResultats(null); setOdooTerme('');
     const impose = typeImposeRef.current || undefined;
+    signaturesRef.current = []; souvenirRef.current = undefined; texteSourceRef.current = '';
     try {
       let analysis: DocumentAnalysis;
       if (pdfFile) {
@@ -1544,7 +1608,8 @@ const [contratOdoo, setContratOdoo] = useState<
           analysis = documentDuPlan(ensembles, lignesDuPlan(ensembles, {},
             grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {
-          analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose);
+          const indice = await rappelerEmetteur([texteCtx, ...pages].join('\n'));
+          analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
         }
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
@@ -1564,10 +1629,12 @@ const [contratOdoo, setContratOdoo] = useState<
           } catch { /* garder texte brut */ }
         }
         analyseTexteRef.current = texteAnalyse;
-        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, openrouterKey, impose);
+        const indice = await rappelerEmetteur(texteAnalyse);
+        analysis = await analyserDocument({ type: 'text', texte: texteAnalyse }, apiKey, openrouterKey, impose, indice);
       } else {
         toast.error('Glissez un PDF ou collez du texte'); return;
       }
+      analysis = redresserAnalyse(analysis, impose);
       setResult(analysis);
       if (isFournisseurDoc(analysis.typeDocument) && analysis.numeroDocument) {
         const match = commandesFournisseur.find(cf =>
@@ -1968,6 +2035,16 @@ const [contratOdoo, setContratOdoo] = useState<
     const versOdoo: { indice: number; reference: string; designation: string; categorie?: string; produitId?: string }[] = [];
     /* Article MonCRM existant rattaché à un article Odoo retenu. */
     const liaisonsOdoo = new Map<string, string>();
+    /* UN ARTICLE RÉPÉTÉ N'EST CRÉÉ QU'UNE FOIS. Le devis TTS 73974 porte trois
+       fois le 0015339 (solaire, 230 V, SEP) : trois articles « PPRF BTR A13a »
+       sortaient, suffixés -2 et -3. Le code du fournisseur désigne l'article. */
+    const creesParCode = new Map<string, Produit>();
+    /* Prix conseillé à poser en prix PUBLIC d'un article existant. */
+    const publics = new Map<string, number>();
+    /* Cocher « créer » sur une occurrence vaut pour toutes celles du même code. */
+    const codeDe = (l: { reference?: string }) => (l.reference || '').trim().toUpperCase();
+    const codesACreer = new Set((result.lignes || []).filter((l, j) => dfCreer[j] && codeDe(l)).map(codeDe));
+    const codesVersOdoo = new Set((result.lignes || []).filter((l, j) => odooACreer(j) && codeDe(l)).map(codeDe));
 
     (result.lignes || []).forEach((l, i) => {
       const prop = propositionsFournisseur.get(i);
@@ -1975,11 +2052,15 @@ const [contratOdoo, setContratOdoo] = useState<
       const refFournisseur = (l.reference || '').trim();
       let produitId = prop?.produit?.id;
       const odoo = odooDeLigne(i);
+      const aCreer = prop?.action === 'absent' && prix != null && (dfCreer[i] || codesACreer.has(codeDe(l)));
+      const dejaCree = refFournisseur ? creesParCode.get(refFournisseur.toUpperCase()) : undefined;
 
+      if (aCreer && dejaCree) {
+        produitId = dejaCree.id;
       /* Article absent qu'on demande à créer, avec la fiche arrêtée à l'écran :
          catégorie, prix public et remise revendeur (règles de la catégorie,
          retouchées à la main). Même fabrique que la page Devis Fournisseurs. */
-      if (prop?.action === 'absent' && dfCreer[i] && prix != null) {
+      } else if (aCreer) {
         const fiche = ficheProposee(i);
         const reference = referenceLibre(fiche.reference || refFournisseur || (l.description || '').slice(0, 40),
           [...produits, ...nouveauxArticles]);
@@ -1996,8 +2077,9 @@ const [contratOdoo, setContratOdoo] = useState<
           produits, horodate, aujourdhui: today(),
         });
         nouveauxArticles.push(neuf);
+        if (refFournisseur) creesParCode.set(refFournisseur.toUpperCase(), neuf);
         produitId = neuf.id;
-        if (odooACreer(i)) {
+        if ((odooACreer(i) || codesVersOdoo.has(codeDe(l))) && !odoo) {
           versOdoo.push({ indice: i, reference, designation: fiche.designation, categorie: fiche.categorie, produitId });
         }
       } else if (prop?.produit) {
@@ -2005,7 +2087,10 @@ const [contratOdoo, setContratOdoo] = useState<
         if (odoo?.reference && odoo.reference !== (article.referenceOdoo || article.reference)) {
           liaisonsOdoo.set(article.id, odoo.reference);
         }
-        if (odooACreer(i)) {
+        if (dfVersPublic[i] && l.prixConseille != null && l.prixConseille > 0) {
+          publics.set(article.id, l.prixConseille);
+        }
+        if (odooACreer(i) && !versOdoo.some(v => v.produitId === article.id)) {
           versOdoo.push({
             indice: i,
             reference: referenceOdooProposee(article, refFournisseur),
@@ -2065,6 +2150,19 @@ const [contratOdoo, setContratOdoo] = useState<
       }).liens);
     }
 
+    /* Le prix CONSEILLÉ devient le prix public, daté : le revendeur suit la
+       remise de l'article, sur le prix d'achat tel qu'il vient d'être posé. */
+    if (publics.size) {
+      updateProduits(prev => prev.map(p => {
+        const pub = publics.get(p.id);
+        return pub == null ? p : {
+          ...p,
+          ...prixVenteArticle({ prixAchat: p.prixAchat, prixHT: pub, remiseRevendeur: p.remiseRevendeur }),
+          prixVenteMaj: horodate,
+        };
+      }));
+    }
+
     /* ODOO : les articles à créer, sous la même référence que MonCRM, et
        SANS PRIX — les prix vivent dans MonCRM, le plus récent l'emporte. Un
        échec ici n'annule rien de ce qui précède : il se dit, et se rattrape
@@ -2105,6 +2203,15 @@ const [contratOdoo, setContratOdoo] = useState<
     const fournisseur = fournisseurs.find(f => f.id === dfFournisseurId);
     const appliquees = lignesDevis.filter(l => l.applique).length;
 
+    /* Le devis enregistré CONFIRME l'émetteur : fournisseur, et celui-là. Le
+       prochain document qui porte ses signatures le retrouvera d'office. */
+    if (signaturesRef.current.length) {
+      void retenirDocument(signaturesRef.current, {
+        sens: 'fournisseur', typeDocument: 'devis_fournisseur',
+        nom: fournisseur?.societe || fournisseur?.nom, fournisseurId: dfFournisseurId,
+      }).then(err => { if (err) console.warn('[memoire_documents]', err); });
+    }
+
     const erreur = await enregistrerDevisFournisseur({
       id: devisId,
       fournisseurId: dfFournisseurId,
@@ -2132,6 +2239,7 @@ const [contratOdoo, setContratOdoo] = useState<
 
     const quoi = [
       appliquees ? `${appliquees} prix appliqué${appliquees > 1 ? 's' : ''}` : null,
+      publics.size ? `${publics.size} prix public${publics.size > 1 ? 's' : ''} repris du prix conseillé` : null,
       nouveauxArticles.length ? `${nouveauxArticles.length} article${nouveauxArticles.length > 1 ? 's' : ''} créé${nouveauxArticles.length > 1 ? 's' : ''}` : null,
       bilanOdoo || null,
     ].filter(Boolean).join(', ');
@@ -3071,12 +3179,15 @@ const [contratOdoo, setContratOdoo] = useState<
     const prixAchat = dfPrixDeLigne(i) ?? 0;
     const coef = categorie.trim() ? coefficientVente(produits, categorie) : null;
     const regleRemise = remiseRevendeurCategorie(produits, categorie);
-    const prixPropose = prixVenteDepuisAchat(prixAchat, coef);
+    /* Le prix CONSEILLÉ du fournisseur (P.U. brut avant remise) passe avant le
+       coefficient mesuré : c'est un prix public écrit, pas déduit. */
+    const conseille = l?.prixConseille != null && l.prixConseille > 0 ? l.prixConseille : undefined;
+    const prixPropose = conseille ?? prixVenteDepuisAchat(prixAchat, coef);
     const nombre = (v: string) => parseFloat(v.replace(',', '.'));
     const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
     const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : (regleRemise?.remise ?? 30);
     const vente = prixVenteArticle({ prixAchat, prixHT, remiseRevendeur: remise });
-    return { reference, designation, categorie, prixAchat, coef, regleRemise, prixPropose, vente, remise, saisie };
+    return { reference, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise, saisie };
   }, [result, dfFiche, odooDeLigne, produits, categorieFournisseur, dfPrixDeLigne]);
 
   /**
@@ -3180,7 +3291,9 @@ const [contratOdoo, setContratOdoo] = useState<
           {f.vente.prixHT > 0
             ? <>Revendeur {formatMontant(f.vente.prixRevendeur)} · coef. {f.vente.coefficient.toFixed(2)} sur l'achat de {formatMontant(f.prixAchat)}. </>
             : <span className="text-warning">Prix public à saisir : l'article serait créé sans prix de vente. </span>}
-          {f.coef
+          {f.conseille != null && f.saisie.prixHT === undefined
+            ? <>Prix public = prix conseillé du fournisseur ({formatMontant(f.conseille)}). </>
+            : f.coef
             ? f.coef.fiable
               ? <>Coef. public {f.coef.coef.toFixed(2)} mesuré sur {f.coef.effectif} articles « {f.coef.categorie} ». </>
               : <>Coef. public {f.coef.coef.toFixed(2)} de « {f.coef.categorie} » trop dispersé : non appliqué. </>
@@ -5021,14 +5134,30 @@ const [contratOdoo, setContratOdoo] = useState<
     if (value === 'creer_client') { handleExtractContact('client'); return; }
     if (value === 'creer_fournisseur') { handleExtractContact('fournisseur'); return; }
     const newType = value as TypeDocument;
-    setResult(prev => prev ? { ...prev, typeDocument: newType } : prev);
+    /* ISOSIGN n'est jamais le partenaire d'un document fournisseur : passer
+       en devis fournisseur reprend l'émetteur de l'en-tête. */
+    const partenaire = (r: DocumentAnalysis) =>
+      sensDuType(newType) === 'fournisseur' && (!r.nomPartenaire?.trim() || /\bisosign\b/i.test(r.nomPartenaire))
+        ? souvenirRef.current?.nom || emetteurDuTexte(texteSourceRef.current) || r.nomPartenaire
+        : r.nomPartenaire;
+    setResult(prev => prev ? { ...prev, typeDocument: newType, nomPartenaire: partenaire(prev) } : prev);
+    /* LA CORRECTION S'APPREND : le sens retenu ici vaudra pour le prochain
+       document du même émetteur (`memoireDocuments.ts`). */
+    const sens = sensDuType(newType);
+    if (sens && signaturesRef.current.length && result) {
+      const nom = partenaire(result);
+      void retenirDocument(signaturesRef.current, {
+        sens, typeDocument: newType,
+        nom: nom && !/\bisosign\b/i.test(nom) ? nom : undefined,
+      }).then(err => { if (err) console.warn('[memoire_documents]', err); });
+    }
     setMatchedCF(null);
     setShowCreerCF(false);
     setShowCreerCC(false);
     /* Les cases cochées valaient pour le type précédent : les garder ferait
        appliquer des prix qu'on n'a plus sous les yeux. */
     setDfVersLien({});
-    setDfVersArticle({});
+    setDfVersArticle({}); setDfVersPublic({});
     setDfCreer({});
     setDfFiche({}); setDfOdooChoix({}); setDfOdooCreer({});
     dfTouche.current = false;
@@ -7778,10 +7907,12 @@ const [contratOdoo, setContratOdoo] = useState<
                           <thead>
                             <tr className="text-muted-foreground border-b">
                               <th className="text-left font-medium py-1.5 px-1">Ligne du document</th>
-                              <th className="text-right font-medium py-1.5 px-1 w-24">Prix lu</th>
+                              <th className="text-right font-medium py-1.5 px-1 w-24" title="Prix conseillé (brut avant remise) et remise lus sur le document">Conseillé</th>
+                              <th className="text-right font-medium py-1.5 px-1 w-24" title="Prix unitaire NET : le prix d'achat">Prix net</th>
                               <th className="text-right font-medium py-1.5 px-1 w-28 hidden sm:table-cell">Aujourd'hui</th>
                               <th className="text-center font-medium py-1.5 px-1 w-20">Fiche fourn.</th>
-                              <th className="text-center font-medium py-1.5 px-1 w-20">Fiche article</th>
+                              <th className="text-center font-medium py-1.5 px-1 w-20" title="Le prix net devient le prix d'achat de l'article">Prix achat</th>
+                              <th className="text-center font-medium py-1.5 px-1 w-20" title="Le prix conseillé devient le prix public de l'article">Prix public</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -7848,6 +7979,15 @@ const [contratOdoo, setContratOdoo] = useState<
                                     )}
                                   </td>
 
+                                  <td className="py-1.5 px-1 text-right tabular-nums">
+                                    {l.prixConseille != null ? (
+                                      <>
+                                        <div>{formatMontant(l.prixConseille)}</div>
+                                        {l.remise != null && <div className="text-muted-foreground">− {l.remise} %</div>}
+                                      </>
+                                    ) : <span className="text-muted-foreground">—</span>}
+                                  </td>
+
                                   <td className="py-1.5 px-1 text-right">
                                     <Input
                                       type="number"
@@ -7907,6 +8047,29 @@ const [contratOdoo, setContratOdoo] = useState<
                                       }}
                                     />
                                   </td>
+
+                                  <td className="py-1.5 px-1 text-center">
+                                    {/* Un article créé prend le prix conseillé par sa fiche ;
+                                        un article existant, seulement sur demande. */}
+                                    {article && l.prixConseille != null ? (
+                                      <label className="flex flex-col items-center gap-0.5 cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          className="rounded"
+                                          checked={!!dfVersPublic[i]}
+                                          onChange={e => {
+                                            dfTouche.current = true;
+                                            setDfVersPublic(prev => ({ ...prev, [i]: e.target.checked }));
+                                          }}
+                                        />
+                                        <span className="text-[10px] text-muted-foreground tabular-nums" title="Prix public actuel">
+                                          {article.prixHT > 0 ? formatMontant(article.prixHT) : 'aucun'}
+                                        </span>
+                                      </label>
+                                    ) : !article && dfCreer[i] && l.prixConseille != null ? (
+                                      <span className="text-[10px] text-muted-foreground">par la fiche</span>
+                                    ) : <span className="text-muted-foreground">—</span>}
+                                  </td>
                                 </tr>
                               );
                             })}
@@ -7917,9 +8080,12 @@ const [contratOdoo, setContratOdoo] = useState<
 
                     <p className="text-[11px] text-muted-foreground leading-relaxed">
                       <strong>Fiche fournisseur</strong> : le prix de ce fournisseur pour cet
-                      article, sans effet sur les devis. <strong>Fiche article</strong> : le prix
-                      d'achat qui commande toutes les marges de l'application — son historique
-                      est conservé dans l'onglet « Prix » du produit.
+                      article, sans effet sur les devis. <strong>Prix achat</strong> : le prix NET
+                      devient le prix d'achat de l'article, qui commande toutes les marges de
+                      l'application. <strong>Prix public</strong> : le prix CONSEILLÉ du fournisseur
+                      devient le prix public (le revendeur suit la remise de l'article). Les deux
+                      sont datés — le plus récent l'emporte — et leur historique est conservé dans
+                      l'onglet « Prix » du produit.
                     </p>
 
                     <div className="flex items-center gap-2">

@@ -63,6 +63,15 @@ export interface LigneAnalysee {
    */
   unite?: string;
   prixUnitaireHT?: number;
+  /**
+   * Devis REÇU : le prix BRUT de la ligne, avant remise — chez TTS la colonne
+   * « P.U. » (1 295 €) à côté du « P.U. NET » (777 €). C'est le prix public
+   * conseillé par le fournisseur : il devient le prix public de l'article,
+   * le net son prix d'achat.
+   */
+  prixConseille?: number;
+  /** Remise de ligne en %, quand le document l'écrit (40 % chez TTS). */
+  remise?: number;
   tva?: number;
   /** Le groupe qui porte la ligne dans une offre Odoo (« AF039468/0001 »). */
   groupe?: string;
@@ -102,13 +111,13 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
 {
   "typeDocument": "demande_devis | commande_fournisseur | bon_livraison | devis_client | devis_fournisseur | commande_client | facture_fournisseur | facture_client | autre",
   "numeroDocument": "numéro du document ou null",
-  "nomPartenaire": "nom du fournisseur OU du client selon le type, ou null",
+  "nomPartenaire": "nom du fournisseur OU du client selon le type — JAMAIS ISOSIGN — ou null",
   "referencePartenaire": "référence interne du partenaire (leur propre n° de commande/devis) ou null",
   "dateDocument": "date au format YYYY-MM-DD ou null",
   "dateLivraisonPrevue": "date de livraison prévue au format YYYY-MM-DD ou null",
   "dateEcheance": "date d'échéance de paiement au format YYYY-MM-DD ou null",
-  "totalHT": nombre ou null,
-  "totalTTC": nombre ou null,
+  "totalHT": "montant TOTAL HORS TAXES (H.T.) du document, nombre ou null",
+  "totalTTC": "montant TOUTES TAXES COMPRISES (T.T.C. / net à payer), nombre ou null",
   "notes": "remarques importantes ou null",
   "adresseLivraison": "rue de l'adresse de LIVRAISON si elle est distincte de la facturation, ou null",
   "codePostalLivraison": "code postal de l'adresse de LIVRAISON (5 chiffres) ou null",
@@ -120,6 +129,8 @@ Identifie le type de document et extrait les informations. Réponds UNIQUEMENT a
       "quantite": 0,
       "unite": "unité écrite par le client (u, ml, m², kg, l…) ou null",
       "prixUnitaireHT": nombre ou null,
+      "prixConseille": "prix unitaire BRUT avant remise (colonne P.U. / prix public / tarif), nombre ou null",
+      "remise": "remise de la ligne en %, nombre ou null",
       "tva": taux TVA en % ou null
     }
   ]
@@ -175,9 +186,25 @@ Extraction des lignes d'un devis REÇU (devis_fournisseur) — ses prix seront
 repris comme prix d'ACHAT :
 - « reference » = le code article DU FOURNISSEUR tel qu'il l'écrit ;
   « description » = sa désignation, conditionnement compris (« fût 25 kg »).
-- « prixUnitaireHT » = le prix unitaire HT NET, remise de ligne déduite.
+- « prixUnitaireHT » = le prix unitaire HT NET, remise de ligne déduite
+  (colonne « P.U. NET », « Net », « Prix net »).
+- « prixConseille » = le prix unitaire BRUT de la même ligne, AVANT remise
+  (colonne « P.U. », « Prix public », « Tarif », « Prix conseillé ») ;
+  « remise » = le pourcentage de remise écrit entre les deux. Exemple :
+  « 1,000 1295,00 40,00 777,00 777,00 » → quantite 1, prixConseille 1295,
+  remise 40, prixUnitaireHT 777.
+- Les titres de groupe (« Alimentation solaire : ») ne sont pas des lignes ;
+  un même article répété sous plusieurs groupes donne autant de lignes.
+- Une majoration ou une participation chiffrée est une ligne (sans remise).
 - Les frais de port, d'emballage ou de transport ne sont pas des articles :
   ne les mets pas en lignes, signale-les dans « notes ».
+- « nomPartenaire » = la société qui ÉMET le devis : celle de l'en-tête, du
+  logo, du capital, du SIRET et du n° de TVA. ISOSIGN figure en
+  « Adresse de facturation / de livraison » : ce n'est JAMAIS le partenaire.
+
+Totaux : « totalHT » est le montant HORS TAXES (« Montant H.T. », « Total
+HT », « H.T. »), « totalTTC » le montant TOUTES TAXES COMPRISES (« T.T.C. »,
+« Net à payer »). Ne les confonds jamais : le TTC est le plus grand des deux.
 
 Si une information est absente, mets null. Les montants et quantités doivent être des nombres. Ne génère aucun texte en dehors du JSON.`;
 
@@ -227,7 +254,51 @@ function lireAnalyse(texte: string): DocumentAnalysis {
   const parsed = JSON.parse(extraireObjetJSON(texte)) as DocumentAnalysis;
   if (!Array.isArray(parsed.lignes)) parsed.lignes = [];
   if (!parsed.typeDocument) parsed.typeDocument = 'autre';
-  return parsed;
+  /* Un modèle rend parfois « 19 958,50 » en chaîne : le total devenait NaN. */
+  parsed.totalHT = nombreLu(parsed.totalHT);
+  parsed.totalTTC = nombreLu(parsed.totalTTC);
+  for (const l of parsed.lignes) {
+    l.prixUnitaireHT = nombreLu(l.prixUnitaireHT);
+    l.prixConseille = nombreLu(l.prixConseille);
+    l.remise = nombreLu(l.remise);
+  }
+  return verifierTotaux(parsed);
+}
+
+/** Un montant lu, nombre ou texte à la française ; `undefined` sinon. */
+export function nombreLu(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
+  if (typeof v !== 'string') return undefined;
+  const n = parseFloat(v.replace(/[\s €]/g, '').replace(',', '.'));
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * Les totaux contrôlés par la SOMME DES LIGNES, sans IA.
+ *
+ * Le devis 73974 de TTS sortait à 23 950,20 € HT et 27 941,90 € TTC : le
+ * modèle avait pris le net à payer (TTC) pour le HT, puis inventé un TTC.
+ * Quand toutes les lignes sont chiffrées, leur somme fait foi : un « HT » qui
+ * vaut la somme × (1 + TVA) est en réalité le TTC, et le HT est la somme. Un
+ * TTC plus petit que le HT est inversé. Sinon, rien ne bouge — des lignes
+ * manquantes (texte tronqué) ne doivent pas fausser un total juste.
+ */
+export function verifierTotaux(a: DocumentAnalysis): DocumentAnalysis {
+  let { totalHT, totalTTC } = a;
+  if (totalHT != null && totalTTC != null && totalTTC < totalHT) [totalHT, totalTTC] = [totalTTC, totalHT];
+  const chiffrees = a.lignes.filter(l => l.prixUnitaireHT != null);
+  if (chiffrees.length && chiffrees.length === a.lignes.length && totalHT != null) {
+    const somme = Math.round(chiffrees.reduce((s, l) => s + (l.quantite || 0) * l.prixUnitaireHT!, 0) * 100) / 100;
+    const proche = (x: number, y: number) => Math.abs(x - y) <= Math.max(0.05, y * 0.002);
+    if (somme > 0 && !proche(totalHT, somme)) {
+      const taux = [0.2, 0.1, 0.055, 0.021].find(t => proche(totalHT!, somme * (1 + t)));
+      if (taux != null) {
+        totalTTC = totalHT;
+        totalHT = somme;
+      }
+    }
+  }
+  return { ...a, totalHT, totalTTC };
 }
 
 async function extraireTextePDF(buffer: ArrayBuffer): Promise<string> {
@@ -339,8 +410,10 @@ export async function analyserDocument(
   apiKey: string,
   openrouterKey?: string,
   typeImpose?: TypeDocument,
+  /** Ce que la mémoire sait de l'émetteur (`memoireDocuments.ts`), dit au modèle. */
+  indice?: string,
 ): Promise<DocumentAnalysis> {
-  const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose);
+  const analyse = await analyserSansType(input, apiKey, openrouterKey, typeImpose, indice);
   return typeImpose ? { ...analyse, typeDocument: typeImpose } : analyse;
 }
 
@@ -351,6 +424,7 @@ async function analyserSansType(
   apiKey: string,
   openrouterKey?: string,
   typeImpose?: TypeDocument,
+  indice?: string,
 ): Promise<DocumentAnalysis> {
   let texte: string;
   if (input.type === 'pdf') {
@@ -366,6 +440,7 @@ async function analyserSansType(
       + `Ne reclasse pas le document : « typeDocument » vaut ${typeImpose}, et les champs `
       + `s'extraient selon les règles de ce type.\n\n${texte}`;
   }
+  if (indice) texte = `${indice}\n\n${texte}`;
 
   // 1. Essayer Groq openai/gpt-oss-20b (remplace llama-3.1-8b-instant, déprécié le
   // 16/08/2026 — cf. https://console.groq.com/docs/deprecations).

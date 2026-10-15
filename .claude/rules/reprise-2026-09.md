@@ -430,6 +430,16 @@ devis relancés sortiraient de tous les comptes de devis en cours.
 - **Fiche de l'article créé modifiable** (référence, désignation, catégorie,
   prix public, remise revendeur) : catégorie habituelle du fournisseur,
   coefficient mesuré (si fiable), remise de gamme ou de famille.
+- **L'analyse apprend de « Corriger le type »** (`memoireDocuments.ts`) :
+  l'émetteur se reconnaît à son SIREN / domaine, son sens (fournisseur /
+  client) et son fournisseur sont rappelés au document suivant. ISOSIGN n'est
+  jamais le partenaire d'un document fournisseur (`emetteurDuTexte`). Totaux
+  contrôlés par la somme des lignes (`verifierTotaux`) ; prix CONSEILLÉ
+  (brut) → prix public, prix NET → prix d'achat.
+  ⚠️ **Migration `20261015120000_memoire_documents.sql` à appliquer** : sans
+  la table, l'analyse marche mais n'apprend rien.
+- Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
+  sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
   « Odoo n'a pas répondu » et seul MonCRM est rapproché. La création d'article
   chez Odoo reste à éprouver sur un premier vrai devis.
