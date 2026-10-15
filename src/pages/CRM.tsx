@@ -107,7 +107,31 @@ export default function CRM() {
     const gagnesApresRelance = gagnes.filter(d => (d.relances?.length ?? 0) > 0).length;
     return { enAttente, dues, semaine, faites30j, gagnes: gagnes.length, gagnesApresRelance };
   }, [devis, aujourdhuiISO]);
-  const listeRelances = filtreRelances === 'dues' ? relances.dues : filtreRelances === 'semaine' ? relances.semaine : relances.enAttente;
+  /* Filtre par client : « '' » = tous. Les compteurs des onglets le suivent,
+     on voit d'un coup d'œil ce qui reste à relancer chez un client donné. */
+  const [clientRelances, setClientRelances] = useState('');
+  const nomClientDevis = (d: Devis) => {
+    const c = clients.find(x => x.id === d.clientId);
+    return c?.societe || c?.nom || '—';
+  };
+  /* Les clients qui ont au moins un devis en attente, par ordre alphabétique. */
+  const clientsRelances = useMemo(() => {
+    const parId = new Map<string, { id: string; nom: string; n: number }>();
+    for (const { d } of relances.enAttente) {
+      const id = d.clientId || '';
+      const e = parId.get(id) ?? { id, nom: nomClientDevis(d), n: 0 };
+      e.n++;
+      parId.set(id, e);
+    }
+    return [...parId.values()].sort((a, b) => a.nom.localeCompare(b.nom, 'fr'));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [relances, clients]);
+  const duClient = <T extends { d: Devis }>(l: T[]) =>
+    clientRelances ? l.filter(x => (x.d.clientId || '') === clientRelances) : l;
+  const relancesDues = duClient(relances.dues);
+  const relancesSemaine = duClient(relances.semaine);
+  const relancesEnAttente = duClient(relances.enAttente);
+  const listeRelances = filtreRelances === 'dues' ? relancesDues : filtreRelances === 'semaine' ? relancesSemaine : relancesEnAttente;
 
   // ── Analyse — sections ouvertes/fermées ───────────────────────────────
   const [analyseSections, setAnalyseSections] = useState<Record<string, boolean>>({
@@ -539,9 +563,9 @@ export default function CRM() {
 
           <div className="flex flex-wrap gap-1.5 items-center">
             {([
-              { k: 'dues',    label: 'À relancer',        n: relances.dues.length },
-              { k: 'semaine', label: 'Sous 7 jours',      n: relances.semaine.length },
-              { k: 'tous',    label: 'Tous les envoyés',  n: relances.enAttente.length },
+              { k: 'dues',    label: 'À relancer',        n: relancesDues.length },
+              { k: 'semaine', label: 'Sous 7 jours',      n: relancesSemaine.length },
+              { k: 'tous',    label: 'Tous les envoyés',  n: relancesEnAttente.length },
             ] as const).map(f => (
               <button key={f.k} type="button" onClick={() => setFiltreRelances(f.k)}
                 className={cn('text-xs rounded-full border px-3 py-1 transition-colors',
@@ -549,6 +573,21 @@ export default function CRM() {
                 {f.label} ({f.n})
               </button>
             ))}
+            <select value={clientRelances} onChange={e => setClientRelances(e.target.value)}
+              title="Filtrer par client"
+              className={cn('ml-auto h-8 rounded-md border bg-background px-2 text-xs max-w-[16rem]',
+                clientRelances ? 'border-primary/40 text-primary font-medium' : 'text-muted-foreground')}>
+              <option value="">Tous les clients ({relances.enAttente.length})</option>
+              {clientsRelances.map(c => (
+                <option key={c.id || 'sans'} value={c.id}>{c.nom} ({c.n})</option>
+              ))}
+            </select>
+            {clientRelances && (
+              <button type="button" onClick={() => setClientRelances('')}
+                className="text-xs text-muted-foreground hover:text-foreground underline">
+                effacer
+              </button>
+            )}
           </div>
 
           {listeRelances.length === 0 ? (
