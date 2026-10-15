@@ -237,14 +237,43 @@ export function prixApplicateur(
  * passe donc par la remise de gamme (cas 2), jamais par `prixRevendeur`.
  */
 export function prixGamme(
-  p: { prixHT?: number | null; categorie?: string; catalogue?: string },
+  p: ArticleAPaliers & { categorie?: string; catalogue?: string },
   remisesParCategorie?: Record<string, number>,
   estRevendeur?: boolean,
+  /** Quantité de la ligne : la remise porte sur le public de SON palier. */
+  quantite?: number,
 ): PrixGamme | null {
   if (!estGamme(p.catalogue) && niveauGamme(p.categorie, p.catalogue) === null) return null;
-  const negociee = prixRevendeur(p.prixHT, p.categorie, remisesParCategorie);
+  const pub = publicPourQuantite(p, quantite);
+  const negociee = prixRevendeur(pub, p.categorie, remisesParCategorie);
   if (negociee) return negociee;
   if (!estRevendeur) return null;
-  const gamme = prixApplicateur(p.prixHT, p.categorie, p.catalogue);
+  const gamme = prixApplicateur(pub, p.categorie, p.catalogue);
   return gamme && gamme.remise > 0 ? gamme : null;
+}
+
+/** Ce qu'il faut d'un article pour lire son prix public au palier. */
+export interface ArticleAPaliers {
+  prixHT?: number | null;
+  paliersPrix?: { qteMin: number; prixHT: number }[];
+}
+
+/**
+ * Le prix PUBLIC d'un article pour une quantité : celui du palier atteint,
+ * le prix de la fiche en dessous du premier palier ou sans quantité.
+ *
+ * ⚠️ **LA REMISE DE GAMME SE CALCULE SUR CE PRIX-LÀ, PAS SUR LA FICHE.**
+ * Mesuré le 16/10/2026 sur PTSNCFALERTE100 (ISOMARK / H2) : paliers 10 →
+ * 558,27 € public et 100 → 530,37 €, saisis à l'import du devis
+ * fournisseur. Chez un revendeur, la ligne de 100 partait à 390,79 € —
+ * 30 % du public de la FICHE — au lieu de 371,26 € ; le coût, lui, suivait
+ * le palier, et la marge montait sans que le prix bouge.
+ */
+export function publicPourQuantite(p: ArticleAPaliers, quantite?: number): number {
+  const fiche = Number(p.prixHT) || 0;
+  if (!quantite || !p.paliersPrix?.length) return fiche;
+  const palier = [...p.paliersPrix]
+    .sort((a, b) => b.qteMin - a.qteMin)
+    .find(x => quantite >= x.qteMin);
+  return palier ? Number(palier.prixHT) || 0 : fiche;
 }

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   niveauGamme, prixApplicateur, prixRevendeur, familleRemise, REMISE_GAMME, prixGamme,
+  publicPourQuantite,
 } from './remiseGammes';
 
 describe('niveau lu dans la catégorie Odoo', () => {
@@ -178,5 +179,24 @@ describe('prixGamme', () => {
 
   it('rien hors ISOMARK / ISOFLOOR', () => {
     expect(prixGamme({ prixHT: 50, categorie: 'SIGNALISATION POLICE', catalogue: 'ISOSIGN' }, undefined, true)).toBeNull();
+  });
+
+  /* PTSNCFALERTE100 (16/10/2026) : la ligne de 100 partait à 390,79 €,
+     30 % du public du palier de 10, au lieu de 371,26 €. */
+  const alerte = {
+    prixHT: 558.27, categorie: 'ISOMARK / H2 / PREFA THERMO',
+    paliersPrix: [{ qteMin: 10, prixHT: 558.27 }, { qteMin: 100, prixHT: 530.37 }],
+  };
+
+  it('remise de gamme sur le public du PALIER de la quantité', () => {
+    expect(prixGamme(alerte, undefined, true, 10)?.prix).toBe(390.79);
+    expect(prixGamme(alerte, undefined, true, 100)?.prix).toBe(371.26);
+    expect(prixGamme(alerte, undefined, true, 250)?.prix).toBe(371.26);
+  });
+
+  it('sans quantité ou sous le premier palier : le public de la fiche', () => {
+    expect(prixGamme(alerte, undefined, true)?.prix).toBe(390.79);
+    expect(publicPourQuantite(alerte, 3)).toBe(558.27);
+    expect(publicPourQuantite({ prixHT: 12 }, 500)).toBe(12);
   });
 });

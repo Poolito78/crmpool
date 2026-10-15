@@ -2085,8 +2085,9 @@ export default function Devis() {
     }
     /* ISOMARK / ISOFLOOR : prix public de la fiche, moins la remise du client
        (ou la remise de gamme pour un revendeur) — jamais le prix revendeur
-       recopié d'Odoo, jamais `prixTarif`. Voir `prixGamme`. */
-    const gamme = prixGamme(produit, remises, isRevendeur);
+       recopié d'Odoo, jamais `prixTarif`. Voir `prixGamme`. Le public est
+       celui du PALIER de la quantité (`publicPourQuantite`). */
+    const gamme = prixGamme(produit, remises, isRevendeur, quantite);
     if (gamme) return gamme.prix;
     const palier = getPrixPourQuantite(produit, quantite);
     return isRevendeur ? palier.prixRevendeur : palier.prixHT;

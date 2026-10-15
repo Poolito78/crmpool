@@ -72,7 +72,7 @@ import {
 import { chiffrerPortIsosign } from '@/lib/transportIsosign';
 import { poidsDepuisLibelle } from '@/lib/transportGammes';
 import { portGammes, type LigneGamme } from '@/lib/transportGammes';
-import { prixApplicateur, prixRevendeur, prixGamme, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
+import { prixApplicateur, prixRevendeur, prixGamme, publicPourQuantite, niveauGamme, estGamme, type PrixGamme } from '@/lib/remiseGammes';
 import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type GrilleTarif } from '@/lib/grilleTarif';
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
@@ -3716,7 +3716,8 @@ const [contratOdoo, setContratOdoo] = useState<
       const gamme = niveau !== null || estGamme(local?.catalogue);
       if (gamme) {
         // La règle du devis (`prixGamme`) : public de la fiche, remise client ou de gamme (revendeur).
-        const pub = odoo?.fiche ?? local?.prixHT;
+        // Public du palier atteint quand le prix vient de la fiche locale.
+        const pub = odoo?.fiche ?? (local ? publicPourQuantite(local, qte) : undefined);
         const remise = prixGamme({ prixHT: pub, categorie, catalogue: local?.catalogue }, clientPort?.remisesParCategorie, clientPort?.estRevendeur);
         const pu = prixManuel[cle] ?? (remise ? remise.prix : (odoo?.contrat ?? pub ?? 0));
         lignesGamme.push({ reference: ref, designation, quantite: qte,
@@ -3743,8 +3744,8 @@ const [contratOdoo, setContratOdoo] = useState<
       if (!ref || articlePlastique(ref)) return;
       const categorie = p.categorie || '';
       const niveau = niveauGamme(categorie, p.catalogue);
-      const remise = prixGamme(p, clientPort?.remisesParCategorie, clientPort?.estRevendeur);
-      const pu = prixManuel[cle] ?? (remise ? remise.prix : p.prixHT ?? 0);
+      const remise = prixGamme(p, clientPort?.remisesParCategorie, clientPort?.estRevendeur, qte);
+      const pu = prixManuel[cle] ?? (remise ? remise.prix : publicPourQuantite(p, qte));
       if (niveau !== null || estGamme(p.catalogue)) {
         lignesGamme.push({ reference: ref, designation: designationProduit(p), quantite: qte,
                            montant: (Number(pu) || 0) * qte, niveau, adr: !!p.adr,
@@ -4316,11 +4317,15 @@ const [contratOdoo, setContratOdoo] = useState<
   const prixDetail = useCallback((
     p: typeof produits[number] | undefined,
     prixImpose?: number | null,
+    /** Quantité de la ligne : le prix public est celui de son palier. */
+    quantite?: number,
   ) => {
     if (!p) return { retenu: prixImpose ?? 0, contrat: null as number | null, catalogue: 0, source: 'aucun' as const, remise: null as PrixGamme | null };
     const ref = p.referenceOdoo || p.reference;
     const contrat = contratOdoo?.prix[ref] ?? null;
-    const catalogue = p.prixHT ?? 0;
+    /* ⚠️ LE PALIER DE LA QUANTITÉ, PAS LE PRIX DE LA FICHE : 100
+       PTSNCFALERTE100 partaient au public du palier de 10. */
+    const catalogue = publicPourQuantite(p, quantite);
 
     /* Remise de gamme. Le catalogue ISOMARK/ISOFLOOR ne porte que le TARIF
        PUBLIC ; la remise applicateur se lit sur la catégorie Odoo de
@@ -4332,7 +4337,7 @@ const [contratOdoo, setContratOdoo] = useState<
        79,22 € (30 % d'un `prixTarif` de 113,17 €). */
     const client = clients.find(c => c.id === creerDevisClientId);
     const gamme = client?.estRevendeur && (estGamme(p.catalogue) || niveauGamme(p.categorie, p.catalogue))
-      ? prixApplicateur(p.prixHT, p.categorie, p.catalogue)
+      ? prixApplicateur(catalogue, p.categorie, p.catalogue)
       : null;
     /* LA FICHE CLIENT PASSE AVANT LE TARIF DE GAMME.
      *
@@ -4345,7 +4350,7 @@ const [contratOdoo, setContratOdoo] = useState<
      * gamme remise `prixTarif` quand il existe — 244,80 € sur l'Hydraseal
      * DPM — là où le prix public est à 264,70 €. Le seau partait à 171,36 €
      * au lieu de 185,29 €, et le devis entier était faux de 13,93 €. */
-    const negociee = prixRevendeur(p.prixHT, p.categorie, client?.remisesParCategorie);
+    const negociee = prixRevendeur(catalogue, p.categorie, client?.remisesParCategorie);
     const remise = negociee ?? (gamme && gamme.remise > 0 ? gamme : null);
 
     if (prixImpose !== undefined && prixImpose !== null) {
@@ -4475,9 +4480,10 @@ const [contratOdoo, setContratOdoo] = useState<
     p: typeof produits[number] | undefined,
     prixImpose?: number | null,
     cle?: string,
+    quantite?: number,
   ) => {
     if (cle && prixManuel[cle] !== undefined) return prixManuel[cle];
-    return prixDetail(p, prixImpose).retenu;
+    return prixDetail(p, prixImpose, quantite).retenu;
   }, [prixDetail, prixManuel]);
 
   /** Quantité effectivement retenue pour une ligne. */
@@ -4485,7 +4491,7 @@ const [contratOdoo, setContratOdoo] = useState<
     quantiteManuelle[cle] ?? defaut, [quantiteManuelle]);
 
   const totalDocument = useMemo(() => chiffrageDocument.reduce((t, ls) =>
-    t + quantiteDocument(ls) * prixDe(produitDocument(ls), undefined, `doc:${ls.cle}`), 0),
+    t + quantiteDocument(ls) * prixDe(produitDocument(ls), undefined, `doc:${ls.cle}`, quantiteDocument(ls)), 0),
   [chiffrageDocument, quantiteDocument, prixDe, produitDocument]);
 
   const surfaceDocument = useMemo(
@@ -4578,15 +4584,16 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Ligne de plan qu'Odoo ne connaît pas (encore) : la grille du niveau
        la tarife sous sa référence. Ni référence ni grille → 0, à vérifier. */
     if (planKadri && !p) return prixManuel[cle] ?? prixGrillePlan(i)?.prix ?? 0;
-    return prixDe(p, undefined, cle);
-  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan, prixPal, prixApprisDeLigne]);
+    // Le palier se lit à la quantité retenue à l'écran.
+    return prixDe(p, undefined, cle, quantiteDe(cle, result?.lignes?.[i]?.quantite || 1));
+  }, [choixOdoo, prixManuel, prixOdoo, prixDe, produitDeLigne, planKadri, prixGrillePlan, prixPal, prixApprisDeLigne, quantiteDe, result]);
 
   /** Ce que pèse une ligne système : la somme de ses composants. */
   const totalSystemeDe = useCallback((i: number, quantite?: number | null) =>
     lignesSystemeDe(i, quantite).reduce((t, ls) => {
       const p = ls.composant.produitId
         ? produitParId(produits, ls.composant.produitId) : undefined;
-      return t + quantiteComposant(i, ls) * prixDe(p, undefined, `d${i}:${ls.composant.id}`);
+      return t + quantiteComposant(i, ls) * prixDe(p, undefined, `d${i}:${ls.composant.id}`, quantiteComposant(i, ls));
     }, 0),
   [lignesSystemeDe, produits, quantiteComposant, prixDe]);
 
@@ -4735,7 +4742,7 @@ const [contratOdoo, setContratOdoo] = useState<
           /* Des pavés se facturent au m², quoi qu'en dise la fiche Odoo
              (« Units ») : la quantité EST une surface. */
           unite: ls.composant.unite === 'm2' ? 'm²' : p?.unite || (ls.contenants ? 'u' : 'kg'),
-          prixUnitaireHT: prixDe(p, undefined, cle),
+          prixUnitaireHT: prixDe(p, undefined, cle, quantite),
           tva: p?.tva ?? l.tva ?? 20,
           remise: 0,
           /* La surface et le dosage restent portés par la ligne : le devis
@@ -4892,7 +4899,7 @@ const [contratOdoo, setContratOdoo] = useState<
             : ls.libelle,
           quantite: quantiteDocument(ls),
           unite: ls.composant.unite === 'm2' ? 'm²' : p?.unite || (ls.contenants ? 'u' : 'kg'),
-          prixUnitaireHT: prixDe(p, undefined, `doc:${ls.cle}`),
+          prixUnitaireHT: prixDe(p, undefined, `doc:${ls.cle}`, quantiteDocument(ls)),
           tva: p?.tva ?? 20,
           remise: 0,
           consommation: ls.composant.consommation,
@@ -5047,7 +5054,7 @@ const [contratOdoo, setContratOdoo] = useState<
         description: (p ? designationProduit(p) : '') || a.produitMatch,
         quantite: quantiteDe(cle, a.quantite),
         unite: p?.unite || 'u',
-        prixUnitaireHT: prixDe(p, a.prixImpose, cle),
+        prixUnitaireHT: prixDe(p, a.prixImpose, cle, quantiteDe(cle, a.quantite)),
         tva: p?.tva ?? 20,
         remise: 0,
       });
@@ -5870,7 +5877,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                le contrat du client qui le donne. Afficher un
                                tiret revenait à cacher le seul chiffre utile. */
                             const pu = l.prixUnitaireHT ?? (
-                              isDevisClient ? prixDe(produitDeLigne(i)) : null
+                              isDevisClient ? prixDe(produitDeLigne(i), undefined, undefined, l.quantite) : null
                             );
                             const total = pu != null ? pu * l.quantite : null;
                             return (
@@ -6654,7 +6661,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                           const p = produitDocument(ls);
                                           const cle = `doc:${ls.cle}`;
                                           const q = quantiteDocument(ls);
-                                          const pu = prixDe(p, undefined, cle);
+                                          const pu = prixDe(p, undefined, cle, q);
                                           return (
                                             <div key={ls.cle} className="flex items-center gap-1.5">
                                               <span
@@ -6915,7 +6922,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                       const p = ls.composant.produitId
                                         ? produitParId(produits, ls.composant.produitId) : undefined;
                                       const cle = `d${i}:${ls.composant.id}`;
-                                      return s + quantiteComposant(i, ls) * prixDe(p, undefined, cle);
+                                      return s + quantiteComposant(i, ls) * prixDe(p, undefined, cle, quantiteComposant(i, ls));
                                     }, 0);
                                     const facultatifs = (sys?.composants ?? []).filter(c => !c.obligatoire);
                                     return (
@@ -7021,7 +7028,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                                   ? produitParId(produits, ls.composant.produitId) : undefined;
                                                 const cle = `d${i}:${ls.composant.id}`;
                                                 const q = quantiteComposant(i, ls);
-                                                const pu = prixDe(p, undefined, cle);
+                                                const pu = prixDe(p, undefined, cle, q);
                                                 return (
                                                   <div key={ls.composant.id} className="flex items-center gap-1.5">
                                                     <span
@@ -7107,10 +7114,10 @@ const [contratOdoo, setContratOdoo] = useState<
                                     const odoo = choixOdoo[i];
                                     const pal = prixPal(i);
                                     const grillePlan = planKadri && !odoo && !retenu ? prixGrillePlan(i) : null;
+                                    const qte = quantiteDe(cle, l.quantite || 1);
                                     const d = odoo
                                       ? prixOdoo(odoo)
-                                      : prixDetail(retenu);
-                                    const qte = quantiteDe(cle, l.quantite || 1);
+                                      : prixDetail(retenu, undefined, qte);
                                     const pu = puDeLigne(i);
                                     return (
                                       <>
@@ -7926,9 +7933,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                       </div>
                                       {(() => {
                                         const cle = `a${a.regleId}`;
-                                        const d = prixDetail(p, a.prixImpose);
+                                        const d = prixDetail(p, a.prixImpose, quantiteDe(`a${a.regleId}`, a.quantite));
                                         const qte = quantiteDe(cle, a.quantite);
-                                        const pu = prixDe(p, a.prixImpose, cle);
+                                        const pu = prixDe(p, a.prixImpose, cle, quantiteDe(cle, a.quantite));
                                         return (
                                           <>
                                             <div className="flex items-center gap-1.5 text-[11px]">
@@ -8017,7 +8024,7 @@ const [contratOdoo, setContratOdoo] = useState<
                               const totalAcc = accompagnements.reduce((t, a) => {
                                 const p = produits.find(x => x.id === a.produitId);
                                 const cle = `a${a.regleId}`;
-                                return t + prixDe(p, a.prixImpose, cle) * quantiteDe(cle, a.quantite);
+                                return t + prixDe(p, a.prixImpose, cle, quantiteDe(cle, a.quantite)) * quantiteDe(cle, a.quantite);
                               }, 0);
                               const total = totalDemande + totalAcc;
                               return total > 0 ? (
