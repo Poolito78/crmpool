@@ -301,12 +301,13 @@ async function extraireOdoo(journal: string[]) {
     product_id: [number, string] | false;
     price_subtotal: number;
     move_type: string;
+    move_id: [number, string] | false;
   };
   const lignes: Ligne[] = [];
   const LOT = 2000;
   for (let offset = 0; offset < total; offset += LOT) {
     const chunk = await odoo.kw("account.move.line", "search_read", [domain], {
-      fields: ["invoice_date", "partner_id", "product_id", "price_subtotal", "move_type"],
+      fields: ["invoice_date", "partner_id", "product_id", "price_subtotal", "move_type", "move_id"],
       limit: LOT,
       offset,
       order: "id asc",
@@ -339,6 +340,9 @@ async function extraireOdoo(journal: string[]) {
   const moisCourant = Number(today.slice(5, 7));
   const debutMois25 = "2025-" + today.slice(5, 7) + "-01";
   const mtd25 = moisVide(moisCourant);
+  // Facturé du jour : les mêmes lignes, datées d'aujourd'hui — avoirs déduits.
+  const jourFacture = moisVide(moisCourant);
+  const facturesJour = new Map<string, { piece: string; client: string; avoir: boolean; montant: number }>();
 
   for (const l of lignes) {
     if (!l.partner_id) continue;
@@ -366,6 +370,15 @@ async function extraireOdoo(journal: string[]) {
       // conformément à l'affichage ; ISOFLOOR et STI restent des sous-ensembles
       // DÉJÀ COMPRIS dans leur marque, jamais des montants à additionner.
       ventilerMois(seau(Number(d.slice(5, 7))), brand, precision, montant);
+
+      if (d === cutoff2026) {
+        ventilerMois(jourFacture, brand, precision, montant);
+        const piece = l.move_id ? l.move_id[1] : "—";
+        if (!facturesJour.has(piece)) {
+          facturesJour.set(piece, { piece, client, avoir: l.move_type === "out_refund", montant: 0 });
+        }
+        facturesJour.get(piece)!.montant += montant;
+      }
     } else if (annee === "2025") {
       add(row, "t25full", montant);
       add(row, `${brand}25full`, montant);
@@ -391,7 +404,83 @@ async function extraireOdoo(journal: string[]) {
   return {
     rows, monthly, cutoff2026, cutoff2025, nbLignes: lignes.length,
     mtd25: arrondirMois(mtd25),
+    jourFacture: arrondirMois(jourFacture),
+    facturesJour: [...facturesJour.values()]
+      .map((f) => ({ ...f, montant: r2(f.montant) }))
+      .sort((a, b) => b.montant - a.montant),
     odoo, categName, prodCateg,
+  };
+}
+
+// ───────────────────────────────────────── 1quater. commandes confirmées du jour
+
+/** Date (AAAA-MM-JJ) à Paris d'un datetime Odoo, stocké en UTC (« 2026-10-15 07:12:00 »). */
+function dateParis(utc: string): string {
+  return new Intl.DateTimeFormat("fr-CA", {
+    timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(new Date(utc.replace(" ", "T") + "Z"));
+}
+
+function heureParis(utc: string | Date): string {
+  const d = typeof utc === "string" ? new Date(utc.replace(" ", "T") + "Z") : utc;
+  return new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" }).format(d);
+}
+
+/**
+ * Commandes de François MOUHOT CONFIRMÉES aujourd'hui (heure de Paris), HT
+ * remises déduites, ventilées par marque comme le facturé.
+ *
+ * ⚠️ « Confirmée aujourd'hui » = `date_order` du jour : Odoo la remplace par
+ * l'instant de la confirmation (`action_confirm`). Un devis daté d'hier et
+ * confirmé ce matin compte donc bien aujourd'hui. `date_order` est en UTC :
+ * on lit depuis la veille et on trie en heure de Paris, sans quoi une commande
+ * confirmée entre minuit et 2 h tomberait la veille.
+ */
+async function commandesDuJour(ctx: CtxOdoo, today: string, journal: string[]) {
+  const { odoo, categName, prodCateg } = ctx;
+  const veille = new Date(Date.parse(today + "T00:00:00Z") - 86_400_000).toISOString().slice(0, 10);
+
+  type Cde = { id: number; name: string; partner_id: [number, string] | false; date_order: string; amount_untaxed: number };
+  const lues = await odoo.kw("sale.order", "search_read", [[
+    ["user_id", "=", SALESPERSON_ID],
+    ["state", "in", ["sale", "done"]],
+    ["date_order", ">=", `${veille} 00:00:00`],
+  ]], { fields: ["id", "name", "partner_id", "date_order", "amount_untaxed"], limit: 500 }) as Cde[];
+  const commandes = lues.filter((c) => c.date_order && dateParis(c.date_order) === today);
+  journal.push(`${commandes.length} commandes confirmées aujourd'hui`);
+
+  const parMarque = moisVide(Number(today.slice(5, 7)));
+  if (commandes.length) {
+    type LigneCde = { order_id: [number, string]; product_id: [number, string] | false; price_subtotal: number };
+    const lignes = await odoo.kw("sale.order.line", "search_read", [[
+      ["order_id", "in", commandes.map((c) => c.id)],
+      ["display_type", "=", false],
+    ]], { fields: ["order_id", "product_id", "price_subtotal"], limit: 5000 }) as LigneCde[];
+
+    const manquants = [...new Set(lignes.filter((l) => l.product_id).map((l) => (l.product_id as [number, string])[0]))]
+      .filter((id) => !prodCateg.has(id));
+    if (manquants.length) {
+      const prods = await odoo.kw("product.product", "read", [manquants], { fields: ["id", "categ_id"] }) as
+        { id: number; categ_id: [number, string] | false }[];
+      for (const p of prods) prodCateg.set(p.id, p.categ_id ? p.categ_id[0] : null);
+    }
+    for (const l of lignes) {
+      const cid = l.product_id ? prodCateg.get(l.product_id[0]) ?? null : null;
+      const [brand, precision] = categBrand(cid !== null ? categName.get(cid) : null);
+      ventilerMois(parMarque, brand, precision, l.price_subtotal || 0);
+    }
+  }
+
+  return {
+    commande: arrondirMois(parMarque),
+    commandes: commandes
+      .map((c) => ({
+        commande: c.name,
+        client: c.partner_id ? c.partner_id[1] : "—",
+        heure: heureParis(c.date_order),
+        montant: r2(c.amount_untaxed || 0),
+      }))
+      .sort((a, b) => b.montant - a.montant),
   };
 }
 
@@ -986,8 +1075,25 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    const { rows, monthly, cutoff2026, cutoff2025, nbLignes, mtd25, odoo, categName, prodCateg } =
+    const { rows, monthly, cutoff2026, cutoff2025, nbLignes, mtd25, jourFacture, facturesJour, odoo, categName, prodCateg } =
       await extraireOdoo(journal);
+
+    // CA du jour : facturé (déjà lu) + commandes confirmées. Les commandes ne
+    // font jamais tomber l'actualisation : en cas d'échec, l'écran le dit.
+    let commandesJour: Record<string, unknown>;
+    try {
+      commandesJour = await commandesDuJour({ odoo, categName, prodCateg }, cutoff2026, journal);
+    } catch (e) {
+      commandesJour = { erreur: e instanceof Error ? e.message : String(e) };
+      journal.push(`Commandes du jour impossibles : ${commandesJour.erreur}`);
+    }
+    const jour = {
+      date: cutoff2026,
+      heure: heureParis(new Date()),
+      facture: jourFacture,
+      factures: facturesJour,
+      ...commandesJour,
+    };
 
     // Mois en cours : comparaison N-1 à même date + estimation de fin de mois.
     // L'estimation ne doit JAMAIS faire tomber l'actualisation : en cas
@@ -1070,6 +1176,8 @@ Deno.serve(async (req: Request) => {
       monthly,
       monthly_2025: Array.from({ length: 12 }, (_, i) => mois2025Reel(i + 1)),
       mois_en_cours: moisEnCours,
+      // CA du jour (portefeuille F. MOUHOT) : facturé et commandes confirmées.
+      jour,
       // Flooring & Quartz, tous commerciaux, et hors FM (national hors IDF Nord).
       flooring_quartz: flooringQuartz,
       projection_method:

@@ -394,6 +394,13 @@ granits sont en « ISOMARK / H2 » avec les BAO GRANITE. Favori introuvable
 affichée, aucun chiffre.
 **Déployé** (ca-refresh version 6, 11/10). Bouton « Actualiser » dans la
 tuile CA Odoo du CRM (`actualiserCaOdoo`, `caOdoo.ts`).
+⚠️ Factures et avoirs CLIENTS seulement (`move_type`) : le favori ne porte
+pas ce filtre, et les factures fournisseurs entraient en négatif.
+**CA du jour** (15 oct., `summary.jour`, `commandesDuJour`) : facturé daté du
+jour + commandes CONFIRMÉES du jour (`date_order` = instant de confirmation,
+UTC → trié en heure de Paris), portefeuille FM. Photo à l'actualisation :
+l'écran signale une photo d'un autre jour. **À déployer** :
+`.\deploy-function.ps1 ca-refresh`.
 
 ## Relance des devis (12 oct.)
 

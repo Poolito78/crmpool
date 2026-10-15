@@ -134,6 +134,25 @@ export type CaFlooringQuartz =
       categories: { nom: string; total: number; isofloor: boolean }[];
     };
 
+/**
+ * CA du jour, portefeuille François MOUHOT (fonction `ca-refresh`) : facturé
+ * daté du jour (avoirs déduits) et commandes CONFIRMÉES du jour (heure de
+ * Paris), HT, ventilés par marque comme le réalisé mensuel.
+ *
+ * ⚠️ C'est une photo prise à l'actualisation (`heure`), pas un compteur en
+ * direct : une facture validée après n'y est pas tant qu'on n'actualise pas.
+ * `erreur` = commandes illisibles ; le facturé reste juste.
+ */
+export type CaJour = {
+  date: string;
+  heure: string;
+  facture: CaMois;
+  factures: { piece: string; client: string; avoir: boolean; montant: number }[];
+  commande?: CaMois;
+  commandes?: { commande: string; client: string; heure: string; montant: number }[];
+  erreur?: string;
+};
+
 type CaSummary = {
   cutoff_2026?: string;
   generated_at_odoo?: string;
@@ -146,6 +165,7 @@ type CaSummary = {
   monthly_2025?: CaMois2025[];
   mois_en_cours?: CaMoisEnCours;
   flooring_quartz?: CaFlooringQuartz;
+  jour?: CaJour;
 };
 
 type CaPayload = { summary: CaSummary; rows: CaRow[] };
@@ -186,6 +206,8 @@ export type CaOdooData = {
   moisEnCours: CaMoisEnCours | null;
   /** Flooring & Quartz tous commerciaux. Absent avant la première actualisation qui le produit. */
   flooringQuartz: CaFlooringQuartz | null;
+  /** CA du jour. Absent avant la première actualisation qui le produit. */
+  jour: CaJour | null;
 };
 
 const n = (v: number | undefined | null) => (typeof v === 'number' && isFinite(v) ? v : 0);
@@ -286,6 +308,7 @@ function construire(payload: CaPayload): CaOdooData {
     mois2025: Array.isArray(s.monthly_2025) ? s.monthly_2025 : [],
     moisEnCours: s.mois_en_cours && s.mois_en_cours.mtd26 ? s.mois_en_cours : null,
     flooringQuartz: s.flooring_quartz ?? null,
+    jour: s.jour && s.jour.facture ? s.jour : null,
   };
 }
 

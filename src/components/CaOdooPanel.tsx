@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { formatMontant } from '@/lib/store';
 import {
   useCaOdoo, actualiserCaOdoo, CA_ODOO_URL,
-  type CaMarque, type CaMois, type CaMois2025, type CaMoisEnCours, type CaFlooringQuartz, type CaFqMois,
+  type CaMarque, type CaMois, type CaMois2025, type CaMoisEnCours, type CaFlooringQuartz, type CaFqMois, type CaJour,
 } from '@/lib/caOdoo';
 
 // ─── Tuile « CA Odoo » du tableau de bord ────────────────────────────────────
@@ -553,6 +553,97 @@ function RecapFlooringQuartz({ fq }: { fq: CaFlooringQuartz | null }) {
   );
 }
 
+/** Date du jour à Paris (AAAA-MM-JJ), pour savoir si la photo du jour est d'aujourd'hui. */
+function aujourdhuiParis() {
+  return new Intl.DateTimeFormat('fr-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+
+function CarteJour({ titre, m, nb, detail }: {
+  titre: string; m: CaMois; nb: number; detail: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border p-3 space-y-1">
+      <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">{titre}</p>
+      <p className="text-xl font-semibold tabular-nums">{formatMontant(m.total)}</p>
+      <p className="text-xs text-muted-foreground tabular-nums">
+        ISOMARK {formatMontant(m.isomark)}
+        {m.isofloor ? <i> (dont ISOFLOOR {formatMontant(m.isofloor)})</i> : null}
+        {' · '}ISOSIGN {formatMontant(m.isosign)}
+        {m.sti ? <i> (dont STI {formatMontant(m.sti)})</i> : null}
+      </p>
+      {nb > 0 && (
+        <details className="text-xs pt-1">
+          <summary className="cursor-pointer font-medium">{nb} pièce{nb > 1 ? 's' : ''}</summary>
+          <div className="mt-1 space-y-0.5">{detail}</div>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/**
+ * CA du jour : facturé daté d'aujourd'hui et commandes confirmées aujourd'hui,
+ * portefeuille François MOUHOT. C'est la photo de la dernière actualisation —
+ * si elle date d'un autre jour, on le dit au lieu d'afficher hier comme
+ * aujourd'hui.
+ */
+function CaDuJour({ jour }: { jour: CaJour | null }) {
+  if (!jour) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        CA du jour : disponible après la prochaine actualisation.
+      </p>
+    );
+  }
+  const perime = jour.date !== aujourdhuiParis();
+  return (
+    <section className="space-y-2">
+      <h3 className="text-sm font-semibold">
+        CA du jour — {formatJour(jour.date)}{' '}
+        <span className="font-normal text-muted-foreground text-xs">
+          à {jour.heure} (dernière actualisation), HT, avoirs déduits
+        </span>
+      </h3>
+      {perime && (
+        <p className="text-xs text-amber-600">
+          Ces chiffres sont ceux du {formatJour(jour.date)} : cliquer sur « Actualiser » pour ceux d'aujourd'hui.
+        </p>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <CarteJour
+          titre="Facturé aujourd'hui"
+          m={jour.facture}
+          nb={jour.factures.length}
+          detail={jour.factures.map(f => (
+            <div key={f.piece} className="flex justify-between gap-3 border-b border-border/50 py-0.5">
+              <span className="truncate">{f.piece} — {f.client}{f.avoir && <i className="text-destructive"> (avoir)</i>}</span>
+              <span className="tabular-nums shrink-0">{formatMontant(f.montant)}</span>
+            </div>
+          ))}
+        />
+        {jour.erreur || !jour.commande ? (
+          <div className="rounded-lg border border-border p-3">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Commandé aujourd'hui</p>
+            <p className="text-xs text-destructive mt-1">Commandes du jour illisibles : {jour.erreur ?? 'non publiées'}</p>
+          </div>
+        ) : (
+          <CarteJour
+            titre="Commandé aujourd'hui (confirmé)"
+            m={jour.commande}
+            nb={jour.commandes?.length ?? 0}
+            detail={(jour.commandes ?? []).map(c => (
+              <div key={c.commande} className="flex justify-between gap-3 border-b border-border/50 py-0.5">
+                <span className="truncate">{c.commande} — {c.client} <span className="text-muted-foreground">({c.heure})</span></span>
+                <span className="tabular-nums shrink-0">{formatMontant(c.montant)}</span>
+              </div>
+            ))}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
 export default function CaOdooPanel() {
   const { data, loading, autorise, recharger } = useCaOdoo();
   const [methodeOuverte, setMethodeOuverte] = useState(false);
@@ -643,6 +734,8 @@ export default function CaOdooPanel() {
           <p className="text-xs mt-0.5"><Evolution avant={data.ca25full} apres={data.projection} /> vs 2025 pleine</p>
         </div>
       </div>
+
+      <CaDuJour jour={data.jour} />
 
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
