@@ -467,6 +467,11 @@ vérification (nom connu, sinon type + libellé : many2one `res.partner`
 les relit** (`rapport.chantier`, `rapport.contact.champ`) ; ce qu'Odoo n'a
 pas gardé s'affiche. Chantier = case Chantier, à défaut la réf. d'affaire ;
 la réf. d'affaire que le chantier ne porte pas va en `client_order_ref`.
+⚠️ **Le contact se cherche par le NOM d'abord** (`trouverContact`) : la
+fiche générique « APPLIC SOL » portait l'e-mail de Yahia ARBANE et partait
+comme contact (AF040055). Un e-mail ne retient une fiche que si elle partage
+un mot avec le nom ; civilité (« M. ») ignorée ; recherche en `child_of`,
+sociétés exclues.
 **À déployer** : `.\deploy-function.ps1 odoo-devis`.
 
 ## Pièges d'implémentation rencontrés

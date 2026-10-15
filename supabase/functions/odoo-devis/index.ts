@@ -219,8 +219,28 @@ async function trouverClient(o: Odoo, nom: string, ctx: Record<string, unknown>)
  * On le cherchait par `name ilike "Prénom Nom"` : Odoo écrit souvent
  * « NOM Prénom », la recherche ne rendait rien, et le devis partait sans
  * contact sans que personne le sache. On compare donc les MOTS du nom, dans
- * n'importe quel ordre, et l'e-mail d'abord quand on l'a — il ne ment pas.
+ * n'importe quel ordre.
+ *
+ * ⚠️ **L'E-MAIL NE SUFFIT PAS.** Chez APPLIC SOL, la fiche générique
+ * « APPLIC SOL » porte la même adresse que Yahia ARBANE : prise d'abord par
+ * l'e-mail, elle partait comme contact de l'affaire (AF040055). Le NOM passe
+ * donc en premier, et une fiche trouvée par l'e-mail n'est retenue que si
+ * elle partage un mot avec le nom. La civilité (« M. Yahia ») n'est pas un
+ * mot du nom : Odoo la range à part.
  */
+const CIVILITES = new Set(["m", "mr", "mme", "mlle", "melle", "monsieur", "madame", "mademoiselle", "dr"]);
+
+/** Les mots d'un nom de personne, triés, sans civilité. */
+function motsDuNom(s: string): string[] {
+  return String(s || "").split(/[\s\-,.]+/).map(nu).filter((m) => m && !CIVILITES.has(m)).sort();
+}
+
+/** « M. Yahia ARBANE » → « Yahia ARBANE » : le nom à écrire chez Odoo. */
+function sansCivilite(s: string): string {
+  return String(s || "").trim().split(/\s+/)
+    .filter((m) => !CIVILITES.has(nu(m))).join(" ").trim();
+}
+
 async function trouverContact(
   o: Odoo,
   societeId: number,
@@ -228,22 +248,40 @@ async function trouverContact(
   email: string | undefined,
   ctx: Record<string, unknown>,
 ): Promise<{ id: number; name: string } | null> {
-  const enfants = await o.kw(
+  /* `child_of` : un contact rangé sous une adresse de la société en est
+     aussi. La société elle-même n'est jamais un contact de l'affaire. */
+  const enfants = (await o.kw(
     "res.partner",
     "search_read",
-    [[["parent_id", "=", societeId]], ["id", "name", "email"]],
+    [[["parent_id", "child_of", societeId], ["id", "!=", societeId]], ["id", "name", "email", "is_company"]],
     { limit: 300, context: ctx },
-  ) as any[];
+  ) as any[]).filter((c) => !c.is_company);
+
+  const cle = motsDuNom(nomComplet);
+  const ensemble = cle.join(" ");
+  if (ensemble) {
+    const exact = enfants.find((c) => motsDuNom(c.name).join(" ") === ensemble);
+    if (exact) return exact;
+  }
+
   const mail = String(email || "").trim().toLowerCase();
+  const partageUnMot = (c: any) => motsDuNom(c.name).some((m) => cle.includes(m));
   if (mail) {
-    const parMail = enfants.find((c) => String(c.email || "").trim().toLowerCase() === mail);
+    const parMail = enfants.find((c) =>
+      String(c.email || "").trim().toLowerCase() === mail && partageUnMot(c));
     if (parMail) return parMail;
   }
-  const mots = (s: string) =>
-    String(s || "").split(/[\s\-,.]+/).map(nu).filter(Boolean).sort().join(" ");
-  const cle = mots(nomComplet);
-  if (!cle) return null;
-  return enfants.find((c) => mots(c.name) === cle) || null;
+
+  /* Tous nos mots dans le sien (« Yahia ARBANE » ↔ « ARBANE Yahia (achats) ») :
+     retenu seulement s'il est seul à convenir. */
+  if (cle.length >= 2) {
+    const inclus = enfants.filter((c) => {
+      const siens = motsDuNom(c.name);
+      return cle.every((m) => siens.includes(m));
+    });
+    if (inclus.length === 1) return inclus[0];
+  }
+  return null;
 }
 
 // --------------------------------------------------------------- articles
@@ -623,9 +661,9 @@ serve(async (req) => {
 
     // ---- 2 bis. le contact de l'affaire ----------------------------------
     const info = payload.contactInfo;
-    const nomContact = info
-      ? [info.prenom, info.nom].filter(Boolean).join(" ").trim()
-      : String(payload.contact || "").trim();
+    const nomContact = sansCivilite(info
+      ? [info.prenom, info.nom].filter(Boolean).join(" ")
+      : String(payload.contact || ""));
     let contactOdoo: { id: number; name: string } | null = null;
     let contactEchec = "";
     if (nomContact) {
