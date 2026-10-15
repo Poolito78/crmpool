@@ -76,7 +76,7 @@ import { prixAuNiveau, prixDansGrille, estNiveauTarif, type NiveauTarif, type Gr
 import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
-  appliquerPrix, coefficientVente, remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur,
+  appliquerPrix, coefficientVente, remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, referencePrise,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import {
@@ -84,7 +84,7 @@ import {
   type MemoireDocument,
 } from '@/lib/memoireDocuments';
 import {
-  chercherArticlesOdooAchat, creerArticlesOdoo, odooIdDuFournisseur, codesOdooDe, referenceOdooProposee,
+  chercherArticlesOdooAchat, odooIdDuFournisseur, codesOdooDe,
   type ArticleOdooAchat, type RechercheAchatOdoo,
 } from '@/lib/odooAchat';
 import { useDevisFournisseur, type DevisFournisseur } from '@/lib/devisFournisseur';
@@ -856,8 +856,6 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    * correspondance exacte ne revient pas) ; absent = l'exacte s'il y en a une.
    */
   const [dfOdooChoix, setDfOdooChoix] = useState<Record<number, ArticleOdooAchat | null>>({});
-  /** Créer l'article chez Odoo. Absent = oui dès que l'article est créé dans MonCRM sans équivalent Odoo. */
-  const [dfOdooCreer, setDfOdooCreer] = useState<Record<number, boolean>>({});
   /** Fiche Odoo du fournisseur choisie parmi des homonymes. */
   const [dfOdooPartenaire, setDfOdooPartenaire] = useState<number | undefined>(undefined);
   /**
@@ -1531,7 +1529,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setClientsProposes([]);
     setDfFournisseurId(''); setDfPrix({});
     setDfVersLien({}); setDfVersArticle({}); setDfCreer({}); setDfVersPublic({});
-    setDfFiche({}); setDfOdoo(null); setDfOdooEtat(''); setDfOdooChoix({}); setDfOdooCreer({}); setDfOdooPartenaire(undefined);
+    setDfFiche({}); setDfOdoo(null); setDfOdooEtat(''); setDfOdooChoix({}); setDfOdooPartenaire(undefined);
     dfTouche.current = false;
     chercheFaitePour.current = null;
     setOdooCible(null); setOdooResultats(null); setOdooTerme('');
@@ -2030,10 +2028,8 @@ const [contratOdoo, setContratOdoo] = useState<
     const cibles: CibleEcriture[] = [];
     const lignesDevis: DevisFournisseur['lignes'] = [];
     const devisId = generateId();
-    /* Articles à créer chez Odoo (sans prix), et article MonCRM qui recevra
-       la référence Odoo. */
-    const versOdoo: { indice: number; reference: string; designation: string; categorie?: string; produitId?: string }[] = [];
-    /* Article MonCRM existant rattaché à un article Odoo retenu. */
+    /* Article MonCRM rattaché à un article Odoo retenu : seule sa référence
+       Odoo bouge, dans MonCRM. RIEN N'EST ÉCRIT DANS ODOO (règle du 15/10). */
     const liaisonsOdoo = new Map<string, string>();
     /* UN ARTICLE RÉPÉTÉ N'EST CRÉÉ QU'UNE FOIS. Le devis TTS 73974 porte trois
        fois le 0015339 (solaire, 230 V, SEP) : trois articles « PPRF BTR A13a »
@@ -2044,7 +2040,31 @@ const [contratOdoo, setContratOdoo] = useState<
     /* Cocher « créer » sur une occurrence vaut pour toutes celles du même code. */
     const codeDe = (l: { reference?: string }) => (l.reference || '').trim().toUpperCase();
     const codesACreer = new Set((result.lignes || []).filter((l, j) => dfCreer[j] && codeDe(l)).map(codeDe));
-    const codesVersOdoo = new Set((result.lignes || []).filter((l, j) => odooACreer(j) && codeDe(l)).map(codeDe));
+    /* La fiche saisie (code, intitulé…) est celle de la ligne où l'on a coché. */
+    const ligneDeFiche = new Map<string, number>();
+    (result.lignes || []).forEach((l, j) => {
+      if (dfCreer[j] && codeDe(l) && !ligneDeFiche.has(codeDe(l))) ligneDeFiche.set(codeDe(l), j);
+    });
+
+    /* UN CODE SAISI À LA MAIN NE SE RENUMÉROTE PAS. Pris par un autre article,
+       il est refusé — `referenceLibre` en ferait « X-2 » sans le dire. */
+    /* Code saisi → code fournisseur de la ligne : deux articles différents
+       ne peuvent pas recevoir le même code ; les occurrences d'un même
+       article, si. */
+    const prises = new Map<string, string>();
+    for (const [j, l] of (result.lignes || []).entries()) {
+      if (!(dfCreer[j] || codesACreer.has(codeDe(l)))) continue;
+      const saisie = (dfFiche[j]?.reference || '').trim();
+      if (!saisie) continue;
+      const cle = saisie.toUpperCase();
+      const deja = prises.get(cle);
+      if (referencePrise(saisie, produits) || (deja !== undefined && (deja !== codeDe(l) || !deja))) {
+        setDfEnCours(false);
+        toast.error(`Le code « ${saisie} » est déjà pris par un autre article : saisissez-en un autre.`);
+        return;
+      }
+      prises.set(cle, codeDe(l));
+    }
 
     (result.lignes || []).forEach((l, i) => {
       const prop = propositionsFournisseur.get(i);
@@ -2052,7 +2072,10 @@ const [contratOdoo, setContratOdoo] = useState<
       const refFournisseur = (l.reference || '').trim();
       let produitId = prop?.produit?.id;
       const odoo = odooDeLigne(i);
-      const aCreer = prop?.action === 'absent' && prix != null && (dfCreer[i] || codesACreer.has(codeDe(l)));
+      /* Créer vaut aussi sur une ligne RAPPROCHÉE : le rapprochement a pu
+         retenir un mauvais article (« PPRF BTR A13a », panneau lumineux à
+         777 €, rapproché du panneau A13A à 9,09 €). */
+      const aCreer = prix != null && (dfCreer[i] || codesACreer.has(codeDe(l)));
       const dejaCree = refFournisseur ? creesParCode.get(refFournisseur.toUpperCase()) : undefined;
 
       if (aCreer && dejaCree) {
@@ -2061,7 +2084,7 @@ const [contratOdoo, setContratOdoo] = useState<
          catégorie, prix public et remise revendeur (règles de la catégorie,
          retouchées à la main). Même fabrique que la page Devis Fournisseurs. */
       } else if (aCreer) {
-        const fiche = ficheProposee(i);
+        const fiche = ficheProposee(dfCreer[i] ? i : (ligneDeFiche.get(codeDe(l)) ?? i));
         const reference = referenceLibre(fiche.reference || refFournisseur || (l.description || '').slice(0, 40),
           [...produits, ...nouveauxArticles]);
         const neuf: Produit = articleDepuisLigne({
@@ -2073,15 +2096,15 @@ const [contratOdoo, setContratOdoo] = useState<
           designation: fiche.designation, prixAchat: prix, tva: l.tva,
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
           vente: { prixHT: fiche.vente.prixHT, remiseRevendeur: fiche.remise },
-          referenceOdoo: odoo?.reference && odoo.reference !== reference ? odoo.reference : undefined,
+          referenceOdoo: (() => {
+            const o = odooPourCreation(i);
+            return o?.reference && o.reference !== reference ? o.reference : undefined;
+          })(),
           produits, horodate, aujourdhui: today(),
         });
         nouveauxArticles.push(neuf);
         if (refFournisseur) creesParCode.set(refFournisseur.toUpperCase(), neuf);
         produitId = neuf.id;
-        if ((odooACreer(i) || codesVersOdoo.has(codeDe(l))) && !odoo) {
-          versOdoo.push({ indice: i, reference, designation: fiche.designation, categorie: fiche.categorie, produitId });
-        }
       } else if (prop?.produit) {
         const article = prop.produit;
         if (odoo?.reference && odoo.reference !== (article.referenceOdoo || article.reference)) {
@@ -2089,15 +2112,6 @@ const [contratOdoo, setContratOdoo] = useState<
         }
         if (dfVersPublic[i] && l.prixConseille != null && l.prixConseille > 0) {
           publics.set(article.id, l.prixConseille);
-        }
-        if (odooACreer(i) && !versOdoo.some(v => v.produitId === article.id)) {
-          versOdoo.push({
-            indice: i,
-            reference: referenceOdooProposee(article, refFournisseur),
-            designation: designationProduit(article),
-            categorie: article.categorie,
-            produitId: article.id,
-          });
         }
       }
 
@@ -2163,38 +2177,6 @@ const [contratOdoo, setContratOdoo] = useState<
       }));
     }
 
-    /* ODOO : les articles à créer, sous la même référence que MonCRM, et
-       SANS PRIX — les prix vivent dans MonCRM, le plus récent l'emporte. Un
-       échec ici n'annule rien de ce qui précède : il se dit, et se rattrape
-       depuis la fiche article. */
-    let bilanOdoo = '';
-    if (versOdoo.length) {
-      try {
-        const rendus = await creerArticlesOdoo(versOdoo.map(({ indice, reference, designation, categorie }) =>
-          ({ indice, reference, designation, categorie })));
-        for (const r of rendus) {
-          const cible = versOdoo.find(v => v.indice === r.indice);
-          if (r.reference && cible?.produitId) {
-            const p = [...produits, ...nouveauxArticles].find(x => x.id === cible.produitId);
-            if (p && r.reference !== p.reference && r.reference !== p.referenceOdoo) liaisonsOdoo.set(p.id, r.reference);
-          }
-        }
-        const crees = rendus.filter(r => r.article === 'cree').length;
-        const repris = rendus.filter(r => r.article === 'repris').length;
-        const sansCat = rendus.filter(r => r.categorieTrouvee === false).length;
-        const echecs = rendus.filter(r => r.erreur);
-        bilanOdoo = [
-          crees ? `${crees} créé${crees > 1 ? 's' : ''} dans Odoo` : null,
-          repris ? `${repris} déjà dans Odoo` : null,
-          sansCat ? `${sansCat} sans catégorie Odoo correspondante` : null,
-        ].filter(Boolean).join(', ');
-        if (echecs.length) {
-          toast.error(`Odoo a refusé ${echecs.length} article(s) : ${echecs.map(e => e.erreur).join(' ; ')}`);
-        }
-      } catch (e) {
-        toast.error(`Articles non créés dans Odoo : ${(e as Error).message}`);
-      }
-    }
     if (liaisonsOdoo.size) {
       updateProduits(prev => prev.map(p =>
         liaisonsOdoo.has(p.id) ? { ...p, referenceOdoo: liaisonsOdoo.get(p.id) } : p));
@@ -2241,7 +2223,6 @@ const [contratOdoo, setContratOdoo] = useState<
       appliquees ? `${appliquees} prix appliqué${appliquees > 1 ? 's' : ''}` : null,
       publics.size ? `${publics.size} prix public${publics.size > 1 ? 's' : ''} repris du prix conseillé` : null,
       nouveauxArticles.length ? `${nouveauxArticles.length} article${nouveauxArticles.length > 1 ? 's' : ''} créé${nouveauxArticles.length > 1 ? 's' : ''}` : null,
-      bilanOdoo || null,
     ].filter(Boolean).join(', ');
     toast.success(quoi ? `Devis fournisseur enregistré — ${quoi}` : 'Devis fournisseur enregistré');
     onOpenChange(false);
@@ -3131,11 +3112,17 @@ const [contratOdoo, setContratOdoo] = useState<
      décochée, à cocher en connaissance de cause. Une fois que l'utilisateur a
      touché une case, on ne repropose plus rien. */
   const dfTouche = useRef(false);
+  /* UN ÉCART ÉNORME DÉSIGNE UN MAUVAIS ARTICLE, PAS UNE HAUSSE. « PPRF BTR
+     A13a » (panneau lumineux, 777 €) rapproché du panneau A13A à 9,09 € :
+     +8 449 %, et la fiche fournisseur était cochée d'office. Au-delà de trois
+     fois (ou en deçà d'un tiers), rien n'est coché et l'écran le signale. */
+  const ecartDouteux = (ecart?: number) => ecart != null && (ecart > 200 || ecart < -67);
   useEffect(() => {
     if (!result || !isDevisFourn(result.typeDocument) || dfTouche.current) return;
     const versLien: Record<number, boolean> = {};
     propositionsFournisseur.forEach((p, i) => {
-      if (p.action === 'actualiser' || p.action === 'rattacher') versLien[i] = true;
+      if ((p.action === 'actualiser' || p.action === 'rattacher')
+        && !ecartDouteux(p.ecartLien ?? p.ecartArticle)) versLien[i] = true;
     });
     setDfVersLien(versLien);
   }, [propositionsFournisseur, result]);
@@ -3161,6 +3148,18 @@ const [contratOdoo, setContratOdoo] = useState<
   }, [dfOdooChoix, dfOdoo]);
 
   /**
+   * L'article Odoo d'un article à CRÉER : celui choisi à la main, ou celui lu
+   * par le code du fournisseur. Jamais celui déduit de l'article MonCRM
+   * rapproché — si l'on crée, c'est que ce rapprochement était faux.
+   */
+  const odooPourCreation = useCallback((i: number): ArticleOdooAchat | undefined => {
+    if (i in dfOdooChoix) return dfOdooChoix[i] ?? undefined;
+    const exact = dfOdoo?.lignes?.[i]?.exact;
+    if (!exact) return undefined;
+    return !propositionsFournisseur.get(i)?.produit || exact.par === 'code fournisseur' ? exact : undefined;
+  }, [dfOdooChoix, dfOdoo, propositionsFournisseur]);
+
+  /**
    * La fiche de l'article à créer pour une ligne : ce qui a été saisi, sinon
    * ce que proposent l'article Odoo retenu (référence, désignation) et les
    * règles de la catégorie — coefficient MESURÉ (rien s'il n'est pas fiable :
@@ -3170,10 +3169,12 @@ const [contratOdoo, setContratOdoo] = useState<
   const ficheProposee = useCallback((i: number) => {
     const l = result?.lignes?.[i];
     const saisie = dfFiche[i] ?? {};
-    const odoo = odooDeLigne(i);
+    const odoo = odooPourCreation(i);
     const refF = (l?.reference || '').trim();
-    const reference = saisie.reference
-      ?? (odoo?.reference || referenceLibre(refF || (l?.description || '').slice(0, 40), produits));
+    /* Code et intitulé se SAISISSENT (demande du 15/10) : le code proposé
+       n'est qu'un exemple affiché en grisé, pris seulement si rien n'est tapé. */
+    const referenceProposee = odoo?.reference || referenceLibre(refF || (l?.description || '').slice(0, 40), produits);
+    const reference = saisie.reference?.trim() || referenceProposee;
     const designation = saisie.designation ?? (odoo?.designation || l?.description || '');
     const categorie = saisie.categorie ?? (categorieFournisseur || '');
     const prixAchat = dfPrixDeLigne(i) ?? 0;
@@ -3187,20 +3188,8 @@ const [contratOdoo, setContratOdoo] = useState<
     const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
     const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : (regleRemise?.remise ?? 30);
     const vente = prixVenteArticle({ prixAchat, prixHT, remiseRevendeur: remise });
-    return { reference, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise, saisie };
-  }, [result, dfFiche, odooDeLigne, produits, categorieFournisseur, dfPrixDeLigne]);
-
-  /**
-   * L'article est-il à créer chez Odoo ? Coché à la main, sinon oui dès qu'il
-   * est créé dans MonCRM sans équivalent Odoo : un article créé est retenu
-   * des deux côtés (demande du 15/10/2026). Jamais quand un article Odoo est
-   * déjà retenu — on ne le dédouble pas.
-   */
-  const odooACreer = useCallback((i: number): boolean => {
-    if (odooDeLigne(i)) return false;
-    if (i in dfOdooCreer) return dfOdooCreer[i];
-    return propositionsFournisseur.get(i)?.action === 'absent' && !!dfCreer[i];
-  }, [odooDeLigne, dfOdooCreer, propositionsFournisseur, dfCreer]);
+    return { reference, referenceProposee, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise, saisie };
+  }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne]);
 
   /* Ce qu'Odoo connaît des lignes, relu quand le fournisseur ou l'article
      MonCRM d'une ligne change — en LECTURE seule. */
@@ -3255,8 +3244,12 @@ const [contratOdoo, setContratOdoo] = useState<
       <div className="mt-1 rounded border border-border bg-background/60 p-1.5 space-y-1.5">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
           <label className="space-y-0.5">
-            <span className="text-[10px] text-muted-foreground">Référence (MonCRM et Odoo)</span>
-            <Input className="h-7 text-xs font-mono" value={f.reference} onChange={e => maj('reference', e.target.value)} />
+            <span className="text-[10px] text-muted-foreground">Code article MonCRM</span>
+            <Input
+              className="h-7 text-xs font-mono" placeholder={f.referenceProposee}
+              title="Saisissez le code ; vide, le code grisé est pris"
+              value={f.saisie.reference ?? ''} onChange={e => maj('reference', e.target.value)}
+            />
           </label>
           <label className="space-y-0.5">
             <span className="text-[10px] text-muted-foreground">Catégorie</span>
@@ -3266,7 +3259,7 @@ const [contratOdoo, setContratOdoo] = useState<
             />
           </label>
           <label className="space-y-0.5 sm:col-span-2">
-            <span className="text-[10px] text-muted-foreground">Désignation</span>
+            <span className="text-[10px] text-muted-foreground">Intitulé</span>
             <Input className="h-7 text-xs" value={f.designation} onChange={e => maj('designation', e.target.value)} />
           </label>
           <label className="space-y-0.5">
@@ -3304,8 +3297,12 @@ const [contratOdoo, setContratOdoo] = useState<
     );
   };
 
-  /** Ce qu'Odoo connaît de la ligne : article retenu, propositions, ou création. */
-  const blocOdooAchat = (i: number, article: Produit | undefined) => {
+  /**
+   * Ce qu'Odoo connaît de la ligne : article retenu ou propositions. LECTURE
+   * SEULE — rien n'est créé ni modifié chez Odoo (règle du 15/10/2026) ;
+   * l'article retenu ne fait que porter sa référence sur la fiche MonCRM.
+   */
+  const blocOdooAchat = (i: number) => {
     const l = result?.lignes?.[i];
     if (!l) return null;
     if (!dfOdoo) {
@@ -3315,15 +3312,13 @@ const [contratOdoo, setContratOdoo] = useState<
     }
     const info = dfOdoo.lignes?.[i];
     const retenu = odooDeLigne(i);
-    const absent = !article;
     const propositions = [
       ...(info?.exact && dfOdooChoix[i] === null ? [info.exact] : []),
       ...(info?.propositions ?? []),
     ].slice(0, 5);
-    const refCreation = absent ? ficheProposee(i).reference : referenceOdooProposee(article, l.reference);
     return (
       <div className="mt-1 rounded border border-primary/30 bg-primary/5 p-1 space-y-0.5">
-        <p className="text-[10px] font-medium text-primary">Odoo</p>
+        <p className="text-[10px] font-medium text-primary">Odoo <span className="font-normal text-muted-foreground">— lecture seule</span></p>
         {retenu ? (
           <div className="flex items-baseline gap-2 text-[11px]">
             <Check className="w-3 h-3 text-primary shrink-0" />
@@ -3349,29 +3344,6 @@ const [contratOdoo, setContratOdoo] = useState<
               </button>
             ))}
             {!propositions.length && <p className="text-[11px] text-muted-foreground">Aucun article Odoo ne correspond.</p>}
-            {refCreation && (!absent || dfPrixDeLigne(i) != null) && (
-              <label className="flex items-center gap-1.5 text-[11px] cursor-pointer">
-                <input
-                  type="checkbox" className="rounded"
-                  checked={odooACreer(i)}
-                  onChange={e => {
-                    dfTouche.current = true;
-                    const oui = e.target.checked;
-                    setDfOdooCreer(prev => ({ ...prev, [i]: oui }));
-                    /* Un article créé chez Odoo l'est aussi dans MonCRM. */
-                    if (oui && absent) {
-                      setDfCreer(prev => ({ ...prev, [i]: true }));
-                      setDfVersLien(prev => ({ ...prev, [i]: true }));
-                    }
-                  }}
-                />
-                <span>
-                  Créer dans Odoo sous <span className="font-mono">{refCreation}</span>
-                  {absent ? ' (et dans MonCRM)' : ''}
-                  <span className="text-muted-foreground"> — sans prix : les prix restent dans MonCRM</span>
-                </span>
-              </label>
-            )}
           </>
         )}
       </div>
@@ -5159,7 +5131,7 @@ const [contratOdoo, setContratOdoo] = useState<
     setDfVersLien({});
     setDfVersArticle({}); setDfVersPublic({});
     setDfCreer({});
-    setDfFiche({}); setDfOdooChoix({}); setDfOdooCreer({});
+    setDfFiche({}); setDfOdooChoix({});
     dfTouche.current = false;
     setDcExclues({});
     setDcPrix({});
@@ -7933,17 +7905,47 @@ const [contratOdoo, setContratOdoo] = useState<
                                       {l.description}
                                     </p>
                                     {article ? (
-                                      <div className="mt-1">
-                                        <ProduitCombobox
-                                          produits={produits}
-                                          suggestions={candidatsPour(i)}
-                                          value={article.id}
-                                          onSelect={(id) => {
-                                            dfTouche.current = true;
-                                            setChoixProduit(prev => ({ ...prev, [i]: id }));
-                                          }}
-                                        />
-                                        {blocOdooAchat(i, article)}
+                                      <div className="mt-1 space-y-1">
+                                        <div className={dfCreer[i] ? 'opacity-50' : ''}>
+                                          <ProduitCombobox
+                                            produits={produits}
+                                            suggestions={candidatsPour(i)}
+                                            value={article.id}
+                                            onSelect={(id) => {
+                                              dfTouche.current = true;
+                                              setDfCreer(prev => ({ ...prev, [i]: false }));
+                                              setChoixProduit(prev => ({ ...prev, [i]: id }));
+                                            }}
+                                          />
+                                        </div>
+                                        {ecartDouteux(ecart) && !dfCreer[i] && (
+                                          <p className="text-warning flex items-center gap-1">
+                                            <AlertTriangle className="w-3 h-3 shrink-0" />
+                                            Écart de {ecart! > 0 ? '+' : ''}{Math.round(ecart!)} % avec le prix connu : est-ce bien cet article ?
+                                          </p>
+                                        )}
+                                        {/* Le rapprochement peut se tromper d'article : on doit
+                                            alors pouvoir créer le bon, sans toucher à l'autre. */}
+                                        {prix != null && (
+                                          <label className="flex items-center gap-1.5 cursor-pointer">
+                                            <input
+                                              type="checkbox"
+                                              className="rounded"
+                                              checked={!!dfCreer[i]}
+                                              onChange={e => {
+                                                dfTouche.current = true;
+                                                const oui = e.target.checked;
+                                                setDfCreer(prev => ({ ...prev, [i]: oui }));
+                                                setDfVersLien(prev => ({ ...prev, [i]: oui }));
+                                                setDfVersArticle(prev => ({ ...prev, [i]: false }));
+                                                setDfVersPublic(prev => ({ ...prev, [i]: false }));
+                                              }}
+                                            />
+                                            <span>Ce n'est pas cet article : créer un nouvel article dans MonCRM</span>
+                                          </label>
+                                        )}
+                                        {dfCreer[i] && prix != null && ficheArticleAchat(i)}
+                                        {blocOdooAchat(i)}
                                       </div>
                                     ) : (
                                       <div className="mt-1 space-y-1">
@@ -7974,7 +7976,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                           </label>
                                         )}
                                         {dfCreer[i] && prix != null && ficheArticleAchat(i)}
-                                        {blocOdooAchat(i, undefined)}
+                                        {blocOdooAchat(i)}
                                       </div>
                                     )}
                                   </td>
@@ -8003,7 +8005,9 @@ const [contratOdoo, setContratOdoo] = useState<
                                   </td>
 
                                   <td className="py-1.5 px-1 text-right tabular-nums hidden sm:table-cell">
-                                    {referenceActuelle != null ? (
+                                    {dfCreer[i] ? (
+                                      <span className="text-muted-foreground">nouvel article</span>
+                                    ) : referenceActuelle != null ? (
                                       <>
                                         <div>{formatMontant(referenceActuelle)}</div>
                                         {ecart != null && Math.abs(ecart) >= 0.5 && (
@@ -8051,7 +8055,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                   <td className="py-1.5 px-1 text-center">
                                     {/* Un article créé prend le prix conseillé par sa fiche ;
                                         un article existant, seulement sur demande. */}
-                                    {article && l.prixConseille != null ? (
+                                    {article && !dfCreer[i] && l.prixConseille != null ? (
                                       <label className="flex flex-col items-center gap-0.5 cursor-pointer">
                                         <input
                                           type="checkbox"
@@ -8066,7 +8070,7 @@ const [contratOdoo, setContratOdoo] = useState<
                                           {article.prixHT > 0 ? formatMontant(article.prixHT) : 'aucun'}
                                         </span>
                                       </label>
-                                    ) : !article && dfCreer[i] && l.prixConseille != null ? (
+                                    ) : dfCreer[i] && l.prixConseille != null ? (
                                       <span className="text-[10px] text-muted-foreground">par la fiche</span>
                                     ) : <span className="text-muted-foreground">—</span>}
                                   </td>
@@ -8096,11 +8100,7 @@ const [contratOdoo, setContratOdoo] = useState<
                       >
                         {dfEnCours
                           ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enregistrement…</>
-                          : (() => {
-                              const nOdoo = (result?.lignes ?? []).filter((_, i) => odooACreer(i)).length;
-                              return <><Check className="w-4 h-4 mr-2" />Enregistrer le devis et appliquer
-                                {nOdoo ? ` — ${nOdoo} article${nOdoo > 1 ? 's' : ''} créé${nOdoo > 1 ? 's' : ''} dans Odoo` : ''}</>;
-                            })()}
+                          : <><Check className="w-4 h-4 mr-2" />Enregistrer le devis et appliquer</>}
                       </Button>
                     </div>
                     <p className="text-[11px] text-muted-foreground">

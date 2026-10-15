@@ -431,12 +431,15 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   masque dès qu'un type est choisi.
 - **Odoo dans le panneau devis fournisseur** (`odooAchat.ts`, fonction
   `odoo-achat`) : article retenu d'office seulement s'il est lu par un code,
-  propositions par les mots, case « Créer dans Odoo » — cochée d'office quand
-  l'article est créé dans MonCRM. ⚠️ **Jamais de prix écrit dans Odoo** : les
-  prix restent dans MonCRM, le plus récent l'emporte.
-- **Fiche de l'article créé modifiable** (référence, désignation, catégorie,
-  prix public, remise revendeur) : catégorie habituelle du fournisseur,
-  coefficient mesuré (si fiable), remise de gamme ou de famille.
+  propositions par les mots. ⚠️ **ODOO EN LECTURE SEULE** (règle du 15/10) :
+  aucune création ni modification chez Odoo — la case « Créer dans Odoo » et
+  le mode `creer` de la fonction ont été retirés. Les prix restent dans
+  MonCRM, le plus récent l'emporte.
+- **Créer dans MonCRM**, y compris sur une ligne mal rapprochée (« Ce n'est
+  pas cet article : créer un nouvel article ») : **code article et intitulé
+  saisis à la main** (code proposé en grisé ; un code déjà pris est refusé),
+  catégorie, prix public, remise revendeur. Un écart de prix au-delà de ×3
+  signale un rapprochement douteux et ne coche rien d'office.
 - **L'analyse apprend de « Corriger le type »** (`memoireDocuments.ts`) :
   l'émetteur se reconnaît à son SIREN / domaine, son sens (fournisseur /
   client) et son fournisseur sont rappelés au document suivant. ISOSIGN n'est
@@ -449,8 +452,9 @@ devis relancés sortiraient de tous les comptes de devis en cours.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
-  « Odoo n'a pas répondu » et seul MonCRM est rapproché. La création d'article
-  chez Odoo reste à éprouver sur un premier vrai devis.
+  « Odoo n'a pas répondu » et seul MonCRM est rapproché. ⚠️ La version
+  déployée porte encore le mode `creer`, que plus rien n'appelle : le
+  redéployer (`.\deploy-function.ps1 odoo-achat`) l'en retire.
 
 ## Pièges d'implémentation rencontrés
 

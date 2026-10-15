@@ -168,7 +168,7 @@ explication.
 `memoireDocuments` (émetteur reconnu par SIREN / domaine → sens fournisseur ou client et fournisseur retenu ; une signature contradictoire est écartée) ·
 `comparaisonDevis` (devis réalisé ↔ chiffrage CRM : écarts ligne à ligne ou par référence, apprentissage) ·
 `devisOdooPdf` (offre Odoo AF… en PDF lue sans IA → type `offre_prix`, comparée au CRM, jamais créée) ·
-`odooAchat` (devis fournisseur : article Odoo retrouvé par code ou créé sous la référence MonCRM — jamais de prix écrit dans Odoo) ·
+`odooAchat` (devis fournisseur : article Odoo retrouvé par code, en LECTURE seule — rien n'est jamais écrit dans Odoo ; un article absent se crée dans MonCRM, code et intitulé saisis) ·
 `concurrents` · `ralColors`
 
 ## Supabase

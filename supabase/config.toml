@@ -14,8 +14,8 @@ verify_jwt = true
 [functions.odoo-stock-sync]
 verify_jwt = true
 
-# Achats : articles d un devis fournisseur crees dans Odoo (jamais de prix).
-# Ecriture, donc session exigee.
+# Achats : lignes d un devis fournisseur rapprochees d Odoo, en LECTURE seule.
+# Session exigee (catalogue et fichier partenaires).
 [functions.odoo-achat]
 verify_jwt = true
 

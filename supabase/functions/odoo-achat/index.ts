@@ -1,25 +1,21 @@
 /**
- * Un devis FOURNISSEUR rapproché d'Odoo : retrouver l'article, ou le créer.
+ * Un devis FOURNISSEUR rapproché d'Odoo — EN LECTURE SEULE.
  *
- * L'analyse de document savait reprendre un devis fournisseur dans MonCRM —
- * fiche fournisseur, prix d'achat, article créé au besoin — mais l'article
- * créé n'existait pas chez Odoo, qui passe les commandes : il fallait le
- * ressaisir, et le devis client suivant partait en négoce.
+ * L'analyse de document reprend un devis fournisseur dans MonCRM (fiche
+ * fournisseur, prix d'achat, article créé au besoin). Cette fonction lui dit
+ * ce qu'Odoo connaît de chaque ligne, pour que l'article MonCRM porte la
+ * bonne référence Odoo.
  *
- * Deux modes, appelés par `src/lib/odooAchat.ts` :
+ * ⚠️ **AUCUNE ÉCRITURE DANS ODOO** (règle du 15/10/2026) : ni article, ni
+ * prix, ni fournisseur. Un article absent se crée dans MonCRM seulement. Une
+ * première version savait créer l'article chez Odoo ; le mode a été retiré.
  *
- *   - « chercher » (LECTURE SEULE) : le fournisseur dans le fichier
- *     partenaires, et pour chaque ligne l'article Odoo qui lui correspond.
- *     N'est RETENU d'office que ce qui se lit par un code — la référence
- *     MonCRM / Odoo de l'article, ou le code fournisseur déjà enregistré chez
- *     ce fournisseur. La recherche par mots ne fait que PROPOSER : un article
- *     voisin retenu à tort désignerait un autre produit (règle de la maison :
- *     on ne devine pas à la place de l'utilisateur).
- *
- *   - « creer » (ÉCRITURE, sur clic seulement) : crée les articles demandés,
- *     référence, désignation et catégorie (si elle existe chez Odoo — jamais
- *     créée) — ⚠️ JAMAIS DE PRIX, voir `creerArticles`.
- *     MonCRM inscrit ensuite la référence Odoo sur son propre article.
+ * Mode « chercher » : le fournisseur dans le fichier partenaires, et pour
+ * chaque ligne l'article Odoo qui lui correspond. N'est RETENU d'office que ce
+ * qui se lit par un code — la référence MonCRM / Odoo de l'article, ou le
+ * code fournisseur déjà enregistré chez ce fournisseur. La recherche par mots
+ * ne fait que PROPOSER (règle de la maison : on ne devine pas à la place de
+ * l'utilisateur).
  *
  * ⚠️ Le champ partenaire de `product.supplierinfo` s'appelle `partner_id`
  * depuis Odoo 16 et `name` avant : il est lu par `fields_get`, une fois par
@@ -286,108 +282,6 @@ async function chercher(od: Odoo, fournisseur: FournisseurEntree, lignes: LigneC
   return { partenaire, ambigus, lignes: resultat };
 }
 
-// ----------------------------------------------------------------- creer
-
-interface ArticleACreer {
-  indice: number;
-  reference: string;
-  designation: string;
-  /** Catégorie MonCRM, chemin Odoo (« ISOMARK / H2 ») ou dernier segment. */
-  categorie?: string;
-}
-
-/**
- * La catégorie Odoo d'une catégorie MonCRM — si elle existe, jamais créée.
- * Le chemin complet d'abord, puis le dernier segment s'il est seul de son nom.
- */
-async function categorieOdoo(od: Odoo, cache: Map<string, number | null>, categorie?: string) {
-  const c = String(categorie || "").trim();
-  if (!c) return null;
-  if (cache.has(c.toUpperCase())) return cache.get(c.toUpperCase())!;
-  let id: number | null = null;
-  const [exacte] = await od.kw("product.category", "search_read",
-    [[["complete_name", "=ilike", c]], ["id"]], { limit: 1 }) as any[];
-  if (exacte) id = exacte.id;
-  else {
-    const dernier = c.split("/").map((x) => x.trim()).filter(Boolean).pop() || "";
-    const parNom = dernier ? await od.kw("product.category", "search_read",
-      [[["name", "=ilike", dernier]], ["id"]], { limit: 2 }) as any[] : [];
-    if (parNom.length === 1) id = parNom[0].id;
-  }
-  cache.set(c.toUpperCase(), id);
-  return id;
-}
-
-/**
- * Crée les articles demandés dans Odoo — RÉFÉRENCE ET DÉSIGNATION SEULEMENT.
- *
- * ⚠️ AUCUN PRIX N'EST ÉCRIT DANS ODOO (règle du 15/10/2026) : ni coût, ni prix
- * de vente, ni prix fournisseur. Les prix d'achat et de vente vivent dans
- * MonCRM, où le changement le plus récent l'emporte (`prix_achat_maj`,
- * `prix_vente_maj`). Un article créé ici porte donc le coût 0 et le prix de
- * vente par défaut d'Odoo, que `odoo-stock-sync` ignore tous deux (coût nul,
- * prix sous le seuil factice) : la synchro de nuit ne peut pas écraser le
- * prix du CRM avec eux.
- *
- * Une référence déjà portée par un article Odoo n'est jamais dédoublée :
- * l'article existant est repris et rendu tel quel.
- */
-async function creerArticles(od: Odoo, articles: ArticleACreer[]) {
-  /* Article stocké quand la base le permet : `detailed_type` (16), puis
-     `is_storable` (17+). Sans l'un ni l'autre, le type par défaut d'Odoo. */
-  const champsTmpl = await od.kw("product.template", "fields_get", [], { attributes: ["type", "selection"] }) as
-    Record<string, { type?: string; selection?: [string, string][] }>;
-  const typeStocke: Record<string, unknown> =
-    champsTmpl.detailed_type?.selection?.some(([v]) => v === "product") ? { detailed_type: "product" }
-    : champsTmpl.is_storable ? { is_storable: true }
-    : {};
-
-  const rapport: {
-    indice: number;
-    productId?: number;
-    reference?: string;
-    designation?: string;
-    article?: "cree" | "repris";
-    /** Faux quand la catégorie demandée n'existe pas chez Odoo. */
-    categorieTrouvee?: boolean;
-    erreur?: string;
-  }[] = [];
-  const categories = new Map<string, number | null>();
-
-  for (const l of articles) {
-    try {
-      const ref = String(l.reference || "").trim();
-      if (!ref) throw new Error("référence manquante");
-      const [deja] = await od.kw("product.product", "search_read",
-        [[["default_code", "=ilike", ref]], CHAMPS_PRODUIT], { limit: 1, context: CTX }) as any[];
-      let produit = deja;
-      let article: "cree" | "repris" = "repris";
-      let categorieTrouvee: boolean | undefined;
-      if (!produit) {
-        const categId = await categorieOdoo(od, categories, l.categorie);
-        if (l.categorie) categorieTrouvee = !!categId;
-        const tmplId = await od.kw("product.template", "create", [{
-          name: (l.designation || ref).trim(),
-          default_code: ref,
-          purchase_ok: true,
-          sale_ok: true,
-          ...typeStocke,
-          ...(categId ? { categ_id: categId } : {}),
-        }]) as number;
-        [produit] = await od.kw("product.product", "search_read",
-          [[["product_tmpl_id", "=", tmplId]], CHAMPS_PRODUIT], { limit: 1, context: CTX }) as any[];
-        if (!produit) throw new Error("article créé mais sa variante est introuvable");
-        article = "cree";
-      }
-      const a = versArticle(produit);
-      rapport.push({ indice: l.indice, productId: a.id, reference: a.reference, designation: a.designation, article, categorieTrouvee });
-    } catch (e) {
-      rapport.push({ indice: l.indice, erreur: (e as Error).message });
-    }
-  }
-  return { lignes: rapport };
-}
-
 // ----------------------------------------------------------------- serve
 
 serve(async (req) => {
@@ -407,12 +301,7 @@ serve(async (req) => {
       const fournisseur = (entree?.fournisseur || {}) as FournisseurEntree;
       return json(await chercher(od, fournisseur, (entree?.lignes || []) as LigneCherchee[]));
     }
-    if (entree?.mode === "creer") {
-      const articles = ((entree?.articles || []) as ArticleACreer[]).filter((a) => String(a?.reference || "").trim());
-      if (!articles.length) return json({ erreur: "Aucun article à créer dans Odoo." }, 400);
-      return json(await creerArticles(od, articles));
-    }
-    return json({ erreur: "mode attendu : « chercher » ou « creer »" }, 400);
+    return json({ erreur: "mode attendu : « chercher »" }, 400);
   } catch (e) {
     console.error("[odoo-achat]", e);
     return json({ erreur: (e as Error).message || String(e) }, 500);

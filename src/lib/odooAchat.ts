@@ -1,16 +1,13 @@
 /**
- * Un devis fournisseur rapproché d'Odoo : l'article retrouvé, ou créé.
+ * Un devis fournisseur rapproché d'Odoo — EN LECTURE SEULE.
  *
- * Client de la fonction Edge `odoo-achat`. L'analyse d'un devis fournisseur
- * rapprochait déjà chaque ligne d'un article MonCRM, et pouvait en créer un ;
- * l'article créé n'existait pas chez Odoo, et le devis client suivant partait
- * en négoce. Ici, chaque ligne est aussi cherchée chez Odoo, et un article
- * créé dans MonCRM l'est aussi chez Odoo — sous la MÊME référence, que MonCRM
- * inscrit dans `referenceOdoo`.
+ * Client de la fonction Edge `odoo-achat`. Chaque ligne du devis est
+ * cherchée chez Odoo ; l'article Odoo retenu ne fait que porter sa référence
+ * sur la fiche MonCRM (`referenceOdoo`).
  *
- * ⚠️ AUCUN PRIX NE PART CHEZ ODOO (règle du 15/10/2026). Les prix d'achat et
- * de vente vivent dans MonCRM, où le changement le plus récent l'emporte
- * (`prixAchatMaj`, `prixVenteMaj`) ; on ne touche pas aux prix d'Odoo.
+ * ⚠️ **RIEN N'EST ÉCRIT DANS ODOO** (règle du 15/10/2026) : ni article, ni
+ * prix. Un article absent se crée dans MonCRM, avec le code et l'intitulé
+ * saisis à l'écran. Les prix vivent dans MonCRM, où le plus récent l'emporte.
  *
  * Seul ce qui se lit par un CODE est retenu d'office : référence de l'article
  * MonCRM, code du fournisseur déjà enregistré chez lui. Une ressemblance de
@@ -39,18 +36,6 @@ export interface RechercheAchatOdoo {
   }>;
 }
 
-export interface ArticleCreeOdoo {
-  indice: number;
-  productId?: number;
-  reference?: string;
-  designation?: string;
-  /** « repris » : la référence existait déjà chez Odoo, rien n'a été dédoublé. */
-  article?: 'cree' | 'repris';
-  /** Faux : la catégorie demandée n'existe pas chez Odoo, l'article est parti sans. */
-  categorieTrouvee?: boolean;
-  erreur?: string;
-}
-
 /**
  * L'identifiant Odoo d'un fournisseur repris du fichier Odoo.
  *
@@ -70,18 +55,6 @@ export function codesOdooDe(p?: Pick<Produit, 'reference' | 'referenceOdoo'> | n
     .filter(Boolean))];
 }
 
-/**
- * La référence sous laquelle créer l'article chez Odoo : celle d'Odoo déjà
- * notée, sinon celle de MonCRM — les deux fiches doivent porter la même —,
- * sinon le code du fournisseur.
- */
-export function referenceOdooProposee(
-  article: Pick<Produit, 'reference' | 'referenceOdoo'> | undefined,
-  codeFournisseur?: string,
-): string {
-  return codesOdooDe(article)[0] || String(codeFournisseur || '').trim();
-}
-
 export async function chercherArticlesOdooAchat(args: {
   fournisseur: { odooId?: number; nom?: string };
   lignes: { indice: number; codeFournisseur?: string; designation?: string; codes: string[] }[];
@@ -98,16 +71,4 @@ export async function chercherArticlesOdooAchat(args: {
     ambigus: data?.ambigus ?? [],
     lignes: data?.lignes ?? {},
   };
-}
-
-/** Crée les articles chez Odoo — référence, désignation, catégorie ; jamais de prix. */
-export async function creerArticlesOdoo(
-  articles: { indice: number; reference: string; designation: string; categorie?: string }[],
-): Promise<ArticleCreeOdoo[]> {
-  const { data, error } = await supabase.functions.invoke('odoo-achat', {
-    body: { mode: 'creer', articles },
-  });
-  if (error) throw new Error(error.message || 'Odoo injoignable');
-  if (data?.erreur) throw new Error(data.erreur);
-  return (data?.lignes ?? []) as ArticleCreeOdoo[];
 }
