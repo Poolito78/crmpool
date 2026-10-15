@@ -24,6 +24,7 @@ import FicheTechniqueArticle from '@/components/FicheTechniqueArticle';
 import { parseEml, type EmlContent } from '@/lib/parseEml';
 import {
   coupeSignatures, extraireIndices, societeDepuisEmail, adresseGenerique, memePersonne,
+  adresseInterne,
 } from '@/lib/chiffrage';
 import ProduitCombobox from '@/components/ProduitCombobox';
 import { useReglesAccompagnement } from '@/hooks/useReglesAccompagnement';
@@ -451,6 +452,12 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   }, [signature, result]);
   const [contactToSave, setContactToSave] = useState<ExtractedContact | null>(null);
   const [contactSaveType, setContactSaveType] = useState<'client' | 'fournisseur'>('client');
+  /* LE NOUVEAU CLIENT D'UNE DEMANDE DE DEVIS. L'import du contact ne servait
+     qu'aux documents « autre » et fermait la fenêtre une fois le client créé :
+     sur une demande d'un client inconnu, il fallait perdre le devis préparé
+     pour créer la fiche. Renseigné, le formulaire s'affiche sous le sélecteur
+     de client du devis (ou de la commande) et la fiche créée y est retenue. */
+  const [contactCible, setContactCible] = useState<'devis' | 'commande' | null>(null);
 
   const fileRef = useRef<HTMLInputElement>(null);
   const zoneRef = useRef<HTMLDivElement>(null);
@@ -727,15 +734,27 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const rechercheOdoo = (cible: 'devis' | 'commande' | 'fournisseur') => (
     <div className="col-span-2 space-y-1">
       {odooCible !== cible ? (
-        <button
-          type="button"
-          className="text-[11px] text-primary underline underline-offset-2"
-          onClick={() => { setOdooCible(cible); setOdooResultats(null); }}
-        >
-          {cible === 'fournisseur'
-            ? 'Le fournisseur n’est pas dans la liste ? Chercher dans Odoo'
-            : 'Le client n’est pas dans la liste ? Chercher dans Odoo'}
-        </button>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5">
+          <button
+            type="button"
+            className="text-[11px] text-primary underline underline-offset-2"
+            onClick={() => { setOdooCible(cible); setOdooResultats(null); }}
+          >
+            {cible === 'fournisseur'
+              ? 'Le fournisseur n’est pas dans la liste ? Chercher dans Odoo'
+              : 'Le client n’est pas dans la liste ? Chercher dans Odoo'}
+          </button>
+          {cible !== 'fournisseur' && contactCible !== cible && (
+            <button
+              type="button"
+              className="text-[11px] text-primary underline underline-offset-2 disabled:opacity-50"
+              disabled={extractingContact}
+              onClick={() => handleExtractContact('client', cible)}
+            >
+              Nouveau client ? Le créer depuis le mail
+            </button>
+          )}
+        </div>
       ) : (
         <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5">
           <div className="flex items-center gap-1.5">
@@ -796,6 +815,63 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
           )}
         </div>
       )}
+
+      {cible !== 'fournisseur' && contactCible === cible && (
+        extractingContact ? (
+          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+            <Loader2 className="h-3 w-3 animate-spin text-primary" />
+            Lecture des coordonnées du client dans le mail…
+          </p>
+        ) : contactToSave ? (
+          <div className="rounded border border-primary/30 bg-primary/5 p-1.5 space-y-1.5">
+            <p className="text-[11px] font-medium text-primary">
+              Nouveau client lu dans le mail — vérifiez avant de créer
+            </p>
+            {champsContact()}
+            <div className="flex gap-1.5">
+              <Button
+                type="button" size="sm" variant="ghost" className="h-7 text-[11px]"
+                onClick={() => { setContactToSave(null); setContactCible(null); }}
+              >
+                Annuler
+              </Button>
+              <Button
+                type="button" size="sm" className="h-7 flex-1 text-[11px]"
+                disabled={!contactToSave.societe.trim() && !contactToSave.nom.trim()}
+                onClick={() => creerClientDepuisMail(contactToSave, cible)}
+              >
+                Créer le client et le retenir
+              </Button>
+            </div>
+          </div>
+        ) : null
+      )}
+    </div>
+  );
+
+  /** Les coordonnées lues dans le mail, corrigeables avant la création. */
+  const champsContact = () => contactToSave && (
+    <div className="grid grid-cols-2 gap-2">
+      {([
+        { key: 'societe', label: 'Société' },
+        { key: 'nom', label: 'Nom contact' },
+        { key: 'email', label: 'Email', type: 'email' },
+        { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
+        { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
+        { key: 'adresse', label: 'Adresse' },
+        { key: 'ville', label: 'Ville' },
+        { key: 'codePostal', label: 'Code postal' },
+      ] as { key: keyof ExtractedContact; label: string; type?: string }[]).map(f => (
+        <div key={f.key} className={f.key === 'adresse' || f.key === 'email' ? 'col-span-2' : ''}>
+          <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</Label>
+          <Input
+            type={f.type || 'text'}
+            className="h-8 text-xs"
+            value={contactToSave[f.key] || ''}
+            onChange={e => setContactToSave(prev => prev ? { ...prev, [f.key]: e.target.value } : prev)}
+          />
+        </div>
+      ))}
     </div>
   );
 
@@ -1861,7 +1937,7 @@ const [contratOdoo, setContratOdoo] = useState<
   function reset() {
     setTexte(''); setFichier(null); setFichiersOrigine([]); setEmlPdfs([]); setResult(null); setMatchedCF(null); setDragging(false);
     setReceptionOpen(false); setShowCreerCF(false); setShowCreerCC(false);
-    setExtractingContact(false); setContactToSave(null);
+    setExtractingContact(false); setContactToSave(null); setContactCible(null);
     setCreerCFFournisseurId(''); setCreerCFNumero(''); setCreerCFDateReception('');
     setCreerCFDateLivraison(''); setCreerCFNotes('');
     setCreerCCClientId(''); setCreerCCNumero(''); setCreerCCDate('');
@@ -5196,12 +5272,72 @@ const [contratOdoo, setContratOdoo] = useState<
     onOpenChange(false);
   }
 
-  async function handleExtractContact(type: 'client' | 'fournisseur') {
+  /**
+   * Crée le client lu dans le mail et le retient sur le devis (ou la
+   * commande) en cours — sans fermer la fenêtre, qui porte tout le chiffrage.
+   *
+   * ⚠️ **NE PAS RECRÉER CE QUI EXISTE.** Même garde que « Créer ce client
+   * depuis Odoo » : une fiche qui porte déjà l'adresse — sur la fiche ou sur
+   * un contact — est retenue telle quelle. Deux fiches sur une même adresse,
+   * et l'adresse ne désigne plus personne au rapprochement suivant.
+   */
+  function creerClientDepuisMail(contact: ExtractedContact, cible: 'devis' | 'commande') {
+    const choisir = cible === 'commande' ? setCreerCCClientId : setCreerDevisClientId;
+    const email = String(contact.email || '').trim().toLowerCase();
+    const deja = email
+      ? clients.find(c =>
+          String(c.email || '').trim().toLowerCase() === email
+          || (c.contacts || []).some(ct => String(ct.email || '').trim().toLowerCase() === email))
+      : undefined;
+    if (deja) {
+      choisir(deja.id);
+      toast.info(`${deja.societe || deja.nom} existe déjà (${email}) : fiche retenue`);
+    } else {
+      const societe = contact.societe.trim() || contact.nom.trim();
+      /* L'interlocuteur s'inscrit avec la société : c'est son adresse qui
+         retrouvera la fiche à sa prochaine demande. */
+      const { contacts } = rattacherContact([], contact.nom.trim() ? {
+        nom: contact.nom.trim(),
+        email: contact.email || undefined,
+        telephone: contact.telephone || undefined,
+        mobile: contact.telephoneMobile || undefined,
+        fonction: signature?.fonction,
+      } : null, generateId);
+      const id = generateId();
+      updateClients(prev => [...prev, {
+        id,
+        nom: contact.nom.trim() || societe,
+        societe,
+        email: contact.email,
+        telephone: contact.telephone,
+        telephoneMobile: contact.telephoneMobile || undefined,
+        adresse: contact.adresse,
+        ville: contact.ville,
+        codePostal: contact.codePostal,
+        notes: contact.notes || "Créé depuis l'analyse d'une demande — fiche à compléter.",
+        dateCreation: today(),
+        adressesLivraison: [],
+        ...(contacts.length ? { contacts } : {}),
+      }]);
+      choisir(id);
+      toast.success(`Client « ${societe} » créé et retenu sur le ${cible}`);
+    }
+    setClientsProposes([]);
+    setClientOdoo(null);
+    setContactToSave(null);
+    setContactCible(null);
+  }
+
+  async function handleExtractContact(
+    type: 'client' | 'fournisseur',
+    cible: 'devis' | 'commande' | null = null,
+  ) {
     // Priorité : texte de la dernière analyse > texte collé > infos du résultat
     const emailText = analyseTexteRef.current || texte ||
       (result ? [result.nomPartenaire, result.notes].filter(Boolean).join('\n') : '');
     if (!emailText.trim()) { toast.error('Aucun texte à analyser'); return; }
     setContactSaveType(type);
+    setContactCible(cible);
     setExtractingContact(true);
     setContactToSave(null);
     try {
@@ -5221,13 +5357,33 @@ const [contratOdoo, setContratOdoo] = useState<
         if (!result.ville && emlContact.ville) result.ville = emlContact.ville;
         if (!result.codePostal && emlContact.codePostal) result.codePostal = emlContact.codePostal;
       }
+      /* ⚠️ **NOUS NE SOMMES JAMAIS LE CLIENT.** Un mail transféré ou une
+         réponse porte notre propre signature (« ISOSIGN, ZA du Monay ») : le
+         modèle la prenait volontiers pour celle du client. Une adresse
+         interne est donc remplacée par celle de l'expéditeur, et la société
+         avec elle. */
+      if (adresseInterne(result.email)) {
+        const indices = extraireIndices(emailText);
+        result.email = (!adresseInterne(signature?.email) && signature?.email) || indices.emails[0] || '';
+        result.societe = '';
+      }
+      if (/\b(isosign|isofloor|isomark)\b/i.test(String(result.societe || ''))) result.societe = '';
+      /* La signature lue en image, quand elle existe, porte ce que le client
+         a écrit lui-même : elle prime, comme pour le rapprochement. */
+      if (signature && !adresseInterne(signature.email)) {
+        result.societe = signature.societe || result.societe;
+        result.nom = signature.nom || result.nom;
+        result.email = signature.email || result.email;
+        result.telephone = signature.telephone || result.telephone;
+        result.telephoneMobile = signature.mobile || result.telephoneMobile;
+        result.adresse = signature.adresse || result.adresse;
+        result.codePostal = signature.codePostal || result.codePostal;
+        result.ville = signature.ville || result.ville;
+      }
       // Fallback société depuis le domaine email si manquant
+      // (`societeDepuisEmail` ne rend rien pour gmail, orange… ni pour nous.)
       if (!result.societe && result.email) {
-        const domainMatch = result.email.match(/@([^@.]+(?:\.[^@.]+)+)\s*$/);
-        if (domainMatch) {
-          const parts = domainMatch[1].split('.');
-          result.societe = parts.slice(0, -1).join('.');
-        }
+        result.societe = societeDepuisEmail(result.email).toUpperCase();
       }
       setContactToSave(result);
     } catch (e: any) {
@@ -8499,7 +8655,7 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
 
                 {/* ═══ Indicateur chargement extraction contact ═══ */}
-                {extractingContact && !isAutre && (
+                {extractingContact && !isAutre && !contactCible && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
                     <Loader2 className="w-4 h-4 animate-spin text-primary" />
                     Extraction des coordonnées en cours…
@@ -8507,7 +8663,7 @@ const [contratOdoo, setContratOdoo] = useState<
                 )}
 
                 {/* ═══ Formulaire contact extrait ═══ */}
-                {contactToSave && (
+                {contactToSave && !contactCible && (
                   <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 sm:p-4 space-y-3">
                     <div className="flex items-center gap-2 mb-1">
                       <Sparkles className="w-4 h-4 text-primary shrink-0" />
@@ -8515,28 +8671,7 @@ const [contratOdoo, setContratOdoo] = useState<
                         Coordonnées extraites — vérifiez et corrigez
                       </p>
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { key: 'societe', label: 'Société' },
-                        { key: 'nom', label: 'Nom contact' },
-                        { key: 'email', label: 'Email', type: 'email' },
-                        { key: 'telephone', label: 'Tél. fixe', type: 'tel' },
-                        { key: 'telephoneMobile', label: 'Tél. mobile', type: 'tel' },
-                        { key: 'adresse', label: 'Adresse' },
-                        { key: 'ville', label: 'Ville' },
-                        { key: 'codePostal', label: 'Code postal' },
-                      ] as { key: keyof ExtractedContact; label: string; type?: string }[]).map(f => (
-                        <div key={f.key} className={f.key === 'adresse' || f.key === 'email' ? 'col-span-2' : ''}>
-                          <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">{f.label}</Label>
-                          <Input
-                            type={f.type || 'text'}
-                            className="h-8 text-xs"
-                            value={(contactToSave as any)[f.key] || ''}
-                            onChange={e => setContactToSave(prev => prev ? { ...prev, [f.key]: e.target.value } : prev)}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                    {champsContact()}
                     <div className="flex gap-2 pt-1">
                       <Button variant="outline" size="sm" onClick={() => setContactToSave(null)}>
                         ← Retour

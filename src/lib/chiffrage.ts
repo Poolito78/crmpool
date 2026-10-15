@@ -107,6 +107,11 @@ export interface IndicesClient {
 /** Nos propres domaines : l'expéditeur interne n'est jamais le client. */
 const DOMAINES_INTERNES = /@(isofloor|isosign|so-signal|sti-fr)\./i;
 
+/** Vrai pour une de nos adresses : elle ne désigne jamais le client. */
+export function adresseInterne(email?: string): boolean {
+  return !!email && DOMAINES_INTERNES.test(email.trim());
+}
+
 /** Messageries grand public : leur domaine ne dit rien de la société. */
 const DOMAINES_GENERIQUES = new Set([
   'gmail', 'googlemail', 'orange', 'wanadoo', 'free', 'sfr', 'neuf', 'bbox',
