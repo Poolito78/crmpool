@@ -436,8 +436,9 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   jamais le partenaire d'un document fournisseur (`emetteurDuTexte`). Totaux
   contrôlés par la somme des lignes (`verifierTotaux`) ; prix CONSEILLÉ
   (brut) → prix public, prix NET → prix d'achat.
-  ⚠️ **Migration `20261015120000_memoire_documents.sql` à appliquer** : sans
-  la table, l'analyse marche mais n'apprend rien.
+  Migration `20261015120000_memoire_documents.sql` **appliquée** le 15/10
+  (table, RLS et deux règles vérifiées). `types.ts` n'est pas régénéré : le
+  module lit la table en `as never`, comme `memoire_articles`.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
