@@ -455,6 +455,20 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   « Odoo n'a pas répondu » et seul MonCRM est rapproché. Redéployée le 15/10
   sans le mode `creer` : la fonction ne fait plus que lire.
 
+## Envoi Odoo : contact et chantier (15 oct.)
+
+Le devis arrivait chez Odoo sans contact ni chantier. `buildOdooPayload`
+n'envoyait pas `devis.chantier` (seul le script console le lisait) ; la
+fonction ne reconnaissait le contact que sous `x_studio_contact_de_laffaire`
+et prenait pour chantier le PREMIER champ dont le libellé contient
+« chantier », de tout type. Désormais `odoo-devis` lit les champs AVANT la
+vérification (nom connu, sinon type + libellé : many2one `res.partner`
+« contact… », texte « chantier »), écrit chantier et contact **à part puis
+les relit** (`rapport.chantier`, `rapport.contact.champ`) ; ce qu'Odoo n'a
+pas gardé s'affiche. Chantier = case Chantier, à défaut la réf. d'affaire ;
+la réf. d'affaire que le chantier ne porte pas va en `client_order_ref`.
+**À déployer** : `.\deploy-function.ps1 odoo-devis`.
+
 ## Pièges d'implémentation rencontrés
 
 - **Pas de `<select>` natif dans un dialogue Radix** : sa liste s'ouvre hors du

@@ -171,6 +171,9 @@ interface Payload {
     fonction?: string;
   };
   ref?: string;
+  /** La case Chantier du devis MonCRM : va dans le champ Studio Chantier
+      d'Odoo (à défaut, la référence d'affaire y va, comme avant). */
+  chantier?: string;
   validity?: string;
   note?: string;
   company_id: number;
@@ -632,7 +635,7 @@ serve(async (req) => {
         contactEchec = (e as Error).message;
       }
     }
-    const rapportContact = !nomContact
+    const rapportContact: Record<string, unknown> = !nomContact
       ? { etat: "aucun" }
       : contactOdoo
       ? { etat: "trouve", nom: contactOdoo.name, id: contactOdoo.id }
@@ -640,9 +643,72 @@ serve(async (req) => {
       ? { etat: "echec", nom: nomContact, message: contactEchec.slice(0, 160) }
       : { etat: "a-creer", nom: nomContact };
 
+    // ---- 2 ter. les champs Studio du devis --------------------------------
+    /* LUS AVANT LA VÉRIFICATION : un champ introuvable doit se voir AVANT
+     * d'écrire, pas après.
+     *
+     * ⚠️ Le contact n'était reconnu que sous UN nom technique figé
+     * (`x_studio_contact_de_laffaire`) et le chantier par le PREMIER champ dont
+     * le libellé contient « chantier », de n'importe quel type : un nom
+     * technique différent, ou un « Adresse chantier » many2one rencontré
+     * d'abord, et rien n'arrivait. On prend le nom connu s'il existe, sinon le
+     * champ du bon TYPE et du bon libellé. */
+    let champChantier: string | null = null;
+    let champContact: string | null = null;
+    /* Champs many2one du devis dont le libellé dit « assistant(e) ». */
+    const champsAssistante: { champ: string; libelle: string; relation: string }[] = [];
+    try {
+      const tous = await o.kw("sale.order", "fields_get", [], {
+        attributes: ["string", "type", "relation", "readonly"],
+        context: ctx,
+      }) as Record<string, any>;
+      const ecrivable = (k: string) => !tous[k]?.readonly;
+      const texte = (k: string) => ["char", "text", "html"].includes(tous[k]?.type);
+      const libelle = (k: string) => nu(tous[k]?.string);
+      const cles = Object.keys(tous);
+
+      champChantier = tous.x_studio_chantier && texte("x_studio_chantier") ? "x_studio_chantier"
+        : cles.find((k) => texte(k) && ecrivable(k) && libelle(k) === "chantier")
+        ?? cles.find((k) => texte(k) && ecrivable(k) && libelle(k).includes("chantier"))
+        ?? null;
+
+      const PARTENAIRES = ["partner_id", "partner_invoice_id", "partner_shipping_id"];
+      const contactPossible = (k: string) =>
+        tous[k]?.type === "many2one" && tous[k]?.relation === "res.partner"
+        && ecrivable(k) && !PARTENAIRES.includes(k) && libelle(k).includes("contact");
+      champContact = tous.x_studio_contact_de_laffaire ? "x_studio_contact_de_laffaire"
+        : cles.find((k) => contactPossible(k) && libelle(k).includes("affaire"))
+        ?? cles.find(contactPossible)
+        ?? null;
+
+      for (const k of cles) {
+        const s = String(tous[k]?.string || "").toLowerCase();
+        if (s.includes("assistant") && tous[k]?.type === "many2one") {
+          champsAssistante.push({ champ: k, libelle: String(tous[k].string), relation: String(tous[k].relation || "") });
+        }
+      }
+    } catch {
+      /* champs optionnels */
+    }
+
+    /* Le chantier : la case Chantier du devis, à défaut la référence
+       d'affaire (ce qui partait avant que la case existe). La référence
+       d'affaire que le chantier ne porte pas va en « Référence client ». */
+    const chantier = String(payload.chantier || "").trim();
+    const refAffaire = String(payload.ref || "").trim();
+    const valeurChantier = (chantier || refAffaire).slice(0, 200);
+    const refVersClient = champChantier && !chantier ? "" : refAffaire.slice(0, 200);
+    const rapportChantier: Record<string, unknown> = !valeurChantier
+      ? { etat: "aucun" }
+      : champChantier
+      ? { etat: "a-ecrire", valeur: valeurChantier, champ: champChantier }
+      : { etat: "champ-absent", valeur: valeurChantier };
+    if (nomContact && !champContact) rapportContact.etat = "champ-absent";
+
     const rapport = {
       client: { id: societe.id, nom: societe.name, ville: societe.city || "" },
-      contact: rapportContact as Record<string, unknown>,
+      contact: { ...rapportContact, ...(champContact ? { champ: champContact } : {}) } as Record<string, unknown>,
+      chantier: rapportChantier,
       articles: Object.entries(resolus).map(([ref, id]) => ({ ref, id, par: comment[ref] })),
       negoce: enNegoce,
       ...(negManquants.length ? { negoceIntrouvable: negManquants } : {}),
@@ -654,7 +720,7 @@ serve(async (req) => {
     // ---- 3. vérification seule -----------------------------------------
     if (dryRun) return json({ etat: "verifie", rapport });
 
-    // ---- 4. TVA et champs Studio ---------------------------------------
+    // ---- 4. TVA ---------------------------------------------------------
     let tvaId: number | null = null;
     try {
       const domaineTva: unknown[] = [
@@ -670,27 +736,6 @@ serve(async (req) => {
       tvaId = t.length ? t[0].id : null;
     } catch {
       /* Odoo appliquera la TVA par défaut */
-    }
-
-    let champChantier: string | null = null;
-    let champContact: string | null = null;
-    /* Champs many2one du devis dont le libellé dit « assistant(e) ». */
-    const champsAssistante: { champ: string; libelle: string; relation: string }[] = [];
-    try {
-      const tous = await o.kw("sale.order", "fields_get", [], {
-        attributes: ["string", "type", "relation", "readonly"],
-        context: ctx,
-      }) as Record<string, any>;
-      for (const k of Object.keys(tous)) {
-        const s = String(tous[k]?.string || "").toLowerCase();
-        if (!champChantier && s.includes("chantier")) champChantier = k;
-        if (s.includes("assistant") && tous[k]?.type === "many2one") {
-          champsAssistante.push({ champ: k, libelle: String(tous[k].string), relation: String(tous[k].relation || "") });
-        }
-      }
-      if (tous.x_studio_contact_de_laffaire) champContact = "x_studio_contact_de_laffaire";
-    } catch {
-      /* champs optionnels */
     }
 
     /* L'ASSISTANTE DE LA FICHE CLIENT SUIT LE DEVIS.
@@ -747,7 +792,7 @@ serve(async (req) => {
        son interlocuteur, et le suivant le retrouvera. */
     let contactId: number | null = contactOdoo?.id ?? null;
     if (!champContact && nomContact) {
-      rapport.contact = { ...rapport.contact, etat: "champ-absent" };
+      /* rapport.contact dit déjà « champ-absent » */
     } else if (!contactId && nomContact && !contactEchec) {
       try {
         const vals: Record<string, unknown> = {
@@ -760,7 +805,7 @@ serve(async (req) => {
         if (info?.mobile) vals.mobile = info.mobile;
         if (info?.fonction) vals.function = info.fonction;
         contactId = await o.kw("res.partner", "create", [vals], { context: ctx }) as number;
-        rapport.contact = { etat: "cree", nom: nomContact, id: contactId };
+        rapport.contact = { etat: "cree", nom: nomContact, id: contactId, champ: champContact };
       } catch (e) {
         rapport.contact = {
           etat: "echec", nom: nomContact,
@@ -777,13 +822,41 @@ serve(async (req) => {
     };
     if (cid) vals.company_id = cid;
     if (payload.validity) vals.validity_date = payload.validity;
-    if (payload.ref && champChantier) vals[champChantier] = String(payload.ref).slice(0, 200);
-    else if (payload.ref) vals.client_order_ref = String(payload.ref).slice(0, 200);
-    if (contactId && champContact) vals[champContact] = contactId;
+    if (refVersClient) vals.client_order_ref = refVersClient;
 
     const orderId = await o.kw("sale.order", "create", [vals], { context: ctx }) as number;
 
     const erreurs: string[] = [];
+
+    /* CHANTIER ET CONTACT, ÉCRITS À PART PUIS RELUS.
+     *
+     * À part : un champ Studio refusé ne doit pas coûter le devis. Relus :
+     * « envoyé » n'est pas « gardé » — un champ calculé ou un onchange côté
+     * serveur peut l'effacer sans erreur. Ce qu'Odoo n'a pas gardé se dit. */
+    const studio: Record<string, unknown> = {};
+    if (valeurChantier && champChantier) studio[champChantier] = valeurChantier;
+    if (contactId && champContact) studio[champContact] = contactId;
+    for (const [champ, valeur] of Object.entries(studio)) {
+      const quoi = champ === champChantier ? "Chantier" : "Contact de l'affaire";
+      try {
+        await o.kw("sale.order", "write", [[orderId], { [champ]: valeur }], { context: ctx });
+        const lu = (await o.kw("sale.order", "read", [[orderId], [champ]], { context: ctx }) as any[])[0]?.[champ];
+        const garde = Array.isArray(lu) ? lu[0] === valeur : !!lu && String(lu).trim() === String(valeur).trim();
+        if (champ === champChantier) {
+          rapport.chantier = garde
+            ? { etat: "ecrit", valeur: valeurChantier, champ }
+            : { etat: "echec", valeur: valeurChantier, champ, message: "écrit mais non gardé par Odoo" };
+        } else if (!garde) {
+          rapport.contact = { ...rapport.contact, etat: "echec", message: "écrit mais non gardé par Odoo" };
+        }
+        if (!garde) erreurs.push(`${quoi} (${champ}) : écrit mais non gardé par Odoo.`);
+      } catch (e) {
+        const message = (e as Error).message.slice(0, 120);
+        erreurs.push(`${quoi} (${champ}) : ${message}`);
+        if (champ === champChantier) rapport.chantier = { etat: "echec", valeur: valeurChantier, champ, message };
+        else rapport.contact = { ...rapport.contact, etat: "echec", message };
+      }
+    }
 
     if (transporteurId) {
       try {

@@ -461,7 +461,9 @@ export default function Devis() {
     erreurs?: string[];
     negoce?: string[];
     /* Ce qu'est devenu le contact de l'affaire chez Odoo. */
-    contact?: { etat: 'aucun' | 'trouve' | 'a-creer' | 'cree' | 'champ-absent' | 'echec'; nom?: string; message?: string };
+    contact?: { etat: 'aucun' | 'trouve' | 'a-creer' | 'cree' | 'champ-absent' | 'echec'; nom?: string; message?: string; champ?: string };
+    /* Ce qu'est devenue la case Chantier chez Odoo. */
+    chantier?: { etat: 'aucun' | 'a-ecrire' | 'ecrit' | 'champ-absent' | 'echec'; valeur?: string; champ?: string; message?: string };
     /* Les références qu'Odoo n'a pas su rattacher, avec ce qu'il propose. */
     aRattacher?: {
       ref: string;
@@ -548,6 +550,7 @@ export default function Devis() {
           negoce: data.rapport?.negoce || [],
           aRattacher: data.rapport?.aRattacher || [],
           contact: data.rapport?.contact,
+          chantier: data.rapport?.chantier,
           message: `${data.rapport?.client?.nom} — `
             + `${(data.rapport?.articles || []).length} article(s) reconnu(s) `
             + `sur ${data.rapport?.lignes} ligne(s). Rien n'a été écrit.`,
@@ -562,6 +565,7 @@ export default function Devis() {
         negoce: data?.rapport?.negoce || [],
         aRattacher: data?.rapport?.aRattacher || [],
         contact: data?.rapport?.contact,
+        chantier: data?.rapport?.chantier,
       });
       if (data?.url) window.open(data.url, '_blank', 'noopener');
     } catch (e) {
@@ -5702,6 +5706,21 @@ ${dosage.source}` : ''}`}>
                 echec: `Contact de l’affaire : ${c.nom} — non rattaché (${c.message || 'erreur Odoo'}).`,
               }[c.etat];
               const alerte = c.etat === 'aucun' || c.etat === 'champ-absent' || c.etat === 'echec';
+              return <p className={`text-xs ${alerte ? 'text-warning' : 'text-muted-foreground'}`}>{texte}</p>;
+            })()}
+
+            {/* La case Chantier : écrite, puis relue chez Odoo. */}
+            {odooInfo?.chantier && odooInfo.chantier.etat !== 'aucun'
+              && (odooInfo.etat === 'verifie' || odooInfo.etat === 'cree') && (() => {
+              const c = odooInfo.chantier;
+              const texte = {
+                aucun: '',
+                'a-ecrire': `Chantier : ${c.valeur} — ira dans la case Chantier d’Odoo.`,
+                ecrit: `Chantier : ${c.valeur} — écrit dans Odoo.`,
+                'champ-absent': `Chantier : ${c.valeur} — aucun champ « Chantier » trouvé sur le devis Odoo.`,
+                echec: `Chantier : ${c.valeur} — non écrit (${c.message || 'erreur Odoo'}).`,
+              }[c.etat];
+              const alerte = c.etat === 'champ-absent' || c.etat === 'echec';
               return <p className={`text-xs ${alerte ? 'text-warning' : 'text-muted-foreground'}`}>{texte}</p>;
             })()}
 

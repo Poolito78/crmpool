@@ -165,6 +165,9 @@ export interface OdooPayload {
     fonction?: string;
   };
   ref?: string;
+  /** La case Chantier du devis : `odoo-devis` l'écrit dans le champ Chantier
+      d'Odoo. Absent, la référence d'affaire y va, comme avant. */
+  chantier?: string;
   validity?: string;
   note?: string;
   company_id: number;
@@ -331,6 +334,10 @@ export function buildOdooPayload(
       },
     } : {}),
     ref: devis.referenceAffaire || undefined,
+    /* Oublié jusqu'ici : seul le script console lisait `devis.chantier`, et
+       l'envoi par la fonction partait sans — la case Chantier d'Odoo
+       recevait la référence d'affaire. */
+    chantier: devis.chantier?.trim() || undefined,
     validity: devis.dateValidite || undefined,
     note: noteLines.join('\n') || undefined,
     company_id: ODOO_COMPANY_ID,
