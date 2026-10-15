@@ -430,8 +430,9 @@ devis relancés sortiraient de tous les comptes de devis en cours.
 - **Fiche de l'article créé modifiable** (référence, désignation, catégorie,
   prix public, remise revendeur) : catégorie habituelle du fournisseur,
   coefficient mesuré (si fiable), remise de gamme ou de famille.
-- ⚠️ **À déployer** : `.\deploy-function.ps1 odoo-achat`. Sans elle, l'écran
-  dit « Odoo n'a pas répondu » et seul MonCRM est rapproché.
+- **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
+  « Odoo n'a pas répondu » et seul MonCRM est rapproché. La création d'article
+  chez Odoo reste à éprouver sur un premier vrai devis.
 
 ## Pièges d'implémentation rencontrés
 
