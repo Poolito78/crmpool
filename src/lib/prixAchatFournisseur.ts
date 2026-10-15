@@ -285,6 +285,36 @@ export function prixVenteDepuisAchat(
 }
 
 /**
+ * Une ligne de FRAIS, pas un article : port, livraison, maquette, BAT,
+ * emballage. Le devis AFC DV5214 porte « Envoi messagerie » et « Maquette et
+ * mise aux normes d'impression » à côté de ses deux thermocollants : les
+ * proposer à la création d'office remplirait le catalogue d'« articles » qui
+ * n'en sont pas. La création reste possible à la main.
+ */
+export function estFraisAnnexe(l: { reference?: string; description?: string }): boolean {
+  const t = `${l.reference || ''} ${l.description || ''}`
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  return /\b(frais|port|franco|livraison|messagerie|transport|expedition|emballage|maquette|b\.?a\.?t|bon a tirer|eco[- ]?participation|ecotaxe)\b/.test(t);
+}
+
+/**
+ * L'unité d'un article créé, d'après celle écrite sur le document :
+ * « Unité(s) », « pièce », « pce » → u ; kg, m², ml, l gardés ; le reste
+ * tel quel, en minuscules. Rien d'écrit → chaîne vide (l'écran met « u »).
+ */
+export function uniteArticle(unite?: string): string {
+  const u = (unite || '').trim().toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\(s\)|\.$/g, '').trim();
+  if (!u) return '';
+  if (/^(u|un|unite|unites|pc|pce|pces|piece|pieces|ex|exemplaires?)$/.test(u)) return 'u';
+  if (/^(kg|kgs|kilo|kilos)$/.test(u)) return 'kg';
+  if (/^(m2|m²|metres? carres?)$/.test(u)) return 'm²';
+  if (/^(ml|m|metres? lineaires?)$/.test(u)) return 'ml';
+  if (/^(l|litres?)$/.test(u)) return 'l';
+  return u;
+}
+
+/**
  * L'article à CRÉER pour une ligne de document fournisseur.
  *
  * Deux chemins y mènent, et doivent produire la même fiche : l'analyse de
@@ -317,6 +347,10 @@ export function articleDepuisLigne(args: {
   vente?: { prixHT: number; remiseRevendeur: number };
   /** Référence de la même fiche chez Odoo, quand elle y existe ou y est créée. */
   referenceOdoo?: string;
+  /** Unité de vente saisie à la création (« u » à défaut). */
+  unite?: string;
+  /** Poids unitaire en kg, quand on le connaît — jamais deviné. */
+  poids?: number;
 }): Produit {
   const designation = (args.designation || '').trim();
   const reference = (args.reference || '').trim()
@@ -337,7 +371,8 @@ export function articleDepuisLigne(args: {
     description: designation,
     prixAchat: args.prixAchat,
     ...vente,
-    tva: args.tva ?? 20, unite: 'u', stock: 0, stockMin: 0,
+    tva: args.tva ?? 20, unite: (args.unite || '').trim() || 'u', stock: 0, stockMin: 0,
+    ...(args.poids != null && args.poids > 0 ? { poids: args.poids } : {}),
     /* Les deux prix sont DATÉS : le plus récent l'emporte à la synchro Odoo,
        et un prix posé à l'import ne doit pas céder à une fiche Odoo plus
        ancienne. */

@@ -449,6 +449,17 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   Migration `20261015120000_memoire_documents.sql` **appliquée** le 15/10
   (table, RLS et deux règles vérifiées). `types.ts` n'est pas régénéré : le
   module lit la table en `as never`, comme `memoire_articles`.
+- ⚠️ **Plusieurs PDF dans un mail : l'IA ne lit que le principal**, choisi
+  par `choisirPdfPrincipal` (`pdfPrincipal.ts`) — montants, en-tête, colonnes
+  de prix ; des CGV en sont écartées. AFC DV5214 joignait ses CGV avant le
+  devis : zéro ligne lue. La pièce retenue passe en tête de l'écran.
+- **Lignes du devis reçu corrigeables** (réf., désignation, qté, conseillé,
+  `ChampLigne` validé en quittant le champ) et « Ajouter une ligne ». Un
+  article **absent du catalogue est proposé à la création, case cochée**,
+  fiche ouverte : code, intitulé, catégorie, réf. fournisseur, prix d'achat,
+  unité, TVA, poids, prix public, remise. Les lignes de frais (port,
+  maquette — `estFraisAnnexe`) restent à cocher à la main ; un article à
+  créer sans prix d'achat bloque l'enregistrement.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit

@@ -12,7 +12,7 @@ import { ScanText, Upload, Loader2, CheckCircle2, AlertTriangle, FileText, X, Pl
 import VoiceButton from '@/components/ui/VoiceButton';
 import { toast } from 'sonner';
 import { lireBonsPourExecution, pagesEnImages, ensemblesBpe, estTasmanPal, type BonPourExecution } from '@/lib/bonPourExecution';
-import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
+import { analyserDocument, extrairePagesPDF, type DocumentAnalysis, type LigneAnalysee, type TypeDocument, TYPE_LABELS } from '@/lib/analyseDocument';
 import {
   estPlanKadri, lirePlanDirectionnel, aLireSurImage, avecPanneauxLus, lignesDuPlan, bilanPlan, titreEnsemble, codificationPal,
   TAUX_PAL_REFERENCE,
@@ -77,8 +77,10 @@ import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
   appliquerPrix, coefficientVente, remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, referencePrise,
+  estFraisAnnexe, uniteArticle,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
+import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
 import {
   signaturesEmetteur, souvenirDocument, retenirDocument, emetteurDuTexte, typeDansLeSens, sensDuType,
   type MemoireDocument,
@@ -135,6 +137,31 @@ function LienFiche({ produit }: { produit: Produit }) {
     >
       {designationProduit(produit)}
     </a>
+  );
+}
+
+/**
+ * Un champ d'une ligne lue, corrigé à la main. Il n'est remis à l'analyse
+ * qu'en quittant le champ : chaque frappe relancerait le rapprochement sur
+ * tout le catalogue.
+ */
+function ChampLigne({ valeur, onValider, className, placeholder, nombre }: {
+  valeur: string; onValider: (v: string) => void;
+  className?: string; placeholder?: string; nombre?: boolean;
+}) {
+  const [brouillon, setBrouillon] = useState(valeur);
+  useEffect(() => { setBrouillon(valeur); }, [valeur]);
+  const valider = () => { if (brouillon !== valeur) onValider(brouillon); };
+  return (
+    <Input
+      className={`h-7 text-xs ${className ?? ''}`}
+      placeholder={placeholder}
+      inputMode={nombre ? 'decimal' : undefined}
+      value={brouillon}
+      onChange={e => setBrouillon(e.target.value)}
+      onBlur={valider}
+      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); valider(); } }}
+    />
   );
 }
 
@@ -846,6 +873,7 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
    */
   const [dfFiche, setDfFiche] = useState<Record<number, {
     reference?: string; designation?: string; categorie?: string; prixHT?: string; remise?: string;
+    referenceFournisseur?: string; unite?: string; tva?: string; poids?: string;
   }>>({});
   /** Ce qu'Odoo connaît des lignes du devis (`odoo-achat`, lecture seule). */
   const [dfOdoo, setDfOdoo] = useState<RechercheAchatOdoo | null>(null);
@@ -1549,6 +1577,10 @@ const [contratOdoo, setContratOdoo] = useState<
            les autres, sans texte du tout, sont des bons pour exécution (images)
            dont on lit les panneaux Tasman. */
         let bons: { name: string; buffer: ArrayBuffer }[] = [];
+        /* La pièce que lit l'IA : la première venue, sauf si une autre
+           ressemble davantage au document chiffré (`choisirPdfPrincipal`) —
+           les CGV d'AFC passaient avant leur devis DV5214. */
+        let principal = pdfFile;
         if (pdfsCtx.length > 1) {
           const lus = await Promise.all(pdfsCtx.map(async s => ({
             s, pg: await extrairePagesPDF(s.buffer).catch(() => [] as string[]),
@@ -1558,6 +1590,16 @@ const [contratOdoo, setContratOdoo] = useState<
             pages = plan.pg;
             planFile = new File([plan.s.buffer], plan.s.name, { type: 'application/pdf' });
             bons = lus.filter(x => x !== plan && x.pg.every(t => t.replace(/\s/g, '').length < 40)).map(x => x.s);
+          } else {
+            const k = choisirPdfPrincipal(lus.map(x => ({ name: x.s.name, pages: x.pg })));
+            if (lus[k].s.name !== pdfFile.name) {
+              pages = lus[k].pg;
+              principal = new File([lus[k].s.buffer], lus[k].s.name, { type: 'application/pdf' });
+              /* L'écran montre en tête la pièce réellement lue. */
+              setFichier(principal);
+              setEmlPdfs([lus[k].s, ...pdfsCtx.filter((_, j) => j !== k)]);
+              toast.info(`« ${lus[k].s.name} » analysé : c'est la pièce qui porte les prix.`);
+            }
           }
         }
         /* NOTRE OFFRE DE PRIX (devis Odoo AF…), seule ou jointe à un mail :
@@ -1607,7 +1649,7 @@ const [contratOdoo, setContratOdoo] = useState<
             grille?.size ? (c: string) => grille.has(c.toUpperCase()) : undefined, 'ensemble'));
         } else {
           const indice = await rappelerEmetteur([texteCtx, ...pages].join('\n'));
-          analysis = await analyserDocument({ type: 'pdf', buffer: await pdfFile.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
+          analysis = await analyserDocument({ type: 'pdf', buffer: await principal.arrayBuffer(), texteSupplementaire: texteSuppl }, apiKey, openrouterKey, impose, indice);
         }
       } else if (texteCtx.trim()) {
         // Décoder le MIME côté client si c'est un email brut collé
@@ -2023,6 +2065,15 @@ const [contratOdoo, setContratOdoo] = useState<
     if (!dfFournisseurId) { toast.error('Choisissez le fournisseur'); return; }
     setDfEnCours(true);
 
+    /* Un article à créer sans prix d'achat partirait à 0 € : on le dit au
+       lieu de l'enregistrer en silence. */
+    const sansPrix = (result.lignes || []).findIndex((_, j) => dfCreer[j] && dfPrixDeLigne(j) == null);
+    if (sansPrix >= 0) {
+      setDfEnCours(false);
+      toast.error(`Ligne ${sansPrix + 1} : saisissez le prix d'achat de l'article à créer.`);
+      return;
+    }
+
     const horodate = new Date().toISOString();
     const nouveauxArticles: Produit[] = [];
     const cibles: CibleEcriture[] = [];
@@ -2069,7 +2120,10 @@ const [contratOdoo, setContratOdoo] = useState<
     (result.lignes || []).forEach((l, i) => {
       const prop = propositionsFournisseur.get(i);
       const prix = dfPrixDeLigne(i);
-      const refFournisseur = (l.reference || '').trim();
+      /* La référence du fournisseur corrigée dans la fiche de création vaut
+         pour l'article créé comme pour sa fiche fournisseur. */
+      const refFournisseur = (dfCreer[i] && dfFiche[i]?.referenceFournisseur !== undefined
+        ? dfFiche[i]!.referenceFournisseur! : (l.reference || '')).trim();
       let produitId = prop?.produit?.id;
       const odoo = odooDeLigne(i);
       /* Créer vaut aussi sur une ligne RAPPROCHÉE : le rapprochement a pu
@@ -2093,7 +2147,8 @@ const [contratOdoo, setContratOdoo] = useState<
              articles créés dans ce même lot. */
           reference,
           referenceFournisseur: refFournisseur,
-          designation: fiche.designation, prixAchat: prix, tva: l.tva,
+          designation: fiche.designation, prixAchat: prix, tva: fiche.tva,
+          unite: fiche.unite, poids: fiche.poids,
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
           vente: { prixHT: fiche.vente.prixHT, remiseRevendeur: fiche.remise },
           referenceOdoo: (() => {
@@ -3084,6 +3139,23 @@ const [contratOdoo, setContratOdoo] = useState<
     return rapprochements.get(i)?.meilleur;
   }, [choixProduit, produits, rapprochements, result, dfFournisseurId, produitFournisseurs]);
 
+  /** Une ligne du devis reçu, corrigée à la main (référence, libellé, quantité…). */
+  const corrigerLigneDf = useCallback((i: number, patch: Partial<LigneAnalysee>) => {
+    dfTouche.current = true;
+    setResult(prev => prev ? { ...prev, lignes: prev.lignes.map((l, j) => j === i ? { ...l, ...patch } : l) } : prev);
+  }, []);
+
+  /* Une ligne que l'analyse n'a pas lue s'ajoute à la main ; elle n'a pas
+     d'article, elle se crée d'office. Ajoutée EN FIN de liste : les choix
+     de l'écran sont rangés par indice de ligne. */
+  const ajouterLigneDf = useCallback(() => {
+    dfTouche.current = true;
+    const i = result?.lignes?.length ?? 0;
+    setResult(prev => prev ? { ...prev, lignes: [...prev.lignes, { reference: '', description: '', quantite: 1 }] } : prev);
+    setDfCreer(prev => ({ ...prev, [i]: true }));
+    setDfVersLien(prev => ({ ...prev, [i]: true }));
+  }, [result]);
+
   /** Le prix d'achat retenu pour une ligne : celui lu, ou celui corrigé. */
   const dfPrixDeLigne = useCallback((i: number) =>
     dfPrix[i] ?? result?.lignes?.[i]?.prixUnitaireHT ?? undefined,
@@ -3120,11 +3192,22 @@ const [contratOdoo, setContratOdoo] = useState<
   useEffect(() => {
     if (!result || !isDevisFourn(result.typeDocument) || dfTouche.current) return;
     const versLien: Record<number, boolean> = {};
+    /* UN ARTICLE ABSENT DU CATALOGUE SE PROPOSE À LA CRÉATION, fiche ouverte :
+       le devis AFC DV5214 (thermocollants Alerte SNCF) n'avait aucun
+       équivalent, et rien ne s'affichait. Les lignes de frais (port,
+       maquette) restent à cocher à la main. */
+    const creer: Record<number, boolean> = {};
     propositionsFournisseur.forEach((p, i) => {
       if ((p.action === 'actualiser' || p.action === 'rattacher')
         && !ecartDouteux(p.ecartLien ?? p.ecartArticle)) versLien[i] = true;
+      const l = result.lignes[i];
+      if (!p.produit && l && !estFraisAnnexe(l) && (p.prixLu ?? 0) > 0) {
+        creer[i] = true;
+        versLien[i] = true;
+      }
     });
     setDfVersLien(versLien);
+    setDfCreer(creer);
   }, [propositionsFournisseur, result]);
 
   /* ── Devis fournisseur : Odoo, et la fiche de l'article à créer ─────────── */
@@ -3188,7 +3271,14 @@ const [contratOdoo, setContratOdoo] = useState<
     const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
     const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : (regleRemise?.remise ?? 30);
     const vente = prixVenteArticle({ prixAchat, prixHT, remiseRevendeur: remise });
-    return { reference, referenceProposee, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise, saisie };
+    /* Le reste de la fiche : lu sur le document, corrigeable. Le poids ne
+       se lit pas sur un devis — vide tant qu'on ne le saisit pas. */
+    const referenceFournisseur = saisie.referenceFournisseur ?? refF;
+    const unite = saisie.unite ?? (uniteArticle(l?.unite) || 'u');
+    const tva = saisie.tva !== undefined ? (nombre(saisie.tva) || 0) : (l?.tva ?? 20);
+    const poids = saisie.poids !== undefined ? nombre(saisie.poids) : undefined;
+    return { reference, referenceProposee, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise,
+             referenceFournisseur, unite, tva, poids: poids != null && poids > 0 ? poids : undefined, saisie };
   }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne]);
 
   /* Ce qu'Odoo connaît des lignes, relu quand le fournisseur ou l'article
@@ -3236,12 +3326,15 @@ const [contratOdoo, setContratOdoo] = useState<
   /** La fiche de l'article à créer, modifiable avant l'import. */
   const ficheArticleAchat = (i: number) => {
     const f = ficheProposee(i);
-    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'remise', v: string) => {
+    const prixAchat = dfPrixDeLigne(i);
+    const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'remise'
+      | 'referenceFournisseur' | 'unite' | 'tva' | 'poids', v: string) => {
       dfTouche.current = true;
       setDfFiche(prev => ({ ...prev, [i]: { ...prev[i], [champ]: v } }));
     };
     return (
-      <div className="mt-1 rounded border border-border bg-background/60 p-1.5 space-y-1.5">
+      <div className="mt-1 rounded border border-success/40 bg-background/60 p-1.5 space-y-1.5">
+        <p className="text-[10px] font-medium text-success">Nouvel article MonCRM — tout se corrige avant l'enregistrement</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
           <label className="space-y-0.5">
             <span className="text-[10px] text-muted-foreground">Code article MonCRM</span>
@@ -3262,6 +3355,49 @@ const [contratOdoo, setContratOdoo] = useState<
             <span className="text-[10px] text-muted-foreground">Intitulé</span>
             <Input className="h-7 text-xs" value={f.designation} onChange={e => maj('designation', e.target.value)} />
           </label>
+          <label className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground">Réf. chez le fournisseur</span>
+            <Input
+              className="h-7 text-xs font-mono" placeholder="aucune"
+              value={f.referenceFournisseur} onChange={e => maj('referenceFournisseur', e.target.value)}
+            />
+          </label>
+          <label className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground">Prix d'achat HT (net)</span>
+            <Input
+              className={`h-7 text-xs text-right tabular-nums ${prixAchat == null ? 'border-warning' : ''}`}
+              type="number" step="0.01" placeholder="à saisir"
+              value={prixAchat ?? ''}
+              onChange={e => {
+                dfTouche.current = true;
+                const v = parseFloat(e.target.value);
+                setDfPrix(prev => ({ ...prev, [i]: isNaN(v) ? 0 : v }));
+              }}
+            />
+          </label>
+          <div className="grid grid-cols-3 gap-1.5 sm:col-span-2">
+            <label className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">Unité</span>
+              <Input
+                className="h-7 text-xs" list="df-unites"
+                value={f.unite} onChange={e => maj('unite', e.target.value)}
+              />
+            </label>
+            <label className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">TVA %</span>
+              <Input
+                className="h-7 text-xs text-right tabular-nums" inputMode="decimal"
+                value={f.saisie.tva ?? String(f.tva)} onChange={e => maj('tva', e.target.value)}
+              />
+            </label>
+            <label className="space-y-0.5">
+              <span className="text-[10px] text-muted-foreground">Poids unitaire (kg)</span>
+              <Input
+                className="h-7 text-xs text-right tabular-nums" inputMode="decimal" placeholder="inconnu"
+                value={f.saisie.poids ?? ''} onChange={e => maj('poids', e.target.value)}
+              />
+            </label>
+          </div>
           <label className="space-y-0.5">
             <span className="text-[10px] text-muted-foreground">Prix public HT</span>
             <Input
@@ -7866,6 +8002,9 @@ const [contratOdoo, setContratOdoo] = useState<
                       <datalist id="df-categories">
                         {categoriesCatalogue.map(c => <option key={c} value={c} />)}
                       </datalist>
+                      <datalist id="df-unites">
+                        {['u', 'kg', 'm²', 'ml', 'l', 'lot', 'rouleau', 'forfait'].map(u => <option key={u} value={u} />)}
+                      </datalist>
                     </div>
 
                     {!dfFournisseurId ? (
@@ -7898,12 +8037,31 @@ const [contratOdoo, setContratOdoo] = useState<
 
                               return (
                                 <tr key={i} className="border-b border-border/50 align-top">
-                                  <td className="py-1.5 px-1">
-                                    <p className="font-medium break-words">
-                                      {l.reference ? <span className="font-mono">{l.reference}</span> : null}
-                                      {l.reference && l.description ? ' · ' : ''}
-                                      {l.description}
-                                    </p>
+                                  <td className="py-1.5 px-1 min-w-[260px]">
+                                    {/* La ligne telle que lue, corrigeable : une lecture
+                                        fautive ne doit pas obliger à relancer l'analyse. */}
+                                    <div className="flex flex-wrap items-center gap-1">
+                                      <span className="text-[10px] text-muted-foreground tabular-nums w-4">{i + 1}.</span>
+                                      <ChampLigne
+                                        className="w-24 font-mono" placeholder="Réf. fourn."
+                                        valeur={l.reference || ''}
+                                        onValider={v => corrigerLigneDf(i, { reference: v.trim() })}
+                                      />
+                                      <ChampLigne
+                                        className="flex-1 min-w-[140px] font-medium" placeholder="Désignation"
+                                        valeur={l.description || ''}
+                                        onValider={v => corrigerLigneDf(i, { description: v })}
+                                      />
+                                      <ChampLigne
+                                        className="w-14 text-right tabular-nums" placeholder="Qté" nombre
+                                        valeur={l.quantite != null ? String(l.quantite) : ''}
+                                        onValider={v => {
+                                          const q = parseFloat(v.replace(',', '.'));
+                                          corrigerLigneDf(i, { quantite: isNaN(q) ? 0 : q });
+                                        }}
+                                      />
+                                      <span className="text-[10px] text-muted-foreground">{uniteArticle(l.unite) || l.unite || 'u'}</span>
+                                    </div>
                                     {article ? (
                                       <div className="mt-1 space-y-1">
                                         <div className={dfCreer[i] ? 'opacity-50' : ''}>
@@ -7926,30 +8084,30 @@ const [contratOdoo, setContratOdoo] = useState<
                                         )}
                                         {/* Le rapprochement peut se tromper d'article : on doit
                                             alors pouvoir créer le bon, sans toucher à l'autre. */}
-                                        {prix != null && (
-                                          <label className="flex items-center gap-1.5 cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              className="rounded"
-                                              checked={!!dfCreer[i]}
-                                              onChange={e => {
-                                                dfTouche.current = true;
-                                                const oui = e.target.checked;
-                                                setDfCreer(prev => ({ ...prev, [i]: oui }));
-                                                setDfVersLien(prev => ({ ...prev, [i]: oui }));
-                                                setDfVersArticle(prev => ({ ...prev, [i]: false }));
-                                                setDfVersPublic(prev => ({ ...prev, [i]: false }));
-                                              }}
-                                            />
-                                            <span>Ce n'est pas cet article : créer un nouvel article dans MonCRM</span>
-                                          </label>
-                                        )}
-                                        {dfCreer[i] && prix != null && ficheArticleAchat(i)}
+                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="rounded"
+                                            checked={!!dfCreer[i]}
+                                            onChange={e => {
+                                              dfTouche.current = true;
+                                              const oui = e.target.checked;
+                                              setDfCreer(prev => ({ ...prev, [i]: oui }));
+                                              setDfVersLien(prev => ({ ...prev, [i]: oui }));
+                                              setDfVersArticle(prev => ({ ...prev, [i]: false }));
+                                              setDfVersPublic(prev => ({ ...prev, [i]: false }));
+                                            }}
+                                          />
+                                          <span>Ce n'est pas cet article : créer un nouvel article dans MonCRM</span>
+                                        </label>
+                                        {dfCreer[i] && ficheArticleAchat(i)}
                                         {blocOdooAchat(i)}
                                       </div>
                                     ) : (
                                       <div className="mt-1 space-y-1">
-                                        <p className="text-destructive">Aucun article du catalogue ne correspond.</p>
+                                        <p className="text-destructive">
+                                          Absent du catalogue — créez-le ci-dessous, ou choisissez un article existant.
+                                        </p>
                                         <ProduitCombobox
                                           produits={produits}
                                           suggestions={candidatsPour(i)}
@@ -7957,37 +8115,42 @@ const [contratOdoo, setContratOdoo] = useState<
                                           onSelect={(id) => {
                                             dfTouche.current = true;
                                             setChoixProduit(prev => ({ ...prev, [i]: id }));
+                                            setDfCreer(prev => ({ ...prev, [i]: false }));
                                             setDfVersLien(prev => ({ ...prev, [i]: true }));
                                           }}
                                         />
-                                        {prix != null && (
-                                          <label className="flex items-center gap-1.5 cursor-pointer">
-                                            <input
-                                              type="checkbox"
-                                              className="rounded"
-                                              checked={!!dfCreer[i]}
-                                              onChange={e => {
-                                                dfTouche.current = true;
-                                                setDfCreer(prev => ({ ...prev, [i]: e.target.checked }));
-                                                setDfVersLien(prev => ({ ...prev, [i]: e.target.checked }));
-                                              }}
-                                            />
-                                            <span>Créer l'article dans MonCRM</span>
-                                          </label>
-                                        )}
-                                        {dfCreer[i] && prix != null && ficheArticleAchat(i)}
+                                        <label className="flex items-center gap-1.5 cursor-pointer">
+                                          <input
+                                            type="checkbox"
+                                            className="rounded"
+                                            checked={!!dfCreer[i]}
+                                            onChange={e => {
+                                              dfTouche.current = true;
+                                              setDfCreer(prev => ({ ...prev, [i]: e.target.checked }));
+                                              setDfVersLien(prev => ({ ...prev, [i]: e.target.checked }));
+                                            }}
+                                          />
+                                          <span>Créer l'article dans MonCRM</span>
+                                          {estFraisAnnexe(l) && !dfCreer[i] && (
+                                            <span className="text-muted-foreground">(ligne de frais : non proposée d'office)</span>
+                                          )}
+                                        </label>
+                                        {dfCreer[i] && ficheArticleAchat(i)}
                                         {blocOdooAchat(i)}
                                       </div>
                                     )}
                                   </td>
 
-                                  <td className="py-1.5 px-1 text-right tabular-nums">
-                                    {l.prixConseille != null ? (
-                                      <>
-                                        <div>{formatMontant(l.prixConseille)}</div>
-                                        {l.remise != null && <div className="text-muted-foreground">− {l.remise} %</div>}
-                                      </>
-                                    ) : <span className="text-muted-foreground">—</span>}
+                                  <td className="py-1.5 px-1 text-right tabular-nums space-y-1">
+                                    <ChampLigne
+                                      className="text-right tabular-nums" placeholder="—" nombre
+                                      valeur={l.prixConseille != null ? String(l.prixConseille) : ''}
+                                      onValider={v => {
+                                        const p = parseFloat(v.replace(',', '.'));
+                                        corrigerLigneDf(i, { prixConseille: isNaN(p) || p <= 0 ? undefined : p });
+                                      }}
+                                    />
+                                    {l.remise != null && <div className="text-muted-foreground">− {l.remise} %</div>}
                                   </td>
 
                                   <td className="py-1.5 px-1 text-right">
@@ -8079,6 +8242,19 @@ const [contratOdoo, setContratOdoo] = useState<
                             })}
                           </tbody>
                         </table>
+                        {!(result?.lignes?.length) && (
+                          <p className="mt-2 px-1 text-xs text-warning flex items-start gap-1">
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                            Aucune ligne lue sur le document. Vérifiez la pièce analysée
+                            (« Voir le document ») ou saisissez les lignes à la main.
+                          </p>
+                        )}
+                        <Button
+                          type="button" variant="outline" size="sm" className="mt-2 h-7 text-xs"
+                          onClick={ajouterLigneDf}
+                        >
+                          <PlusCircle className="w-3.5 h-3.5 mr-1" />Ajouter une ligne
+                        </Button>
                       </div>
                     )}
 

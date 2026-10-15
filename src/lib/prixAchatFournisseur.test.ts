@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   prixConditionnement, rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
-  remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur,
+  remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, estFraisAnnexe, uniteArticle,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -288,6 +288,40 @@ describe('articleDepuisLigne — créer l’article d’une ligne mal rattachée
     expect(p.categorie).toBe('INCONNUE');
     expect(p.prixHT).toBe(0);
     expect(p.origine).toBe('crm');
+  });
+
+  it('prend l’unité et le poids saisis, rien de deviné sinon', () => {
+    const p = articleDepuisLigne({ ...base, unite: 'kg', poids: 25 });
+    expect(p.unite).toBe('kg');
+    expect(p.poids).toBe(25);
+    const q = articleDepuisLigne(base);
+    expect(q.unite).toBe('u');
+    expect(q.poids).toBeUndefined();
+  });
+});
+
+describe('uniteArticle', () => {
+  it('ramène les écritures du document à l’unité de la fiche', () => {
+    expect(uniteArticle('Unité(s)')).toBe('u');
+    expect(uniteArticle('pce')).toBe('u');
+    expect(uniteArticle('Kg')).toBe('kg');
+    expect(uniteArticle('m2')).toBe('m²');
+    expect(uniteArticle('Forfait')).toBe('forfait');
+    expect(uniteArticle(undefined)).toBe('');
+  });
+});
+
+describe('estFraisAnnexe — une ligne de frais n’est pas un article', () => {
+  it('reconnaît port, livraison et maquette du devis AFC DV5214', () => {
+    expect(estFraisAnnexe({ description: 'Envoi messagerie Forfait livraison 1 palette 80x120cm' })).toBe(true);
+    expect(estFraisAnnexe({ description: 'Maquette et mise aux normes d\'impression OFFERTE' })).toBe(true);
+    expect(estFraisAnnexe({ description: 'Frais de port' })).toBe(true);
+  });
+
+  it('laisse passer les articles, même ceux qui contiennent « port »', () => {
+    expect(estFraisAnnexe({ description: 'Thermocollant préfabriqué Alerte SNCF diamètre 100cm' })).toBe(false);
+    expect(estFraisAnnexe({ description: 'Support Ø60 galvanisé 3,50 m' })).toBe(false);
+    expect(estFraisAnnexe({ description: 'Porte-panneau' })).toBe(false);
   });
 });
 
