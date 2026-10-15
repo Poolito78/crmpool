@@ -452,9 +452,8 @@ devis relancés sortiraient de tous les comptes de devis en cours.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit
-  « Odoo n'a pas répondu » et seul MonCRM est rapproché. ⚠️ La version
-  déployée porte encore le mode `creer`, que plus rien n'appelle : le
-  redéployer (`.\deploy-function.ps1 odoo-achat`) l'en retire.
+  « Odoo n'a pas répondu » et seul MonCRM est rapproché. Redéployée le 15/10
+  sans le mode `creer` : la fonction ne fait plus que lire.
 
 ## Pièges d'implémentation rencontrés
 
