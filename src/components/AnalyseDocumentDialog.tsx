@@ -219,6 +219,11 @@ interface PartenaireOdoo {
   contrat: string;
 }
 
+/** Types d'analyse dont la pièce vient d'un CLIENT : jamais classée chez un fournisseur. */
+const TYPES_SANS_CLASSEMENT_FOURNISSEUR: ReadonlySet<TypeDocument | undefined> = new Set<TypeDocument>([
+  'demande_devis', 'devis_client', 'commande_client', 'facture_client', 'offre_prix', 'devis_concurrent',
+]);
+
 export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles, initialText }: Props) {
   const {
     commandesFournisseur, commandesClient, fournisseurs, produits, produitsCharges, clients, devis,
@@ -4951,12 +4956,17 @@ const [contratOdoo, setContratOdoo] = useState<
                 {panneauApercu}
 
                 {/* ── Mini-GED : ranger les pièces chez le fournisseur ── */}
-                <ClasserDocumentFournisseur
-                  fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
-                  result={result}
-                  fournisseurs={fournisseurs}
-                  fournisseurIdConnu={matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId || undefined}
-                />
+                {/* Pas pour un document CLIENT (demande de devis, devis, commande, facture
+                    client, offre de prix, devis concurrent) : il n'a rien à faire chez un
+                    fournisseur. Il réapparaît dès que « Corriger le type » le rend fournisseur. */}
+                {!TYPES_SANS_CLASSEMENT_FOURNISSEUR.has(result.typeDocument) && (
+                  <ClasserDocumentFournisseur
+                    fichiers={fichiersOrigine.length > 0 ? fichiersOrigine : fichier ? [fichier] : []}
+                    result={result}
+                    fournisseurs={fournisseurs}
+                    fournisseurIdConnu={matchedCF?.fournisseurId || creerCFFournisseurId || dfFournisseurId || undefined}
+                  />
+                )}
 
                 {/* ── Bandeaux match / no-match ── */}
                 {matchedCF && (
