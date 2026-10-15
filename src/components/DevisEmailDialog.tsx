@@ -268,8 +268,8 @@ interface Props {
   client?: Client;
   produits?: Produit[];
   /**
-   * Mode RELANCE : même envoi (PDF joint, pièces jointes, .eml), mais objet
-   * « Relance — … », corps tiré d'un mail type (`relanceDevis.ts`) et la
+   * Mode RELANCE : même envoi (PDF joint, pièces jointes, .eml) et même objet,
+   * corps tiré d'un mail type (`relanceDevis.ts`) et la
    * prochaine relance à planifier, que `onSent` reçoit alors.
    */
   relance?: boolean;
@@ -461,7 +461,10 @@ export default function DevisEmailDialog({ open, onOpenChange, devis, client, pr
     const mailType = modeleMail('devis');
     setImagesMail(mailType.images ?? []);
     const objet = remplirMail(mailType.objet, valeursMail);
-    setSubject(relance ? `Relance — ${objet}` : objet);
+    /* Une relance garde l'objet de l'envoi, SANS « Relance » (demande du
+       15/10) : le client ne lit pas le mot, et le mail se range avec l'envoi
+       dans sa messagerie. */
+    setSubject(objet);
 
     if (relance) {
       // Le rang de la relance choisit le mail type proposé (suivi, validité, dernière).
