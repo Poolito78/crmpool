@@ -288,7 +288,7 @@ async function analyserViaOpenRouter(texte: string, openrouterKey: string): Prom
         body: JSON.stringify({
           model,
           temperature: 0,
-          max_tokens: 1024,
+          max_tokens: 4096,
           messages: [
             { role: 'system', content: PROMPT },
             { role: 'user', content: `Document :\n${texte}` },
@@ -317,7 +317,7 @@ async function analyserViaGemini(texte: string): Promise<DocumentAnalysis> {
       systemInstruction: { parts: [{ text: PROMPT }] },
       contents: [{ role: 'user', parts: [{ text: `Document :
 ${texte}` }] }],
-      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 1024 },
+      generationConfig: { responseMimeType: 'application/json', temperature: 0, maxOutputTokens: 8192 },
     });
     return lireAnalyse(texteGemini(data));
   } catch (e) {
@@ -378,6 +378,13 @@ async function analyserSansType(
   // 4096 laisse de la marge des deux côtés (~1 000 à 2 000 jetons de texte
   // envoyé + 4 096 réservés restent bien sous les 8 000).
   // response_format garantit en plus un JSON bien formé.
+  //
+  // ⚠️ GROQ PEUT NE RIEN RENDRE (15/10/2026) : sur un devis fournisseur d'une
+  // vingtaine de lignes, la réflexion épuisait le budget et Groq répondait
+  // 400 « json_validate_failed » avec une génération VIDE — l'analyse
+  // s'arrêtait là. D'où `reasoning_effort: 'low'` (l'extraction ne demande
+  // pas de raisonner), et tout échec du modèle lui-même — 400 de validation,
+  // 413, 5xx, réponse coupée — passe la main à Gemini au lieu de s'afficher.
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -386,6 +393,7 @@ async function analyserSansType(
         model: 'openai/gpt-oss-20b',
         temperature: 0,
         max_tokens: 4096,
+        reasoning_effort: 'low',
         response_format: { type: 'json_object' },
         messages: [
           { role: 'system', content: PROMPT },
@@ -398,15 +406,22 @@ async function analyserSansType(
 
     if (!response.ok) {
       const err = await response.text();
-      throw new Error(`Erreur API Groq : ${response.status} — ${err}`);
+      const repli = response.status === 413 || response.status >= 500
+        || (response.status === 400 && /json_validate_failed|failed_generation/.test(err));
+      throw Object.assign(new Error(`Erreur API Groq : ${response.status} — ${err}`), { repli });
     }
 
     const data = await response.json();
     const text: string = data.choices?.[0]?.message?.content ?? '';
-    return lireAnalyse(text);
+    try {
+      return lireAnalyse(text);
+    } catch (e) {
+      throw Object.assign(e as Error, { repli: true });
+    }
   } catch (err: any) {
-    if (!err.quota) throw err;
-    console.warn('Groq quota dépassé — basculement sur Gemini');
+    if (!err.quota && !err.repli) throw err;
+    console.warn(err.quota ? 'Groq quota dépassé — basculement sur Gemini'
+      : `Groq sans réponse exploitable — basculement sur Gemini (${err.message})`);
   }
 
   /* 2. Repli Gemini — par l'Edge Function `gemini`.
