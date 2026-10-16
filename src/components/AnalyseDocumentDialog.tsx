@@ -78,7 +78,7 @@ import { chargerGrille } from '@/lib/grilleTarif.charger';
 import {
   rapprocherFournisseur, proposerPrix, prixVenteDepuisAchat, articleDepuisLigne, referenceLibre,
   appliquerPrix, coefficientVente, remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, referencePrise,
-  estFraisAnnexe, uniteArticle,
+  estFraisAnnexe, uniteArticle, coefficientsDeVente, venteDepuisCoefficients, noteAchat,
   type PropositionPrix, type CibleEcriture,
 } from '@/lib/prixAchatFournisseur';
 import { choisirPdfPrincipal } from '@/lib/pdfPrincipal';
@@ -950,6 +950,8 @@ export default function AnalyseDocumentDialog({ open, onOpenChange, initialFiles
   const [dfFiche, setDfFiche] = useState<Record<number, {
     reference?: string; designation?: string; categorie?: string; prixHT?: string; remise?: string;
     referenceFournisseur?: string; unite?: string; tva?: string; poids?: string;
+    /** Intitulé d'ACHAT (celui du fournisseur) ; `designation` est celui de VENTE. */
+    designationAchat?: string;
   }>>({});
   /** Ce qu'Odoo connaît des lignes du devis (`odoo-achat`, lecture seule). */
   const [dfOdoo, setDfOdoo] = useState<RechercheAchatOdoo | null>(null);
@@ -2225,6 +2227,15 @@ const [contratOdoo, setContratOdoo] = useState<
           referenceFournisseur: refFournisseur,
           designation: fiche.designation, prixAchat: prix, tva: fiche.tva,
           unite: fiche.unite, poids: fiche.poids,
+          /* L'intitulé d'ACHAT et le tarif de revente conseillé vont aux
+             notes : la désignation, elle, est l'intitulé de VENTE. */
+          notes: noteAchat({
+            fournisseur: (() => { const fo = fournisseurs.find(x => x.id === dfFournisseurId); return fo?.societe || fo?.nom; })(),
+            intituleAchat: fiche.designationAchat !== fiche.designation ? fiche.designationAchat : undefined,
+            referenceFournisseur: refFournisseur || undefined,
+            prixAchat: prix, coefs: coefsDoc,
+            date: new Date().toLocaleDateString('fr-FR'),
+          }),
           categorie: fiche.categorie, fournisseurId: dfFournisseurId,
           vente: { prixHT: fiche.vente.prixHT, remiseRevendeur: fiche.remise },
           referenceOdoo: (() => {
@@ -2259,7 +2270,8 @@ const [contratOdoo, setContratOdoo] = useState<
         devisId,
         ordre: i,
         reference: refFournisseur || undefined,
-        designation: l.description || undefined,
+        /* Le devis du fournisseur garde SON intitulé : celui d'achat. */
+        designation: (dfCreer[i] && dfFiche[i]?.designationAchat?.trim()) || l.description || undefined,
         quantite: l.quantite,
         prixAchat: prix,
         produitId,
@@ -3237,6 +3249,15 @@ const [contratOdoo, setContratOdoo] = useState<
     dfPrix[i] ?? result?.lignes?.[i]?.prixUnitaireHT ?? undefined,
   [dfPrix, result]);
 
+  /* Le tarif de revente conseillé écrit en pied de devis (COM'ROAD :
+     « grand compte X 1,25, applicateur indépendant X 1,6, client final
+     X 2 »), lu dans le texte du document et dans les notes de l'analyse. */
+  const coefsDoc = useMemo(() => {
+    if (!result || !isDevisFourn(result.typeDocument)) return [];
+    const duTexte = coefficientsDeVente(texteSourceRef.current);
+    return duTexte.length ? duTexte : coefficientsDeVente(result.notes || '');
+  }, [result]);
+
   /** Ce qu'il faut faire de chaque ligne, en l'état des choix de l'écran. */
   const propositionsFournisseur = useMemo<Map<number, PropositionPrix>>(() => {
     const m = new Map<number, PropositionPrix>();
@@ -3341,11 +3362,22 @@ const [contratOdoo, setContratOdoo] = useState<
     const regleRemise = remiseRevendeurCategorie(produits, categorie);
     /* Le prix CONSEILLÉ du fournisseur (P.U. brut avant remise) passe avant le
        coefficient mesuré : c'est un prix public écrit, pas déduit. */
-    const conseille = l?.prixConseille != null && l.prixConseille > 0 ? l.prixConseille : undefined;
-    const prixPropose = conseille ?? prixVenteDepuisAchat(prixAchat, coef);
+    /* Un conseillé égal à l'achat, sans remise, n'est que le PU répété
+       (`sansFauxConseille`) : on ne vend pas au prix d'achat. */
+    const conseille = l?.prixConseille != null && l.prixConseille > 0
+      && !(Math.abs(l.prixConseille - prixAchat) < 0.005 && !(l.remise && l.remise > 0))
+      ? l.prixConseille : undefined;
+    /* Puis le tarif de revente conseillé du pied de devis : public = achat ×
+       coefficient « client final », remise = ce qu'en retire l'applicateur. */
+    const parCoefs = venteDepuisCoefficients(prixAchat, coefsDoc);
+    const prixPropose = conseille ?? parCoefs?.prixHT ?? prixVenteDepuisAchat(prixAchat, coef);
     const nombre = (v: string) => parseFloat(v.replace(',', '.'));
     const prixHT = saisie.prixHT !== undefined ? (nombre(saisie.prixHT) || 0) : (prixPropose ?? 0);
-    const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : (regleRemise?.remise ?? 30);
+    const remiseProposee = (conseille == null ? parCoefs?.remiseRevendeur : undefined) ?? regleRemise?.remise ?? 30;
+    const remise = saisie.remise !== undefined ? (nombre(saisie.remise) || 0) : remiseProposee;
+    const origineRemise = saisie.remise !== undefined ? 'saisie à la main'
+      : conseille == null && parCoefs?.remiseRevendeur != null ? 'coefficient revendeur conseillé par le fournisseur'
+      : regleRemise?.origine ?? 'défaut de la fiche article';
     const vente = prixVenteArticle({ prixAchat, prixHT, remiseRevendeur: remise });
     /* Le reste de la fiche : lu sur le document, corrigeable. Le poids ne
        se lit pas sur un devis — vide tant qu'on ne le saisit pas. */
@@ -3353,9 +3385,13 @@ const [contratOdoo, setContratOdoo] = useState<
     const unite = saisie.unite ?? (uniteArticle(l?.unite) || 'u');
     const tva = saisie.tva !== undefined ? (nombre(saisie.tva) || 0) : (l?.tva ?? 20);
     const poids = saisie.poids !== undefined ? nombre(saisie.poids) : undefined;
-    return { reference, referenceProposee, designation, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise,
-             referenceFournisseur, unite, tva, poids: poids != null && poids > 0 ? poids : undefined, saisie };
-  }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne]);
+    /* Deux intitulés : celui d'ACHAT est la désignation du fournisseur (elle
+       reste sur son devis et dans les notes de la fiche) ; celui de VENTE
+       nomme l'article dans nos devis clients. */
+    const designationAchat = saisie.designationAchat ?? (l?.description || '');
+    return { reference, referenceProposee, designation, designationAchat, categorie, prixAchat, coef, conseille, regleRemise, prixPropose, vente, remise,
+             origineRemise, parCoefs, referenceFournisseur, unite, tva, poids: poids != null && poids > 0 ? poids : undefined, saisie };
+  }, [result, dfFiche, odooPourCreation, produits, categorieFournisseur, dfPrixDeLigne, coefsDoc]);
 
   /* Ce qu'Odoo connaît des lignes, relu quand le fournisseur ou l'article
      MonCRM d'une ligne change — en LECTURE seule. */
@@ -3404,7 +3440,7 @@ const [contratOdoo, setContratOdoo] = useState<
     const f = ficheProposee(i);
     const prixAchat = dfPrixDeLigne(i);
     const maj = (champ: 'reference' | 'designation' | 'categorie' | 'prixHT' | 'remise'
-      | 'referenceFournisseur' | 'unite' | 'tva' | 'poids', v: string) => {
+      | 'referenceFournisseur' | 'unite' | 'tva' | 'poids' | 'designationAchat', v: string) => {
       dfTouche.current = true;
       setDfFiche(prev => ({ ...prev, [i]: { ...prev[i], [champ]: v } }));
     };
@@ -3428,8 +3464,16 @@ const [contratOdoo, setContratOdoo] = useState<
             />
           </label>
           <label className="space-y-0.5 sm:col-span-2">
-            <span className="text-[10px] text-muted-foreground">Intitulé</span>
+            <span className="text-[10px] text-muted-foreground">
+              <strong className="text-foreground">Intitulé de VENTE</strong> — nomme l'article dans nos devis clients
+            </span>
             <Input className="h-7 text-xs" value={f.designation} onChange={e => maj('designation', e.target.value)} />
+          </label>
+          <label className="space-y-0.5 sm:col-span-2">
+            <span className="text-[10px] text-muted-foreground">
+              <strong className="text-foreground">Intitulé d'ACHAT</strong> — désignation du fournisseur, gardée dans les notes de la fiche
+            </span>
+            <Input className="h-7 text-xs" value={f.designationAchat} onChange={e => maj('designationAchat', e.target.value)} />
           </label>
           <label className="space-y-0.5">
             <span className="text-[10px] text-muted-foreground">Réf. chez le fournisseur</span>
@@ -3492,18 +3536,44 @@ const [contratOdoo, setContratOdoo] = useState<
             />
           </label>
         </div>
+        {/* Le tarif de revente du pied de devis, palier par palier : prix net
+            de vente = notre achat × coefficient conseillé. */}
+        {coefsDoc.length > 0 && (
+          <div className="rounded border border-info/30 bg-info/5 p-1.5 space-y-0.5">
+            <p className="text-[10px] font-medium text-info">Tarif de revente conseillé par le fournisseur</p>
+            <table className="w-full text-[11px] tabular-nums">
+              <tbody>
+                {coefsDoc.map(c => (
+                  <tr key={c.libelle}>
+                    <td className="pr-2">{c.libelle}</td>
+                    <td className="pr-2 text-right text-muted-foreground">× {String(c.coef).replace('.', ',')}</td>
+                    <td className="pr-2 text-right font-medium">{f.prixAchat > 0 ? formatMontant(f.prixAchat * c.coef) : '—'}</td>
+                    <td className="text-muted-foreground">
+                      {c.role === 'public' ? '→ prix public' : c.role === 'revendeur' ? '→ prix revendeur' : 'noté sur la fiche'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {!coefsDoc.some(c => c.role === 'public') && (
+              <p className="text-[10px] text-warning">Aucun palier « client final » nommé : prix public à saisir.</p>
+            )}
+          </div>
+        )}
         <p className="text-[10px] text-muted-foreground leading-relaxed">
           {f.vente.prixHT > 0
             ? <>Revendeur {formatMontant(f.vente.prixRevendeur)} · coef. {f.vente.coefficient.toFixed(2)} sur l'achat de {formatMontant(f.prixAchat)}. </>
             : <span className="text-warning">Prix public à saisir : l'article serait créé sans prix de vente. </span>}
           {f.conseille != null && f.saisie.prixHT === undefined
             ? <>Prix public = prix conseillé du fournisseur ({formatMontant(f.conseille)}). </>
+            : f.parCoefs && f.saisie.prixHT === undefined
+            ? <>Prix public = achat × coefficient « client final » conseillé ({formatMontant(f.parCoefs.prixHT)}). </>
             : f.coef
             ? f.coef.fiable
               ? <>Coef. public {f.coef.coef.toFixed(2)} mesuré sur {f.coef.effectif} articles « {f.coef.categorie} ». </>
               : <>Coef. public {f.coef.coef.toFixed(2)} de « {f.coef.categorie} » trop dispersé : non appliqué. </>
             : f.categorie.trim() ? <>Aucun coefficient mesurable sur « {f.categorie} ». </> : null}
-          Remise : {f.saisie.remise !== undefined ? 'saisie à la main' : f.regleRemise?.origine ?? 'défaut de la fiche article'}.
+          Remise : {f.origineRemise}.
         </p>
       </div>
     );
@@ -8169,6 +8239,14 @@ const [contratOdoo, setContratOdoo] = useState<
                         {['u', 'kg', 'm²', 'ml', 'l', 'lot', 'rouleau', 'forfait'].map(u => <option key={u} value={u} />)}
                       </datalist>
                     </div>
+
+                    {coefsDoc.length > 0 && (
+                      <p className="text-xs rounded-lg border border-info/30 bg-info/5 px-2 py-1.5">
+                        <span className="font-medium text-info">Tarif de revente conseillé lu sur le devis : </span>
+                        {coefsDoc.map(c => `${c.libelle} × ${String(c.coef).replace('.', ',')}`).join(' · ')}
+                        <span className="text-muted-foreground"> — appliqué au prix d'achat de chaque article créé.</span>
+                      </p>
+                    )}
 
                     {!dfFournisseurId ? (
                       <p className="text-xs text-muted-foreground">

@@ -193,6 +193,10 @@ repris comme prix d'ACHAT :
   « remise » = le pourcentage de remise écrit entre les deux. Exemple :
   « 1,000 1295,00 40,00 777,00 777,00 » → quantite 1, prixConseille 1295,
   remise 40, prixUnitaireHT 777.
+  Une colonne « Brut HT » qui répète le PU (aucune remise) est le montant de
+  la ligne, PAS un prix conseillé : prixConseille null. Des coefficients de
+  revente écrits en pied (« client final X 2 ») ne sont pas des lignes :
+  recopie-les dans « notes ».
 - Les titres de groupe (« Alimentation solaire : ») ne sont pas des lignes ;
   un même article répété sous plusieurs groupes donne autant de lignes.
 - Une majoration ou une participation chiffrée est une ligne (sans remise).
@@ -261,8 +265,26 @@ function lireAnalyse(texte: string): DocumentAnalysis {
     l.prixUnitaireHT = nombreLu(l.prixUnitaireHT);
     l.prixConseille = nombreLu(l.prixConseille);
     l.remise = nombreLu(l.remise);
+    sansFauxConseille(l);
   }
   return verifierTotaux(parsed);
+}
+
+/**
+ * UN « BRUT » ÉGAL AU NET N'EST PAS UN PRIX CONSEILLÉ.
+ *
+ * COM'ROAD (devis 260067) écrit « PU ht 50,00 … Brut ht 50,00 » : le brut
+ * est le montant de la ligne, sans remise. Lu comme prix conseillé, il
+ * devenait le prix PUBLIC de l'article créé — vendu à son prix d'achat.
+ * Sans remise écrite, un conseillé égal au net est retiré.
+ */
+export function sansFauxConseille(l: LigneAnalysee): LigneAnalysee {
+  if (l.prixConseille != null && l.prixUnitaireHT != null
+      && Math.abs(l.prixConseille - l.prixUnitaireHT) < 0.005 && !(l.remise && l.remise > 0)) {
+    l.prixConseille = undefined;
+    l.remise = undefined;
+  }
+  return l;
 }
 
 /** Un montant lu, nombre ou texte à la française ; `undefined` sinon. */

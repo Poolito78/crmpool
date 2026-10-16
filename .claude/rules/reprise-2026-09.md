@@ -460,6 +460,15 @@ devis relancés sortiraient de tous les comptes de devis en cours.
   unité, TVA, poids, prix public, remise. Les lignes de frais (port,
   maquette — `estFraisAnnexe`) restent à cocher à la main ; un article à
   créer sans prix d'achat bloque l'enregistrement.
+- ⚠️ **Un « Brut HT » égal au PU n'est pas un prix conseillé**
+  (`sansFauxConseille`, `analyseDocument.ts`) : COM'ROAD 260067 faisait d'un
+  achat à 50 € un public à 50 €. **Tarif de revente du pied de devis**
+  (`coefficientsDeVente`) : « client final X 2 » → public = achat × 2,
+  « applicateur X 1,6 » → remise revendeur 20 %, les autres paliers (grand
+  compte) affichés et notés. Fiche : **intitulé de VENTE** (désignation de
+  l'article) ≠ **intitulé d'ACHAT** (celui du fournisseur, gardé au devis
+  fournisseur et dans `produits.notes` avec les paliers — `noteAchat`).
+  Pas de colonne dédiée à l'intitulé d'achat sur `produit_fournisseurs`.
 - Groq rendait 400 `json_validate_failed` vide sur un devis long : repli
   sur Gemini (budget 8192) au lieu d'une erreur.
 - **Déployé** (odoo-achat, 15/10). Si la fonction ne répond pas, l'écran dit

@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('pdfjs-dist', () => ({ GlobalWorkerOptions: {}, getDocument: vi.fn() }));
 vi.mock('./modelesIA', () => ({ appelerGemini: vi.fn(), texteGemini: vi.fn() }));
 
-import { verifierTotaux, nombreLu, type DocumentAnalysis } from './analyseDocument';
+import { verifierTotaux, nombreLu, sansFauxConseille, type DocumentAnalysis } from './analyseDocument';
 
 const doc = (a: Partial<DocumentAnalysis>): DocumentAnalysis =>
   ({ typeDocument: 'devis_fournisseur', lignes: [], ...a });
@@ -47,5 +47,20 @@ describe('nombreLu', () => {
     expect(nombreLu(777)).toBe(777);
     expect(nombreLu(null)).toBeUndefined();
     expect(nombreLu('n/a')).toBeUndefined();
+  });
+});
+
+describe('sansFauxConseille — un brut égal au net n’est pas un prix conseillé', () => {
+  it('retire le « Brut ht » de COM’ROAD qui répète le PU', () => {
+    const l = sansFauxConseille({ reference: 'IMP/MESURE', description: 'Support Dia 80', quantite: 1,
+      prixUnitaireHT: 50, prixConseille: 50, remise: 0 });
+    expect(l.prixConseille).toBeUndefined();
+    expect(l.remise).toBeUndefined();
+  });
+
+  it('garde un vrai prix conseillé remisé (TTS : 1 295 € − 40 % = 777 €)', () => {
+    const l = sansFauxConseille({ reference: '0015339', description: 'PPRF', quantite: 1,
+      prixUnitaireHT: 777, prixConseille: 1295, remise: 40 });
+    expect(l.prixConseille).toBe(1295);
   });
 });

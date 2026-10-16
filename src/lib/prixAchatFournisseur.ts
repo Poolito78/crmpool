@@ -297,6 +297,107 @@ export function estFraisAnnexe(l: { reference?: string; description?: string }):
   return /\b(frais|port|franco|livraison|messagerie|transport|expedition|emballage|maquette|b\.?a\.?t|bon a tirer|eco[- ]?participation|ecotaxe)\b/.test(t);
 }
 
+/* ── Le tarif de revente conseillé par le fournisseur ────────────────────── */
+
+/** À quel prix de la fiche article un coefficient conseillé correspond. */
+export type RoleCoef = 'public' | 'revendeur' | 'autre';
+
+export interface CoefVente {
+  /** Le palier tel que le fournisseur le nomme (« applicateur indépendant »). */
+  libelle: string;
+  /** Coefficient sur NOTRE prix d'achat (× 1,6). */
+  coef: number;
+  role: RoleCoef;
+}
+
+const ANCRE_COEFS = /(?:re)?vente\s+conseill|coef\w*\s+(?:de\s+)?(?:re)?vente|tarifs?\s+revendeurs?|prix\s+conseill/i;
+
+/**
+ * Les coefficients de revente qu'un fournisseur écrit en pied de devis.
+ *
+ * COM'ROAD (devis 260067, 14/10/2026) ne donne qu'un prix — le nôtre, à
+ * l'achat — et conclut : « prix de revente conseillé grand compte X 1,25,
+ * applicateur indépendant X 1,6, client final X 2 ». La colonne « Brut ht »
+ * répétait le PU : lue comme prix conseillé, elle faisait d'un achat à 50 €
+ * un prix public à 50 €, revendu sans marge.
+ *
+ * On ne lit que ce qui suit une annonce de tarif conseillé (`ANCRE_COEFS`),
+ * et un coefficient entre 1 et 10 : un « X 2 » perdu dans une désignation
+ * (« 2 X 3 m ») n'est pas un tarif. Le palier « client final » donne le prix
+ * public, celui de l'applicateur / revendeur le prix revendeur ; les autres
+ * (grand compte) restent affichés et notés sur la fiche.
+ */
+export function coefficientsDeVente(texte: string): CoefVente[] {
+  const t = (texte || '').normalize('NFKC').replace(/\s+/g, ' ');
+  const ancre = t.search(ANCRE_COEFS);
+  if (ancre < 0) return [];
+  const fenetre = t.slice(ancre, ancre + 400);
+  const vus = new Set<string>();
+  const coefs: CoefVente[] = [];
+  for (const m of fenetre.matchAll(/([^,;:.()]{0,60}?)\s+[x×*]\s?(\d+(?:[.,]\d+)?)(?![\d.,]*\d)/gi)) {
+    const coef = parseFloat(m[2].replace(',', '.'));
+    if (!(coef > 1 && coef <= 10)) continue;
+    const libelle = m[1].trim()
+      .replace(/^.*conseill[ée]e?s?\s*/i, '')
+      .replace(/^(?:et|ou|puis|pour)\s+/i, '')
+      .trim() || 'prix conseillé';
+    const cle = libelle.toLowerCase();
+    if (vus.has(cle)) continue;
+    vus.add(cle);
+    const sans = cle.normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const role: RoleCoef =
+      /client\s*final|particulier|public|utilisateur\s+final|prix conseille/.test(sans) ? 'public'
+      : /applicat|install|poseur|revendeur|artisan/.test(sans) ? 'revendeur'
+      : 'autre';
+    coefs.push({ libelle, coef, role });
+  }
+  return coefs;
+}
+
+/**
+ * Le prix public et la remise revendeur que donnent les coefficients
+ * conseillés : public = achat × coefficient « client final » ; remise
+ * revendeur = ce que le palier revendeur retire du public (× 1,6 sur × 2 =
+ * 20 %). Sans palier public nommé, rien n'est déduit : on ne choisit pas
+ * à la place de l'utilisateur lequel des coefficients fait le public.
+ */
+export function venteDepuisCoefficients(prixAchat: number, coefs: CoefVente[]):
+  { prixHT: number; remiseRevendeur?: number } | undefined {
+  const pub = coefs.find(c => c.role === 'public');
+  if (!pub || !(prixAchat > 0)) return undefined;
+  const rev = coefs.find(c => c.role === 'revendeur');
+  return {
+    prixHT: Math.round(prixAchat * pub.coef * 100) / 100,
+    ...(rev && rev.coef < pub.coef
+      ? { remiseRevendeur: Math.round((1 - rev.coef / pub.coef) * 10000) / 100 }
+      : {}),
+  };
+}
+
+/**
+ * La note posée sur un article créé : son intitulé chez le fournisseur et
+ * son tarif de revente conseillé, palier par palier. Les notes sont
+ * internes, jamais imprimées au devis.
+ */
+export function noteAchat(args: {
+  fournisseur?: string; intituleAchat?: string; referenceFournisseur?: string;
+  prixAchat: number; coefs: CoefVente[]; date: string;
+}): string {
+  const euros = (n: number) => n.toFixed(2).replace('.', ',') + ' €';
+  const chez = args.fournisseur ? ` chez ${args.fournisseur}` : '';
+  const lignes: string[] = [];
+  if (args.intituleAchat?.trim()) {
+    lignes.push(`Intitulé d'achat${chez}${args.referenceFournisseur ? ` (réf. ${args.referenceFournisseur})` : ''} : ${args.intituleAchat.trim()}`);
+  }
+  if (args.coefs.length) {
+    lignes.push(`Tarif de revente conseillé${chez} au ${args.date}, sur un achat de ${euros(args.prixAchat)} :`);
+    for (const c of args.coefs) {
+      lignes.push(`- ${c.libelle} × ${String(c.coef).replace('.', ',')} = ${euros(args.prixAchat * c.coef)}`);
+    }
+  }
+  return lignes.join('\n');
+}
+
 /**
  * L'unité d'un article créé, d'après celle écrite sur le document :
  * « Unité(s) », « pièce », « pce » → u ; kg, m², ml, l gardés ; le reste
@@ -351,6 +452,8 @@ export function articleDepuisLigne(args: {
   unite?: string;
   /** Poids unitaire en kg, quand on le connaît — jamais deviné. */
   poids?: number;
+  /** Notes internes de la fiche (intitulé d'achat, tarif conseillé). */
+  notes?: string;
 }): Produit {
   const designation = (args.designation || '').trim();
   const reference = (args.reference || '').trim()
@@ -373,6 +476,7 @@ export function articleDepuisLigne(args: {
     ...vente,
     tva: args.tva ?? 20, unite: (args.unite || '').trim() || 'u', stock: 0, stockMin: 0,
     ...(args.poids != null && args.poids > 0 ? { poids: args.poids } : {}),
+    ...(args.notes?.trim() ? { notes: args.notes.trim() } : {}),
     /* Les deux prix sont DATÉS : le plus récent l'emporte à la synchro Odoo,
        et un prix posé à l'import ne doit pas céder à une fiche Odoo plus
        ancienne. */

@@ -3,6 +3,7 @@ import {
   prixConditionnement, rapprocherFournisseur, coefficientVente, proposerPrix, prixVenteDepuisAchat,
   appliquerPrix, articleDepuisLigne, referencePrise, referenceLibre,
   remiseRevendeurCategorie, prixVenteArticle, categorieDuFournisseur, estFraisAnnexe, uniteArticle,
+  coefficientsDeVente, venteDepuisCoefficients, noteAchat,
 } from './prixAchatFournisseur';
 import type { Produit, ProduitFournisseur, Fournisseur } from './store';
 
@@ -297,6 +298,49 @@ describe('articleDepuisLigne — créer l’article d’une ligne mal rattachée
     const q = articleDepuisLigne(base);
     expect(q.unite).toBe('u');
     expect(q.poids).toBeUndefined();
+  });
+});
+
+describe('coefficientsDeVente — le tarif de revente écrit en pied de devis', () => {
+  /* Texte du devis COM'ROAD 260067 tel que pdf.js le rend : coupures de
+     ligne au milieu des paliers, ligature « ﬁ ». */
+  const COMROAD = `Adhésivé avec un butyle tramé ne nécessitant pas
+de chauffage préalable
+Tarif revendeur : prix de revente conseillé grand
+compte X 1,25, applicateur indépendant X 1,6, client
+ﬁnal X 2
+Qté
+1,00`;
+
+  it('lit les trois paliers de COM’ROAD avec leur rôle', () => {
+    expect(coefficientsDeVente(COMROAD)).toEqual([
+      { libelle: 'grand compte', coef: 1.25, role: 'autre' },
+      { libelle: 'applicateur indépendant', coef: 1.6, role: 'revendeur' },
+      { libelle: 'client final', coef: 2, role: 'public' },
+    ]);
+  });
+
+  it('ne lit rien sans annonce de tarif conseillé', () => {
+    expect(coefficientsDeVente('Support Dia 80 X 2 morceaux, 1,00 50,00')).toEqual([]);
+  });
+
+  it('client final → prix public, applicateur → remise revendeur', () => {
+    expect(venteDepuisCoefficients(50, coefficientsDeVente(COMROAD)))
+      .toEqual({ prixHT: 100, remiseRevendeur: 20 });
+  });
+
+  it('sans palier public nommé, rien n’est déduit', () => {
+    expect(venteDepuisCoefficients(50, [{ libelle: 'grand compte', coef: 1.25, role: 'autre' }])).toBeUndefined();
+  });
+
+  it('note l’intitulé d’achat et chaque palier en euros', () => {
+    const note = noteAchat({
+      fournisseur: "COM'ROAD", intituleAchat: 'Support imprimé Govel Dia 80', referenceFournisseur: 'IMP/MESURE',
+      prixAchat: 50, coefs: coefficientsDeVente(COMROAD), date: '16/10/2026',
+    });
+    expect(note).toContain("Intitulé d'achat chez COM'ROAD (réf. IMP/MESURE) : Support imprimé Govel Dia 80");
+    expect(note).toContain('- grand compte × 1,25 = 62,50 €');
+    expect(note).toContain('- client final × 2 = 100,00 €');
   });
 });
 
