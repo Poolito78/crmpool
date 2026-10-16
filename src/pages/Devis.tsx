@@ -3486,7 +3486,7 @@ export default function Devis() {
                     <DropdownMenuItem onClick={() => {
                       const existing = editingId ? devis.find(d => d.id === editingId) : null;
                       const preview: DevisType = {
-                        id: editingId || 'preview', numero: existing?.numero || 'APERÇU',
+                        id: editingId || 'preview', numero: existing?.numero || '', // pas encore numéroté : rien sous « DEVIS »
                         clientId, contactId: contactId || undefined, adresseLivraisonId: adresseLivraisonId || undefined, contactLivraisonId: contactLivraisonId || undefined,
                         dateCreation, dateValidite, statut, lignes, referenceAffaire, chantier, niveauTarif: niveauTarif || null, systeme: systeme || undefined, notes, conditions,
                         fraisPortHT, fraisPortTVA, modeCalcul, surfaceGlobaleM2: surfaceGlobaleM2 || undefined, uniteSurface,

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo, promptOdooPartnerName, m2Consommes, coutChantierLigne } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, m2Consommes, coutChantierLigne, coutChantier } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
@@ -457,7 +457,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   function buildFileName() {
     const societe = client?.societe || client?.nom || '';
-    const parts: string[] = ['Devis', devis.numero];
+    const parts: string[] = ['Devis', ...(devis.numero ? [devis.numero] : [])];
     if (societe) parts.push(sanitize(societe));
     if (devis.referenceAffaire) parts.push(sanitize(devis.referenceAffaire));
     return parts.join('_') + '.pdf';
@@ -790,7 +790,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                 </div>
                 <div className="text-right">
                   <h1 className="font-heading text-3xl font-bold tracking-tight">DEVIS</h1>
-                  <p className="text-lg font-semibold text-primary mt-1">{devis.numero}</p>
+                  {devis.numero && <p className="text-lg font-semibold text-primary mt-1">{devis.numero}</p>}
                   <div className="mt-2 space-y-0.5 text-sm">
                     <div className="flex justify-end gap-4"><span className="text-muted-foreground">Date :</span><span>{formatDate(refDate)}</span></div>
                     <div className="flex justify-end gap-4"><span className="text-muted-foreground">Validité :</span><span>{formatDate(displayValidite)}</span></div>
@@ -1516,12 +1516,22 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
           <div className="text-sm text-muted-foreground space-y-1">
           </div>
           <div className={`${showCoutGroupe ? 'w-72' : 'w-64'} space-y-1 ml-auto`}>
-            {showCoutChantier && coutChantierRef.current != null && (
-              <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
-                <span>Coût chantier</span>
-                <span>{coutChantierTotalRef.current > 0 && <>{formatMontant(coutChantierTotalRef.current)} · </>}{coutChantierRef.current.toFixed(2).replace('.', ',')} €/{uS}</span>
-              </div>
-            )}
+            {showCoutChantier && (() => {
+              /* La table m²/conso calcule le coût chantier pendant son rendu ; sans
+                 elle (case « m²/conso » décochée), les refs restaient vides — ou
+                 périmées — et la case « Coût chantier » cochée n'affichait rien.
+                 On reprend alors le calcul de `coutChantier` (odooSync.ts). */
+              const cc = showConso
+                ? { total: coutChantierTotalRef.current, parM2: coutChantierRef.current }
+                : coutChantier(devis.lignes, produits, surfaceGlobale, uniteSurface);
+              if (cc.parM2 == null) return null;
+              return (
+                <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">
+                  <span>Coût chantier</span>
+                  <span>{cc.total > 0 && <>{formatMontant(cc.total)} · </>}{cc.parM2.toFixed(2).replace('.', ',')} €/{uS}</span>
+                </div>
+              );
+            })()}
             {showCoutGroupe && (() => {
               /* Seulement les groupes à surface (€/m², €/ml) : sur un devis de
                  panneaux, ce tableau ne faisait que répéter, au bas du devis, les
