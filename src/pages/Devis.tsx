@@ -4823,7 +4823,7 @@ ${dosage.source}` : ''}`}>
                                 {kgReel !== null && (() => {
                                   const poidsConditionne = couvertureLigne ? Math.round(l.quantite * couvertureLigne * 100) / 100 : prod?.poids ? Math.round(l.quantite * prod.poids * 100) / 100 : null;
                                   const uniteChantier = couvertureLigne ? 'm²' : 'kg';
-                                  const coutLigneChantier = coutChantierLigne(l, produits, surfaceGlobaleM2, uniteSurface);
+                                  const coutLigneChantier = coutChantierLigne(l, produits, surfaceGlobaleM2, uniteSurface, lignes);
                                   return (
                                     <span className="italic">
                                       ↳ {kgReel} {uniteChantier} chantier{l.consoUsage ? <span className="not-italic"> ({l.consoUsage})</span> : null}

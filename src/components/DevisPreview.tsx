@@ -1,6 +1,6 @@
 import { useState, useRef, Fragment, useEffect, useCallback, type CSSProperties } from 'react';
 import { valeursVisibles } from '@/lib/variantesCompo';
-import { type Devis, type Client, type Produit, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, consoDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
+import { type Devis, type Client, type Produit, type LigneDevis, couvertureM2, consoPourSurface, consoFiche, libelleSurface, uniteDeLigne, consoDeLigne, calculerTotalLigne, calculerTotalDevis, formatMontant, formatDate } from '@/lib/store';
 import { Printer, Pencil, Loader2, Send, FolderOpen, FileText, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import logoIsofloor from '@/assets/logo-isofloor.png';
 import { savePdfFromElement, getStoredDirHandle, writeFileToFolder, generatePdfFromElement, storeDirHandle } from '@/lib/pdfFolder';
 import { toast } from 'sonner';
-import { genererScriptOdoo, promptOdooPartnerName, m2Consommes, coutChantierLigne, coutChantier } from '@/lib/odooSync';
+import { genererScriptOdoo, promptOdooPartnerName, coutChantierLigne, coutChantier } from '@/lib/odooSync';
 import { getRalInfo } from '@/lib/ralColors';
 import { supabase } from '@/integrations/supabase/client';
 import { articlesLiesDuDevis } from '@/lib/liensProduit';
@@ -192,9 +192,6 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
   // Ref mis à jour pendant le rendu de la table m²/conso — lu dans la section Totaux
   const coutChantierRef = useRef<number | null>(null);
   const coutChantierTotalRef = useRef<number>(0);
-  /* Coût chantier de chaque ligne, rempli par la table m²/conso au rendu (même calcul que
-     son total) ; vide sans elle, on retombe alors sur `coutChantierLigne`. */
-  const coutLigneMap = new Map<string, number>();
   const [surfaceGlobale, setSurfaceGlobale] = useState<number>(devis.surfaceGlobaleM2 || 0);
   // m² ou ml : au ml la surface est un linéaire, la conso celle de la fiche au ml (kg/ml).
   const uniteSurface = devis.uniteSurface;
@@ -235,7 +232,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
   /**
    * Coût chantier de chaque groupe du devis : la somme des coûts de ses lignes
-   * (ceux de la table m²/conso quand elle est affichée), rapportée à la plus
+   * (`coutLigneDevis`, le calcul de la conception), rapportée à la plus
    * grande surface de ses lignes, dans l'unité de celle-ci (sol en €/m²,
    * joints en €/ml).
    */
@@ -253,7 +250,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
       let unite = uniteL({});
       for (const l of g.lignes) {
         const s = getSurfaceLigne(l.id) || (uniteL(l) === (uniteSurface ?? 'm2') ? surfaceGlobale : 0);
-        total += coutLigneMap.get(l.id) ?? coutChantierLigne({ ...l, surfaceM2: s || undefined }, produits, surfaceGlobale, uniteSurface);
+        total += coutLigneDevis(l, s);
         if (s > surface) { surface = s; unite = uniteL(l); }
       }
       return { id: g.id, titre: g.titre, total, surface: surface > 0 ? surface : null, unite, parUnite: total > 0 && surface > 0 ? Math.round(total / surface * 100) / 100 : null };
@@ -278,6 +275,11 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
     const ligne = devis.lignes.find(l => l.id === ligneId);
     return ligne?.surfaceM2 || 0;
   }
+  /* Les lignes aux surfaces de l'aperçu : le coût chantier du catalyseur se
+     compte sur la résine CONSOMMÉE des autres lignes (`coutCatalyseConsommee`). */
+  const lignesAuxSurfaces = devis.lignes.map(l => ({ ...l, surfaceM2: getSurfaceLigne(l.id) || undefined }));
+  const coutLigneDevis = (l: LigneDevis, surface: number) =>
+    coutChantierLigne({ ...l, surfaceM2: surface || undefined }, produits, surfaceGlobale, uniteSurface, lignesAuxSurfaces);
   function setSurface(ligneId: string, val: number) {
     setSurfacesParLigne(prev => ({ ...prev, [ligneId]: val }));
     onSurfaceChange?.(ligneId, val);
@@ -968,25 +970,19 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
 
           // â"€â"€ Totaux ligne récapitulatif â"€â"€
           let sumConsoKgM2 = 0, sumTotalKg = 0, sumCondKg = 0, sumCoutConsoHT = 0;
-          for (const { conso, isComposite, compDatas, prod, l } of allLines) {
-            /* Vendu au m² (pavés d'un système) : la quantité EST la surface
-               consommée, elle se compte à son prix, pas au kilo — même règle
-               que `coutChantier` (odooSync.ts). */
-            const avant = sumCoutConsoHT;
-            if (/^m(²|2)$/i.test((l.unite || '').trim())) {
-              sumCoutConsoHT += m2Consommes(l) * (l.prixUnitaireHT || 0) * (1 - (l.remise || 0) / 100);
-              coutLigneMap.set(l.id, sumCoutConsoHT - avant);
-              continue;
-            }
+          for (const { conso, isComposite, prod, l } of allLines) {
             const surfLigne = getSurfaceLigne(l.id);
-            /* Article consommé au m² (toile de verre) : son coût chantier est la
-               part de rouleau réellement consommée, et ses m² ne sont pas des kg —
-               ni dans les kg/m², ni dans le total KG. */
-            if (uniteL(l) !== 'ml' && couvertureM2(prod)) {
-              sumCoutConsoHT += coutChantierLigne({ ...l, surfaceM2: surfLigne || undefined }, produits, surfaceGlobale, uniteSurface);
-              coutLigneMap.set(l.id, sumCoutConsoHT - avant);
-              continue;
-            }
+            /* LE COÛT CHANTIER EST CELUI DE L'ÉCRAN DE CONCEPTION, au centime :
+               `coutChantierLigne` (odooSync.ts), ligne par ligne. Le tableau
+               avait son propre calcul — composants au prix catalogue, ligne sans
+               conso comptée 0 € — et DEV-2026-151 annonçait 1 067,48 € à
+               l'aperçu pour 1 145,98 € en conception. Le tableau ne garde que
+               ses kilos. */
+            const cout = coutLigneDevis(l, surfLigne);
+            sumCoutConsoHT += cout;
+            // Vendu au m² (pavés) ou consommé au m² (toile de verre) : des m², pas des kg.
+            if (/^m(²|2)$/i.test((l.unite || '').trim())) continue;
+            if (uniteL(l) !== 'ml' && couvertureM2(prod)) continue;
             if (isComposite) {
               if (conso > 0) {
                 if (uniteL(l) === (uniteSurface ?? 'm2')) sumConsoKgM2 += conso;   // des kg/ml ne s'ajoutent pas à des kg/m²
@@ -997,23 +993,15 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                   sumTotalKg += Math.round(totalKgRecap * 100) / 100;
                 }
               }
-              for (const { totalKgComp, prixKg } of compDatas) {
-                if (totalKgComp != null && prixKg != null) sumCoutConsoHT += totalKgComp * prixKg;
-              }
             } else if (conso > 0) {
               if (uniteL(l) === (uniteSurface ?? 'm2')) sumConsoKgM2 += conso;   // des kg/ml ne s'ajoutent pas à des kg/m²
               const poidsP = prod?.poids || null;
               const totalKgP = surfLigne > 0 ? surfLigne * conso : null;
               if (totalKgP != null) {
                 sumTotalKg += Math.round(totalKgP * 100) / 100;
-                if (poidsP) {
-                  sumCondKg += (l.quantite || 0) * poidsP;
-                }
-                const prixKgP = poidsP && l.prixUnitaireHT ? l.prixUnitaireHT * (1 - l.remise / 100) / poidsP : null;
-                if (prixKgP != null) sumCoutConsoHT += totalKgP * prixKgP;
+                if (poidsP) sumCondKg += (l.quantite || 0) * poidsP;
               }
             }
-            coutLigneMap.set(l.id, sumCoutConsoHT - avant);
           }
           sumTotalKg = Math.round(sumTotalKg * 100) / 100;
           sumCondKg = Math.round(sumCondKg * 10) / 10;
@@ -1265,7 +1253,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                             <td className={`py-1.5 px-1 text-right${auKg ? ' font-semibold text-primary' : ''}`}>{auKg ? (l.quantite ? fmt(l.quantite, 2) : '') : poidsC && l.quantite ? Math.round(l.quantite * poidsC * 10) / 10 : ''}</td>
                             <td className="py-1.5 px-1 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT * (1 - l.remise / 100)) : ''}</td>
                             <td className="py-1.5 px-1 text-right text-muted-foreground">{prixKg != null ? `(${formatMontant(prixKg)})` : ''}</td>
-                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: surfaceLigne || undefined }, produits, surfaceGlobale, uniteSurface))}</td>
+                            <td className="py-1.5 px-1 text-right font-bold">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, surfaceLigne))}</td>
                           </>
                         );
                       })()}
@@ -1477,7 +1465,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                         {showRemise && <td className="py-2 text-right">{l.prixUnitaireHT > 0 ? formatMontant(l.prixUnitaireHT) : ''}</td>}
                         {showRemise && <td className="py-2 text-right">{l.remise > 0 ? `${l.remise}%` : ''}</td>}
                         <td className="py-2 text-right">{prixNet > 0 ? formatMontant(prixNet) : ''}</td>
-                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutChantierLigne({ ...l, surfaceM2: getSurfaceLigne(l.id) || undefined }, produits, surfaceGlobale, uniteSurface))}</td>
+                        <td className="py-2 text-right font-medium">{t.totalHT > 0 ? formatMontant(t.totalHT) : ''}{coutLigneEl(coutLigneDevis(l, getSurfaceLigne(l.id)))}</td>
                       </tr>
                       {showComposants && composants && composants.length > 0 && composants.map(comp => {
                         const compProd = produits.find(p => p.id === comp.produitId);
@@ -1523,7 +1511,7 @@ export default function DevisPreview({ devis, client, produits = [], onEdit, hid
                  On reprend alors le calcul de `coutChantier` (odooSync.ts). */
               const cc = showConso
                 ? { total: coutChantierTotalRef.current, parM2: coutChantierRef.current }
-                : coutChantier(devis.lignes, produits, surfaceGlobale, uniteSurface);
+                : coutChantier(lignesAuxSurfaces, produits, surfaceGlobale, uniteSurface);
               if (cc.parM2 == null) return null;
               return (
                 <div className="flex justify-between text-sm font-semibold text-[#CC0000] border-b border-[#CC0000]/30 pb-1 mb-1">

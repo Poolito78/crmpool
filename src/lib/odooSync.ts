@@ -9,6 +9,7 @@ import { couvertureM2, consoFiche, libelleSurface, uniteDeLigne, surfaceDeLigne,
 import { produitParId } from '@/lib/indexProduits';
 import { estGamme, niveauGamme } from '@/lib/remiseGammes';
 import { noteEnTexte } from '@/lib/noteRiche';
+import { calculerCatalyse, contenanceCatalyseur, estCatalyseur, ligneDuTableau, TEMPERATURE_PAR_DEFAUT } from '@/lib/catalyseur';
 
 // ── Gestion du nom Odoo par client (localStorage) ────────────────────────────
 
@@ -204,8 +205,14 @@ export function coutChantierLigne(
   produits: Produit[],
   surfaceGlobaleM2: number,
   uniteDevis?: UniteSurface,
+  /** Toutes les lignes du devis : le catalyseur se compte sur la résine des autres (`coutCatalyseConsommee`). */
+  lignesDevis?: LigneDevis[],
 ): number {
   if (l.type === 'groupe' || l.type === 'soustotal' || l.type === 'texte') return 0;
+  if (lignesDevis) {
+    const cata = coutCatalyseConsommee(l, lignesDevis, produits, surfaceGlobaleM2, uniteDevis);
+    if (cata != null) return cata;
+  }
   /* UNE LIGNE VENDUE AU m² SE COMPTE AU m², PAS AU KILO. Les pavés d'un
      système portent « 1 m²/m² » en consommation : le calcul au kilo les
      divisait par leur poids (8 kg/m²), et 4 m² à 47,50 € comptaient
@@ -231,13 +238,71 @@ export function coutChantierLigne(
   return l.prixUnitaireHT > 0 ? (l.quantite || 0) * net : 0;
 }
 
+/**
+ * LE CATALYSEUR CONSOMMÉ, PAS CELUI QU'ON A VENDU NI UNE CONSO FIGÉE.
+ *
+ * Le catalyseur se dose sur la RÉSINE (`catalyseur.ts`) : sa quantité vendue
+ * vient des seaux vendus. Sa ligne porte pourtant une « consommation » en
+ * kg/m², figée à la création et jamais recalculée : DEV-2026-152 en gardait
+ * 0,012 — 9,6 kg sur 800 m² pour 8 kg vendus, 376,80 € de coût chantier pour
+ * une ligne facturée 314 €, et un coût chantier au-dessus du total HT.
+ *
+ * On reprend donc le dosage sur la résine CONSOMMÉE — surface × conso ÷
+ * poids, en unités fractionnaires — à la température du devis (celle de la
+ * première ligne de catalyseur, comme `repartitionCatalyse`), et on valorise
+ * les kilos obtenus au prix net moyen du kilo de catalyseur vendu, réparti
+ * entre ses lignes (sac 2 kg, 400 g, dose) au prorata de leurs kilos.
+ *
+ * `null` quand la ligne n'est pas un catalyseur, ou quand le dosage ne se lit
+ * pas (résine « à vérifier », sous 0 °C, aucune résine) : on ne devine pas,
+ * la ligne garde alors le calcul ordinaire.
+ */
+export function coutCatalyseConsommee(
+  l: LigneDevis,
+  lignes: LigneDevis[],
+  produits: Produit[],
+  surfaceGlobaleM2: number,
+  uniteDevis?: UniteSurface,
+): number | null {
+  const trouver = (id: string) => produitParId(produits, id);
+  const estArticle = (x: LigneDevis) => x.type !== 'groupe' && x.type !== 'soustotal' && x.type !== 'texte';
+  const pLigne = l.produitId ? trouver(l.produitId) : undefined;
+  if (!estArticle(l) || !estCatalyseur(pLigne)) return null;
+
+  const cata = lignes.filter(x => estArticle(x) && x.produitId && estCatalyseur(trouver(x.produitId)));
+  const t = ligneDuTableau(cata[0]?.temperatureCatalyse ?? TEMPERATURE_PAR_DEFAUT);
+  if (t == null) return null;
+
+  // La résine consommée : la quantité devient surface × conso ÷ poids, sans arrondi au seau.
+  const consommees = lignes.map(x => {
+    if (!estArticle(x) || !x.produitId) return x;
+    const prod = trouver(x.produitId);
+    if (!prod || estCatalyseur(prod) || !(prod.poids && prod.poids > 0)) return x;
+    const unite = uniteDeLigne(x, uniteDevis);
+    const conso = consoDeLigne(x, unite) || consoFiche(prod, unite) || 0;
+    const surf = surfaceDeLigne(x, surfaceGlobaleM2, uniteDevis);
+    return conso > 0 && surf > 0 ? { ...x, quantite: surf * conso / prod.poids } : x;
+  });
+  const calc = calculerCatalyse(consommees, trouver, t, undefined);
+  if (calc.aVerifier.length || !calc.resines.length) return null;
+
+  const kgDe = (x: LigneDevis) => {
+    const p = x.produitId ? trouver(x.produitId) : undefined;
+    return (x.quantite || 0) * (contenanceCatalyseur(p) ?? p?.poids ?? 0);
+  };
+  const kgVendus = cata.reduce((s, x) => s + kgDe(x), 0);
+  const montant = cata.reduce((s, x) => s + (x.quantite || 0) * (x.prixUnitaireHT || 0) * (1 - (x.remise || 0) / 100), 0);
+  if (!(kgVendus > 0) || !(montant > 0)) return null;
+  return calc.kgCatalyseur * (montant / kgVendus) * (kgDe(l) / kgVendus);
+}
+
 export function coutChantier(
   lignes: Devis['lignes'],
   produits: Produit[],
   surfaceGlobaleM2: number,
   unite?: UniteSurface,
 ): { total: number; parM2: number | null } {
-  const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, unite), 0);
+  const total = lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, unite, lignes), 0);
   // Rapporté à l'unité du devis : les surfaces des lignes dans l'autre unité n'y entrent pas.
   const surfaceRef = surfaceGlobaleM2 > 0
     ? surfaceGlobaleM2
@@ -279,7 +344,7 @@ export function coutChantierParGroupe(
     else if (cur && l.type !== 'texte') cur.lignes.push(l);
   }
   return groupes.map(g => {
-    const total = g.lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, uniteDevis), 0);
+    const total = g.lignes.reduce((t, l) => t + coutChantierLigne(l, produits, surfaceGlobaleM2, uniteDevis, lignes), 0);
     let surface = 0;
     let unite: UniteSurface = uniteDevis ?? 'm2';
     for (const l of g.lignes) {

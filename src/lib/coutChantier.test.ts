@@ -111,3 +111,42 @@ describe('unité par ligne et coût par groupe', () => {
     expect(joints.parUnite).toBeCloseTo(2);
   });
 });
+
+/* DEV-2026-152 (AUBRAC SIGNAL, 16/10/2026) : Flowfast 319 Road, 800 m². La ligne
+   du Catalyst gardait une conso figée de 0,012 kg/m² — 9,6 kg pour 8 kg vendus :
+   le coût chantier dépassait le total HT. */
+describe('coût chantier du catalyseur', () => {
+  const produits = [
+    { id: 'res', reference: 'FLOWFAST319', description: 'FLOWFAST 319 Flexible Seal Unpigmented (20 kg)', poids: 20 },
+    { id: 'pig', reference: 'PIGMENT2KG', description: 'Pigment poudre micronisé (2 kg)', poids: 2 },
+    { id: 'snl', reference: 'SNLR11', description: 'SNL 319 ROAD (11,65Kg)', poids: 11.65 },
+    { id: 'cat', reference: 'CATALYST2', description: 'Catalyst (2 kg)', poids: 2 },
+  ] as Produit[];
+  const lignes = [
+    { id: 'g', type: 'groupe', description: 'Finition', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    { id: '1', produitId: 'res', description: 'FLOWFAST 319', quantite: 21, unite: 'U', prixUnitaireHT: 232.75, tva: 20, remise: 0, surfaceM2: 800, consommation: 0.523 },
+    { id: '2', produitId: 'pig', description: 'Pigment', quantite: 21, unite: 'U', prixUnitaireHT: 72, tva: 20, remise: 0, surfaceM2: 800, consommation: 0.0523 },
+    { id: '3', produitId: 'snl', description: 'SNL', quantite: 42, unite: 'Units', prixUnitaireHT: 32, tva: 20, remise: 0, surfaceM2: 800, consommation: 0.609 },
+    { id: 's', type: 'soustotal', description: '', quantite: 0, unite: '', prixUnitaireHT: 0, tva: 20, remise: 0 },
+    { id: '4', produitId: 'cat', description: 'Catalyst (2 kg)', quantite: 4, unite: 'U', prixUnitaireHT: 78.5, tva: 20, remise: 0, surfaceM2: 800, consommation: 0.012 },
+  ] as Devis['lignes'];
+
+  it('dose le catalyseur sur la résine consommée, pas sur sa conso figée', () => {
+    // 800 × 0,523 = 418,4 kg de 319 consommés × 1,5 % (20 °C) = 6,276 kg, à 39,25 €/kg.
+    const cata = 418.4 * 0.015 * 78.5 / 2;
+    const { total } = coutChantier(lignes, produits, 800);
+    expect(total).toBeCloseTo(418.4 * 232.75 / 20 + 41.84 * 72 / 2 + 487.2 * 32 / 11.65 + cata, 2);
+    expect(total).toBeLessThan(8057.75);   // jamais au-dessus du vendu
+  });
+
+  it('suit la température saisie sur la ligne du catalyseur', () => {
+    const a15 = lignes.map(l => l.id === '4' ? { ...l, temperatureCatalyse: 15 } : l);
+    const sans = coutChantier(lignes, produits, 800).total;
+    expect(coutChantier(a15, produits, 800).total - sans).toBeCloseTo(418.4 * (0.023 - 0.015) * 78.5 / 2, 1);   // kg dosés arrondis au gramme
+  });
+
+  it('garde le calcul ordinaire quand la résine ne se lit pas', () => {
+    const sansResine = lignes.filter(l => l.id !== '1');
+    expect(coutChantier(sansResine, produits, 800).total).toBeCloseTo(41.84 * 72 / 2 + 487.2 * 32 / 11.65 + 800 * 0.012 * 78.5 / 2, 2);
+  });
+});
