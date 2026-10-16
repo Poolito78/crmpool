@@ -1,5 +1,6 @@
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { logoAllege, pngIndexe } from './pdfImage';
 
 // ─── IndexedDB : persistance du dossier mémorisé ─────────────────────────────
 
@@ -216,7 +217,9 @@ export async function generatePdfFromElement(
   // Le clone reste dans le DOM jusqu'à la fin des mesures offsetTop/offsetHeight.
   // (Si finally retirait le wrap ici, offsetTop retourne 0 → computePageSlices inutile)
   const captureEl = clone;
-  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  // Poids du fichier : voir `pdfImage.ts` (logo à sa taille d'impression, pages en PNG à palette).
+  const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4', compress: true });
+  const logoEntete = opts?.logoDataUrl ? await logoAllege(opts.logoDataUrl) : undefined;
   const pw = pdf.internal.pageSize.getWidth();
   const ph = pdf.internal.pageSize.getHeight();
   const imgH = (canvas.height * pw) / canvas.width;
@@ -260,10 +263,11 @@ export async function generatePdfFromElement(
     pdf.setLineWidth(0.4);
     pdf.line(8, headerH, pw - 8, headerH);
     // Logo
-    if (opts?.logoDataUrl) {
+    if (logoEntete) {
       try {
         const logoW = 28; const logoH = 8;
-        pdf.addImage(opts.logoDataUrl, 'PNG', 8, 2, logoW, logoH);
+        // Alias fixe : le logo n'est embarqué qu'une fois, quel que soit le nombre de pages.
+        pdf.addImage(logoEntete, 'PNG', 8, 2, logoW, logoH, 'logo-entete', 'FAST');
       } catch { /* ignore si logo indisponible */ }
     }
     // DEVIS / AR + numéro + date (droite)
@@ -568,7 +572,10 @@ export async function generatePdfFromElement(
       const drawBand = theadRowData.length > 0 && (page === 0 || yOffsetMm < tableBottomMm - 2);
       // Page 1 : contenu à y=0 ; pages 2+ : sous l'entête (+ bandeau si présent)
       const yContent = page === 0 ? 0 : headerH + (drawBand ? tableHeadH : 0);
-      pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH);
+      // PNG à palette sans perte visible ; une page qui porte une photo garde le JPEG.
+      const png = await pngIndexe(tmp.getContext('2d')!.getImageData(0, 0, tmp.width, tmp.height));
+      if (png) pdf.addImage(png, 'PNG', 0, yContent, pw, sliceH, `page-${page}`, 'FAST');
+      else pdf.addImage(tmp.toDataURL('image/jpeg', 0.92), 'JPEG', 0, yContent, pw, sliceH, `page-${page}`);
       if (page > 0) drawPageHeader();
       drawFooter(page + 1, totalPages);
 
