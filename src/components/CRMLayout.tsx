@@ -289,6 +289,19 @@ export default function CRMLayout() {
       setAgentMailOpen(true);
     }
   }, [location.search]); // eslint-disable-line react-hooks/exhaustive-deps
+  /* Récapitulatif envoyé par le Chiffrage ISOSIGN (mis de côté par main.tsx) :
+     il part à l'analyse de document comme un texte déposé. */
+  useEffect(() => {
+    let texte = '';
+    try {
+      texte = sessionStorage.getItem('crm_analyse_texte') ?? '';
+      sessionStorage.removeItem('crm_analyse_texte');
+    } catch { /* stockage indisponible */ }
+    if (!texte.trim()) return;
+    setFichiersDeposes([]);
+    setTexteDepose(texte.trim());
+    setAnalyseOpen(true);
+  }, []);
   const { canAchat, canCrm, isAdmin, userId, session } = useCurrentUser();
   const { nameOf } = useCommercials();
   const currentName = nameOf(userId);

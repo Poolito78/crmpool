@@ -209,6 +209,20 @@ window.addEventListener('error', (e) => {
   }
 });
 
+/* Le Chiffrage ISOSIGN (métré sur plan) ouvre MonCRM sur `?analyse=1#texte=…`
+   pour confier son récapitulatif à l'analyse de document. Le texte voyage dans
+   le FRAGMENT : jamais envoyé au serveur, pas de limite de longueur pratique.
+   On le met de côté AVANT le montage — la page de connexion éventuelle ferait
+   perdre l'adresse — et CRMLayout l'ouvre une fois l'utilisateur authentifié. */
+try {
+  const u = new URL(window.location.href);
+  if (u.searchParams.get('analyse') === '1' && u.hash.startsWith('#texte=')) {
+    sessionStorage.setItem('crm_analyse_texte', decodeURIComponent(u.hash.slice('#texte='.length)));
+    u.searchParams.delete('analyse'); u.searchParams.delete('t');
+    window.history.replaceState(null, '', u.pathname + (u.searchParams.toString() ? `?${u.searchParams}` : ''));
+  }
+} catch { /* adresse illisible : rien à reprendre */ }
+
 try {
   createRoot(document.getElementById("root")!).render(<App />);
 } catch (e: any) {
