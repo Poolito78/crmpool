@@ -2114,9 +2114,79 @@ export function useStore() {
       factures_fournisseur: async () => { const { data } = await supabase.from('factures_fournisseur').select('*'); if (data) setFacturesFournisseur(data.map(dbToFactureFournisseur)); },
     };
     const timers: Record<string, ReturnType<typeof setTimeout>> = {};
-    const scheduleRefetch = (table: string) => {
+
+    /* ⚠️ **RELIRE UNE TABLE ENTIÈRE À CHAQUE MESSAGE A FAIT DÉPASSER LE QUOTA.**
+       Chaque enregistrement d'un devis — sauvegardes automatiques comprises,
+       et l'écho de nos propres écritures — faisait relire TOUS les devis
+       (lignes jsonb comprises, ~2 Mo) à CHAQUE onglet ouvert. Septembre :
+       5,93 Go d'egress pour 5 Go gratuits (règle du 17/10/2026).
+       Désormais on ne relit que les lignes NOMMÉES par les messages, et une
+       suppression se range sans rien relire. La relecture complète ne reste
+       que pour une rafale (import en masse) ou un message sans identifiant. */
+    const RAFALE_TABLE = 100;
+    type Ligne = { id: string };
+    type Brute = Record<string, unknown> & { id: string };
+    interface Cible { poser: (lus: Map<string, Ligne>, sorties: Set<string>) => void; map: (r: Brute) => Ligne }
+    /* Range les lignes relues à leur place, garde le tableau précédent si
+       rien n'a changé (l'écho de notre propre écriture). */
+    const cible = <T extends Ligne>(setter: React.Dispatch<React.SetStateAction<T[]>>, map: (r: Brute) => T): Cible => ({
+      map,
+      poser: (lus, sorties) => setter(prev => {
+        let change = false;
+        const connus = new Set<string>();
+        const n = prev.flatMap(x => {
+          connus.add(x.id);
+          if (sorties.has(x.id)) { change = true; return []; }
+          const neuf = lus.get(x.id) as T | undefined;
+          if (!neuf) return [x];
+          if (JSON.stringify(neuf) === JSON.stringify(x)) return [x];
+          change = true;
+          return [neuf];
+        });
+        for (const [id, v] of lus) if (!connus.has(id)) { n.push(v as T); change = true; }
+        return change ? n : prev;
+      }),
+    });
+    const lignesParTable: Record<string, Cible> = {
+      clients: cible(setClients, dbToClient),
+      fournisseurs: cible(setFournisseurs, dbToFournisseur),
+      devis: cible(setDevis, dbToDevis),
+      produit_fournisseurs: cible(setProduitFournisseurs, dbToProduitFournisseur),
+      commandes_fournisseur: cible(setCommandesFournisseur, dbToCommandeFournisseur),
+      commandes_client: cible(setCommandesClient, dbToCommandeClient),
+      factures_client: cible(setFacturesClient, dbToFactureClient),
+      factures_fournisseur: cible(setFacturesFournisseur, dbToFactureFournisseur),
+    };
+    const evenements: Record<string, { relire: Set<string>; effaces: Set<string>; complet: boolean; n: number }> = {};
+    const relireLignes = async (table: string) => {
+      const ev = evenements[table];
+      delete evenements[table];
+      const dest = lignesParTable[table];
+      if (!ev || !dest) { await refetchers[table]?.(); return; }
+      if (ev.complet || ev.n > RAFALE_TABLE) { await refetchers[table]?.(); return; }
+      const ids = [...ev.relire].filter(id => !ev.effaces.has(id));
+      const lus: Brute[] = [];
+      for (let i = 0; i < ids.length; i += 100) {
+        const { data, error } = await supabase.from(table as 'devis').select('*').in('id', ids.slice(i, i + 100));
+        if (error) { await refetchers[table]?.(); return; }
+        lus.push(...((data || []) as unknown as Brute[]));
+      }
+      const parId = new Map<string, Ligne>(lus.map(r => [r.id, dest.map(r)]));
+      // Lue = visible ; nommée mais absente = sortie de notre vue (RLS, transfert).
+      const sorties = new Set([...ev.effaces, ...ids.filter(id => !parId.has(id))]);
+      dest.poser(parId, sorties);
+      if (table === 'devis') void lireNumerosLiberes();
+    };
+    const scheduleRefetch = (table: string, payload?: { eventType?: string; type?: string; new?: { id?: string }; old?: { id?: string } }) => {
+      const ev = evenements[table] ??= { relire: new Set(), effaces: new Set(), complet: false, n: 0 };
+      ev.n++;
+      const type = payload?.eventType || payload?.type;
+      const id = (type === 'DELETE' ? payload?.old?.id : payload?.new?.id) as string | undefined;
+      if (!id) ev.complet = true;
+      else if (type === 'DELETE') ev.effaces.add(id);
+      else ev.relire.add(id);
       clearTimeout(timers[table]);
-      timers[table] = setTimeout(() => { refetchers[table]?.(); }, 400);
+      timers[table] = setTimeout(() => { void relireLignes(table); }, 400);
     };
 
     /**
@@ -2182,7 +2252,7 @@ export function useStore() {
       channel = supabase.channel('crm-realtime');
       for (const table of Object.keys(refetchers)) {
         channel.on('postgres_changes' as any, { event: '*', schema: 'public', table }, (payload: any) => {
-          if (table !== 'produits') { scheduleRefetch(table); return; }
+          if (table !== 'produits') { scheduleRefetch(table, payload); return; }
           enAttente.push(payload);
           clearTimeout(timers.produits);
           timers.produits = setTimeout(appliquerProduits, 400);
