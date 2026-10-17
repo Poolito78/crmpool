@@ -107,6 +107,7 @@ function afficherBanniereMiseAJour() {
   recharger.type = 'button';
   recharger.textContent = 'Recharger';
   recharger.style.cssText = 'padding:6px 12px;border:0;border-radius:8px;background:#cc0000;color:#fff;font:600 14px system-ui;cursor:pointer';
+  recharger.title = 'Entrée';
   recharger.onclick = () => { void rechargerNouvelleVersion(); };
 
   const plusTard = document.createElement('button');
@@ -114,7 +115,49 @@ function afficherBanniereMiseAJour() {
   plusTard.setAttribute('aria-label', 'Plus tard');
   plusTard.textContent = '✕';
   plusTard.style.cssText = 'padding:6px 8px;border:0;border-radius:8px;background:transparent;color:#9ca3af;font:600 14px system-ui;cursor:pointer';
-  plusTard.onclick = () => { barre.remove(); };
+  plusTard.onclick = () => { barre.remove(); document.removeEventListener('keydown', clavier); };
+
+  /* Clavier : Entrée = « Recharger », ← / → passent d'un bouton de la bannière
+     à l'autre (Entrée valide alors le bouton sélectionné, ✕ compris).
+     Mais SEULEMENT quand la touche n'a rien d'autre à faire. Recharger efface
+     ce qui est en cours de saisie : une touche tapée dans un champ (valider
+     une ligne, déplacer le curseur), sur un autre bouton ou dans un dialogue
+     ouvert garde son rôle — sinon la bannière avalerait la saisie au moment
+     même où l'on valide. */
+  const boutons = [recharger, plusTard];
+  const clavier = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.isComposing) return;
+    if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+    if (!['Enter', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
+    const cible = e.target as HTMLElement | null;
+    const dansBanniere = !!cible && barre.contains(cible);
+    if (!dansBanniere) {
+      if (cible && cible !== document.body && cible !== document.documentElement) {
+        if (cible.isContentEditable) return;
+        if (cible.closest('input, textarea, select, button, a[href], [role="button"], [role="combobox"], [role="option"], [role="menuitem"], [role="tab"], [role="slider"], [role="textbox"]')) return;
+      }
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')) return;
+    }
+    if (e.key === 'Enter') {
+      // Sur un bouton de la bannière, le navigateur le clique tout seul.
+      if (dansBanniere) return;
+      e.preventDefault();
+      document.removeEventListener('keydown', clavier);
+      void rechargerNouvelleVersion();
+      return;
+    }
+    e.preventDefault();
+    const actuel = boutons.indexOf(cible as HTMLButtonElement);
+    const pas = e.key === 'ArrowRight' ? 1 : -1;
+    const suivant = actuel < 0 ? 0 : (actuel + pas + boutons.length) % boutons.length;
+    boutons[suivant].focus();
+  };
+  document.addEventListener('keydown', clavier);
+  // Bouton sélectionné au clavier : visible, même sans le contour du navigateur.
+  for (const b of boutons) {
+    b.onfocus = () => { b.style.outline = '2px solid #fff'; b.style.outlineOffset = '2px'; };
+    b.onblur = () => { b.style.outline = 'none'; };
+  }
 
   barre.append(texte, recharger, plusTard);
   document.body.appendChild(barre);

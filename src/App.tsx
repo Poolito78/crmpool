@@ -52,7 +52,9 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
           <div style={{ padding: 32, fontFamily: 'system-ui, sans-serif', textAlign: 'center', color: '#555' }}>
             Mise à jour de l'application en cours…
             <div style={{ marginTop: 16 }}>
+              {/* autoFocus : Entrée recharge, il n'y a rien d'autre à saisir sur cet écran. */}
               <button
+                autoFocus
                 onClick={() => { try { sessionStorage.removeItem('chunk-reload'); } catch { /* ignore */ } purgeAndReload(); }}
                 style={{ padding: '8px 16px', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer' }}
               >
